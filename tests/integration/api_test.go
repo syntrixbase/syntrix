@@ -1,0 +1,143 @@
+package integration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"testing"
+	"time"
+
+	"syntrix/internal/api"
+	"syntrix/internal/query"
+	"syntrix/internal/storage"
+	"syntrix/internal/storage/mongo"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestAPIIntegration runs a full integration test against a real MongoDB.
+// It requires MongoDB to be running (e.g. via docker-compose).
+func TestAPIIntegration(t *testing.T) {
+	// 1. Setup Storage Backend
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+	dbName := "syntrix_integration_test"
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	backend, err := mongo.NewMongoBackend(ctx, mongoURI, dbName)
+	if err != nil {
+		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
+	}
+	defer backend.Close(context.Background())
+
+	// 2. Setup Query Engine
+	engine := query.NewEngine(backend, "http://dummy-csp")
+
+	// 3. Setup API Server
+	server := api.NewServer(engine)
+	ts := httptest.NewServer(server)
+	defer ts.Close()
+
+	client := ts.Client()
+	collection := "rooms/room-1/messages"
+
+	// 3. Scenario: Create Document
+	docData := map[string]interface{}{
+		"name": "Integration User",
+		"age":  42,
+	}
+	body, _ := json.Marshal(map[string]interface{}{"data": docData})
+
+	resp, err := client.Post(fmt.Sprintf("%s/v1/%s", ts.URL, collection), "application/json", bytes.NewBuffer(body))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var createdDoc storage.Document
+	err = json.NewDecoder(resp.Body).Decode(&createdDoc)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	assert.NotEmpty(t, createdDoc.Path)
+	assert.Equal(t, collection, createdDoc.Collection)
+	assert.Equal(t, "Integration User", createdDoc.Data["name"])
+
+	docID := createdDoc.Path[len(collection)+1:] // Extract ID from "collection/id"
+
+	// 4. Scenario: Get Document
+	resp, err = client.Get(fmt.Sprintf("%s/v1/%s/%s", ts.URL, collection, docID))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var fetchedDoc storage.Document
+	err = json.NewDecoder(resp.Body).Decode(&fetchedDoc)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	assert.Equal(t, createdDoc.Path, fetchedDoc.Path)
+	assert.Equal(t, float64(42), fetchedDoc.Data["age"]) // JSON numbers are floats
+
+	// 4.5 Scenario: Patch Document
+	patchData := map[string]interface{}{
+		"age": 43,
+	}
+	patchBody, _ := json.Marshal(map[string]interface{}{"data": patchData})
+	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", ts.URL, collection, docID), bytes.NewBuffer(patchBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var patchedDoc storage.Document
+	err = json.NewDecoder(resp.Body).Decode(&patchedDoc)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	assert.Equal(t, "Integration User", patchedDoc.Data["name"]) // Should remain unchanged
+	assert.Equal(t, float64(43), patchedDoc.Data["age"])         // Should be updated
+
+	// 5. Scenario: Query Document
+	query := storage.Query{
+		Collection: collection,
+		Filters: []storage.Filter{
+			{Field: "name", Op: "==", Value: "Integration User"},
+		},
+	}
+	queryBody, _ := json.Marshal(query)
+	resp, err = client.Post(fmt.Sprintf("%s/v1/query", ts.URL), "application/json", bytes.NewBuffer(queryBody))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var queryResults []*storage.Document
+	err = json.NewDecoder(resp.Body).Decode(&queryResults)
+	require.NoError(t, err)
+	resp.Body.Close()
+
+	found := false
+	for _, d := range queryResults {
+		if d.Path == createdDoc.Path {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "Created document should be found in query")
+
+	// 6. Scenario: Delete Document
+	delReq, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/v1/%s/%s", ts.URL, collection, docID), nil)
+	resp, err = client.Do(delReq)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	// Verify Delete
+	resp, err = client.Get(fmt.Sprintf("%s/v1/%s/%s", ts.URL, collection, docID))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode)
+}

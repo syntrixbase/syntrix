@@ -1,0 +1,21 @@
+
+api:
+  port: 8080
+  query_service_url: "http://localhost:8082"
+
+realtime:
+  port: 8081
+  query_service_url: "http://localhost:8082"
+
+query:
+  port: 8082
+  csp_service_url: "http://localhost:8083"
+  storage:
+    mongo_uri: "mongodb://localhost:27017"
+    database_name: "syntrix"
+
+csp:
+  port: 8083
+  storage:
+    mongo_uri: "mongodb://localhost:27017"
+    database_name: "syntrix"
