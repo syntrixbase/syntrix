@@ -12,8 +12,8 @@
     },
     "retryPolicy": {
       "maxAttempts": 3,
-      "initialBackoff": 1000000000,
-      "maxBackoff": 5000000000
+      "initialBackoff": "1s",
+      "maxBackoff": "5s"
     }
   }
 ]
