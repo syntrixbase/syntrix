@@ -11,7 +11,7 @@ A Trigger is defined by a JSON configuration object. Here is the structure:
   "triggerId": "user-signup-welcome",
   "version": "1.0",
   "tenant": "acme",
-  "collection": "users",
+  "collection": "chats/*/members",
   "events": ["create"],
   "condition": "event.document.data.age >= 18",
   "url": "http://localhost:3000/webhooks/welcome",
@@ -20,8 +20,8 @@ A Trigger is defined by a JSON configuration object. Here is the structure:
   },
   "retryPolicy": {
     "maxAttempts": 3,
-    "initialBackoff": 1000000000,
-    "maxBackoff": 10000000000
+    "initialBackoff": "1s",
+    "maxBackoff": "10s"
   }
 }
 ```
@@ -33,7 +33,7 @@ A Trigger is defined by a JSON configuration object. Here is the structure:
 -   **`events`**: List of event types to listen for: `create`, `update`, `delete`.
 -   **`condition`**: A CEL expression string. If this evaluates to `true`, the webhook is fired. If empty, it defaults to `true`.
 -   **`url`**: The destination URL for the webhook POST request.
--   **`retryPolicy`**: Configuration for retrying failed deliveries. Backoff times are in nanoseconds (e.g., `1000000000` = 1s).
+-   **`retryPolicy`**: Configuration for retrying failed deliveries. Backoff times are duration strings (e.g., `1s`, `100ms`, `1m`).
 
 ## Writing Conditions (CEL)
 

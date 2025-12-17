@@ -3,6 +3,7 @@ package trigger
 import (
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -16,7 +17,12 @@ func TestLoadTriggersFromFile(t *testing.T) {
 			"collection": "users",
 			"events": ["create"],
 			"condition": "true",
-			"url": "http://example.com"
+			"url": "http://example.com",
+			"retryPolicy": {
+				"maxAttempts": 3,
+				"initialBackoff": "1s",
+				"maxBackoff": "10s"
+			}
 		}
 	]`
 	jsonFile, err := os.CreateTemp("", "triggers-*.json")
@@ -32,6 +38,8 @@ func TestLoadTriggersFromFile(t *testing.T) {
 	require.Len(t, triggers, 1)
 	assert.Equal(t, "t1", triggers[0].ID)
 	assert.Equal(t, "users", triggers[0].Collection)
+	assert.Equal(t, time.Second, time.Duration(triggers[0].RetryPolicy.InitialBackoff))
+	assert.Equal(t, 10*time.Second, time.Duration(triggers[0].RetryPolicy.MaxBackoff))
 
 	// 3. Create Temp YAML File
 	yamlContent := `
@@ -41,6 +49,10 @@ func TestLoadTriggersFromFile(t *testing.T) {
     - update
   condition: "price > 100"
   url: "http://example.org"
+  retryPolicy:
+    maxAttempts: 5
+    initialBackoff: 500ms
+    maxBackoff: 5s
 `
 	yamlFile, err := os.CreateTemp("", "triggers-*.yaml")
 	require.NoError(t, err)
@@ -55,6 +67,8 @@ func TestLoadTriggersFromFile(t *testing.T) {
 	require.Len(t, triggers, 1)
 	assert.Equal(t, "t2", triggers[0].ID)
 	assert.Equal(t, "orders", triggers[0].Collection)
+	assert.Equal(t, 500*time.Millisecond, time.Duration(triggers[0].RetryPolicy.InitialBackoff))
+	assert.Equal(t, 5*time.Second, time.Duration(triggers[0].RetryPolicy.MaxBackoff))
 }
 
 func TestLoadTriggersFromFile_NotFound(t *testing.T) {
