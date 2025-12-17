@@ -46,7 +46,7 @@ func (s *TriggerService) Watch(ctx context.Context, backend storage.StorageBacke
 	}
 
 	// 2. Start Watch with Resume Token
-	stream, err := backend.Watch(ctx, "", resumeToken)
+	stream, err := backend.Watch(ctx, "", resumeToken, storage.WatchOptions{IncludeBefore: true})
 	if err != nil {
 		return err
 	}
@@ -121,8 +121,9 @@ func (s *TriggerService) createDeliveryTask(t *Trigger, event *storage.Event) *D
 		after = event.Document.Data
 	}
 
-	// Note: 'Before' image is not always available in standard change streams unless configured.
-	// We assume it might be populated in the event if available.
+	if event.Before != nil {
+		before = event.Before.Data
+	}
 
 	return &DeliveryTask{
 		TriggerID:  t.ID,
@@ -131,13 +132,14 @@ func (s *TriggerService) createDeliveryTask(t *Trigger, event *storage.Event) *D
 		Collection: event.Document.Collection,
 		DocKey:     event.Document.Id,
 		// LSN and Seq would come from the event metadata in a real implementation
-		LSN:        "0:0",
-		Seq:        0,
-		Before:     before,
-		After:      after,
-		Timestamp:  time.Now().Unix(),
-		URL:        t.URL,
-		Headers:    t.Headers,
-		SecretsRef: t.SecretsRef,
+		LSN:         "0:0",
+		Seq:         0,
+		Before:      before,
+		After:       after,
+		Timestamp:   time.Now().Unix(),
+		URL:         t.URL,
+		Headers:     t.Headers,
+		SecretsRef:  t.SecretsRef,
+		RetryPolicy: t.RetryPolicy,
 	}
 }

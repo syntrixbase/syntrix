@@ -67,6 +67,14 @@ func TestRealtime_FullFlow(t *testing.T) {
 	// Give some time for subscription to register
 	time.Sleep(100 * time.Millisecond)
 
+	// 2.5 Receive Subscribe Ack
+	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var subAckMsg realtime.BaseMessage
+	err = ws.ReadJSON(&subAckMsg)
+	require.NoError(t, err, "Should receive subscribe ack")
+	assert.Equal(t, realtime.TypeSubscribeAck, subAckMsg.Type)
+	assert.Equal(t, subID, subAckMsg.ID)
+
 	// 3. Trigger Event (Create Document via API Gateway)
 	docData := map[string]interface{}{
 		"msg": "hello realtime",

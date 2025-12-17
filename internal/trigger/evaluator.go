@@ -83,7 +83,8 @@ func (e *CELEvaluator) Evaluate(ctx context.Context, trigger *Trigger, event *st
 			"type":      string(event.Type),
 			"path":      event.Path,
 			"timestamp": event.Timestamp,
-			"document":  event.Document, // This relies on Document struct fields being accessible or converted
+			"document":  nil,
+			"before":    nil,
 		},
 	}
 
@@ -97,6 +98,16 @@ func (e *CELEvaluator) Evaluate(ctx context.Context, trigger *Trigger, event *st
 			"version":    event.Document.Version,
 		}
 		input["event"].(map[string]interface{})["document"] = docMap
+	}
+
+	if event.Before != nil {
+		docMap := map[string]interface{}{
+			"id":         event.Before.Id,
+			"collection": event.Before.Collection,
+			"data":       event.Before.Data,
+			"version":    event.Before.Version,
+		}
+		input["event"].(map[string]interface{})["before"] = docMap
 	}
 
 	out, _, err := prg.Eval(input)

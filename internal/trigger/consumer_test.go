@@ -108,6 +108,19 @@ func (m *MockMsg) NakWithDelay(delay time.Duration) error {
 	return args.Error(0)
 }
 
+func (m *MockMsg) Metadata() (*jetstream.MsgMetadata, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*jetstream.MsgMetadata), args.Error(1)
+}
+
+func (m *MockMsg) Term() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
 // --- Tests ---
 
 func TestConsumer_Start_Success(t *testing.T) {
@@ -201,7 +214,9 @@ func TestConsumer_Start_ProcessError(t *testing.T) {
 	taskBytes, _ := json.Marshal(task)
 
 	msg.On("Data").Return(taskBytes)
-	msg.On("Nak").Return(nil) // Expect Nak on error
+	// msg.On("Nak").Return(nil) // Expect Nak on error
+	msg.On("NakWithDelay", mock.Anything).Return(nil)
+	msg.On("Metadata").Return(&jetstream.MsgMetadata{NumDelivered: 1}, nil)
 
 	iter.On("Next").Return(msg, nil).Once()
 	iter.On("Next").Return(nil, errors.New("stop")).Run(func(args mock.Arguments) {
@@ -266,7 +281,9 @@ func TestConsumer_Start_InvalidPayload(t *testing.T) {
 	// Should log error and continue (which means Nak in current implementation? No, processMsg returns error, so Nak)
 	// Wait, processMsg returns error on unmarshal failure.
 	// Loop calls processMsg -> error -> msg.Nak()
-	msg.On("Nak").Return(nil)
+	// msg.On("Nak").Return(nil)
+	msg.On("Metadata").Return(&jetstream.MsgMetadata{NumDelivered: 1}, nil)
+	msg.On("Term").Return(nil)
 
 	iter.On("Next").Return(msg, nil).Once()
 	iter.On("Next").Return(nil, errors.New("stop")).Run(func(args mock.Arguments) { cancel() })

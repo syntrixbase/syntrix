@@ -1,5 +1,13 @@
 import axios from 'axios';
 
+export interface TavilySearchOptions {
+  searchDepth?: 'basic' | 'advanced';
+  maxResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  includeRawContent?: boolean;
+}
+
 export class TavilyClient {
   private apiKey: string;
 
@@ -7,26 +15,33 @@ export class TavilyClient {
     this.apiKey = apiKey;
   }
 
-  async search(query: string): Promise<string> {
+  async search(query: string, options: TavilySearchOptions = {}): Promise<string> {
     try {
       const response = await axios.post('https://api.tavily.com/search', {
         api_key: this.apiKey,
         query,
-        search_depth: 'basic',
+        search_depth: options.searchDepth || 'basic',
         include_answer: true,
-        max_results: 3
+        max_results: options.maxResults || 5,
+        include_domains: options.includeDomains,
+        exclude_domains: options.excludeDomains,
+        include_raw_content: options.includeRawContent
       });
 
-      // Return the answer if available, otherwise snippets
-      if (response.data.answer) {
-        return response.data.answer;
-      }
-
-      return JSON.stringify(response.data.results.map((r: any) => ({
+      const results = response.data.results.map((r: any) => ({
         title: r.title,
+        url: r.url,
         content: r.content,
-        url: r.url
-      })));
+        score: r.score,
+        rawContent: r.raw_content
+      }));
+
+      const output = {
+        answer: response.data.answer,
+        results: results
+      };
+
+      return JSON.stringify(output);
     } catch (error) {
       console.error('Tavily search failed:', error);
       return "Error performing search.";

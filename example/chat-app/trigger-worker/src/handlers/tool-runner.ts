@@ -34,7 +34,13 @@ export const toolRunnerHandler = async (req: Request, res: Response) => {
     // Execute Tool
     if (toolName === 'tavily_search') {
       console.log(`Executing Tavily Search: ${args.query}`);
-      result = await tavily.search(args.query);
+      result = await tavily.search(args.query, {
+        searchDepth: args.searchDepth,
+        maxResults: args.maxResults,
+        includeDomains: args.includeDomains,
+        excludeDomains: args.excludeDomains,
+        includeRawContent: args.includeRawContent
+      });
     } else {
       result = `Error: Unknown tool ${toolName}`;
     }

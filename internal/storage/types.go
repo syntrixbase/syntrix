@@ -31,6 +31,11 @@ type Document struct {
 	Version int64 `json:"version" bson:"version"`
 }
 
+// WatchOptions defines options for watching changes
+type WatchOptions struct {
+	IncludeBefore bool
+}
+
 // StorageBackend defines the interface for storage operations
 type StorageBackend interface {
 	// Get retrieves a document by its path
@@ -51,7 +56,7 @@ type StorageBackend interface {
 
 	// Watch returns a channel of events for a given collection (or all if empty).
 	// resumeToken can be nil to start from now.
-	Watch(ctx context.Context, collection string, resumeToken interface{}) (<-chan Event, error)
+	Watch(ctx context.Context, collection string, resumeToken interface{}, opts WatchOptions) (<-chan Event, error)
 
 	// Close closes the connection to the backend
 	Close(ctx context.Context) error
@@ -70,6 +75,7 @@ const (
 type Event struct {
 	Type        EventType   `json:"type"`
 	Document    *Document   `json:"document,omitempty"` // Nil for delete
+	Before      *Document   `json:"before,omitempty"`   // Previous state, if available
 	Path        string      `json:"path"`
 	Timestamp   int64       `json:"timestamp"`
 	ResumeToken interface{} `json:"-"` // Opaque token for resuming watch

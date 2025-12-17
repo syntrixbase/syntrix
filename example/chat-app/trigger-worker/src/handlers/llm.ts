@@ -24,6 +24,25 @@ const TOOLS = [
             type: 'string',
             description: 'The search query.',
           },
+          searchDepth: {
+            type: 'string',
+            enum: ['basic', 'advanced'],
+            description: 'Search depth: "basic" for faster results, "advanced" for more comprehensive results. Default is "basic".',
+          },
+          maxResults: {
+            type: 'number',
+            description: 'Maximum number of results to return. Default is 5.',
+          },
+          includeDomains: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of domains to include in search.',
+          },
+          excludeDomains: {
+            type: 'array',
+            items: { type: 'string' },
+            description: 'List of domains to exclude from search.',
+          },
         },
         required: ['query'],
       },

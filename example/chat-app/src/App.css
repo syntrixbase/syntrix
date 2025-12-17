@@ -1,15 +1,20 @@
 #root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 0;
-  text-align: center;
+  width: 100%;
+  padding: 2rem;
+  box-sizing: border-box;
 }
 
 .app-container {
   display: flex;
-  height: 100vh;
-  width: 100vw;
+  height: 85vh;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
   text-align: left;
+  background-color: #ffffff;
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
 }
 
 .sidebar {
@@ -109,4 +114,68 @@
   justify-content: center;
   height: 100%;
   color: #888;
+}
+
+.tool-call-box {
+  align-self: flex-start;
+  background-color: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 10px;
+  margin: 5px 0;
+  font-size: 0.9em;
+  max-width: 80%;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tool-call-box.pending {
+  border-left: 4px solid #ffc107;
+}
+
+.tool-call-box.success {
+  border-left: 4px solid #28a745;
+}
+
+.tool-call-box.failed {
+  border-left: 4px solid #dc3545;
+}
+
+.tool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #495057;
+}
+
+.tool-status {
+  font-size: 0.8em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.tool-status.pending { background-color: #fff3cd; color: #856404; }
+.tool-status.success { background-color: #d4edda; color: #155724; }
+.tool-status.failed { background-color: #f8d7da; color: #721c24; }
+
+.tool-args pre, .tool-result pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  background-color: #e9ecef;
+  padding: 5px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+
+.tool-result, .tool-error {
+  margin-top: 8px;
+  border-top: 1px solid #eee;
+  padding-top: 5px;
+}
+
+.tool-error {
+  color: #dc3545;
 }

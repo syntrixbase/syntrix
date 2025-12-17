@@ -161,7 +161,7 @@ func (m *MongoBackend) Query(ctx context.Context, q storage.Query) ([]*storage.D
 	return docs, nil
 }
 
-func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeToken interface{}) (<-chan storage.Event, error) {
+func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	pipeline := mongo.Pipeline{}
 	if collectionName != "" {
 		// Filter by documentKey._id starting with "collectionName/"
@@ -171,12 +171,15 @@ func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeT
 	}
 
 	// We need 'updateLookup' to get the full document after an update
-	opts := options.ChangeStream().SetFullDocument(options.UpdateLookup)
+	changeStreamOpts := options.ChangeStream().SetFullDocument(options.UpdateLookup)
+	if opts.IncludeBefore {
+		changeStreamOpts.SetFullDocumentBeforeChange("whenAvailable")
+	}
 	if resumeToken != nil {
-		opts.SetResumeAfter(resumeToken)
+		changeStreamOpts.SetResumeAfter(resumeToken)
 	}
 
-	stream, err := m.getCollection(collectionName).Watch(ctx, pipeline, opts)
+	stream, err := m.getCollection(collectionName).Watch(ctx, pipeline, changeStreamOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +192,11 @@ func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeT
 
 		for stream.Next(ctx) {
 			var changeEvent struct {
-				ID            interface{}       `bson:"_id"`
-				OperationType string            `bson:"operationType"`
-				FullDocument  *storage.Document `bson:"fullDocument"`
-				DocumentKey   struct {
+				ID                       interface{}       `bson:"_id"`
+				OperationType            string            `bson:"operationType"`
+				FullDocument             *storage.Document `bson:"fullDocument"`
+				FullDocumentBeforeChange *storage.Document `bson:"fullDocumentBeforeChange"`
+				DocumentKey              struct {
 					ID string `bson:"_id"`
 				} `bson:"documentKey"`
 				ClusterTime interface{} `bson:"clusterTime"` // Timestamp
@@ -208,6 +212,7 @@ func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeT
 				ResumeToken: changeEvent.ID,
 				// Timestamp: ... (ClusterTime is complex, let's use current time or parse it if needed)
 				Timestamp: time.Now().UnixNano(),
+				Before:    changeEvent.FullDocumentBeforeChange,
 			}
 
 			switch changeEvent.OperationType {

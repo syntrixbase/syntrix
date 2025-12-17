@@ -122,8 +122,8 @@ func (m *MockStorageBackend) Query(ctx context.Context, q storage.Query) ([]*sto
 	return args.Get(0).([]*storage.Document), args.Error(1)
 }
 
-func (m *MockStorageBackend) Watch(ctx context.Context, collection string, resumeToken interface{}) (<-chan storage.Event, error) {
-	args := m.Called(ctx, collection, resumeToken)
+func (m *MockStorageBackend) Watch(ctx context.Context, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+	args := m.Called(ctx, collection, resumeToken, opts)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -150,7 +150,7 @@ func TestWatch(t *testing.T) {
 
 	// 2. Mock Watch
 	eventChan := make(chan storage.Event, 1)
-	backend.On("Watch", ctx, "", nil).Return((<-chan storage.Event)(eventChan), nil)
+	backend.On("Watch", ctx, "", nil, storage.WatchOptions{IncludeBefore: true}).Return((<-chan storage.Event)(eventChan), nil)
 
 	// 3. Mock Update Checkpoint (after processing event)
 	backend.On("Update", ctx, "sys/checkpoints/trigger_evaluator", mock.Anything, int64(0)).Return(nil)

@@ -194,6 +194,13 @@ func (e *Engine) Pull(ctx context.Context, req storage.ReplicationPullRequest) (
 		newCheckpoint = docs[len(docs)-1].UpdatedAt
 	}
 
+	// If we have more documents than the limit, we should return the checkpoint of the last document
+	// If we have fewer documents than the limit, it means we've reached the end, so we can return the latest checkpoint
+	// However, RxDB expects the checkpoint to be the value of the last document in the batch.
+	// If the batch is empty, we should return the requested checkpoint (or the latest known checkpoint if we knew it, but we don't).
+	// The current implementation is correct for non-empty batches.
+	// For empty batches, returning req.Checkpoint is also correct as it indicates no progress.
+
 	return &storage.ReplicationPullResponse{
 		Documents:  docs,
 		Checkpoint: newCheckpoint,

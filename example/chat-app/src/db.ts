@@ -28,6 +28,16 @@ export type Message = {
     createdAt: number;
 };
 
+export type ToolCall = {
+    id: string;
+    toolName: string;
+    args: any;
+    status: 'pending' | 'success' | 'failed';
+    result?: string;
+    error?: string;
+    createdAt: number;
+};
+
 const chatSchema = {
     title: 'chat schema',
     version: 0,
@@ -55,6 +65,23 @@ const messageSchema = {
     required: ['id', 'role', 'createdAt']
 };
 
+const toolCallSchema = {
+    title: 'tool call schema',
+    version: 0,
+    primaryKey: 'id',
+    type: 'object',
+    properties: {
+        id: { type: 'string', maxLength: 100 },
+        toolName: { type: 'string' },
+        args: { type: 'object' },
+        status: { type: 'string' },
+        result: { type: 'string' },
+        error: { type: 'string' },
+        createdAt: { type: 'number' }
+    },
+    required: ['id', 'toolName', 'status', 'createdAt']
+};
+
 // --- Database Type ---
 
 export type MyDatabaseCollections = {
@@ -65,6 +92,86 @@ export type MyDatabaseCollections = {
 export type MyDatabase = RxDatabase<MyDatabaseCollections>;
 
 // --- Replication Logic ---
+
+class RealtimeManager {
+    private ws: WebSocket | null = null;
+    private subscriptions: Map<string, { query: any, includeData: boolean, callback: () => void }> = new Map();
+    private url: string;
+
+    constructor(url: string) {
+        this.url = url;
+    }
+
+    connect() {
+        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
+
+        this.ws = new WebSocket(this.url);
+
+        this.ws.onopen = () => {
+            console.log('WS Connected');
+            this.subscriptions.forEach((sub, id) => {
+                this.sendSubscribe(id, sub);
+            });
+        };
+
+        this.ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+                if (msg.type === 'event') {
+                    const payload = msg.payload;
+                    const subId = payload.subId;
+                    if (subId && this.subscriptions.has(subId)) {
+                        this.subscriptions.get(subId)?.callback();
+                    }
+                }
+            } catch (e) {
+                console.error('WS Error', e);
+            }
+        };
+
+        this.ws.onclose = () => {
+            this.ws = null;
+            setTimeout(() => this.connect(), 3000);
+        };
+    }
+
+    subscribe(query: any, callback: () => void): string {
+        const id = crypto.randomUUID();
+        const sub = { query, includeData: false, callback };
+        this.subscriptions.set(id, sub);
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.sendSubscribe(id, sub);
+        } else {
+            this.connect();
+        }
+        return id;
+    }
+
+    private sendSubscribe(id: string, sub: { query: any, includeData: boolean }) {
+        this.ws?.send(JSON.stringify({
+            id: id,
+            type: 'subscribe',
+            payload: {
+                query: sub.query,
+                includeData: sub.includeData
+            }
+        }));
+    }
+
+    unsubscribe(id: string) {
+        this.subscriptions.delete(id);
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify({
+                id: crypto.randomUUID(),
+                type: 'unsubscribe',
+                payload: { id }
+            }));
+        }
+    }
+}
+
+const realtimeManager = new RealtimeManager(RT_URL.replace('http', 'ws') + '/v1/realtime');
 
 // Helper to create a replication state for a collection
 const setupReplication = async (collection: RxCollection, remoteCollectionPath: string) => {
@@ -126,33 +233,23 @@ const setupReplication = async (collection: RxCollection, remoteCollectionPath: 
     });
 
     // WebSocket for Realtime
-    // Note: Syntrix Realtime API might need a specific handshake or subscription
-    // For this demo, we'll rely on polling (pull.live = true does polling if stream not provided?)
-    // Actually replicateRxCollection 'live: true' just keeps the replication state open.
-    // We need to trigger re-pull on WS event.
-
-    const wsUrl = RT_URL.replace('http', 'ws') + '/v1/realtime';
-    const ws = new WebSocket(wsUrl);
-    ws.onopen = () => {
-        // Subscribe to collection
-        ws.send(JSON.stringify({
-            type: 'subscribe',
-            payload: {
-                query: {
-                    collection: remoteCollectionPath
-                },
-                includeData: false // Optimization: We only need the event to trigger re-sync
-            }
-        }));
-    };
-    ws.onmessage = (event) => {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'event') {
+    // Use shared RealtimeManager
+    let debounceTimer: any;
+    const subId = realtimeManager.subscribe({ collection: remoteCollectionPath }, () => {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
             replicationState.reSync();
+        }, 100);
+    });
+
+    return {
+        replicationState,
+        cancel: async () => {
+            if (debounceTimer) clearTimeout(debounceTimer);
+            await replicationState.cancel();
+            realtimeManager.unsubscribe(subId);
         }
     };
-
-    return replicationState;
 };
 
 let dbPromise: Promise<MyDatabase> | null = null;
@@ -164,7 +261,8 @@ export const getDatabase = async (): Promise<MyDatabase> => {
 
     dbPromise = createRxDatabase<MyDatabaseCollections>({
         name: 'chatdb_v2', // New DB name to avoid conflicts
-        storage: getRxStorageDexie()
+        storage: getRxStorageDexie(),
+        ignoreDuplicate: true
     }).then(async (db) => {
         // 1. Add Chats Collection
         await db.addCollections({
@@ -181,10 +279,9 @@ export const getDatabase = async (): Promise<MyDatabase> => {
 };
 
 // Dynamic Collection Manager
-export const syncMessages = async (chatId: string): Promise<RxCollection<Message>> => {
+export const getMessagesCollection = async (chatId: string): Promise<RxCollection<Message>> => {
     const db = await getDatabase();
     const collectionName = `messages_${chatId}`;
-    const remotePath = `users/${USER_ID}/chats/${chatId}/messages`;
 
     // Check if already exists
     if (db[collectionName]) {
@@ -195,10 +292,43 @@ export const syncMessages = async (chatId: string): Promise<RxCollection<Message
     const collections = await db.addCollections({
         [collectionName]: { schema: messageSchema }
     });
-    const collection = collections[collectionName];
+    return collections[collectionName];
+};
 
-    // Start Sync
+export const getToolCallsCollection = async (chatId: string): Promise<RxCollection<ToolCall>> => {
+    const db = await getDatabase();
+    const collectionName = `toolcalls_${chatId}`;
+
+    // Check if already exists
+    if (db[collectionName]) {
+        return db[collectionName];
+    }
+
+    // Create Collection
+    const collections = await db.addCollections({
+        [collectionName]: { schema: toolCallSchema }
+    });
+    return collections[collectionName];
+};
+
+export const startChatSync = async (chatId: string) => {
+    const collection = await getMessagesCollection(chatId);
+    const remotePath = `users/${USER_ID}/chats/${chatId}/messages`;
+    return setupReplication(collection, remotePath);
+};
+
+export const startToolCallSync = async (chatId: string) => {
+    const collection = await getToolCallsCollection(chatId);
+    const remotePath = `users/${USER_ID}/chats/${chatId}/toolcall`;
+    return setupReplication(collection, remotePath);
+};
+
+// Deprecated: Use getMessagesCollection + startChatSync
+export const syncMessages = async (chatId: string): Promise<RxCollection<Message>> => {
+    const collection = await getMessagesCollection(chatId);
+    const remotePath = `users/${USER_ID}/chats/${chatId}/messages`;
+    // Note: This starts sync but doesn't return the cancel function, so it leaks if used repeatedly.
+    // Kept for backward compatibility if needed, but ChatWindow should be updated.
     await setupReplication(collection, remotePath);
-
     return collection;
 };

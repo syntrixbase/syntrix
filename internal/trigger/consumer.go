@@ -81,9 +81,52 @@ func (c *Consumer) Start(ctx context.Context) error {
 			// Process message
 			if err := c.processMsg(ctx, msg); err != nil {
 				log.Printf("[Error] Failed to process message: %v", err)
-				// Nak with delay? Or Terminate if fatal?
-				// For now, Nak so it's redelivered.
-				msg.Nak()
+
+				// Retry Logic
+				md, metaErr := msg.Metadata()
+				if metaErr != nil {
+					log.Printf("[Error] Failed to get message metadata: %v", metaErr)
+					msg.Nak()
+					continue
+				}
+
+				var task DeliveryTask
+				if jsonErr := json.Unmarshal(msg.Data(), &task); jsonErr != nil {
+					log.Printf("[Error] Invalid payload for retry check: %v", jsonErr)
+					msg.Term()
+					continue
+				}
+
+				// Check Max Attempts
+				// NumDelivered starts at 1
+				maxAttempts := task.RetryPolicy.MaxAttempts
+				if maxAttempts == 0 {
+					maxAttempts = 3 // Default
+				}
+
+				if int(md.NumDelivered) >= maxAttempts {
+					log.Printf("[Error] Max attempts (%d) reached for trigger %s. Terminating.", maxAttempts, task.TriggerID)
+					msg.Term()
+					continue
+				}
+
+				// Calculate Backoff
+				attempt := int(md.NumDelivered)
+				initialBackoff := time.Duration(task.RetryPolicy.InitialBackoff)
+				if initialBackoff == 0 {
+					initialBackoff = 1 * time.Second
+				}
+
+				// Exponential backoff: initial * 2^(attempt-1)
+				backoff := initialBackoff * (1 << (attempt - 1))
+
+				maxBackoff := time.Duration(task.RetryPolicy.MaxBackoff)
+				if maxBackoff > 0 && backoff > maxBackoff {
+					backoff = maxBackoff
+				}
+
+				log.Printf("[Info] Retrying trigger %s in %v (Attempt %d/%d)", task.TriggerID, backoff, attempt+1, maxAttempts)
+				msg.NakWithDelay(backoff)
 			} else {
 				msg.Ack()
 			}

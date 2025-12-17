@@ -114,6 +114,9 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		c.mu.Unlock()
 		log.Printf("[Info][WS] Subscribed to collection=%s id=%s includeData=%v", payload.Query.Collection, msg.ID, payload.IncludeData)
 
+		// Send Ack
+		c.send <- BaseMessage{ID: msg.ID, Type: TypeSubscribeAck}
+
 		if payload.SendSnapshot {
 			// Fetch snapshot
 			req := storage.ReplicationPullRequest{

@@ -17,24 +17,26 @@ export class SyntrixClient {
   async query<T>(query: SyntrixQuery): Promise<T[]> {
     try {
       const response = await this.client.post('/v1/query', query);
-      // Syntrix Query API returns { documents: [...] } or just array?
-      // Based on internal/query/engine.go, it returns []*storage.Document
-      // But internal/api/server.go handleQuery likely wraps it.
-      // Let's assume it returns the list of documents directly or wrapped.
-      // Checking internal/api/server.go would be good, but let's assume standard JSON response.
-      // If it returns raw documents, they have { id, collection, data, ... }
-      // We usually want just the data with ID injected.
-
-      // Wait, let's check internal/api/server.go handleQuery implementation if possible.
-      // Assuming it returns a list of documents.
+      // Syntrix Query API returns flattened documents (map[string]interface{})
+      // So response.data is an array of objects like { id: "...", role: "...", ... }
       const docs = response.data;
       if (Array.isArray(docs)) {
-          return docs.map((d: any) => ({ ...d.data, id: d.id }));
+          return docs as T[];
       }
       return [];
     } catch (error) {
       console.error('Query failed:', error);
       return [];
+    }
+  }
+
+  async getDocument<T>(path: string): Promise<T | null> {
+    try {
+      const response = await this.client.get(`/v1/${path}`);
+      return response.data as T;
+    } catch (error) {
+      // console.error(`Failed to get document at ${path}:`, error);
+      return null;
     }
   }
 
@@ -123,7 +125,8 @@ export class SyntrixClient {
 
   async postMessage(chatPath: string, content: string) {
     const id = uuidv4();
-    await this.createDocument(`${chatPath}/messages/${id}`, {
+    // POST to the collection, not the document path
+    await this.createDocument(`${chatPath}/messages`, {
       id,
       role: 'assistant',
       content,
@@ -134,7 +137,8 @@ export class SyntrixClient {
   async postToolCall(chatPath: string, toolName: string, args: any, toolCallId: string) {
     // Use the ID from OpenAI if provided, otherwise generate one
     const id = toolCallId || uuidv4();
-    await this.createDocument(`${chatPath}/toolcall/${id}`, {
+    // POST to the collection
+    await this.createDocument(`${chatPath}/toolcall`, {
       id,
       toolName,
       args,

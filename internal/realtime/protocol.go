@@ -10,6 +10,7 @@ const (
 	TypeAuth           = "auth"
 	TypeAuthAck        = "auth_ack"
 	TypeSubscribe      = "subscribe"
+	TypeSubscribeAck   = "subscribe_ack"
 	TypeUnsubscribe    = "unsubscribe"
 	TypeUnsubscribeAck = "unsubscribe_ack"
 	TypeEvent          = "event"
