@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -90,7 +91,10 @@ func setupMicroservices(t *testing.T) *MicroservicesEnv {
 	manager.Start(mgrCtx)
 
 	// Wait for startup
-	time.Sleep(1 * time.Second)
+	waitForPort(t, apiPort)
+	waitForPort(t, queryPort)
+	waitForPort(t, realtimePort)
+	waitForPort(t, cspPort)
 
 	return &MicroservicesEnv{
 		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
@@ -151,4 +155,18 @@ func TestMicroservices_FullFlow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
+}
+
+func waitForPort(t *testing.T, port int) {
+	timeout := 5 * time.Second
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("Timeout waiting for port %d to be ready", port)
 }

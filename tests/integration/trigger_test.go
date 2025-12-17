@@ -140,7 +140,8 @@ func TestTriggerIntegration(t *testing.T) {
 	}()
 
 	// Wait for services to be ready
-	time.Sleep(2 * time.Second)
+	waitForPort(t, apiPort)
+	waitForPort(t, 18081)
 
 	// 5. Trigger Event via API
 	// Create a document that matches the trigger

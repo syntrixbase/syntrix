@@ -78,7 +78,8 @@ func TestAPIIntegration(t *testing.T) {
 	}()
 
 	// Wait for startup
-	time.Sleep(1 * time.Second)
+	waitForPort(t, apiPort)
+	waitForPort(t, queryPort)
 
 	apiURL := fmt.Sprintf("http://localhost:%d", apiPort)
 	client := &http.Client{Timeout: 5 * time.Second}
