@@ -29,7 +29,7 @@ A Trigger is defined by a JSON configuration object. Here is the structure:
 ### Fields
 
 -   **`triggerId`**: Unique identifier for the trigger.
--   **`collection`**: The database collection to watch (e.g., `users`, `orders`).
+-   **`collection`**: The database collection to watch (e.g., `users`, `orders`). Supports wildcards (e.g., `chats/*/messages` matches `chats/room1/messages`).
 -   **`events`**: List of event types to listen for: `create`, `update`, `delete`.
 -   **`condition`**: A CEL expression string. If this evaluates to `true`, the webhook is fired. If empty, it defaults to `true`.
 -   **`url`**: The destination URL for the webhook POST request.
