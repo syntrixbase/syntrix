@@ -2,6 +2,7 @@ package query
 
 import (
 	"context"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
 
@@ -10,9 +11,8 @@ import (
 type Service interface {
 	GetDocument(ctx context.Context, path string) (*storage.Document, error)
 	CreateDocument(ctx context.Context, doc *storage.Document) error
-	UpdateDocument(ctx context.Context, path string, data map[string]interface{}, version int64) error
-	ReplaceDocument(ctx context.Context, path string, collection string, data map[string]interface{}) (*storage.Document, error)
-	PatchDocument(ctx context.Context, path string, data map[string]interface{}) (*storage.Document, error)
+	ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error)
+	PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error)
 	DeleteDocument(ctx context.Context, path string) error
 	ExecuteQuery(ctx context.Context, q storage.Query) ([]*storage.Document, error)
 	WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error)

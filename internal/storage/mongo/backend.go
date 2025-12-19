@@ -3,7 +3,6 @@ package mongo
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -53,11 +52,12 @@ func NewMongoBackend(ctx context.Context, uri string, dbName string, dataColl st
 	}, nil
 }
 
-func (m *MongoBackend) Get(ctx context.Context, path string) (*storage.Document, error) {
-	collection := m.getCollection(path)
+func (m *MongoBackend) Get(ctx context.Context, fullpath string) (*storage.Document, error) {
+	collection := m.getCollection(fullpath)
+	id := storage.CalculateID(fullpath)
 
 	var doc storage.Document
-	err := collection.FindOne(ctx, bson.M{"_id": path}).Decode(&doc)
+	err := collection.FindOne(ctx, bson.M{"_id": id}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, storage.ErrNotFound
@@ -78,18 +78,17 @@ func (m *MongoBackend) Create(ctx context.Context, doc *storage.Document) error 
 	return err
 }
 
-func (m *MongoBackend) Update(ctx context.Context, path string, data map[string]interface{}, version int64) error {
+func (m *MongoBackend) Update(ctx context.Context, path string, data map[string]interface{}, precond storage.Filters) error {
 	collection := m.getCollection(path)
+	id := storage.CalculateID(path)
 
-	filter := bson.M{"_id": path}
-	if version > 0 {
-		filter["version"] = version
-	}
+	filter := makeFilterBSON(precond)
+	filter["_id"] = id
 
 	update := bson.M{
 		"$set": bson.M{
 			"data":       data,
-			"updated_at": time.Now().UnixNano(),
+			"updated_at": time.Now().UnixMilli(),
 		},
 		"$inc": bson.M{
 			"version": 1,
@@ -102,7 +101,7 @@ func (m *MongoBackend) Update(ctx context.Context, path string, data map[string]
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": path})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id})
 		if count == 0 {
 			return storage.ErrNotFound
 		}
@@ -114,23 +113,16 @@ func (m *MongoBackend) Update(ctx context.Context, path string, data map[string]
 
 func (m *MongoBackend) Delete(ctx context.Context, path string) error {
 	collection := m.getCollection(path)
-	_, err := collection.DeleteOne(ctx, bson.M{"_id": path})
+	id := storage.CalculateID(path)
+	_, err := collection.DeleteOne(ctx, bson.M{"_id": id})
 	return err
 }
 
 func (m *MongoBackend) Query(ctx context.Context, q storage.Query) ([]*storage.Document, error) {
 	collection := m.getCollection(q.Collection)
 
-	filter := bson.M{"collection": q.Collection}
-
-	for _, f := range q.Filters {
-		fieldName := mapField(f.Field)
-		op := mapOp(f.Op)
-		if op == "" {
-			continue // Or return error
-		}
-		filter[fieldName] = bson.M{op: f.Value}
-	}
+	filter := makeFilterBSON(q.Filters)
+	filter["collection"] = q.Collection
 
 	findOptions := options.Find()
 	if q.Limit > 0 {
@@ -168,10 +160,15 @@ func (m *MongoBackend) Query(ctx context.Context, q storage.Query) ([]*storage.D
 func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	pipeline := mongo.Pipeline{}
 	if collectionName != "" {
-		// Filter by documentKey._id starting with "collectionName/"
-		// This works for delete events too, unlike filtering by fullDocument.collection
-		pattern := fmt.Sprintf("^%s/", collectionName)
-		pipeline = append(pipeline, bson.D{{Key: "$match", Value: bson.D{{Key: "documentKey._id", Value: bson.D{{Key: "$regex", Value: pattern}}}}}})
+		// Filter by fullDocument.collection for insert/update/replace
+		// OR operationType is delete (since we can't filter deletes by collection with hash ID)
+		match := bson.D{
+			{Key: "$or", Value: bson.A{
+				bson.D{{Key: "fullDocument.collection", Value: collectionName}},
+				bson.D{{Key: "operationType", Value: "delete"}},
+			}},
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: match}})
 	}
 
 	// We need 'updateLookup' to get the full document after an update
@@ -210,6 +207,13 @@ func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeT
 				continue
 			}
 
+			// Client-side filtering for collection (double check)
+			if collectionName != "" && changeEvent.OperationType != "delete" {
+				if changeEvent.FullDocument == nil || changeEvent.FullDocument.Collection != collectionName {
+					continue
+				}
+			}
+
 			evt := storage.Event{
 				Path:        changeEvent.DocumentKey.ID,
 				ResumeToken: changeEvent.ID,
@@ -240,42 +244,6 @@ func (m *MongoBackend) Watch(ctx context.Context, collectionName string, resumeT
 	}()
 
 	return out, nil
-}
-
-func mapField(field string) string {
-	switch field {
-	case "path", "_id":
-		return "_id"
-	case "collection":
-		return "collection"
-	case "updated_at":
-		return "updated_at"
-	case "version":
-		return "version"
-	default:
-		return "data." + field
-	}
-}
-
-func mapOp(op string) string {
-	switch op {
-	case "==":
-		return "$eq"
-	case "!=":
-		return "$ne"
-	case ">":
-		return "$gt"
-	case ">=":
-		return "$gte"
-	case "<":
-		return "$lt"
-	case "<=":
-		return "$lte"
-	case "in":
-		return "$in"
-	default:
-		return "$eq" // Default to equality
-	}
 }
 
 func (m *MongoBackend) Close(ctx context.Context) error {

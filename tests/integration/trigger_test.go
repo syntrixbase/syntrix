@@ -15,6 +15,7 @@ import (
 
 	"syntrix/internal/config"
 	"syntrix/internal/services"
+	"syntrix/internal/storage"
 	"syntrix/internal/storage/mongo"
 	"syntrix/internal/trigger"
 
@@ -172,7 +173,7 @@ func TestTriggerIntegration(t *testing.T) {
 		// Success
 		require.NotNil(t, receivedTask)
 		assert.Equal(t, "integration-test-trigger", receivedTask.TriggerID)
-		assert.Equal(t, "users/"+userID, receivedTask.DocKey)
+		assert.Equal(t, storage.CalculateID("users/"+userID), receivedTask.DocKey)
 		assert.Equal(t, "create", receivedTask.Event)
 		assert.Equal(t, "users", receivedTask.Collection)
 	case <-time.After(10 * time.Second):

@@ -15,14 +15,13 @@ Base URL: `/v1`
 **Response (200 OK):**
 ```json
 {
-  "path": "rooms/room-1/messages/msg-1",
+  "id": "msg-1",
   "collection": "messages",
-  "data": {
-    "text": "Hello World",
-    "sender": "alice"
-  },
   "updated_at": 1678888888000,
-  "version": 1
+  "created_at": 1678888888000,
+  "version": 1,
+  "text": "Hello World",
+  "sender": "alice"
 }
 ```
 
@@ -32,10 +31,8 @@ Base URL: `/v1`
 **Request:**
 ```json
 {
-  "data": {
-    "text": "Hello World",
-    "sender": "bob"
-  }
+  "text": "Hello World",
+  "sender": "bob"
 }
 ```
 
@@ -43,8 +40,12 @@ Base URL: `/v1`
 ```json
 {
   "id": "generated-id-123",
-  "path": "rooms/room-1/messages/generated-id-123",
-  ...
+  "collection": "messages",
+  "updated_at": 1678888888000,
+  "created_at": 1678888888000,
+  "version": 1,
+  "text": "Hello World",
+  "sender": "bob"
 }
 ```
 
@@ -54,10 +55,8 @@ Base URL: `/v1`
 **Request:**
 ```json
 {
-  "data": {
-    "text": "Hello World Updated",
-    "sender": "alice"
-  }
+  "text": "Hello World Updated",
+  "sender": "alice"
 }
 ```
 
@@ -67,9 +66,7 @@ Base URL: `/v1`
 **Request:**
 ```json
 {
-  "data": {
-    "read": true
-  }
+  "read": true
 }
 ```
 

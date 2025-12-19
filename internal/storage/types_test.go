@@ -7,16 +7,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestCalculateID(t *testing.T) {
+	path := "users/bob"
+	id := CalculateID(path)
+	assert.Len(t, id, 32) // 16 bytes hex = 32 chars
+}
+
 func TestNewDocument(t *testing.T) {
 	path := "users/bob"
 	collection := "users"
 	data := map[string]interface{}{"foo": "bar"}
 
-	before := time.Now().UnixNano()
+	before := time.Now().UnixMilli()
 	doc := NewDocument(path, collection, data)
-	after := time.Now().UnixNano()
+	after := time.Now().UnixMilli()
 
-	assert.Equal(t, path, doc.Id)
+	assert.Equal(t, CalculateID(path), doc.Id)
 	assert.Equal(t, collection, doc.Collection)
 	assert.Equal(t, data, doc.Data)
 	assert.Equal(t, int64(1), doc.Version)

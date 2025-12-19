@@ -14,7 +14,6 @@ The following operators are supported:
 | `<` | Less than | `{"field": "score", "op": "<", "value": 100}` |
 | `<=` | Less than or equal | `{"field": "score", "op": "<=", "value": 100}` |
 | `in` | Value is in a list | `{"field": "role", "op": "in", "value": ["admin", "editor"]}` |
-| `array-contains` | Array field contains value | `{"field": "tags", "op": "array-contains", "value": "golang"}` |
 
 ## Unsupported Operators
 

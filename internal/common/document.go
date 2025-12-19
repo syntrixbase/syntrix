@@ -1,17 +1,28 @@
-package api
+package common
 
 import (
 	"errors"
 	"fmt"
+	"regexp"
 
 	"github.com/google/uuid"
 )
 
+var (
+	idRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]{1,64}$`)
+)
+
+func CheckDocumentID(id string) bool {
+	return idRegex.MatchString(id)
+}
+
 // User facing document type, represents a JSON object.
 //
 //	"id" field is reserved for document ID.
-//	"_version" field is reserved for document version.
-//	"_updated_at" field is reserved for last updated timestamp.
+//	"version" field is reserved for document version.
+//	"updated_at" field is reserved for last updated timestamp.
+//	"created_at" field is reserved for creation timestamp.
+//	"collection" field is reserved for collection name.
 type Document map[string]interface{}
 
 func (doc Document) GetID() string {
@@ -32,12 +43,12 @@ func (doc Document) GenerateIDIfEmpty() {
 }
 
 func (doc Document) HasVersion() bool {
-	_, exists := doc["_version"]
+	_, exists := doc["version"]
 	return exists
 }
 
 func (doc Document) GetVersion() int64 {
-	if v, ok := doc["_version"].(float64); ok {
+	if v, ok := doc["version"].(float64); ok {
 		return int64(v)
 	}
 
@@ -49,20 +60,15 @@ func (doc Document) HasKey(key string) bool {
 	return exists
 }
 
-func (doc Document) StripProtectedFields() Document {
-	stripped := make(Document)
-	for k, v := range doc {
-		if k != "_version" && k != "_updated_at" {
-			stripped[k] = v
-		}
-	}
-	return stripped
+func (doc Document) StripProtectedFields() {
+	delete(doc, "version")
+	delete(doc, "updated_at")
+	delete(doc, "created_at")
+	delete(doc, "collection")
 }
 
 func (doc Document) IsEmpty() bool {
-	stripped := doc.StripProtectedFields()
-	delete(stripped, "id")
-	return len(stripped) == 0
+	return len(doc) == 1 && doc.HasKey("id")
 }
 
 func (doc Document) ValidateDocument() error {
@@ -86,6 +92,8 @@ func (doc Document) ValidateDocument() error {
 			return errors.New("data field 'id' must be a string or integer")
 		}
 	}
+
+	doc.StripProtectedFields()
 
 	return nil
 }

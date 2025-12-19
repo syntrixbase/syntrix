@@ -138,9 +138,19 @@ func flattenDocument(doc *storage.Document) map[string]interface{} {
 	for k, v := range doc.Data {
 		flat[k] = v
 	}
+
+	// Ensure ID is present (extract from Fullpath)
+	if _, ok := flat["id"]; !ok {
+		if idx := strings.LastIndex(doc.Fullpath, "/"); idx != -1 {
+			flat["id"] = doc.Fullpath[idx+1:]
+		}
+	}
+
 	// Add system fields
-	flat["_version"] = doc.Version
-	flat["_updated_at"] = doc.UpdatedAt
+	flat["version"] = doc.Version
+	flat["updated_at"] = doc.UpdatedAt
+	flat["created_at"] = doc.CreatedAt
+	flat["collection"] = doc.Collection
 	return flat
 }
 

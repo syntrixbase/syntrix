@@ -14,7 +14,11 @@ import (
 	"syntrix/internal/config"
 	"syntrix/internal/query"
 	"syntrix/internal/services"
-	"syntrix/internal/storage/mongo"
+	"syntrix/internal/storage"
+	internalmongo "syntrix/internal/storage/mongo"
+
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,9 +45,21 @@ func setupMicroservices(t *testing.T) *MicroservicesEnv {
 	ctx := context.Background()
 	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	backend, err := mongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys")
+
+	// Connect using driver to drop database
+	client, err := mongo.Connect(connCtx, options.Client().ApplyURI(mongoURI))
 	if err != nil {
 		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
+	}
+	defer client.Disconnect(ctx)
+
+	err = client.Database(dbName).Drop(ctx)
+	require.NoError(t, err)
+
+	// Verify connection with backend (optional, but good for sanity)
+	backend, err := internalmongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys")
+	if err != nil {
+		t.Skipf("Skipping integration test: could not connect to MongoDB backend: %v", err)
 	}
 	backend.Close(ctx)
 
@@ -142,11 +158,13 @@ func TestMicroservices_FullFlow(t *testing.T) {
 	qClient := query.NewClient(env.QueryURL)
 	fetchedDoc, err := qClient.GetDocument(context.Background(), docPath)
 	require.NoError(t, err)
-	assert.Equal(t, docPath, fetchedDoc.Id)
+	assert.Equal(t, storage.CalculateID(docPath), fetchedDoc.Id)
 
 	// 3. Update Document via API Gateway
 	patchData := map[string]interface{}{
-		"msg": "Updated Message",
+		"doc": map[string]interface{}{
+			"msg": "Updated Message",
+		},
 	}
 	patchBody, _ := json.Marshal(patchData)
 	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", env.APIURL, collection, docID), bytes.NewBuffer(patchBody))

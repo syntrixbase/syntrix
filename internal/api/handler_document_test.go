@@ -18,7 +18,8 @@ func TestHandleGetDocument(t *testing.T) {
 	server := NewServer(mockService, nil)
 
 	doc := &storage.Document{
-		Id:         "rooms/room-1/messages/msg-1",
+		Id:         "hash-1",
+		Fullpath:   "rooms/room-1/messages/msg-1",
 		Collection: "rooms/room-1/messages",
 		Data:       map[string]interface{}{"name": "Alice"},
 		Version:    1,
@@ -76,15 +77,16 @@ func TestHandleReplaceDocument(t *testing.T) {
 	server := NewServer(mockService, nil)
 
 	doc := &storage.Document{
-		Id:         "rooms/room-1/messages/msg-1",
+		Id:         "hash-1",
+		Fullpath:   "rooms/room-1/messages/msg-1",
 		Collection: "rooms/room-1/messages",
 		Data:       map[string]interface{}{"name": "Bob", "id": "msg-1"},
 		Version:    2,
 	}
 
-	mockService.On("ReplaceDocument", mock.Anything, "rooms/room-1/messages/msg-1", "rooms/room-1/messages", mock.Anything).Return(doc, nil)
+	mockService.On("ReplaceDocument", mock.Anything, "rooms/room-1/messages/msg-1", "rooms/room-1/messages", mock.Anything, mock.Anything).Return(doc, nil)
 
-	body := []byte(`{"name": "Bob"}`)
+	body := []byte(`{"doc":{"name": "Bob"}}`)
 	req, _ := http.NewRequest("PUT", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 
@@ -107,9 +109,9 @@ func TestHandleUpdateDocument(t *testing.T) {
 		Version:    2,
 	}
 
-	mockService.On("PatchDocument", mock.Anything, "rooms/room-1/messages/msg-1", mock.Anything).Return(doc, nil)
+	mockService.On("PatchDocument", mock.Anything, "rooms/room-1/messages/msg-1", mock.Anything, mock.Anything).Return(doc, nil)
 
-	body := []byte(`{"status": "read"}`)
+	body := []byte(`{"doc":{"status": "read"}}`)
 	req, _ := http.NewRequest("PATCH", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 

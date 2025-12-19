@@ -58,30 +58,6 @@ func TestServer_CreateDocument(t *testing.T) {
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
 
-func TestServer_UpdateDocument(t *testing.T) {
-	server, mockStorage := setupTestServer()
-
-	path := "test/1"
-	data := map[string]interface{}{"foo": "updated"}
-	version := int64(1)
-
-	mockStorage.On("Update", mock.Anything, path, data, version).Return(nil)
-
-	reqBody := map[string]interface{}{
-		"path":    path,
-		"data":    data,
-		"version": version,
-	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/internal/v1/document/update", bytes.NewBuffer(jsonBody))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	server.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-}
-
 func TestServer_DeleteDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 

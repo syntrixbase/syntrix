@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/mock"
@@ -25,21 +26,16 @@ func (m *MockQueryService) CreateDocument(ctx context.Context, doc *storage.Docu
 	return args.Error(0)
 }
 
-func (m *MockQueryService) UpdateDocument(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	args := m.Called(ctx, path, data, version)
-	return args.Error(0)
-}
-
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data map[string]interface{}) (*storage.Document, error) {
-	args := m.Called(ctx, path, collection, data)
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
+	args := m.Called(ctx, path, collection, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.Document), args.Error(1)
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}) (*storage.Document, error) {
-	args := m.Called(ctx, path, data)
+func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
+	args := m.Called(ctx, path, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

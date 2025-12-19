@@ -58,7 +58,12 @@ func TestMongoBackend_CRUD(t *testing.T) {
 		"name": "Updated User",
 		"age":  31,
 	}
-	err = backend.Update(ctx, docPath, newData, fetchedDoc.Version)
+
+	filters := storage.Filters{
+		{Field: "version", Op: "==", Value: fetchedDoc.Version},
+	}
+
+	err = backend.Update(ctx, docPath, newData, filters)
 	require.NoError(t, err)
 
 	// Verify Update
@@ -69,7 +74,10 @@ func TestMongoBackend_CRUD(t *testing.T) {
 
 	// 4. Update (CAS Failure)
 	oldVersion := int64(1)
-	err = backend.Update(ctx, docPath, newData, oldVersion)
+	filters = storage.Filters{
+		{Field: "version", Op: "==", Value: oldVersion},
+	}
+	err = backend.Update(ctx, docPath, newData, filters)
 	assert.ErrorIs(t, err, storage.ErrVersionConflict)
 
 	// 5. Delete

@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/gorilla/schema"
@@ -53,7 +54,7 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	flatDocs := make([]Document, len(resp.Documents))
+	flatDocs := make([]common.Document, len(resp.Documents))
 	for i, doc := range resp.Documents {
 		flatDocs[i] = flattenDocument(doc)
 	}
@@ -93,12 +94,18 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	// Convert flattened changes to storage.ReplicationPushRequest
 	var changes []storage.ReplicationPushChange
 	for _, change := range reqBody.Changes {
-		if change.Doc.GetID() == "" {
-			log.Println("[Warning][Push] change document missing ID, skipping")
-			continue
+		docData := change.Doc
+		if err := docData.ValidateDocument(); err != nil {
+			log.Println("[Warning][Push] change document validation failed:", err)
+			http.Error(w, "Invalid document in changes: "+err.Error(), http.StatusBadRequest)
+			return
 		}
 
-		docData := change.Doc
+		if docData.GetID() == "" {
+			log.Println("[Warning][Push] change document missing ID, skipping")
+			http.Error(w, "Document ID is required in changes", http.StatusBadRequest)
+			return
+		}
 
 		// Extract metadata
 		var version int64
@@ -113,7 +120,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 
 		id := collection + "/" + docID
-		doc := storage.NewDocument(id, collection, docData.StripProtectedFields())
+		doc := storage.NewDocument(id, collection, docData)
 		doc.Version = version
 
 		changes = append(changes, storage.ReplicationPushChange{
@@ -147,7 +154,7 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Flatten conflicts
-	flatConflicts := make([]Document, len(resp.Conflicts))
+	flatConflicts := make([]common.Document, len(resp.Conflicts))
 	for i, doc := range resp.Conflicts {
 		flatConflicts[i] = flattenDocument(doc)
 	}

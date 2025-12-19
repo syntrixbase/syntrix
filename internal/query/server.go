@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
 
@@ -32,7 +33,6 @@ func (s *Server) routes() {
 	// Internal API routes
 	s.mux.HandleFunc("POST /internal/v1/document/get", s.handleGetDocument)
 	s.mux.HandleFunc("POST /internal/v1/document/create", s.handleCreateDocument)
-	s.mux.HandleFunc("POST /internal/v1/document/update", s.handleUpdateDocument)
 	s.mux.HandleFunc("POST /internal/v1/document/replace", s.handleReplaceDocument)
 	s.mux.HandleFunc("POST /internal/v1/document/patch", s.handlePatchDocument)
 	s.mux.HandleFunc("POST /internal/v1/document/delete", s.handleDeleteDocument)
@@ -88,41 +88,19 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusCreated)
 }
 
-func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Path    string                 `json:"path"`
-		Data    map[string]interface{} `json:"data"`
-		Version int64                  `json:"version"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	if err := s.engine.UpdateDocument(r.Context(), req.Path, req.Data, req.Version); err != nil {
-		if errors.Is(err, storage.ErrVersionConflict) {
-			http.Error(w, "Version conflict", http.StatusConflict)
-			return
-		}
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-}
-
 func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path       string                 `json:"path"`
-		Collection string                 `json:"collection"`
-		Data       map[string]interface{} `json:"data"`
+		Path       string          `json:"path"`
+		Collection string          `json:"collection"`
+		Data       common.Document `json:"data"`
+		Pred       storage.Filters `json:"pred"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.ReplaceDocument(r.Context(), req.Path, req.Collection, req.Data)
+	doc, err := s.engine.ReplaceDocument(r.Context(), req.Path, req.Collection, req.Data, req.Pred)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -136,13 +114,14 @@ func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Path string                 `json:"path"`
 		Data map[string]interface{} `json:"data"`
+		Pred storage.Filters        `json:"pred"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.PatchDocument(r.Context(), req.Path, req.Data)
+	doc, err := s.engine.PatchDocument(r.Context(), req.Path, req.Data, req.Pred)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)

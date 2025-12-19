@@ -41,7 +41,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/{path...}", s.protected(s.handleGetDocument))
 	s.mux.HandleFunc("POST /v1/{path...}", s.protected(s.handleCreateDocument))
 	s.mux.HandleFunc("PUT /v1/{path...}", s.protected(s.handleReplaceDocument))
-	s.mux.HandleFunc("PATCH /v1/{path...}", s.protected(s.handleUpdateDocument))
+	s.mux.HandleFunc("PATCH /v1/{path...}", s.protected(s.handlePatchDocument))
 	s.mux.HandleFunc("DELETE /v1/{path...}", s.protected(s.handleDeleteDocument))
 
 	// Query Operations

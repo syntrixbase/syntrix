@@ -50,7 +50,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	docData := map[string]interface{}{
 		"id":       docID,
 		"msg":      "hello replication",
-		"_version": float64(0), // New document
+		"version": float64(0), // New document
 	}
 
 	pushBody := api.ReplicaPushRequest{

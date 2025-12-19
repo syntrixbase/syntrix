@@ -123,7 +123,9 @@ func TestAPIIntegration(t *testing.T) {
 
 	// 4.5 Scenario: Patch Document
 	patchData := map[string]interface{}{
-		"age": 43,
+		"doc": map[string]interface{}{
+			"age": 43,
+		},
 	}
 	patchBody, _ := json.Marshal(patchData)
 	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(patchBody))

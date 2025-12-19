@@ -50,9 +50,9 @@ func TestEngine_ReplaceDocument_Create(t *testing.T) {
 	mockStorage.On("Get", ctx, path).Return(nil, storage.ErrNotFound)
 	mockStorage.On("Create", ctx, mock.AnythingOfType("*storage.Document")).Return(nil)
 
-	doc, err := engine.ReplaceDocument(ctx, path, collection, data)
+	doc, err := engine.ReplaceDocument(ctx, path, collection, data, storage.Filters{})
 	assert.NoError(t, err)
-	assert.Equal(t, path, doc.Id)
+	assert.Equal(t, storage.CalculateID(path), doc.Id)
 	assert.Equal(t, data, doc.Data)
 	mockStorage.AssertExpectations(t)
 }
@@ -69,10 +69,10 @@ func TestEngine_ReplaceDocument_Update(t *testing.T) {
 
 	// Simulate Found -> Update -> Get
 	mockStorage.On("Get", ctx, path).Return(existingDoc, nil).Once()
-	mockStorage.On("Update", ctx, path, data, int64(1)).Return(nil)
+	mockStorage.On("Update", ctx, path, data, storage.Filters{}).Return(nil)
 	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: data}, nil).Once()
 
-	doc, err := engine.ReplaceDocument(ctx, path, collection, data)
+	doc, err := engine.ReplaceDocument(ctx, path, collection, data, storage.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, data, doc.Data)
 	mockStorage.AssertExpectations(t)
@@ -95,11 +95,11 @@ func TestEngine_PatchDocument(t *testing.T) {
 	mockStorage.On("Get", ctx, path).Return(existingDoc, nil).Once()
 
 	expectedMergedData := map[string]interface{}{"foo": "old", "bar": "baz"}
-	mockStorage.On("Update", ctx, path, expectedMergedData, int64(1)).Return(nil)
+	mockStorage.On("Update", ctx, path, expectedMergedData, storage.Filters{}).Return(nil)
 
 	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: expectedMergedData}, nil).Once()
 
-	doc, err := engine.PatchDocument(ctx, path, patchData)
+	doc, err := engine.PatchDocument(ctx, path, patchData, storage.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMergedData, doc.Data)
 	mockStorage.AssertExpectations(t)
@@ -116,18 +116,18 @@ func TestEngine_PatchDocument_ConflictRetry(t *testing.T) {
 	// Attempt 1: Get -> Update (Conflict)
 	doc1 := &storage.Document{Id: path, Version: 1, Data: map[string]interface{}{"foo": "old"}}
 	mockStorage.On("Get", ctx, path).Return(doc1, nil).Once()
-	mockStorage.On("Update", ctx, path, mock.Anything, int64(1)).Return(storage.ErrVersionConflict).Once()
+	mockStorage.On("Update", ctx, path, mock.Anything, storage.Filters{}).Return(storage.ErrVersionConflict).Once()
 
 	// Attempt 2: Get -> Update (Success) -> Get
 	doc2 := &storage.Document{Id: path, Version: 2, Data: map[string]interface{}{"foo": "old_v2"}}
 	mockStorage.On("Get", ctx, path).Return(doc2, nil).Once()
 
 	expectedMergedData := map[string]interface{}{"foo": "old_v2", "bar": "baz"}
-	mockStorage.On("Update", ctx, path, expectedMergedData, int64(2)).Return(nil).Once()
+	mockStorage.On("Update", ctx, path, expectedMergedData, storage.Filters{}).Return(nil).Once()
 
 	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 3, Data: expectedMergedData}, nil).Once()
 
-	doc, err := engine.PatchDocument(ctx, path, patchData)
+	doc, err := engine.PatchDocument(ctx, path, patchData, storage.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMergedData, doc.Data)
 	mockStorage.AssertExpectations(t)
@@ -176,7 +176,7 @@ func TestEngine_Push(t *testing.T) {
 	// Simulate Get -> Update (Success)
 	existingDoc := &storage.Document{Id: "test/1", Version: 1}
 	mockStorage.On("Get", ctx, "test/1").Return(existingDoc, nil)
-	mockStorage.On("Update", ctx, "test/1", doc.Data, int64(1)).Return(nil)
+	mockStorage.On("Update", ctx, "test/1", doc.Data, storage.Filters{}).Return(nil)
 
 	resp, err := engine.Push(ctx, req)
 	assert.NoError(t, err)

@@ -1,0 +1,282 @@
+# Syntrix API Documentation
+
+This document describes the REST API provided by Syntrix.
+
+## Base URL
+
+All API endpoints are prefixed with `/v1`, except for the health check.
+
+## Authentication
+
+Syntrix uses JWT (JSON Web Tokens) for authentication.
+
+### Login
+
+Authenticate a user and receive a token pair (Access Token and Refresh Token).
+
+**Endpoint:** `POST /v1/auth/login`
+
+**Request Body:**
+
+```json
+{
+  "username": "user1",
+  "password": "password123"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1Ni...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "expires_in": 3600
+}
+```
+
+### Refresh Token
+
+Get a new Access Token using a valid Refresh Token.
+
+**Endpoint:** `POST /v1/auth/refresh`
+
+**Request Body:**
+
+```json
+{
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1Ni...",
+  "refresh_token": "new_refresh_token...",
+  "expires_in": 3600
+}
+```
+
+### Logout
+
+Invalidate a Refresh Token.
+
+**Endpoint:** `POST /v1/auth/logout`
+
+**Request Body:**
+
+```json
+{
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4..."
+}
+```
+
+**Response (200 OK):** Empty body.
+
+## Document Operations
+
+These endpoints allow you to perform CRUD operations on documents.
+
+**Following document fields are reserved by system for special purpose:**
+
+- `id`: Document ID (immutable).
+- `version`: Document version (auto-incremented).
+- `created_at`: Database creation timestamp (Unix milliseconds).
+- `updated_at`: Database last update timestamp (Unix milliseconds).
+- `collection`: Collection path.
+
+### Get Document
+
+Retrieve a document by its full path.
+
+**Endpoint:** `GET /v1/{path...}`
+
+**Example:** `GET /v1/rooms/room-1/messages/msg-1`
+
+**Response (200 OK):**
+
+```json
+{
+  "id": "msg-1",
+  "text": "Hello World",
+  "sender": "alice",
+  "version": 1,
+  "created_at": 1700000000000,
+  "updated_at": 1700000000000,
+  "collection": "rooms/room-1/messages"
+}
+```
+
+### Create Document
+
+Create a new document in a collection. The ID is automatically generated if not provided.
+
+**Endpoint:** `POST /v1/{collection_path...}`
+
+**Example:** `POST /v1/rooms/room-1/messages`
+
+**Request Body:**
+
+```json
+{
+  "text": "Hello World",
+  "sender": "alice"
+}
+```
+
+**Response (201 Created):** Returns the created document.
+
+### Replace Document (Upsert)
+
+Replace an existing document or create it if it doesn't exist.
+
+**Endpoint:** `PUT /v1/{document_path...}`
+
+**Example:** `PUT /v1/rooms/room-1/messages/msg-1`
+
+**Request Body:**
+
+```json
+{
+  "doc": {
+    "id": "msg-1",
+    "text": "Hello World Updated",
+    "sender": "alice"
+  },
+  "ifMatch": "Filters"
+}
+```
+
+**Response (200 OK):** Returns the replaced document.
+
+### Update Document (Patch)
+
+Update specific fields of an existing document.
+
+**Endpoint:** `PATCH /v1/{document_path...}`
+
+**Example:** `PATCH /v1/rooms/room-1/messages/msg-1`
+
+**Request Body:**
+
+```json
+{
+  "doc": {
+    "text": "Hello World Patched"
+  },
+  "ifMatch": "Filters"
+}
+```
+
+**Response (200 OK):** Returns the updated document.
+
+### Delete Document
+
+Delete a document.
+
+**Endpoint:** `DELETE /v1/{document_path...}`
+
+**Example:** `DELETE /v1/rooms/room-1/messages/msg-1`
+
+**Response (204 No Content):** Empty body.
+
+## Query Operations
+
+Execute complex queries against a collection.
+
+**Endpoint:** `POST /v1/query`
+
+* Filters: [filters](./filters.md)
+
+**Request Body:**
+
+```json
+{
+  "collection": "rooms/room-1/messages",
+  "filters": [
+    {
+      "field": "sender",
+      "op": "==",
+      "value": "alice"
+    }
+  ],
+  "orderBy": [
+    {
+      "field": "created_at",
+      "direction": "desc"
+    }
+  ],
+  "limit": 10
+}
+```
+
+**Response (200 OK):** Array of documents.
+
+## Replication Operations
+
+Endpoints for client-side replication (offline support).
+
+### Pull Changes
+
+Get changes since a specific checkpoint.
+
+**Endpoint:** `GET /v1/replication/pull`
+
+**Query Parameters:**
+
+- `collection`: The collection to pull from.
+- `checkpoint`: The last checkpoint (version/timestamp) the client has.
+- `limit`: Max number of documents to return.
+
+**Example:** `GET /v1/replication/pull?collection=rooms/room-1/messages&checkpoint=0&limit=100`
+
+**Response (200 OK):**
+
+```json
+{
+  "documents": [ ... ],
+  "checkpoint": "100"
+}
+```
+
+### Push Changes
+
+Push local changes to the server.
+
+**Endpoint:** `POST /v1/replication/push`
+
+**Request Body:**
+
+```json
+{
+  "collection": "rooms/room-1/messages",
+  "changes": [
+    {
+      "action": "create",
+      "document": {
+        "id": "msg-2",
+        "text": "Offline message",
+        ...
+      }
+    }
+  ]
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "conflicts": []
+}
+```
+
+## Health Check
+
+Check if the service is running.
+
+**Endpoint:** `GET /health`
+
+**Response (200 OK):** `OK`

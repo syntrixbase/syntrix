@@ -104,8 +104,8 @@ func (m *MockStorageBackend) Create(ctx context.Context, doc *storage.Document) 
 	return args.Error(0)
 }
 
-func (m *MockStorageBackend) Update(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	args := m.Called(ctx, path, data, version)
+func (m *MockStorageBackend) Update(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) error {
+	args := m.Called(ctx, path, data, pred)
 	return args.Error(0)
 }
 
@@ -153,7 +153,7 @@ func TestWatch(t *testing.T) {
 	backend.On("Watch", ctx, "", nil, storage.WatchOptions{IncludeBefore: true}).Return((<-chan storage.Event)(eventChan), nil)
 
 	// 3. Mock Update Checkpoint (after processing event)
-	backend.On("Update", ctx, "sys/checkpoints/trigger_evaluator", mock.Anything, int64(0)).Return(nil)
+	backend.On("Update", ctx, "sys/checkpoints/trigger_evaluator", mock.Anything, storage.Filters{}).Return(nil)
 
 	// 4. Start Watch in Goroutine
 	errChan := make(chan error)

@@ -16,11 +16,29 @@ import (
 
 // Document represents a stored document
 type Document struct {
-	Path       string                 `json:"path"`
-	Collection string                 `json:"collection"`
-	Data       map[string]interface{} `json:"data"`
-	UpdatedAt  int64                  `json:"updated_at"`
-	Version    int64                  `json:"version"` // For optimistic concurrency
+	// Id is the unique identifier for the document, 128-bit BLAKE3 of fullpath, binary
+	Id string `json:"id" bson:"_id"`
+
+	// Fullpath is the Full Pathname of document
+	Fullpath string `json:"fullpath" bson:"fullpath"`
+
+	// Collection is the parent collection name
+	Collection string `json:"collection" bson:"collection"`
+
+	// Parent is the parent of collection
+	Parent string `json:"parent" bson:"parent"`
+
+	// Data is the actual content of the document
+	Data map[string]interface{} `json:"data" bson:"data"`
+
+	// UpdatedAt is the timestamp of the last update (Unix millionseconds)
+	UpdatedAt int64 `json:"updated_at" bson:"updated_at"`
+
+	// CreatedAt is the timestamp of the creation (Unix millionseconds)
+	CreatedAt int64 `json:"created_at" bson:"created_at"`
+
+	// Version is the optimistic concurrency control version
+	Version int64 `json:"version" bson:"version"`
 }
 
 // StorageBackend defines the interface for storage operations
@@ -67,12 +85,13 @@ We will use a **Single Collection** strategy for simplicity and efficiency.
 **Schema:**
 ```javascript
 {
-  "_id": "users/alice/posts/post1",           // Primary Key: Full Path
-  "_path": "users/alice/posts/post1",         // Redundant, useful for indexing
-  "_parent": "users/alice/posts",             // Parent path (for collection queries)
-  "_collection": "posts",                     // Collection name (e.g., "posts", "users")
-  "_updatedAt": NumberLong(1678888888000),    // Timestamp
-  "_version": NumberLong(1),                  // Optimistic locking version
+  "_id": "binary_blake3_hash",              // Primary Key: 128-bit BLAKE3 of fullpath
+  "fullpath": "users/alice/posts/post1",      // Full Pathname
+  "collection": "users/alice/posts",          // Collection fullpath (for listing documents)
+  "parent": "users/alice",                    // Parent path (parent of the collection)
+  "updated_at": NumberLong(1678888888000),    // Timestamp
+  "created_at": NumberLong(1678888888000),    // Timestamp
+  "version": NumberLong(1),                   // Optimistic locking version
   "data": {                                   // Actual user data
     "title": "Hello World",
     "content": "..."
@@ -81,14 +100,14 @@ We will use a **Single Collection** strategy for simplicity and efficiency.
 ```
 
 **Sharding Strategy:**
-- **Shard Key**: `_parent`.
+- **Shard Key**: `collection`.
 - **Rationale**: Optimizes for read performance (Data Locality). Queries for a specific collection (e.g., "messages in room A") hit a single shard.
 - **Trade-off**: Potential write hotspots for massive collections. Accepted for initial design.
 
 **Indexes:**
 1.  `_id`: Default unique index.
-2.  `_parent`: For listing documents in a collection (`db.documents.find({_parent: "users/alice/posts"})`).
-3.  `_collection`: For Collection Group queries (optional, e.g., find all posts across all users).
+2.  `collection`: For listing documents in a collection (`db.documents.find({collection: "users/alice/posts"})`).
+3.  `parent`: For hierarchical queries (optional).
 4.  **Composite indexes**:
     - **Manual Creation**: Indexes must be created manually.
     - **Strict Mode**: Queries missing required indexes will **fail** and return an error suggesting the required index.

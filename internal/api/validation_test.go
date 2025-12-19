@@ -3,6 +3,7 @@ package api
 import (
 	"testing"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -88,10 +89,10 @@ func TestValidateCollection(t *testing.T) {
 func TestValidateData(t *testing.T) {
 	tests := []struct {
 		name    string
-		data    Document
+		data    common.Document
 		wantErr bool
 	}{
-		{"valid data", Document{"key": "value"}, false},
+		{"valid data", common.Document{"key": "value"}, false},
 		{"nil data", nil, true},
 	}
 
@@ -223,7 +224,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "users/alice"}},
+					{Doc: &storage.Document{Fullpath: "users/alice"}},
 				},
 			},
 			false,
@@ -248,7 +249,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "users/alice!"}},
+					{Doc: &storage.Document{Fullpath: "users/alice!"}},
 				},
 			},
 			true,
@@ -258,7 +259,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "posts/post1"}},
+					{Doc: &storage.Document{Fullpath: "posts/post1"}},
 				},
 			},
 			true,
@@ -268,7 +269,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "users/alice/posts"}},
+					{Doc: &storage.Document{Fullpath: "users/alice/posts"}},
 				},
 			},
 			true,

@@ -59,11 +59,11 @@ Example webhook payload + signature:
   "tenant": "acme",
   "event": "update",
   "collection": "orders",
-  "docKey": "abc123",
+  "id": "abc123",
   "lsn": "1697041234:42",
   "seq": 99102,
-  "before": { "status": "pending" },
-  "after":  { "status": "shipped" },
+  "before": { "id": "abc123", "collection": "orders", "status": "pending", "version": 1 },
+  "after":  { "id": "abc123", "collection": "orders", "status": "shipped", "version": 2 },
   "ts": 1697041234
 }
 ```
@@ -97,22 +97,22 @@ Header: `X-Syntrix-Signature: t=1697041234,v1=hex(hmac_sha256(secret, t + "." + 
 - Common: Auth via TET (tenant inferred), JSON body; errors use standard codes listed below.
 - `/trigger/get`
   - Request: `{ "paths": ["/rooms/room-123/messages/msg-9", ...] }` (paths required, non-empty)
-  - Response: `{ "documents": [{"id": "...", "_collection": "...", "_version": 7, "_updated_at": 123, "<user_fields>": "..."}, ...] }`
+  - Response: `{ "documents": [{"id": "...", "collection": "...", "version": 7, "updated_at": 123, "<user_fields>": "..."}, ...] }`
     - Order matches input `paths`.
     - Missing doc returns a placeholder `{ "path": "<input>", "missing": true }` (HTTP 200 overall); if caller prefers hard fail, use `/trigger/query` with filters.
 - `/trigger/query`
   - Request: `{ "query": { "collection": "rooms/room-123/messages", "filters": [...], "orderBy": [...], "limit": 20, "startAfter": "cursor" } }`
-  - Response: `{ "documents": [{"id": "...", "_collection": "...", "_version": 7, "_updated_at": 123, "<user_fields>": "..."}, ...], "nextCursor": "..." }` (identical to public query API)
+  - Response: `{ "documents": [{"id": "...", "collection": "...", "version": 7, "updated_at": 123, "<user_fields>": "..."}, ...], "nextCursor": "..." }` (identical to public query API)
  - `/trigger/write`
-   - Request: `{ "ops": [{ "type": "create|set|update|patch|delete", "path": "...", "data": {...}, "precondition": [{"field": "_version", "op": "==", "value": 7}] } , ...], "idempotencyKey": "..." }` (one or many ops)
+   - Request: `{ "ops": [{ "type": "create|set|update|patch|delete", "path": "...", "data": {...}, "precondition": [{"field": "version", "op": "==", "value": 7}] } , ...], "idempotencyKey": "..." }` (one or many ops)
   - Response (transactional, all-or-nothing):
     - Success: `{ "results": [{ "status": "ok", "version": 8, "updated_at": 1234567891 }, ...], "idempotencyKey": "..." }`
-    - Failure (any op fails → none applied, including precondition mismatch): `{ "error": { "code": "...", "message": "...", "details": [{"opIndex": 0, "code": "PRECONDITION_FAILED", "message": "_version mismatch"}, ...] }, "idempotencyKey": "..." }`
+    - Failure (any op fails → none applied, including precondition mismatch): `{ "error": { "code": "...", "message": "...", "details": [{"opIndex": 0, "code": "PRECONDITION_FAILED", "message": "version mismatch"}, ...] }, "idempotencyKey": "..." }`
 
 **Request shape (examples)**
 - Get: `{ "paths": ["/rooms/room-123/messages/msg-9"] }`
 - Query: `{ "query": { "collection": "rooms/room-123/messages", "filters": [...], "orderBy": [...], "limit": 20, "startAfter": "cursor" } }` (structure identical to `POST /v1/query`)
-- Write: `{ "ops": [ { "type": "create|set|update|patch|delete", "path": "/rooms/room-123/messages/msg-9", "data": {...}, "precondition": [{"field": "_version", "op": "==", "value": 7}] }, { "type": "delete", "path": "/rooms/room-123/messages/msg-10" } ], "idempotencyKey": "..." }`
+- Write: `{ "ops": [ { "type": "create|set|update|patch|delete", "path": "/rooms/room-123/messages/msg-9", "data": {...}, "precondition": [{"field": "version", "op": "==", "value": 7}] }, { "type": "delete", "path": "/rooms/room-123/messages/msg-10" } ], "idempotencyKey": "..." }`
 
 Notes:
 - `tenant` is derived from the TET; it is not a request field.
@@ -122,7 +122,7 @@ Notes:
 - `/trigger/get`: array of documents mirroring `GET /v1/{path}` shape per item.
 - `/trigger/query`: same as `POST /v1/query` (`documents`, `nextCursor`).
 - `/trigger/write`: transactional; either all ops succeed with per-op results, or none are applied and an error with per-op details is returned.
-- Document payloads use the same flattened shape as public API (i.e., `flattenDocument`: user fields plus `id`, `_collection`, `_version`, `_updated_at`).
+- Document payloads use the same flattened shape as public API (i.e., `flattenDocument`: user fields plus `id`, `collection`, `version`, `updated_at`).
 
 **Token issuance (TET)**
 - Issued by control plane for a specific trigger execution window (short TTL, e.g., minutes).
@@ -146,10 +146,10 @@ Notes:
 - CAS/preconditions (optional): `ifMatchVersion`, `ifModifiedSince` guard against blind overwrites; failures return `412 PRECONDITION_FAILED`.
 
 **Additional semantics & defaults**
-- Preconditions/filters: same operator set and semantics as public query filters; any field is allowed (including user fields), e.g., `_version == 7`.
+- Preconditions/filters: same operator set and semantics as public query filters; any field is allowed (including user fields), e.g., `version == 7`.
 - Precondition operators: `==, !=, >, >=, <, <=, in, not-in, array-contains` (align with public query); multiple preconditions in an op are ANDed.
 - Patch semantics: identical to public PATCH (partial update; preserves unspecified fields; supports nested field paths as in public API; no special restrictions beyond existing reserved fields).
-- Field restrictions: `set/patch/update` cannot write reserved fields (`_id`, `_path`, `_parent`, `_collection`, `_updated_at`, `_version`, system-only keys); attempts return 400 INVALID_ARGUMENT.
+- Field restrictions: `set/patch/update` cannot write reserved fields (`_id`, `_path`, `_parent`, `collection`, `updated_at`, `version`, system-only keys); attempts return 400 INVALID_ARGUMENT.
 - Op order & duplicates: in a single `/trigger/write` transaction, multiple ops on the same path are allowed and executed in request order; later ops see effects of earlier ones (no dedup to reduce overhead).
 - Limits: `max_ops`, `max_payload_kb`, default op count/size/limit/timeout are provided via config (not in token unless overridden).
 - Error codes: HTTP status codes are reused; application codes align to the following mapping (stable set):

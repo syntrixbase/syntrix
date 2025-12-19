@@ -2,8 +2,12 @@ package storage
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
+	"strings"
 	"time"
+
+	"github.com/zeebo/blake3"
 )
 
 var (
@@ -17,17 +21,26 @@ var (
 
 // Document represents a stored document in the database
 type Document struct {
-	// Id is the unique identifier for the document (e.g., "chats/chatroom-1/members/alice")
+	// Id is the unique identifier for the document, 128-bit BLAKE3 of fullpath, binary
 	Id string `json:"id" bson:"_id"`
+
+	// Fullpath is the Full Pathname of document
+	Fullpath string `json:"fullpath" bson:"fullpath"`
 
 	// Collection is the parent collection name
 	Collection string `json:"collection" bson:"collection"`
 
+	// Parent is the parent of collection
+	Parent string `json:"parent" bson:"parent"`
+
 	// Data is the actual content of the document
 	Data map[string]interface{} `json:"data" bson:"data"`
 
-	// UpdatedAt is the timestamp of the last update (Unix nanoseconds)
+	// UpdatedAt is the timestamp of the last update (Unix millionseconds)
 	UpdatedAt int64 `json:"updated_at" bson:"updated_at"`
+
+	// CreatedAt is the timestamp of the creation (Unix millionseconds)
+	CreatedAt int64 `json:"created_at" bson:"created_at"`
 
 	// Version is the optimistic concurrency control version
 	Version int64 `json:"version" bson:"version"`
@@ -47,8 +60,8 @@ type StorageBackend interface {
 	Create(ctx context.Context, doc *Document) error
 
 	// Update updates an existing document.
-	// If version > 0, it performs a CAS (Compare-And-Swap) operation.
-	Update(ctx context.Context, path string, data map[string]interface{}, version int64) error
+	// If pred is provided, it performs a CAS (Compare-And-Swap) operation.
+	Update(ctx context.Context, path string, data map[string]interface{}, pred Filters) error
 
 	// Delete removes a document by its path
 	Delete(ctx context.Context, path string) error
@@ -66,6 +79,8 @@ type StorageBackend interface {
 
 // EventType represents the type of change
 type EventType string
+
+type Filters []Filter
 
 const (
 	EventCreate EventType = "create"
@@ -85,11 +100,11 @@ type Event struct {
 
 // Query represents a database query
 type Query struct {
-	Collection string   `json:"collection"`
-	Filters    []Filter `json:"filters"`
-	OrderBy    []Order  `json:"orderBy"`
-	Limit      int      `json:"limit"`
-	StartAfter string   `json:"startAfter"` // Cursor (usually the last document ID or sort key)
+	Collection string  `json:"collection"`
+	Filters    Filters `json:"filters"`
+	OrderBy    []Order `json:"orderBy"`
+	Limit      int     `json:"limit"`
+	StartAfter string  `json:"startAfter"` // Cursor (usually the last document ID or sort key)
 }
 
 // Filter represents a query filter
@@ -105,13 +120,32 @@ type Order struct {
 	Direction string `json:"direction"` // "asc" or "desc"
 }
 
+// CalculateID calculates the document ID (hash) from the full path
+func CalculateID(fullpath string) string {
+	hash := blake3.Sum256([]byte(fullpath))
+	return hex.EncodeToString(hash[:16])
+}
+
 // NewDocument creates a new document instance with initialized metadata
-func NewDocument(id string, collection string, data map[string]interface{}) *Document {
+func NewDocument(fullpath string, collection string, data map[string]interface{}) *Document {
+	// Calculate Parent from collection path
+	parent := ""
+	if idx := strings.LastIndex(collection, "/"); idx != -1 {
+		parent = collection[:idx]
+	}
+
+	id := CalculateID(fullpath)
+
+	now := time.Now().UnixMilli()
+
 	return &Document{
 		Id:         id,
+		Fullpath:   fullpath,
 		Collection: collection,
+		Parent:     parent,
 		Data:       data,
-		UpdatedAt:  time.Now().UnixNano(),
+		UpdatedAt:  now,
+		CreatedAt:  now,
 		Version:    1,
 	}
 }
@@ -131,7 +165,8 @@ type ReplicationPullResponse struct {
 
 // ReplicationPushChange represents a single change in a push request
 type ReplicationPushChange struct {
-	Doc *Document `json:"doc"`
+	Doc         *Document `json:"doc"`
+	BaseVersion *int64    `json:"base_version"` // Version known to the client
 }
 
 // ReplicationPushRequest represents a request to push changes

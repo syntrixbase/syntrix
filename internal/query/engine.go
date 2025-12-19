@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
 
@@ -38,16 +39,11 @@ func (e *Engine) CreateDocument(ctx context.Context, doc *storage.Document) erro
 	return e.storage.Create(ctx, doc)
 }
 
-// UpdateDocument updates an existing document.
-func (e *Engine) UpdateDocument(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	// Future: Add validation and authorization check here
-	return e.storage.Update(ctx, path, data, version)
-}
-
 // ReplaceDocument replaces a document or creates it if it doesn't exist (Upsert).
-func (e *Engine) ReplaceDocument(ctx context.Context, path string, collection string, data map[string]interface{}) (*storage.Document, error) {
+func (e *Engine) ReplaceDocument(
+	ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
 	// Try Get first
-	existing, err := e.storage.Get(ctx, path)
+	_, err := e.storage.Get(ctx, path)
 	if err != nil {
 		if err == storage.ErrNotFound {
 			// Create
@@ -61,7 +57,7 @@ func (e *Engine) ReplaceDocument(ctx context.Context, path string, collection st
 	}
 
 	// Update (Replace data)
-	if err := e.storage.Update(ctx, path, data, existing.Version); err != nil {
+	if err := e.storage.Update(ctx, path, data, pred); err != nil {
 		return nil, err
 	}
 
@@ -70,9 +66,9 @@ func (e *Engine) ReplaceDocument(ctx context.Context, path string, collection st
 }
 
 // PatchDocument updates specific fields of a document (Merge + CAS).
-func (e *Engine) PatchDocument(ctx context.Context, path string, data map[string]interface{}) (*storage.Document, error) {
+func (e *Engine) PatchDocument(ctx context.Context, fullpath string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
 	for {
-		existing, err := e.storage.Get(ctx, path)
+		existing, err := e.storage.Get(ctx, fullpath)
 		if err != nil {
 			return nil, err
 		}
@@ -87,10 +83,10 @@ func (e *Engine) PatchDocument(ctx context.Context, path string, data map[string
 		}
 
 		// Try Update with CAS
-		err = e.storage.Update(ctx, path, mergedData, existing.Version)
+		err = e.storage.Update(ctx, fullpath, mergedData, pred)
 		if err == nil {
 			// Success, fetch latest to return
-			return e.storage.Get(ctx, path)
+			return e.storage.Get(ctx, fullpath)
 		}
 
 		if err != storage.ErrVersionConflict {
@@ -244,13 +240,22 @@ func (e *Engine) Push(ctx context.Context, req storage.ReplicationPushRequest) (
 		// If incoming doc has a version, check if it matches existing.
 		// Or simply overwrite if "last write wins" is desired.
 		// For now, let's use strict version checking if version > 0.
-		if doc.Version > 0 && existing.Version != doc.Version {
+		if change.BaseVersion != nil && existing.Version != *change.BaseVersion {
 			conflicts = append(conflicts, existing) // Return server state
 			continue
 		}
 
+		filters := storage.Filters{}
+		if change.BaseVersion != nil {
+			filters = append(filters, storage.Filter{
+				Field: "version",
+				Op:    "==",
+				Value: *change.BaseVersion,
+			})
+		}
+
 		// Update
-		if err := e.storage.Update(ctx, doc.Id, doc.Data, existing.Version); err != nil {
+		if err := e.storage.Update(ctx, doc.Id, doc.Data, filters); err != nil {
 			if err == storage.ErrVersionConflict {
 				// Fetch latest to return as conflict
 				latest, _ := e.storage.Get(ctx, doc.Id)

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
 
@@ -59,32 +60,12 @@ func (c *Client) CreateDocument(ctx context.Context, doc *storage.Document) erro
 	return nil
 }
 
-func (c *Client) UpdateDocument(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	reqBody := map[string]interface{}{
-		"path":    path,
-		"data":    data,
-		"version": version,
-	}
-	resp, err := c.post(ctx, "/internal/v1/document/update", reqBody)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusConflict {
-		return storage.ErrVersionConflict
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-	return nil
-}
-
-func (c *Client) ReplaceDocument(ctx context.Context, path string, collection string, data map[string]interface{}) (*storage.Document, error) {
+func (c *Client) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
 	reqBody := map[string]interface{}{
 		"path":       path,
 		"collection": collection,
 		"data":       data,
+		"pred":       pred,
 	}
 	resp, err := c.post(ctx, "/internal/v1/document/replace", reqBody)
 	if err != nil {
@@ -103,10 +84,11 @@ func (c *Client) ReplaceDocument(ctx context.Context, path string, collection st
 	return &doc, nil
 }
 
-func (c *Client) PatchDocument(ctx context.Context, path string, data map[string]interface{}) (*storage.Document, error) {
+func (c *Client) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
 	reqBody := map[string]interface{}{
 		"path": path,
 		"data": data,
+		"pred": pred,
 	}
 	resp, err := c.post(ctx, "/internal/v1/document/patch", reqBody)
 	if err != nil {

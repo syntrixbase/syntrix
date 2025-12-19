@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
 
@@ -37,7 +38,7 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data Document
+	var data common.Document
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -51,7 +52,7 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	data.GenerateIDIfEmpty()
 
 	path := collection + "/" + data.GetID()
-	doc := storage.NewDocument(path, collection, stripSystemFields(data))
+	doc := storage.NewDocument(path, collection, data)
 
 	if err := s.engine.CreateDocument(r.Context(), doc); err != nil {
 		if errors.Is(err, storage.ErrExists) {
@@ -80,19 +81,25 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data Document
+	var data UpdateDocumentRequest
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	data.SetID(docID)
-	if err := data.ValidateDocument(); err != nil {
+	if err := data.Doc.ValidateDocument(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.ReplaceDocument(r.Context(), path, collection, stripSystemFields(data))
+	if id := data.Doc.GetID(); id != "" && id != docID {
+		http.Error(w, "Document ID cannot be changed", http.StatusBadRequest)
+		return
+	}
+
+	data.Doc.SetID(docID)
+
+	doc, err := s.engine.ReplaceDocument(r.Context(), path, collection, data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, storage.ErrVersionConflict) {
 			http.Error(w, "Version conflict", http.StatusConflict)
@@ -106,7 +113,7 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(flattenDocument(doc))
 }
 
-func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
 	_, docID, err := validateAndExplodeFullpath(path)
@@ -119,24 +126,28 @@ func (s *Server) handleUpdateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var data Document
+	var data UpdateDocumentRequest
 	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := data.ValidateDocument(); err != nil {
+	if err := data.Doc.ValidateDocument(); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	if data.IsEmpty() {
+	if id := data.Doc.GetID(); id != "" && id != docID {
+		http.Error(w, "Document ID cannot be changed", http.StatusBadRequest)
+		return
+	}
+
+	if data.Doc.IsEmpty() {
 		http.Error(w, "No data to update", http.StatusBadRequest)
 		return
 	}
-	data.SetID(docID)
-
-	doc, err := s.engine.PatchDocument(r.Context(), path, data)
+	data.Doc.SetID(docID)
+	doc, err := s.engine.PatchDocument(r.Context(), path, data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"syntrix/internal/common"
 	"syntrix/internal/query"
 	"syntrix/internal/storage"
 )
@@ -20,13 +21,10 @@ func (m *MockQueryService) GetDocument(ctx context.Context, path string) (*stora
 func (m *MockQueryService) CreateDocument(ctx context.Context, doc *storage.Document) error {
 	return nil
 }
-func (m *MockQueryService) UpdateDocument(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	return nil
-}
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data map[string]interface{}) (*storage.Document, error) {
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
 	return nil, nil
 }
-func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}) (*storage.Document, error) {
+func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
 	return nil, nil
 }
 func (m *MockQueryService) DeleteDocument(ctx context.Context, path string) error { return nil }

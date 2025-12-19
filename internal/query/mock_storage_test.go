@@ -25,8 +25,8 @@ func (m *MockStorageBackend) Create(ctx context.Context, doc *storage.Document) 
 	return args.Error(0)
 }
 
-func (m *MockStorageBackend) Update(ctx context.Context, path string, data map[string]interface{}, version int64) error {
-	args := m.Called(ctx, path, data, version)
+func (m *MockStorageBackend) Update(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) error {
+	args := m.Called(ctx, path, data, pred)
 	return args.Error(0)
 }
 

@@ -1,13 +1,18 @@
 package api
 
+import (
+	"syntrix/internal/common"
+	"syntrix/internal/storage"
+)
+
 type ReplicaChange struct {
 	Action string `json:"action"` // "create", "update", "delete"
 
 	// User facing document type, represents a JSON object.
 	//
 	//	"id" field is reserved for document ID.
-	//	"_version" field is reserved for document version.
-	Doc Document `json:"document"`
+	//	"version" field is reserved for document version.
+	Doc common.Document `json:"document"`
 }
 
 type ReplicaPushRequest struct {
@@ -16,7 +21,7 @@ type ReplicaPushRequest struct {
 }
 
 type ReplicaPushResponse struct {
-	Conflicts []Document `json:"conflicts"`
+	Conflicts []common.Document `json:"conflicts"`
 }
 
 type ReplicaPullRequest struct {
@@ -26,6 +31,11 @@ type ReplicaPullRequest struct {
 }
 
 type ReplicaPullResponse struct {
-	Documents  []Document `json:"documents"`
-	Checkpoint string     `json:"checkpoint"`
+	Documents  []common.Document `json:"documents"`
+	Checkpoint string            `json:"checkpoint"`
+}
+
+type UpdateDocumentRequest struct {
+	Doc     common.Document `json:"doc"`
+	IfMatch storage.Filters `json:"ifMatch,omitempty"`
 }

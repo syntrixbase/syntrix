@@ -48,16 +48,14 @@ All conditions are evaluated against an `event` variable. The structure of `even
   "type": "create",          // "create", "update", or "delete"
   "path": "users/user_123",  // Full document path
   "timestamp": 1697041234,   // Event timestamp (Unix)
-  "document": {              // The document state (post-image)
-    "id": "user_123",
+  "document": {              // The document state (User-Facing Document)
+    "id": "user_123",        // Business ID
     "collection": "users",
     "version": 1,
-    "data": {                // The actual document fields
-      "name": "Alice",
-      "age": 25,
-      "role": "admin",
-      "tags": ["vip", "beta"]
-    }
+    "name": "Alice",         // Flattened fields
+    "age": 25,
+    "role": "admin",
+    "tags": ["vip", "beta"]
   }
 }
 ```
@@ -67,37 +65,38 @@ All conditions are evaluated against an `event` variable. The structure of `even
 #### 1. Simple Field Check
 Trigger only when a user's age is 18 or older.
 ```cel
-event.document.data.age >= 18
+event.document.age >= 18
 ```
 
 #### 2. String Matching
 Trigger when a user's role is 'admin'.
 ```cel
-event.document.data.role == 'admin'
+event.document.role == 'admin'
 ```
 
 #### 3. Boolean Logic
 Trigger for active users who are also VIPs.
 ```cel
-event.document.data.isActive == true && event.document.data.isVIP == true
+event.document.isActive == true && event.document.isVIP == true
 ```
 
 #### 4. List Operations
 Trigger if the user has the 'beta' tag.
 ```cel
-'beta' in event.document.data.tags
+'beta' in event.document.tags
 ```
 
 #### 5. Null Checks
 Trigger if the 'email' field exists and is not null.
 ```cel
-has(event.document.data.email) && event.document.data.email != null
+has(event.document.email) && event.document.email != null
 ```
 
 #### 6. Complex Logic
 Trigger on high-value orders (amount > 1000) OR orders from specific regions.
 ```cel
-event.document.data.amount > 1000 || event.document.data.region in ['US', 'EU']
+event.document.amount > 1000 || event.document.region in ['US', 'EU']
+
 ```
 
 #### 7. Event Type Specific

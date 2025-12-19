@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -20,7 +21,8 @@ func TestHandlePull(t *testing.T) {
 	resp := &storage.ReplicationPullResponse{
 		Documents: []*storage.Document{
 			{
-				Id:         "rooms/room-1/messages/msg-1",
+				Id:         "hash-1",
+				Fullpath:   "rooms/room-1/messages/msg-1",
 				Collection: "rooms/room-1/messages",
 				Data:       map[string]interface{}{"name": "Alice"},
 				Version:    1,
@@ -58,7 +60,7 @@ func TestHandlePush(t *testing.T) {
 		Collection: "rooms/room-1/messages",
 		Changes: []ReplicaChange{
 			{
-				Doc: Document{"id": "msg-1", "name": "Bob", "_version": float64(1)},
+				Doc: common.Document{"id": "msg-1", "name": "Bob", "version": float64(1)},
 			},
 		},
 	}

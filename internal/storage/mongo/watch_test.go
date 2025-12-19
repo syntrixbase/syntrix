@@ -34,8 +34,11 @@ func TestMongoBackend_Watch(t *testing.T) {
 
 		time.Sleep(100 * time.Millisecond)
 
+		filters := storage.Filters{
+			{Field: "version", Op: "==", Value: doc.Version},
+		}
 		// Update
-		if err := backend.Update(context.Background(), "users/watcher", map[string]interface{}{"msg": "world"}, doc.Version); err != nil {
+		if err := backend.Update(context.Background(), "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
 			t.Logf("Update failed: %v", err)
 		}
 
