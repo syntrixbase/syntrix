@@ -78,7 +78,6 @@ func (e *CELEvaluator) Evaluate(ctx context.Context, trigger *Trigger, event *st
 	input := map[string]interface{}{
 		"event": map[string]interface{}{
 			"type":      string(event.Type),
-			"path":      event.Path,
 			"timestamp": event.Timestamp,
 			"document":  nil,
 			"before":    nil,

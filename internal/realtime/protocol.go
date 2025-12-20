@@ -51,7 +51,7 @@ type EventPayload struct {
 type PublicEvent struct {
 	Type      storage.EventType      `json:"type"`
 	Document  map[string]interface{} `json:"document,omitempty"`
-	Path      string                 `json:"path"`
+	ID        string                 `json:"id"`
 	Timestamp int64                  `json:"timestamp"`
 }
 

@@ -1,101 +1,33 @@
 package integration
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"testing"
 	"time"
-
-	"syntrix/internal/config"
-	"syntrix/internal/services"
-	"syntrix/internal/storage/mongo"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestDocumentSystemFields(t *testing.T) {
-	// 1. Setup Config
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
-	dbName := "syntrix_fields_test"
+	env := setupServiceEnv(t, "")
+	defer env.Cancel()
 
-	// Clean DB
-	ctx := context.Background()
-	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	backend, err := mongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys")
-	if err != nil {
-		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
-	}
-	// Drop database to start fresh
-	backend.DB().Drop(ctx)
-	backend.Close(ctx)
-
-	apiPort := 18090 // Use different ports to avoid conflicts
-	queryPort := 18091
-
-	cfg := &config.Config{
-		API: config.APIConfig{
-			Port:            apiPort,
-			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
-		},
-		Query: config.QueryConfig{
-			Port:          queryPort,
-			CSPServiceURL: "http://dummy-csp",
-		},
-		Storage: config.StorageConfig{
-			MongoURI:       mongoURI,
-			DatabaseName:   dbName,
-			DataCollection: "documents",
-			SysCollection:  "sys",
-		},
-	}
-
-	opts := services.Options{
-		RunAPI:   true,
-		RunQuery: true,
-	}
-
-	manager := services.NewManager(cfg, opts)
-	require.NoError(t, manager.Init(context.Background()))
-
-	// Start Manager
-	mgrCtx, mgrCancel := context.WithCancel(context.Background())
-	manager.Start(mgrCtx)
-	defer func() {
-		mgrCancel()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		manager.Shutdown(shutdownCtx)
-	}()
-
-	// Wait for startup
-	waitForPort(t, apiPort)
-	waitForPort(t, queryPort)
-
-	apiURL := fmt.Sprintf("http://localhost:%d", apiPort)
-	client := &http.Client{Timeout: 5 * time.Second}
+	token := env.GetToken(t, "test-user", "user")
 	collection := "test_fields"
 
 	// 1. Create Document
 	docData := map[string]interface{}{
 		"field1": "value1",
 	}
-	body, _ := json.Marshal(docData)
 
-	resp, err := client.Post(fmt.Sprintf("%s/v1/%s", apiURL, collection), "application/json", bytes.NewBuffer(body))
-	require.NoError(t, err)
+	resp := env.MakeRequest(t, "POST", "/v1/"+collection, docData, token)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createdDoc map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&createdDoc)
+	err := json.NewDecoder(resp.Body).Decode(&createdDoc)
 	require.NoError(t, err)
 	resp.Body.Close()
 
@@ -121,11 +53,7 @@ func TestDocumentSystemFields(t *testing.T) {
 			"field2": "value2",
 		},
 	}
-	patchBody, _ := json.Marshal(patchData)
-	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(patchBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/v1/%s/%s", collection, docID), patchData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var patchedDoc map[string]interface{}
@@ -154,11 +82,7 @@ func TestDocumentSystemFields(t *testing.T) {
 			"field3": "value3",
 		},
 	}
-	replaceBody, _ := json.Marshal(replaceData)
-	req, _ = http.NewRequest("PUT", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(replaceBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PUT", fmt.Sprintf("/v1/%s/%s", collection, docID), replaceData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var replacedDoc map[string]interface{}
@@ -180,11 +104,7 @@ func TestDocumentSystemFields(t *testing.T) {
 			"collection": "hacked",
 		},
 	}
-	maliciousBody, _ := json.Marshal(maliciousData)
-	req, _ = http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(maliciousBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/v1/%s/%s", collection, docID), maliciousData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var protectedDoc map[string]interface{}

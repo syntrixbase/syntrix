@@ -47,16 +47,18 @@ type TriggerConfig struct {
 }
 
 type StorageConfig struct {
-	MongoURI       string `yaml:"mongo_uri"`
-	DatabaseName   string `yaml:"database_name"`
-	DataCollection string `yaml:"data_collection"`
-	SysCollection  string `yaml:"sys_collection"`
+	MongoURI            string        `yaml:"mongo_uri"`
+	DatabaseName        string        `yaml:"database_name"`
+	DataCollection      string        `yaml:"data_collection"`
+	SysCollection       string        `yaml:"sys_collection"`
+	SoftDeleteRetention time.Duration `yaml:"soft_delete_retention"`
 }
 
 type AuthConfig struct {
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"`
 	AuthCodeTTL     time.Duration `yaml:"auth_code_ttl"`
+	RulesFile       string        `yaml:"rules_file"`
 }
 
 // LoadConfig loads configuration from files and environment variables
@@ -65,15 +67,17 @@ func LoadConfig() *Config {
 	// 1. Defaults
 	cfg := &Config{
 		Storage: StorageConfig{
-			MongoURI:       "mongodb://localhost:27017",
-			DatabaseName:   "syntrix",
-			DataCollection: "documents",
-			SysCollection:  "sys",
+			MongoURI:            "mongodb://localhost:27017",
+			DatabaseName:        "syntrix",
+			DataCollection:      "documents",
+			SysCollection:       "sys",
+			SoftDeleteRetention: 5 * time.Minute,
 		},
 		Auth: AuthConfig{
 			AccessTokenTTL:  15 * time.Minute,
 			RefreshTokenTTL: 7 * 24 * time.Hour,
 			AuthCodeTTL:     2 * time.Minute,
+			RulesFile:       "security.yaml",
 		},
 		API: APIConfig{
 			Port:            8080,

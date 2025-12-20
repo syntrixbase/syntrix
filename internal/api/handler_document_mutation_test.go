@@ -11,7 +11,7 @@ import (
 
 func TestHandleReplaceDocument_IdMutation(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	// Try to replace document msg-1 with body containing id: msg-2
 	body := []byte(`{"doc":{"id": "msg-2", "name": "Bob"}}`)
@@ -26,7 +26,7 @@ func TestHandleReplaceDocument_IdMutation(t *testing.T) {
 
 func TestHandleUpdateDocument_IdMutation(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	// Try to update document msg-1 with body containing id: msg-2
 	body := []byte(`{"doc":{"id": "msg-2", "name": "Bob"}}`)

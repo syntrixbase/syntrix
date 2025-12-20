@@ -29,5 +29,8 @@ func flattenDocument(doc *storage.Document) common.Document {
 	flat["updated_at"] = doc.UpdatedAt
 	flat["created_at"] = doc.CreatedAt
 	flat["collection"] = doc.Collection
+	if doc.Deleted {
+		flat["deleted"] = true
+	}
 	return flat
 }

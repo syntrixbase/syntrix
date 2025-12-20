@@ -36,7 +36,7 @@ func TestHub_Broadcast(t *testing.T) {
 	// Broadcast an event
 	evt := storage.Event{
 		Type: storage.EventCreate,
-		Path: "users/123",
+		Id:   "users/123",
 		Document: &storage.Document{
 			Id:         "users/123",
 			Collection: "users",
@@ -56,7 +56,7 @@ func TestHub_Broadcast(t *testing.T) {
 
 		assert.Equal(t, "sub1", payload.SubID)
 		assert.Equal(t, evt.Type, payload.Delta.Type)
-		assert.Equal(t, evt.Path, payload.Delta.Path)
+		assert.Equal(t, evt.Id, payload.Delta.ID)
 		assert.Equal(t, evt.Document.Data["name"], payload.Delta.Document["name"])
 	case <-time.After(1 * time.Second):
 		t.Fatal("Timeout waiting for broadcast message")
@@ -114,7 +114,7 @@ func TestHub_Broadcast_WithFilter(t *testing.T) {
 	// 1. Broadcast event that does NOT match (age = 18)
 	evtNoMatch := storage.Event{
 		Type: storage.EventCreate,
-		Path: "users/young",
+		Id:   "users/young",
 		Document: &storage.Document{
 			Id:         "users/young",
 			Collection: "users",
@@ -134,7 +134,7 @@ func TestHub_Broadcast_WithFilter(t *testing.T) {
 	// 2. Broadcast event that DOES match (age = 25)
 	evtMatch := storage.Event{
 		Type: storage.EventCreate,
-		Path: "users/adult",
+		Id:   "users/adult",
 		Document: &storage.Document{
 			Id:         "users/adult",
 			Collection: "users",

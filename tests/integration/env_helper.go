@@ -1,0 +1,242 @@
+package integration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"os"
+	"testing"
+	"time"
+
+	"syntrix/internal/auth"
+	"syntrix/internal/config"
+	"syntrix/internal/services"
+
+	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type ServiceEnv struct {
+	APIURL      string
+	QueryURL    string
+	RealtimeURL string
+	CSPURL      string
+	Manager     *services.Manager
+	Cancel      context.CancelFunc
+	MongoURI    string
+	DBName      string
+}
+
+func setupServiceEnv(t *testing.T, rulesContent string, configModifiers ...func(*config.Config)) *ServiceEnv {
+	// 1. Setup Config
+	mongoURI := os.Getenv("MONGO_URI")
+	if mongoURI == "" {
+		mongoURI = "mongodb://localhost:27017"
+	}
+	dbName := "syntrix_microservices_test"
+
+	// Clean DB
+	ctx := context.Background()
+	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	// Connect using driver to drop database
+	client, err := mongo.Connect(connCtx, options.Client().ApplyURI(mongoURI))
+	if err != nil {
+		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
+	}
+	defer client.Disconnect(ctx)
+
+	err = client.Database(dbName).Drop(ctx)
+	require.NoError(t, err)
+
+	apiPort := 18084
+	queryPort := 18085
+	realtimePort := 18086
+	cspPort := 18087
+
+	// Create security rules file
+	if rulesContent == "" {
+		rulesContent = `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{document=**}:
+        allow:
+          read, write: "true"
+`
+	}
+	rulesFile := t.TempDir() + "/security.yaml"
+	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
+	require.NoError(t, err)
+
+	cfg := &config.Config{
+		API: config.APIConfig{
+			Port:            apiPort,
+			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
+		},
+		Query: config.QueryConfig{
+			Port:          queryPort,
+			CSPServiceURL: fmt.Sprintf("http://localhost:%d", cspPort),
+		},
+		Realtime: config.RealtimeConfig{
+			Port:            realtimePort,
+			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
+		},
+		CSP: config.CSPConfig{
+			Port: cspPort,
+		},
+		Storage: config.StorageConfig{
+			MongoURI:       mongoURI,
+			DatabaseName:   dbName,
+			DataCollection: "documents",
+			SysCollection:  "sys",
+		},
+		Auth: config.AuthConfig{
+			AccessTokenTTL:  15 * time.Minute,
+			RefreshTokenTTL: 7 * 24 * time.Hour,
+			AuthCodeTTL:     2 * time.Minute,
+			RulesFile:       rulesFile,
+		},
+	}
+
+	// Apply config modifiers
+	for _, mod := range configModifiers {
+		mod(cfg)
+	}
+
+	opts := services.Options{
+		RunAPI:              true,
+		RunQuery:            true,
+		RunRealtime:         true,
+		RunCSP:              true,
+		RunAuth:             true,
+		RunTriggerEvaluator: true,
+		RunTriggerWorker:    true,
+	}
+
+	manager := services.NewManager(cfg, opts)
+	require.NoError(t, manager.Init(context.Background()))
+
+	// Start Manager
+	mgrCtx, mgrCancel := context.WithCancel(context.Background())
+	manager.Start(mgrCtx)
+
+	// Wait for startup
+	waitForPort(t, apiPort)
+	waitForPort(t, queryPort)
+	waitForPort(t, realtimePort)
+	waitForPort(t, cspPort)
+
+	return &ServiceEnv{
+		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
+		QueryURL:    fmt.Sprintf("http://localhost:%d", queryPort),
+		RealtimeURL: fmt.Sprintf("http://localhost:%d", realtimePort),
+		CSPURL:      fmt.Sprintf("http://localhost:%d", cspPort),
+		Manager:     manager,
+		MongoURI:    mongoURI,
+		DBName:      dbName,
+		Cancel: func() {
+			mgrCancel()
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			manager.Shutdown(shutdownCtx)
+		},
+	}
+}
+
+func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
+	ctx := context.Background()
+	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	client, err := mongo.Connect(connCtx, options.Client().ApplyURI(e.MongoURI))
+	require.NoError(t, err)
+	defer client.Disconnect(ctx)
+
+	hash, algo, _ := auth.HashPassword("password")
+
+	user := auth.User{
+		ID:            uid,
+		Username:      uid,
+		PasswordHash:  hash,
+		PasswordAlgo:  algo,
+		Roles:         []string{role},
+		Disabled:      false,
+		CreatedAt:     time.Now(),
+		LastLoginAt:   time.Now(),
+		LoginAttempts: 0,
+		LockoutUntil:  time.Time{},
+	}
+
+	_, err = client.Database(e.DBName).Collection("auth_users").InsertOne(ctx, user)
+	// Ignore duplicate key error if user already exists
+	if err != nil && !mongo.IsDuplicateKeyError(err) {
+		require.NoError(t, err)
+	}
+
+	// Login
+	loginBody := map[string]string{
+		"username": uid,
+		"password": "password",
+	}
+	bodyBytes, _ := json.Marshal(loginBody)
+	resp, err := http.Post(e.APIURL+"/v1/auth/login", "application/json", bytes.NewBuffer(bodyBytes))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var res map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&res)
+	require.NoError(t, err)
+
+	token, ok := res["access_token"].(string)
+	require.True(t, ok, "access_token not found in response")
+	return token
+}
+
+func (e *ServiceEnv) MakeRequest(t *testing.T, method, path string, body interface{}, token string) *http.Response {
+	var bodyReader io.Reader
+	if body != nil {
+		jsonBody, err := json.Marshal(body)
+		require.NoError(t, err)
+		bodyReader = bytes.NewBuffer(jsonBody)
+	}
+
+	req, err := http.NewRequest(method, e.APIURL+path, bodyReader)
+	require.NoError(t, err)
+
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	return resp
+}
+
+func waitForPort(t *testing.T, port int) {
+	timeout := 5 * time.Second
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", fmt.Sprintf("localhost:%d", port), 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("Timeout waiting for port %d to be ready", port)
+}

@@ -179,7 +179,7 @@ func TestEngine_Push(t *testing.T) {
 	engine := NewEngine(mockStorage, "http://mock-csp")
 	ctx := context.Background()
 
-	doc := &storage.Document{Id: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1}
+	doc := &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1}
 	req := storage.ReplicationPushRequest{
 		Collection: "test",
 		Changes: []storage.ReplicationPushChange{

@@ -10,6 +10,7 @@ import (
 
 	"syntrix/internal/api"
 	"syntrix/internal/auth"
+	"syntrix/internal/authz"
 	"syntrix/internal/config"
 	"syntrix/internal/csp"
 	"syntrix/internal/query"
@@ -63,7 +64,7 @@ func (m *Manager) Init(ctx context.Context) error {
 		// For simplicity, let's default to Query config (which is usually the main DB config).
 
 		var err error
-		m.storageBackend, err = mongo.NewMongoBackend(ctx, mongoURI, dbName, dataColl, sysColl)
+		m.storageBackend, err = mongo.NewMongoBackend(ctx, mongoURI, dbName, dataColl, sysColl, m.cfg.Storage.SoftDeleteRetention)
 		if err != nil {
 			return fmt.Errorf("failed to connect to storage backend: %w", err)
 		}
@@ -118,7 +119,24 @@ func (m *Manager) Init(ctx context.Context) error {
 			queryService = query.NewClient(m.cfg.API.QueryServiceURL)
 		}
 
-		apiServer := api.NewServer(queryService, m.authService)
+		// Initialize Authz Engine
+		var authzEngine *authz.Engine
+		if m.cfg.Auth.RulesFile != "" {
+			var err error
+			authzEngine, err = authz.NewEngine(queryService)
+			if err != nil {
+				return fmt.Errorf("failed to create authz engine: %w", err)
+			}
+
+			if err := authzEngine.LoadRules(m.cfg.Auth.RulesFile); err != nil {
+				log.Printf("Error: failed to load rules from %s: %v", m.cfg.Auth.RulesFile, err)
+				return fmt.Errorf("failed to load authorization rules")
+			} else {
+				log.Printf("Loaded authorization rules from %s", m.cfg.Auth.RulesFile)
+			}
+		}
+
+		apiServer := api.NewServer(queryService, m.authService, authzEngine)
 		m.servers = append(m.servers, &http.Server{
 			Addr:    fmt.Sprintf(":%d", m.cfg.API.Port),
 			Handler: apiServer,
@@ -132,7 +150,7 @@ func (m *Manager) Init(ctx context.Context) error {
 			queryService = query.NewClient(m.cfg.Realtime.QueryServiceURL)
 		}
 
-		m.rtServer = realtime.NewServer(queryService)
+		m.rtServer = realtime.NewServer(queryService, m.cfg.Storage.DataCollection)
 		m.servers = append(m.servers, &http.Server{
 			Addr:    fmt.Sprintf(":%d", m.cfg.Realtime.Port),
 			Handler: m.rtServer,
@@ -207,12 +225,10 @@ func (m *Manager) Init(ctx context.Context) error {
 }
 
 func (m *Manager) Start(bgCtx context.Context) {
-	var wg sync.WaitGroup
-
 	for i, srv := range m.servers {
-		wg.Add(1)
+		m.wg.Add(1)
 		go func(s *http.Server, name string) {
-			defer wg.Done()
+			defer m.wg.Done()
 			log.Printf("%s listening on %s", name, s.Addr)
 			if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 				log.Printf("%s error: %v", name, err)
@@ -221,12 +237,12 @@ func (m *Manager) Start(bgCtx context.Context) {
 	}
 
 	// Start Realtime Background Tasks with retry
-	if m.opts.RunRealtime && m.rtServer != nil {
+	if m.opts.RunRealtime {
 		go func() {
 			// Give servers a moment to start
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
-			maxRetries := 10
+			maxRetries := 100
 			for i := 0; i < maxRetries; i++ {
 				// Check context before trying
 				select {
@@ -236,13 +252,15 @@ func (m *Manager) Start(bgCtx context.Context) {
 				}
 
 				if err := m.rtServer.StartBackgroundTasks(bgCtx); err != nil {
-					log.Printf("Attempt %d/%d: Failed to start realtime background tasks: %v", i+1, maxRetries, err)
+					if maxRetries%10 == 0 {
+						log.Printf("Attempt %d/%d: Failed to start realtime background tasks: %v", i+1, maxRetries, err)
+					}
 
 					// Wait with context check
 					select {
 					case <-bgCtx.Done():
 						return
-					case <-time.After(1 * time.Second):
+					case <-time.After(100 * time.Millisecond):
 						continue
 					}
 				}
@@ -254,7 +272,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 	}
 
 	// Start Trigger Evaluator (Change Stream Watcher)
-	if m.opts.RunTriggerEvaluator && m.triggerService != nil {
+	if m.opts.RunTriggerEvaluator {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
@@ -265,7 +283,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 	}
 
 	// Start Trigger Consumer
-	if m.opts.RunTriggerWorker && m.triggerConsumer != nil {
+	if m.opts.RunTriggerWorker {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()

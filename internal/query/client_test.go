@@ -51,8 +51,8 @@ func TestClient_WatchCollection(t *testing.T) {
 		assert.Equal(t, "/internal/v1/watch", r.URL.Path)
 
 		// Send two events then close
-		evt1 := storage.Event{Type: "create", Path: "test/1"}
-		evt2 := storage.Event{Type: "update", Path: "test/1"}
+		evt1 := storage.Event{Type: "create", Id: "test/1"}
+		evt2 := storage.Event{Type: "update", Id: "test/1"}
 
 		encoder := json.NewEncoder(w)
 		encoder.Encode(evt1)

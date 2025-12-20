@@ -4,11 +4,13 @@ storage:
   database_name: "syntrix"
   data_collection: "documents"
   sys_collection: "sys"
+  soft_delete_retention: 720h # 30 days
 
 auth:
   access_token_ttl: 15m
   refresh_token_ttl: 168h # 7 days
   auth_code_ttl: 2m
+  rules_file: "security.yaml"
 
 api:
   port: 8080

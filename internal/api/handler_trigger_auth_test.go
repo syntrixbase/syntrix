@@ -59,7 +59,7 @@ func TestTriggerAuth(t *testing.T) {
 
 	// Setup Server
 	mockEngine := new(MockQueryService)
-	server := NewServer(mockEngine, authService)
+	server := NewServer(mockEngine, authService, nil)
 
 	// Generate Tokens
 	userToken, _ := tokenService.GenerateTokenPair(&auth.User{

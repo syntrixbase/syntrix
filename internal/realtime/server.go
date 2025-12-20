@@ -10,17 +10,19 @@ import (
 )
 
 type Server struct {
-	hub          *Hub
-	queryService query.Service
-	mux          *http.ServeMux
+	hub            *Hub
+	queryService   query.Service
+	dataCollection string
+	mux            *http.ServeMux
 }
 
-func NewServer(qs query.Service) *Server {
+func NewServer(qs query.Service, dataCollection string) *Server {
 	h := NewHub()
 	s := &Server{
-		hub:          h,
-		queryService: qs,
-		mux:          http.NewServeMux(),
+		hub:            h,
+		dataCollection: dataCollection,
+		queryService:   qs,
+		mux:            http.NewServeMux(),
 	}
 	s.mux.HandleFunc("/v1/realtime", func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.Header.Get("Accept"), "text/event-stream") {
@@ -38,6 +40,7 @@ func NewServer(qs query.Service) *Server {
 func (s *Server) StartBackgroundTasks(ctx context.Context) error {
 	go s.hub.Run()
 
+	// Watch all collections
 	stream, err := s.queryService.WatchCollection(ctx, "")
 	if err != nil {
 		return err
@@ -55,7 +58,8 @@ func (s *Server) StartBackgroundTasks(ctx context.Context) error {
 					log.Println("[Realtime] Change stream closed")
 					return
 				}
-				log.Printf("[Realtime] Broadcasting event type=%s collection=%s path=%s", evt.Type, evt.Document.Collection, evt.Path)
+				// Broadcast all events, let Hub filter by subscription
+				log.Printf("[Realtime] Broadcasting event type=%s id=%s", evt.Type, evt.Id)
 				s.hub.Broadcast(evt)
 			}
 		}

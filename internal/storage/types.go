@@ -33,9 +33,6 @@ type Document struct {
 	// Parent is the parent of collection
 	Parent string `json:"parent" bson:"parent"`
 
-	// Data is the actual content of the document
-	Data map[string]interface{} `json:"data" bson:"data"`
-
 	// UpdatedAt is the timestamp of the last update (Unix millionseconds)
 	UpdatedAt int64 `json:"updated_at" bson:"updated_at"`
 
@@ -44,6 +41,12 @@ type Document struct {
 
 	// Version is the optimistic concurrency control version
 	Version int64 `json:"version" bson:"version"`
+
+	// Data is the actual content of the document
+	Data map[string]interface{} `json:"data" bson:"data"`
+
+	// Deleted indicates if the document is soft-deleted
+	Deleted bool `json:"deleted,omitempty" bson:"deleted,omitempty"`
 }
 
 // WatchOptions defines options for watching changes
@@ -68,7 +71,7 @@ type StorageBackend interface {
 	Patch(ctx context.Context, path string, data map[string]interface{}, pred Filters) error
 
 	// Delete removes a document by its path
-	Delete(ctx context.Context, path string) error
+	Delete(ctx context.Context, path string, pred Filters) error
 
 	// Query executes a complex query
 	Query(ctx context.Context, q Query) ([]*Document, error)
@@ -98,10 +101,10 @@ const (
 
 // Event represents a database change event
 type Event struct {
+	Id          string      `json:"id"`
 	Type        EventType   `json:"type"`
 	Document    *Document   `json:"document,omitempty"` // Nil for delete
 	Before      *Document   `json:"before,omitempty"`   // Previous state, if available
-	Path        string      `json:"path"`
 	Timestamp   int64       `json:"timestamp"`
 	ResumeToken interface{} `json:"-"` // Opaque token for resuming watch
 }
@@ -113,6 +116,7 @@ type Query struct {
 	OrderBy    []Order `json:"orderBy"`
 	Limit      int     `json:"limit"`
 	StartAfter string  `json:"startAfter"` // Cursor (usually the last document ID or sort key)
+	ShowDeleted bool    `json:"showDeleted"`
 }
 
 // Filter represents a query filter

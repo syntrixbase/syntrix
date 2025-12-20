@@ -114,8 +114,8 @@ func (m *MockStorageBackend) Patch(ctx context.Context, path string, data map[st
 	return args.Error(0)
 }
 
-func (m *MockStorageBackend) Delete(ctx context.Context, path string) error {
-	args := m.Called(ctx, path)
+func (m *MockStorageBackend) Delete(ctx context.Context, path string, pred storage.Filters) error {
+	args := m.Called(ctx, path, pred)
 	return args.Error(0)
 }
 

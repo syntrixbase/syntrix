@@ -16,7 +16,7 @@ import (
 
 func TestHandlePull(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	resp := &storage.ReplicationPullResponse{
 		Documents: []*storage.Document{
@@ -48,7 +48,7 @@ func TestHandlePull(t *testing.T) {
 
 func TestHandlePush(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	resp := &storage.ReplicationPushResponse{
 		Conflicts: []*storage.Document{},

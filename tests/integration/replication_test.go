@@ -18,8 +18,11 @@ import (
 )
 
 func TestReplication_FullFlow(t *testing.T) {
-	env := setupMicroservices(t)
+	env := setupServiceEnv(t, "")
 	defer env.Cancel()
+
+	// Get Token
+	token := env.GetToken(t, "user1", "user")
 
 	collectionName := "replication_test_col"
 
@@ -65,7 +68,12 @@ func TestReplication_FullFlow(t *testing.T) {
 	bodyBytes, _ := json.Marshal(pushBody)
 	pushURL := fmt.Sprintf("%s/v1/replication/push?collection=%s", env.APIURL, collectionName)
 
-	pushResp, err := client.Post(pushURL, "application/json", bytes.NewBuffer(bodyBytes))
+	pushReq, err := http.NewRequest("POST", pushURL, bytes.NewBuffer(bodyBytes))
+	require.NoError(t, err)
+	pushReq.Header.Set("Content-Type", "application/json")
+	pushReq.Header.Set("Authorization", "Bearer "+token)
+
+	pushResp, err := client.Do(pushReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, pushResp.StatusCode)
 
@@ -114,7 +122,11 @@ func TestReplication_FullFlow(t *testing.T) {
 
 	// 4. Pull to verify storage
 	pullURL := fmt.Sprintf("%s/v1/replication/pull?collection=%s&checkpoint=0", env.APIURL, collectionName)
-	pullResp, err := http.Get(pullURL)
+	pullReq, err := http.NewRequest("GET", pullURL, nil)
+	require.NoError(t, err)
+	pullReq.Header.Set("Authorization", "Bearer "+token)
+
+	pullResp, err := client.Do(pullReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, pullResp.StatusCode)
 

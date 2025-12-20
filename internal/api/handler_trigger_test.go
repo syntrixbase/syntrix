@@ -14,7 +14,7 @@ import (
 
 func TestHandleTriggerGet(t *testing.T) {
 	mockEngine := new(MockQueryService)
-	server := NewServer(mockEngine, nil)
+	server := NewServer(mockEngine, nil, nil)
 
 	// Mock Data
 	doc1 := &storage.Document{
@@ -57,7 +57,7 @@ func TestHandleTriggerGet(t *testing.T) {
 
 func TestHandleTriggerWrite(t *testing.T) {
 	mockEngine := new(MockQueryService)
-	server := NewServer(mockEngine, nil)
+	server := NewServer(mockEngine, nil, nil)
 
 	// Mock Expectations
 	mockEngine.On("CreateDocument", mock.Anything, mock.MatchedBy(func(doc *storage.Document) bool {
@@ -92,7 +92,7 @@ func TestHandleTriggerWrite(t *testing.T) {
 
 func TestHandleTriggerQuery(t *testing.T) {
 	mockEngine := new(MockQueryService)
-	server := NewServer(mockEngine, nil)
+	server := NewServer(mockEngine, nil, nil)
 
 	// Mock Data
 	docs := []*storage.Document{
@@ -116,7 +116,7 @@ func TestHandleTriggerQuery(t *testing.T) {
 
 func TestHandleTriggerWrite_TransactionFailure(t *testing.T) {
 	mockEngine := new(MockQueryService)
-	server := NewServer(mockEngine, nil)
+	server := NewServer(mockEngine, nil, nil)
 
 	// Mock RunTransaction to simulate failure
 	// The mock implementation executes the closure.

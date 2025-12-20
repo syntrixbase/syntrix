@@ -46,7 +46,7 @@ func (m *MockQueryService) RunTransaction(ctx context.Context, fn func(ctx conte
 
 func TestServer_Routing(t *testing.T) {
 	qs := &MockQueryService{}
-	server := NewServer(qs)
+	server := NewServer(qs, "")
 	go server.hub.Run()
 
 	tests := []struct {

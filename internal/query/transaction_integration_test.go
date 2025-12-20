@@ -26,7 +26,7 @@ func TestTransactionIntegration(t *testing.T) {
 	defer cancel()
 
 	// 1. Setup Backend
-	backend, err := mongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys")
+	backend, err := mongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys", 0)
 	if err != nil {
 		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
 	}

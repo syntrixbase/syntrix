@@ -1,21 +1,29 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"syntrix/internal/auth"
+	"syntrix/internal/authz"
 	"syntrix/internal/query"
+	"syntrix/internal/storage"
+	"time"
 )
 
 type Server struct {
 	engine query.Service
 	auth   *auth.AuthService
+	authz  *authz.Engine
 	mux    *http.ServeMux
 }
 
-func NewServer(engine query.Service, auth *auth.AuthService) *Server {
+func NewServer(engine query.Service, auth *auth.AuthService, authz *authz.Engine) *Server {
 	s := &Server{
 		engine: engine,
 		auth:   auth,
+		authz:  authz,
 		mux:    http.NewServeMux(),
 	}
 	s.routes()
@@ -38,11 +46,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) routes() {
 	// Document Operations
-	s.mux.HandleFunc("GET /v1/{path...}", s.protected(s.handleGetDocument))
-	s.mux.HandleFunc("POST /v1/{path...}", s.protected(s.handleCreateDocument))
-	s.mux.HandleFunc("PUT /v1/{path...}", s.protected(s.handleReplaceDocument))
-	s.mux.HandleFunc("PATCH /v1/{path...}", s.protected(s.handlePatchDocument))
-	s.mux.HandleFunc("DELETE /v1/{path...}", s.protected(s.handleDeleteDocument))
+	s.mux.HandleFunc("GET /v1/{path...}", s.maybeProtected(s.authorized(s.handleGetDocument, "read")))
+	s.mux.HandleFunc("POST /v1/{path...}", s.maybeProtected(s.authorized(s.handleCreateDocument, "create")))
+	s.mux.HandleFunc("PUT /v1/{path...}", s.maybeProtected(s.authorized(s.handleReplaceDocument, "update")))
+	s.mux.HandleFunc("PATCH /v1/{path...}", s.maybeProtected(s.authorized(s.handlePatchDocument, "update")))
+	s.mux.HandleFunc("DELETE /v1/{path...}", s.maybeProtected(s.authorized(s.handleDeleteDocument, "delete")))
 
 	// Query Operations
 	s.mux.HandleFunc("POST /v1/query", s.protected(s.handleQuery))
@@ -73,6 +81,86 @@ func (s *Server) protected(h http.HandlerFunc) http.HandlerFunc {
 	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		s.auth.Middleware(h).ServeHTTP(w, r)
+	}
+}
+
+func (s *Server) maybeProtected(h http.HandlerFunc) http.HandlerFunc {
+	if s.auth == nil {
+		return h
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.auth.MiddlewareOptional(h).ServeHTTP(w, r)
+	}
+}
+
+func (s *Server) authorized(h http.HandlerFunc, action string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if s.authz == nil {
+			h(w, r)
+			return
+		}
+
+		path := r.PathValue("path")
+
+		// Build Request Context
+		reqCtx := authz.Request{
+			Time: time.Now(),
+		}
+
+		// Extract Auth
+		if uid, ok := r.Context().Value("userID").(string); ok {
+			reqCtx.Auth.UID = uid
+		}
+		reqCtx.Auth.Token = map[string]interface{}{
+			"uid": reqCtx.Auth.UID,
+		}
+		if roles, ok := r.Context().Value("roles").([]string); ok {
+			rInterface := make([]interface{}, len(roles))
+			for i, v := range roles {
+				rInterface[i] = v
+			}
+			reqCtx.Auth.Token["roles"] = rInterface
+		}
+
+		// Fetch Existing Resource if needed
+		var existingRes *authz.Resource
+		if action != "create" {
+			doc, err := s.engine.GetDocument(r.Context(), path)
+			if err == nil {
+				existingRes = &authz.Resource{
+					Data: doc.Data,
+					ID:   doc.Id,
+				}
+			} else if err != storage.ErrNotFound {
+				http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+				return
+			}
+		}
+
+		// For Create/Update, extract new data
+		if action == "create" || action == "update" {
+			bodyBytes, _ := io.ReadAll(r.Body)
+			r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+			var data map[string]interface{}
+			if err := json.Unmarshal(bodyBytes, &data); err == nil {
+				reqCtx.Resource = &authz.Resource{Data: data}
+			}
+		}
+
+		allowed, err := s.authz.Evaluate(r.Context(), path, action, reqCtx, existingRes)
+		if err != nil {
+			// Log error?
+			http.Error(w, "Forbidden: Rule Error", http.StatusForbidden)
+			return
+		}
+
+		if !allowed {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+
+		h(w, r)
 	}
 }
 

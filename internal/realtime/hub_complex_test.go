@@ -58,7 +58,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	// 1. Test "in" - Match
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
-		Path: "users/u1",
+		Id:   "users/u1",
 		Document: &storage.Document{
 			Id:         "users/u1",
 			Collection: "users",
@@ -78,7 +78,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	// 2. Test "in" - No Match
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
-		Path: "users/u2",
+		Id:   "users/u2",
 		Document: &storage.Document{
 			Id:         "users/u2",
 			Collection: "users",
@@ -96,7 +96,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	// 3. Test "array-contains" - Match
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
-		Path: "posts/p1",
+		Id:   "posts/p1",
 		Document: &storage.Document{
 			Id:         "posts/p1",
 			Collection: "posts",
@@ -116,7 +116,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	// 4. Test "array-contains" - No Match
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
-		Path: "posts/p2",
+		Id:   "posts/p2",
 		Document: &storage.Document{
 			Id:         "posts/p2",
 			Collection: "posts",

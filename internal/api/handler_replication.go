@@ -123,6 +123,10 @@ func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
 		doc := storage.NewDocument(id, collection, docData)
 		doc.Version = version
 
+		if change.Action == "delete" {
+			doc.Deleted = true
+		}
+
 		changes = append(changes, storage.ReplicationPushChange{
 			Doc: doc,
 		})

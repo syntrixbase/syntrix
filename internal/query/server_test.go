@@ -62,7 +62,7 @@ func TestServer_DeleteDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
 	path := "test/1"
-	mockStorage.On("Delete", mock.Anything, path).Return(nil)
+	mockStorage.On("Delete", mock.Anything, path, storage.Filters(nil)).Return(nil)
 
 	reqBody, _ := json.Marshal(map[string]string{"path": path})
 	req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))

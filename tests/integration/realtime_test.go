@@ -77,7 +77,7 @@ const (
 )
 
 func TestRealtime_FullFlow(t *testing.T) {
-	env := setupMicroservices(t)
+	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
 	// Convert http URL to ws URL
@@ -199,7 +199,7 @@ func TestRealtime_FullFlow(t *testing.T) {
 }
 
 func TestRealtime_SSE(t *testing.T) {
-	env := setupMicroservices(t)
+	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
 	collectionName := "sse_test_col"
@@ -279,7 +279,7 @@ func TestRealtime_SSE(t *testing.T) {
 }
 
 func TestRealtime_Stream(t *testing.T) {
-	env := setupMicroservices(t)
+	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
 	collectionName := "stream_test_col"
@@ -375,7 +375,7 @@ func mustMarshal(v interface{}) []byte {
 }
 
 func TestRealtime_Filtering(t *testing.T) {
-	env := setupMicroservices(t)
+	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
 	// Convert http URL to ws URL

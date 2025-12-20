@@ -31,6 +31,9 @@ type Document struct {
 
 	// Version is the optimistic concurrency control version, Auto-increment per update, client cannot set
 	Version int64 `json:"version" bson:"version"`
+
+	// Deleted indicates if the document is soft-deleted
+	Deleted bool `json:"deleted,omitempty" bson:"deleted,omitempty"`
 }
 ```
 
@@ -56,5 +59,19 @@ type Document map[string]interface{}
 **Rules & protections**
 - `id` is required and immutable after creation; server enforces charset `[A-Za-z0-9_.-]` and rejects mutations on update/patch.
 - Shadow fields (`collection`, `version`, `updated_at`, `created_at`) are server-owned; client-supplied values are ignored/overwritten.
+
+## 3 Soft Delete Mechanism
+
+When a document is deleted via the API or Storage interface, it is **soft deleted** instead of being immediately removed from the database.
+
+1.  **Marked as Deleted**: The `deleted` field is set to `true`.
+2.  **Data Cleared**: The `data` field is cleared (set to empty) to save space and ensure privacy.
+3.  **Expiration**: A `sys_expires_at` field is set based on the configured retention period (default 30 days). MongoDB's TTL index will automatically remove the document after this time.
+4.  **Visibility**: Soft-deleted documents are excluded from `Get` and `Query` operations by default.
+5.  **Re-creation**: If a document is created with the same ID as a soft-deleted one, the soft-deleted document is overwritten (revived).
+6.  **Watch Events**:
+    *   Soft deletion emits a `delete` event.
+    *   Reviving a soft-deleted document emits a `create` event.
+
 - `version` in MongoDocument is incremented automatically per write and not client-settable.
 - `created_at` is set once on create; `updated_at` updates on every write.

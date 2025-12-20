@@ -1,19 +1,12 @@
 package integration
 
 import (
-	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"testing"
-	"time"
 
-	"syntrix/internal/config"
-	"syntrix/internal/services"
 	"syntrix/internal/storage"
-	"syntrix/internal/storage/mongo"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,67 +15,10 @@ import (
 // TestAPIIntegration runs a full integration test against a real MongoDB.
 // It requires MongoDB to be running (e.g. via docker-compose).
 func TestAPIIntegration(t *testing.T) {
-	// 1. Setup Config
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
-	}
-	dbName := "syntrix_api_test"
+	env := setupServiceEnv(t, "")
+	defer env.Cancel()
 
-	// Clean DB (Optional, relying on unique IDs mostly, but good practice to ensure connection works)
-	ctx := context.Background()
-	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	backend, err := mongo.NewMongoBackend(connCtx, mongoURI, dbName, "documents", "sys")
-	if err != nil {
-		t.Skipf("Skipping integration test: could not connect to MongoDB: %v", err)
-	}
-	backend.Close(ctx)
-
-	apiPort := 18082
-	queryPort := 18083
-
-	cfg := &config.Config{
-		API: config.APIConfig{
-			Port:            apiPort,
-			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
-		},
-		Query: config.QueryConfig{
-			Port:          queryPort,
-			CSPServiceURL: "http://dummy-csp",
-		},
-		Storage: config.StorageConfig{
-			MongoURI:       mongoURI,
-			DatabaseName:   dbName,
-			DataCollection: "documents",
-			SysCollection:  "sys",
-		},
-	}
-
-	opts := services.Options{
-		RunAPI:   true,
-		RunQuery: true,
-	}
-
-	manager := services.NewManager(cfg, opts)
-	require.NoError(t, manager.Init(context.Background()))
-
-	// Start Manager
-	mgrCtx, mgrCancel := context.WithCancel(context.Background())
-	manager.Start(mgrCtx)
-	defer func() {
-		mgrCancel()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		manager.Shutdown(shutdownCtx)
-	}()
-
-	// Wait for startup
-	waitForPort(t, apiPort)
-	waitForPort(t, queryPort)
-
-	apiURL := fmt.Sprintf("http://localhost:%d", apiPort)
-	client := &http.Client{Timeout: 5 * time.Second}
+	token := env.GetToken(t, "test-user", "user")
 	collection := "rooms/room-1/messages"
 
 	// 3. Scenario: Create Document
@@ -90,14 +26,12 @@ func TestAPIIntegration(t *testing.T) {
 		"name": "Integration User",
 		"age":  42,
 	}
-	body, _ := json.Marshal(docData)
 
-	resp, err := client.Post(fmt.Sprintf("%s/v1/%s", apiURL, collection), "application/json", bytes.NewBuffer(body))
-	require.NoError(t, err)
+	resp := env.MakeRequest(t, "POST", "/v1/"+collection, docData, token)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createdDoc map[string]interface{}
-	err = json.NewDecoder(resp.Body).Decode(&createdDoc)
+	err := json.NewDecoder(resp.Body).Decode(&createdDoc)
 	require.NoError(t, err)
 	resp.Body.Close()
 
@@ -109,8 +43,7 @@ func TestAPIIntegration(t *testing.T) {
 	docID := createdDoc["id"].(string)
 
 	// 4. Scenario: Get Document
-	resp, err = client.Get(fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID))
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/v1/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var fetchedDoc map[string]interface{}
@@ -127,11 +60,7 @@ func TestAPIIntegration(t *testing.T) {
 			"age": 43,
 		},
 	}
-	patchBody, _ := json.Marshal(patchData)
-	req, _ := http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(patchBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/v1/%s/%s", collection, docID), patchData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var patchedDoc map[string]interface{}
@@ -149,9 +78,7 @@ func TestAPIIntegration(t *testing.T) {
 			{Field: "name", Op: "==", Value: "Integration User"},
 		},
 	}
-	queryBody, _ := json.Marshal(query)
-	resp, err = client.Post(fmt.Sprintf("%s/v1/query", apiURL), "application/json", bytes.NewBuffer(queryBody))
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "POST", "/v1/query", query, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var queryResults []map[string]interface{}
@@ -178,11 +105,7 @@ func TestAPIIntegration(t *testing.T) {
 			{"field": "age", "op": "==", "value": 43},
 		},
 	}
-	ifMatchBody, _ := json.Marshal(ifMatchData)
-	req, _ = http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(ifMatchBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/v1/%s/%s", collection, docID), ifMatchData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// Failure case (Condition not met)
@@ -194,21 +117,14 @@ func TestAPIIntegration(t *testing.T) {
 			{"field": "age", "op": "==", "value": 999}, // Wrong age
 		},
 	}
-	ifMatchFailBody, _ := json.Marshal(ifMatchFailData)
-	req, _ = http.NewRequest("PATCH", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), bytes.NewBuffer(ifMatchFailBody))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = client.Do(req)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/v1/%s/%s", collection, docID), ifMatchFailData, token)
 	require.Equal(t, http.StatusConflict, resp.StatusCode)
 
 	// 6. Scenario: Delete Document
-	delReq, _ := http.NewRequest("DELETE", fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID), nil)
-	resp, err = client.Do(delReq)
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/v1/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	// Verify Delete
-	resp, err = client.Get(fmt.Sprintf("%s/v1/%s/%s", apiURL, collection, docID))
-	require.NoError(t, err)
+	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/v1/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

@@ -20,7 +20,7 @@ func setupTestBackend(t *testing.T) *MongoBackend {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	backend, err := NewMongoBackend(ctx, testMongoURI, testDBName, "documents", "sys")
+	backend, err := NewMongoBackend(ctx, testMongoURI, testDBName, "documents", "sys", 0)
 	require.NoError(t, err)
 
 	// Clean up test database before starting
@@ -81,7 +81,7 @@ func TestMongoBackend_CRUD(t *testing.T) {
 	assert.ErrorIs(t, err, storage.ErrVersionConflict)
 
 	// 5. Delete
-	err = backend.Delete(ctx, docPath)
+	err = backend.Delete(ctx, docPath, nil)
 	require.NoError(t, err)
 
 	// Verify Delete

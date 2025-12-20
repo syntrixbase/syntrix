@@ -65,7 +65,7 @@ func (h *Hub) Run() {
 						eventCollection = message.Document.Collection
 					} else {
 						// Fallback for delete events: extract from path
-						parts := strings.Split(message.Path, "/")
+						parts := strings.Split(message.Id, "/")
 						if len(parts) >= 2 {
 							eventCollection = parts[len(parts)-2]
 						}
@@ -101,7 +101,7 @@ func (h *Hub) Run() {
 							Delta: PublicEvent{
 								Type:      message.Type,
 								Document:  doc,
-								Path:      message.Path,
+								ID:        message.Id,
 								Timestamp: message.Timestamp,
 							},
 						}

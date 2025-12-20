@@ -45,7 +45,7 @@ func TestMongoBackend_Watch(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		// Delete
-		if err := backend.Delete(context.Background(), "users/watcher"); err != nil {
+		if err := backend.Delete(context.Background(), "users/watcher", nil); err != nil {
 			t.Logf("Delete failed: %v", err)
 		}
 	}()
@@ -55,7 +55,7 @@ func TestMongoBackend_Watch(t *testing.T) {
 	for i, expectedType := range expectedEvents {
 		select {
 		case evt := <-stream:
-			t.Logf("Received event: Type=%s Path=%s", evt.Type, evt.Path)
+			t.Logf("Received event: Type=%s ID=%s", evt.Type, evt.Id)
 			assert.Equal(t, expectedType, evt.Type)
 			if i == 0 {
 				assert.Equal(t, "hello", evt.Document.Data["msg"])

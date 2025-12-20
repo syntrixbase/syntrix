@@ -15,7 +15,7 @@ import (
 
 func TestHandleGetDocument(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	doc := &storage.Document{
 		Id:         "hash-1",
@@ -43,7 +43,7 @@ func TestHandleGetDocument(t *testing.T) {
 
 func TestHandleCreateDocument(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	// Note: The API server might be calling CreateDocument or ReplaceDocument depending on implementation.
 	// Assuming it calls CreateDocument for POST /v1/collection
@@ -60,7 +60,7 @@ func TestHandleCreateDocument(t *testing.T) {
 
 func TestHandleGetDocument_NotFound(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	mockService.On("GetDocument", mock.Anything, "rooms/room-1/messages/unknown").Return(nil, storage.ErrNotFound)
 
@@ -74,7 +74,7 @@ func TestHandleGetDocument_NotFound(t *testing.T) {
 
 func TestHandleReplaceDocument(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	doc := &storage.Document{
 		Id:         "hash-1",
@@ -100,7 +100,7 @@ func TestHandleReplaceDocument(t *testing.T) {
 
 func TestHandleUpdateDocument(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	doc := &storage.Document{
 		Id:         "rooms/room-1/messages/msg-1",
@@ -125,7 +125,7 @@ func TestHandleUpdateDocument(t *testing.T) {
 
 func TestHandleDeleteDocument(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	mockService.On("DeleteDocument", mock.Anything, "rooms/room-1/messages/msg-1").Return(nil)
 
@@ -139,7 +139,7 @@ func TestHandleDeleteDocument(t *testing.T) {
 
 func TestHandleReplaceDocument_IfMatch(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	doc := &storage.Document{
 		Id:         "hash-1",
@@ -169,7 +169,7 @@ func TestHandleReplaceDocument_IfMatch(t *testing.T) {
 
 func TestHandlePatchDocument_IfMatch(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	doc := &storage.Document{
 		Id:         "rooms/room-1/messages/msg-1",

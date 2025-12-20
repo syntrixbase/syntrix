@@ -10,7 +10,7 @@ import (
 
 func TestHandleHealth(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	req, _ := http.NewRequest("GET", "/health", nil)
 	rr := httptest.NewRecorder()

@@ -15,7 +15,7 @@ import (
 
 func TestHandleQuery(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := NewServer(mockService, nil)
+	server := NewServer(mockService, nil, nil)
 
 	docs := []*storage.Document{
 		{
