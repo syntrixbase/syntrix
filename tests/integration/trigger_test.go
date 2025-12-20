@@ -87,7 +87,7 @@ func TestTriggerIntegration(t *testing.T) {
   tenant: "test-tenant"
   collection: "users"
   events: ["create"]
-  condition: "event.document.data.age >= 18"
+  condition: "event.document.age >= 18"
   url: "%s"
   headers:
     X-Test: "true"

@@ -111,10 +111,11 @@ func (c *Consumer) dispatch(msg jetstream.Msg) {
 		return
 	}
 
-	// Hash Collection Path to select worker
-	// This ensures all events for the same collection go to the same worker (serial execution)
+	// Hash Collection Path + DocKey to select worker
+	// This ensures all events for the same document go to the same worker (serial execution per document)
 	h := fnv.New32a()
 	h.Write([]byte(task.Collection))
+	h.Write([]byte(task.DocKey))
 	hash := h.Sum32()
 	workerIdx := int(hash % uint32(c.numWorkers))
 

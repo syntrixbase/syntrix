@@ -25,7 +25,7 @@ func TestCELEvaluator(t *testing.T) {
 			trigger: &Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
-				Condition:  "event.document.data.age > 18",
+				Condition:  "event.document.age > 18",
 			},
 			event: &storage.Event{
 				Type: storage.EventCreate,
@@ -42,7 +42,7 @@ func TestCELEvaluator(t *testing.T) {
 			trigger: &Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
-				Condition:  "event.document.data.age > 18",
+				Condition:  "event.document.age > 18",
 			},
 			event: &storage.Event{
 				Type: storage.EventCreate,
@@ -123,7 +123,7 @@ func TestCELEvaluator(t *testing.T) {
 			trigger: &Trigger{
 				Events:     []string{"update"},
 				Collection: "users",
-				Condition:  "event.document.data.role == 'admin' && event.document.data.active == true",
+				Condition:  "event.document.role == 'admin' && event.document.active == true",
 			},
 			event: &storage.Event{
 				Type: storage.EventUpdate,

@@ -88,22 +88,30 @@ func (e *CELEvaluator) Evaluate(ctx context.Context, trigger *Trigger, event *st
 	// If Document is struct, we might need to convert it to map or rely on CEL's reflection if configured.
 	// For simplicity, let's manually construct the map for the document part we care about.
 	if event.Document != nil {
-		docMap := map[string]interface{}{
-			"id":         event.Document.Id,
-			"collection": event.Document.Collection,
-			"data":       event.Document.Data,
-			"version":    event.Document.Version,
+		docMap := make(map[string]interface{})
+		// Flatten data fields
+		for k, v := range event.Document.Data {
+			docMap[k] = v
 		}
+		// Set system fields (these overwrite data fields if collision occurs, which is expected behavior for reserved fields)
+		docMap["id"] = event.Document.Id
+		docMap["collection"] = event.Document.Collection
+		docMap["version"] = event.Document.Version
+
 		input["event"].(map[string]interface{})["document"] = docMap
 	}
 
 	if event.Before != nil {
-		docMap := map[string]interface{}{
-			"id":         event.Before.Id,
-			"collection": event.Before.Collection,
-			"data":       event.Before.Data,
-			"version":    event.Before.Version,
+		docMap := make(map[string]interface{})
+		// Flatten data fields
+		for k, v := range event.Before.Data {
+			docMap[k] = v
 		}
+		// Set system fields
+		docMap["id"] = event.Before.Id
+		docMap["collection"] = event.Before.Collection
+		docMap["version"] = event.Before.Version
+
 		input["event"].(map[string]interface{})["before"] = docMap
 	}
 
