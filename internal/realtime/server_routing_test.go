@@ -15,16 +15,16 @@ type MockQueryService struct{}
 
 var _ query.Service = &MockQueryService{}
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (*storage.Document, error) {
+func (m *MockQueryService) GetDocument(ctx context.Context, path string) (common.Document, error) {
 	return nil, nil
 }
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc *storage.Document) error {
+func (m *MockQueryService) CreateDocument(ctx context.Context, doc common.Document) error {
 	return nil
 }
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
 	return nil, nil
 }
-func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
+func (m *MockQueryService) PatchDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
 	return nil, nil
 }
 func (m *MockQueryService) DeleteDocument(ctx context.Context, path string) error { return nil }

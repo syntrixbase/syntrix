@@ -25,7 +25,7 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-func (c *Client) GetDocument(ctx context.Context, path string) (*storage.Document, error) {
+func (c *Client) GetDocument(ctx context.Context, path string) (common.Document, error) {
 	reqBody := map[string]string{"path": path}
 	resp, err := c.post(ctx, "/internal/v1/document/get", reqBody)
 	if err != nil {
@@ -40,14 +40,14 @@ func (c *Client) GetDocument(ctx context.Context, path string) (*storage.Documen
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var doc storage.Document
+	var doc common.Document
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
 		return nil, err
 	}
-	return &doc, nil
+	return doc, nil
 }
 
-func (c *Client) CreateDocument(ctx context.Context, doc *storage.Document) error {
+func (c *Client) CreateDocument(ctx context.Context, doc common.Document) error {
 	resp, err := c.post(ctx, "/internal/v1/document/create", doc)
 	if err != nil {
 		return err
@@ -60,12 +60,10 @@ func (c *Client) CreateDocument(ctx context.Context, doc *storage.Document) erro
 	return nil
 }
 
-func (c *Client) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
+func (c *Client) ReplaceDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
 	reqBody := map[string]interface{}{
-		"path":       path,
-		"collection": collection,
-		"data":       data,
-		"pred":       pred,
+		"data": data,
+		"pred": pred,
 	}
 	resp, err := c.post(ctx, "/internal/v1/document/replace", reqBody)
 	if err != nil {
@@ -77,20 +75,18 @@ func (c *Client) ReplaceDocument(ctx context.Context, path string, collection st
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var doc storage.Document
+	var doc common.Document
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
 		return nil, err
 	}
-	return &doc, nil
+	return doc, nil
 }
 
-func (c *Client) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
-	reqBody := map[string]interface{}{
-		"path": path,
+func (c *Client) PatchDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
+	resp, err := c.post(ctx, "/internal/v1/document/patch", map[string]interface{}{
 		"data": data,
 		"pred": pred,
-	}
-	resp, err := c.post(ctx, "/internal/v1/document/patch", reqBody)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -103,11 +99,11 @@ func (c *Client) PatchDocument(ctx context.Context, path string, data map[string
 		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
 	}
 
-	var doc storage.Document
+	var doc common.Document
 	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
 		return nil, err
 	}
-	return &doc, nil
+	return doc, nil
 }
 
 func (c *Client) DeleteDocument(ctx context.Context, path string) error {

@@ -8,13 +8,14 @@ import (
 	"testing"
 	"time"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestClient_GetDocument(t *testing.T) {
-	expectedDoc := &storage.Document{Id: "test/1", Data: map[string]interface{}{"foo": "bar"}}
+	expectedDoc := common.Document{"id": "1", "collection": "test", "foo": "bar", "version": float64(1)}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/internal/v1/document/get", r.URL.Path)
@@ -41,7 +42,7 @@ func TestClient_CreateDocument(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	doc := &storage.Document{Id: "test/1"}
+	doc := common.Document{"id": "1", "collection": "test"}
 	err := client.CreateDocument(context.Background(), doc)
 	assert.NoError(t, err)
 }

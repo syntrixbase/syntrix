@@ -74,13 +74,13 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
-	var doc storage.Document
+	var doc common.Document
 	if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.engine.CreateDocument(r.Context(), &doc); err != nil {
+	if err := s.engine.CreateDocument(r.Context(), doc); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -90,17 +90,15 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path       string          `json:"path"`
-		Collection string          `json:"collection"`
-		Data       common.Document `json:"data"`
-		Pred       storage.Filters `json:"pred"`
+		Data common.Document `json:"data"`
+		Pred storage.Filters `json:"pred"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.ReplaceDocument(r.Context(), req.Path, req.Collection, req.Data, req.Pred)
+	doc, err := s.engine.ReplaceDocument(r.Context(), req.Data, req.Pred)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -112,16 +110,15 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path string                 `json:"path"`
-		Data map[string]interface{} `json:"data"`
-		Pred storage.Filters        `json:"pred"`
+		Data common.Document `json:"data"`
+		Pred storage.Filters `json:"pred"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.PatchDocument(r.Context(), req.Path, req.Data, req.Pred)
+	doc, err := s.engine.PatchDocument(r.Context(), req.Data, req.Pred)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)

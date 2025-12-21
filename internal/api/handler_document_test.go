@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -17,13 +18,7 @@ func TestHandleGetDocument(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := NewServer(mockService, nil, nil)
 
-	doc := &storage.Document{
-		Id:         "hash-1",
-		Fullpath:   "rooms/room-1/messages/msg-1",
-		Collection: "rooms/room-1/messages",
-		Data:       map[string]interface{}{"name": "Alice"},
-		Version:    1,
-	}
+	doc := common.Document{"id": "msg-1", "collection": "rooms/room-1/messages", "name": "Alice", "version": 1}
 
 	mockService.On("GetDocument", mock.Anything, "rooms/room-1/messages/msg-1").Return(doc, nil)
 
@@ -47,9 +42,14 @@ func TestHandleCreateDocument(t *testing.T) {
 
 	// Note: The API server might be calling CreateDocument or ReplaceDocument depending on implementation.
 	// Assuming it calls CreateDocument for POST /v1/collection
-	mockService.On("CreateDocument", mock.Anything, mock.AnythingOfType("*storage.Document")).Return(nil)
+	mockService.On("CreateDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["name"] == "Bob"
+	})).Return(nil)
 
-	body := []byte(`{"name": "Bob"}`)
+	createdDoc := common.Document{"id": "msg-1", "collection": "rooms/room-1/messages", "name": "Bob", "version": 1}
+	mockService.On("GetDocument", mock.Anything, "rooms/room-1/messages/msg-1").Return(createdDoc, nil)
+
+	body := []byte(`{"id":"msg-1","name": "Bob"}`)
 	req, _ := http.NewRequest("POST", "/v1/rooms/room-1/messages", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 
@@ -76,15 +76,11 @@ func TestHandleReplaceDocument(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := NewServer(mockService, nil, nil)
 
-	doc := &storage.Document{
-		Id:         "hash-1",
-		Fullpath:   "rooms/room-1/messages/msg-1",
-		Collection: "rooms/room-1/messages",
-		Data:       map[string]interface{}{"name": "Bob", "id": "msg-1"},
-		Version:    2,
-	}
+	returnedDoc := common.Document{"name": "Bob", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
 
-	mockService.On("ReplaceDocument", mock.Anything, "rooms/room-1/messages/msg-1", "rooms/room-1/messages", mock.Anything, mock.Anything).Return(doc, nil)
+	mockService.On("ReplaceDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["name"] == "Bob"
+	}), mock.Anything).Return(returnedDoc, nil)
 
 	body := []byte(`{"doc":{"name": "Bob"}}`)
 	req, _ := http.NewRequest("PUT", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
@@ -102,14 +98,11 @@ func TestHandleUpdateDocument(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := NewServer(mockService, nil, nil)
 
-	doc := &storage.Document{
-		Id:         "rooms/room-1/messages/msg-1",
-		Collection: "rooms/room-1/messages",
-		Data:       map[string]interface{}{"name": "Alice", "status": "read", "id": "msg-1"},
-		Version:    2,
-	}
+	returnedDoc := common.Document{"name": "Alice", "status": "read", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
 
-	mockService.On("PatchDocument", mock.Anything, "rooms/room-1/messages/msg-1", mock.Anything, mock.Anything).Return(doc, nil)
+	mockService.On("PatchDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["status"] == "read"
+	}), mock.Anything).Return(returnedDoc, nil)
 
 	body := []byte(`{"doc":{"status": "read"}}`)
 	req, _ := http.NewRequest("PATCH", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
@@ -141,19 +134,15 @@ func TestHandleReplaceDocument_IfMatch(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := NewServer(mockService, nil, nil)
 
-	doc := &storage.Document{
-		Id:         "hash-1",
-		Fullpath:   "rooms/room-1/messages/msg-1",
-		Collection: "rooms/room-1/messages",
-		Data:       map[string]interface{}{"name": "Bob", "id": "msg-1"},
-		Version:    2,
-	}
-
 	filters := storage.Filters{
 		{Field: "version", Op: "==", Value: float64(1)},
 	}
 
-	mockService.On("ReplaceDocument", mock.Anything, "rooms/room-1/messages/msg-1", "rooms/room-1/messages", mock.Anything, filters).Return(doc, nil)
+	returnedDoc := common.Document{"name": "Bob", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
+
+	mockService.On("ReplaceDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["name"] == "Bob"
+	}), filters).Return(returnedDoc, nil)
 
 	body := []byte(`{"doc":{"name": "Bob"}, "ifMatch": [{"field": "version", "op": "==", "value": 1}]}`)
 	req, _ := http.NewRequest("PUT", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
@@ -171,18 +160,15 @@ func TestHandlePatchDocument_IfMatch(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := NewServer(mockService, nil, nil)
 
-	doc := &storage.Document{
-		Id:         "rooms/room-1/messages/msg-1",
-		Collection: "rooms/room-1/messages",
-		Data:       map[string]interface{}{"name": "Alice", "status": "read", "id": "msg-1"},
-		Version:    2,
-	}
+	returnedDoc := common.Document{"name": "Alice", "status": "read", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
 
 	filters := storage.Filters{
 		{Field: "status", Op: "==", Value: "unread"},
 	}
 
-	mockService.On("PatchDocument", mock.Anything, "rooms/room-1/messages/msg-1", mock.Anything, filters).Return(doc, nil)
+	mockService.On("PatchDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["status"] == "read"
+	}), filters).Return(returnedDoc, nil)
 
 	body := []byte(`{"doc":{"status": "read"}, "ifMatch": [{"field": "status", "op": "==", "value": "unread"}]}`)
 	req, _ := http.NewRequest("PATCH", "/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))

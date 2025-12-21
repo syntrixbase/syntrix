@@ -19,6 +19,13 @@ Welcome to the Syntrix developer documentation.
 
 -   [Writing Trigger Rules](guides/trigger_rules.md) - How to configure triggers and write CEL conditions.
 
+## Reference
+
+-   [REST API](reference/api.md) - HTTP API endpoints.
+-   [TypeScript SDK](reference/typescript_sdk.md) - Client SDK for Node.js and Browser.
+-   [Filter Syntax](reference/filters.md) - Query filter syntax.
+-   [Trigger Rules](reference/trigger_rules.md) - Trigger configuration reference.
+
 ## Getting Started
 
 See the root [README.md](../README.md) for build and run instructions.

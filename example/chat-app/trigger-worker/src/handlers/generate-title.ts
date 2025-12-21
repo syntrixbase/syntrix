@@ -9,7 +9,7 @@ const openai = new AzureOpenAI({
   apiVersion: '2024-05-01-preview',
 });
 
-const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
+// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 export const generateTitleHandler = async (req: Request, res: Response) => {
   try {
@@ -28,6 +28,15 @@ export const generateTitleHandler = async (req: Request, res: Response) => {
     const userId = parts[1];
     const chatId = parts[3];
     const chatPath = `users/${userId}/chats/${chatId}`;
+    const token = payload.preIssuedToken;
+
+    if (!token) {
+        console.error('Missing preIssuedToken');
+        res.status(401).send('Unauthorized');
+        return;
+    }
+
+    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
 
     // 2. Check if title is already generated
     const chat = await syntrix.getDocument<any>(chatPath);

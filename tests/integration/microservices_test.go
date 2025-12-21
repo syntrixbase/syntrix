@@ -50,8 +50,7 @@ func TestMicroservices_FullFlow(t *testing.T) {
 	queryResp.Body.Close()
 
 	// Check content
-	data := fetchedDoc["data"].(map[string]interface{})
-	assert.Equal(t, "Hello Microservices", data["msg"])
+	assert.Equal(t, "Hello Microservices", fetchedDoc["msg"])
 
 	// 3. Update Document via API Gateway
 	patchData := map[string]interface{}{

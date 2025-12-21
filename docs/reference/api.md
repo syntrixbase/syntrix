@@ -214,65 +214,6 @@ Execute complex queries against a collection.
 
 **Response (200 OK):** Array of documents.
 
-## Replication Operations
-
-Endpoints for client-side replication (offline support).
-
-### Pull Changes
-
-Get changes since a specific checkpoint.
-
-**Endpoint:** `GET /v1/replication/pull`
-
-**Query Parameters:**
-
-- `collection`: The collection to pull from.
-- `checkpoint`: The last checkpoint (version/timestamp) the client has.
-- `limit`: Max number of documents to return.
-
-**Example:** `GET /v1/replication/pull?collection=rooms/room-1/messages&checkpoint=0&limit=100`
-
-**Response (200 OK):**
-
-```json
-{
-  "documents": [ ... ],
-  "checkpoint": "100"
-}
-```
-
-### Push Changes
-
-Push local changes to the server.
-
-**Endpoint:** `POST /v1/replication/push`
-
-**Request Body:**
-
-```json
-{
-  "collection": "rooms/room-1/messages",
-  "changes": [
-    {
-      "action": "create",
-      "document": {
-        "id": "msg-2",
-        "text": "Offline message",
-        ...
-      }
-    }
-  ]
-}
-```
-
-**Response (200 OK):**
-
-```json
-{
-  "conflicts": []
-}
-```
-
 ## Health Check
 
 Check if the service is running.

@@ -3,7 +3,7 @@ import { SyntrixClient } from '../syntrix-client';
 import { WebhookPayload, AgentTask, SubAgent } from '../types';
 import { generateShortId } from '../utils';
 
-const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
+// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 export const agentInitHandler = async (req: Request, res: Response) => {
   try {
@@ -20,6 +20,15 @@ export const agentInitHandler = async (req: Request, res: Response) => {
     const parts = payload.collection.split('/');
     const userId = parts[1];
     const chatId = parts[3];
+    const token = payload.preIssuedToken;
+
+    if (!token) {
+        console.error('Missing preIssuedToken');
+        res.status(401).send('Unauthorized');
+        return;
+    }
+
+    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
 
     console.log(`[AgentInit] ChatID: ${chatId}, TaskID: ${task.id}`);
 

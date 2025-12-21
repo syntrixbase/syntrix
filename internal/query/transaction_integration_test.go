@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"syntrix/internal/common"
 	"syntrix/internal/query"
 	"syntrix/internal/storage"
 	"syntrix/internal/storage/mongo"
@@ -48,12 +49,12 @@ func TestTransactionIntegration(t *testing.T) {
 
 	t.Run("Successful Transaction", func(t *testing.T) {
 		err := engine.RunTransaction(ctx, func(ctx context.Context, tx query.Service) error {
-			doc1 := storage.NewDocument("tx/doc1", "tx", map[string]interface{}{"val": 1})
+			doc1 := common.Document{"id": "doc1", "collection": "tx", "val": 1}
 			if err := tx.CreateDocument(ctx, doc1); err != nil {
 				return err
 			}
 
-			doc2 := storage.NewDocument("tx/doc2", "tx", map[string]interface{}{"val": 2})
+			doc2 := common.Document{"id": "doc2", "collection": "tx", "val": 2}
 			if err := tx.CreateDocument(ctx, doc2); err != nil {
 				return err
 			}
@@ -73,7 +74,7 @@ func TestTransactionIntegration(t *testing.T) {
 
 	t.Run("Rollback Transaction", func(t *testing.T) {
 		err := engine.RunTransaction(ctx, func(ctx context.Context, tx query.Service) error {
-			doc3 := storage.NewDocument("tx/doc3", "tx", map[string]interface{}{"val": 3})
+			doc3 := common.Document{"id": "doc3", "collection": "tx", "val": 3}
 			if err := tx.CreateDocument(ctx, doc3); err != nil {
 				return err
 			}
@@ -90,11 +91,11 @@ func TestTransactionIntegration(t *testing.T) {
 
 	t.Run("Rollback Patch", func(t *testing.T) {
 		// Setup initial doc
-		doc5 := storage.NewDocument("tx/doc5", "tx", map[string]interface{}{"val": 5})
+		doc5 := common.Document{"id": "doc5", "collection": "tx", "val": 5}
 		require.NoError(t, engine.CreateDocument(ctx, doc5))
 
 		err := engine.RunTransaction(ctx, func(ctx context.Context, tx query.Service) error {
-			_, err := tx.PatchDocument(ctx, "tx/doc5", map[string]interface{}{"val": 55}, storage.Filters{})
+			_, err := tx.PatchDocument(ctx, common.Document{"id": "doc5", "collection": "tx", "val": 55}, storage.Filters{})
 			if err != nil {
 				return err
 			}
@@ -103,15 +104,15 @@ func TestTransactionIntegration(t *testing.T) {
 		require.Error(t, err)
 
 		// Verify doc5 is still 5
-		doc5, err = engine.GetDocument(ctx, "tx/doc5")
+		storedDoc5, err := engine.GetDocument(ctx, "tx/doc5")
 		assert.NoError(t, err)
-		assert.EqualValues(t, 5, doc5.Data["val"])
+		assert.EqualValues(t, 5, storedDoc5["val"])
 	})
 
 	t.Run("Nested Operations in Transaction", func(t *testing.T) {
 		err := engine.RunTransaction(ctx, func(ctx context.Context, tx query.Service) error {
 			// Create
-			doc4 := storage.NewDocument("tx/doc4", "tx", map[string]interface{}{"val": 4})
+			doc4 := common.Document{"id": "doc4", "collection": "tx", "val": 4}
 			if err := tx.CreateDocument(ctx, doc4); err != nil {
 				return err
 			}
@@ -123,7 +124,7 @@ func TestTransactionIntegration(t *testing.T) {
 			}
 
 			// Handle number type differences (int vs float64 from Mongo)
-			val := readDoc.Data["val"]
+			val := readDoc["val"]
 			isEqual := false
 			switch v := val.(type) {
 			case int:
@@ -142,7 +143,7 @@ func TestTransactionIntegration(t *testing.T) {
 			}
 
 			// Update within transaction
-			_, err = tx.PatchDocument(ctx, "tx/doc4", map[string]interface{}{"val": 44}, storage.Filters{})
+			_, err = tx.PatchDocument(ctx, common.Document{"id": "doc4", "collection": "tx", "val": 44}, storage.Filters{})
 			if err != nil {
 				return err
 			}
@@ -154,6 +155,6 @@ func TestTransactionIntegration(t *testing.T) {
 		// Verify final state
 		doc4, err := engine.GetDocument(ctx, "tx/doc4")
 		assert.NoError(t, err)
-		assert.EqualValues(t, 44, doc4.Data["val"])
+		assert.EqualValues(t, 44, doc4["val"])
 	})
 }

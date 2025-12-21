@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"syntrix/internal/common"
 	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
@@ -24,7 +25,7 @@ func TestServer_GetDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
 	path := "test/1"
-	doc := &storage.Document{Id: path, Data: map[string]interface{}{"foo": "bar"}}
+	doc := &storage.Document{Fullpath: path, Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1, UpdatedAt: 2, CreatedAt: 1}
 	mockStorage.On("Get", mock.Anything, path).Return(doc, nil)
 
 	reqBody, _ := json.Marshal(map[string]string{"path": path})
@@ -36,16 +37,16 @@ func TestServer_GetDocument(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	var respDoc storage.Document
+	var respDoc common.Document
 	err := json.Unmarshal(w.Body.Bytes(), &respDoc)
 	assert.NoError(t, err)
-	assert.Equal(t, doc.Id, respDoc.Id)
+	assert.Equal(t, "1", respDoc.GetID())
 }
 
 func TestServer_CreateDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
-	doc := &storage.Document{Id: "test/1", Data: map[string]interface{}{"foo": "bar"}}
+	doc := common.Document{"id": "1", "collection": "test", "foo": "bar"}
 	mockStorage.On("Create", mock.Anything, mock.AnythingOfType("*storage.Document")).Return(nil)
 
 	reqBody, _ := json.Marshal(doc)

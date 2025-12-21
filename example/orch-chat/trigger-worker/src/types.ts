@@ -6,6 +6,7 @@ export interface WebhookPayload {
   after?: any;
   before?: any;
   ts: number;
+  preIssuedToken?: string;
 }
 
 export interface Message {

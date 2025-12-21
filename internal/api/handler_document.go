@@ -27,7 +27,7 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(flattenDocument(doc))
+	json.NewEncoder(w).Encode(doc)
 }
 
 func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
@@ -50,11 +50,11 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data.GenerateIDIfEmpty()
+	data.SetCollection(collection)
 
 	path := collection + "/" + data.GetID()
-	doc := storage.NewDocument(path, collection, data)
 
-	if err := s.engine.CreateDocument(r.Context(), doc); err != nil {
+	if err := s.engine.CreateDocument(r.Context(), data); err != nil {
 		if errors.Is(err, storage.ErrExists) {
 			http.Error(w, "Document already exists", http.StatusConflict)
 		} else {
@@ -63,9 +63,15 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	doc, err := s.engine.GetDocument(r.Context(), path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(flattenDocument(doc))
+	json.NewEncoder(w).Encode(doc)
 }
 
 func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
@@ -98,8 +104,9 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	data.Doc.SetID(docID)
+	data.Doc.SetCollection(collection)
 
-	doc, err := s.engine.ReplaceDocument(r.Context(), path, collection, data.Doc, data.IfMatch)
+	doc, err := s.engine.ReplaceDocument(r.Context(), data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, storage.ErrVersionConflict) {
 			http.Error(w, "Version conflict", http.StatusConflict)
@@ -110,13 +117,13 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(flattenDocument(doc))
+	json.NewEncoder(w).Encode(doc)
 }
 
 func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
-	_, docID, err := validateAndExplodeFullpath(path)
+	collection, docID, err := validateAndExplodeFullpath(path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -147,7 +154,8 @@ func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data.Doc.SetID(docID)
-	doc, err := s.engine.PatchDocument(r.Context(), path, data.Doc, data.IfMatch)
+	data.Doc.SetCollection(collection)
+	doc, err := s.engine.PatchDocument(r.Context(), data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, storage.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
@@ -162,7 +170,7 @@ func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(flattenDocument(doc))
+	json.NewEncoder(w).Encode(doc)
 }
 
 func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {

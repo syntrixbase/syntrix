@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"syntrix/internal/authz"
+	"syntrix/internal/common"
 	"syntrix/internal/query"
 	"syntrix/internal/storage"
 	"time"
@@ -136,9 +137,14 @@ func (s *Server) authorized(h http.HandlerFunc, action string) http.HandlerFunc 
 		if action != "create" {
 			doc, err := s.engine.GetDocument(r.Context(), path)
 			if err == nil {
+				data := common.Document{}
+				for k, v := range doc {
+					data[k] = v
+				}
+				data.StripProtectedFields()
 				existingRes = &authz.Resource{
-					Data: doc.Data,
-					ID:   doc.Id,
+					Data: data,
+					ID:   doc.GetID(),
 				}
 			} else if err != storage.ErrNotFound {
 				http.Error(w, "Internal Server Error", http.StatusInternalServerError)

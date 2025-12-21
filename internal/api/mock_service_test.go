@@ -17,33 +17,33 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (*storage.Document, error) {
+func (m *MockQueryService) GetDocument(ctx context.Context, path string) (common.Document, error) {
 	args := m.Called(ctx, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(common.Document), args.Error(1)
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc *storage.Document) error {
+func (m *MockQueryService) CreateDocument(ctx context.Context, doc common.Document) error {
 	args := m.Called(ctx, doc)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
-	args := m.Called(ctx, path, collection, data, pred)
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
+	args := m.Called(ctx, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(common.Document), args.Error(1)
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
-	args := m.Called(ctx, path, data, pred)
+func (m *MockQueryService) PatchDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
+	args := m.Called(ctx, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(common.Document), args.Error(1)
 }
 
 func (m *MockQueryService) DeleteDocument(ctx context.Context, path string) error {

@@ -193,7 +193,9 @@ const setupReplication = async (collection: RxCollection, remoteCollectionPath: 
                 return {
                     documents: data.documents.map((doc: any) => ({
                         ...doc,
-                        id: doc.id // Ensure ID is mapped
+                        id: doc.id, // Ensure ID is mapped
+                        updatedAt: doc.updated_at, // Map snake_case to camelCase
+                        version: doc.version // Map version
                     })),
                     checkpoint: data.checkpoint ? { updatedAt: data.checkpoint } : null
                 };
@@ -215,7 +217,7 @@ const setupReplication = async (collection: RxCollection, remoteCollectionPath: 
                         document: {
                             ...d.newDocumentState,
                             id: (d.newDocumentState as any).id,
-                            _version: 0 // Syntrix handles versioning
+                            version: (d.newDocumentState as any).version || 0 // Syntrix handles versioning
                         }
                     };
                 });

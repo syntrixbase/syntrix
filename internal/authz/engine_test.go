@@ -19,12 +19,12 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (*storage.Document, error) {
+func (m *MockQueryService) GetDocument(ctx context.Context, path string) (common.Document, error) {
 	args := m.Called(ctx, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(common.Document), args.Error(1)
 }
 
 func (m *MockQueryService) ListDocuments(ctx context.Context, parent string, pageSize int, pageToken string) ([]*storage.Document, string, error) {
@@ -35,15 +35,15 @@ func (m *MockQueryService) QueryDocuments(ctx context.Context, parent string, fi
 	return nil, nil
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc *storage.Document) error {
+func (m *MockQueryService) CreateDocument(ctx context.Context, doc common.Document) error {
 	return nil
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, path string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
+func (m *MockQueryService) PatchDocument(ctx context.Context, data common.Document, pred storage.Filters) (common.Document, error) {
 	return nil, nil
 }
 
@@ -163,7 +163,7 @@ match:
 		Auth: Auth{UID: "adminUser"},
 		Time: time.Now(),
 	}
-	mockQuery.On("GetDocument", mock.Anything, "admins/adminUser").Return(&storage.Document{Id: "adminUser"}, nil)
+	mockQuery.On("GetDocument", mock.Anything, "admins/adminUser").Return(common.Document{"id": "adminUser"}, nil)
 
 	allowed, err = engine.Evaluate(context.Background(), "/admin/config", "write", reqAdmin, nil)
 	assert.NoError(t, err)

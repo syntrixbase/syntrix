@@ -4,7 +4,7 @@ import { TavilyClient } from '../tools/tavily';
 import { WebhookPayload } from '../types';
 import { generateShortId } from '../utils';
 
-const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
+// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 const tavily = new TavilyClient(process.env.TAVILY_API_KEY || '');
 
 export const toolRunnerHandler = async (req: Request, res: Response) => {
@@ -28,6 +28,15 @@ export const toolRunnerHandler = async (req: Request, res: Response) => {
     // OR: users/demo-user/orch-chats/chat-1/sub-agents/agent-1/tool-calls
     const parts = payload.collection.split('/');
     const isSubAgent = parts.includes('sub-agents');
+    const token = payload.preIssuedToken;
+
+    if (!token) {
+        console.error('Missing preIssuedToken');
+        res.status(401).send('Unauthorized');
+        return;
+    }
+
+    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
 
     let result = '';
 

@@ -50,7 +50,7 @@ func (s *Server) handleTriggerGet(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		docs = append(docs, flattenDocument(doc))
+		docs = append(docs, doc)
 	}
 
 	resp := TriggerGetResponse{Documents: docs}
@@ -77,18 +77,40 @@ func (s *Server) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 				}
 				collection := strings.Join(parts[:len(parts)-1], "/")
 
-				doc := storage.NewDocument(op.Path, collection, op.Data)
+				doc := common.Document(op.Data)
+				if doc == nil {
+					doc = make(common.Document)
+				}
+				doc.SetCollection(collection)
+				doc.SetID(parts[len(parts)-1])
 				err = tx.CreateDocument(ctx, doc)
 			case "update":
 				// Map "update" to PatchDocument
-				_, err = tx.PatchDocument(ctx, op.Path, op.Data, storage.Filters{})
+				parts := strings.Split(op.Path, "/")
+				if len(parts) < 2 {
+					return storage.ErrNotFound
+				}
+				collection := strings.Join(parts[:len(parts)-1], "/")
+				patchDoc := common.Document(op.Data)
+				if patchDoc == nil {
+					patchDoc = make(common.Document)
+				}
+				patchDoc.SetCollection(collection)
+				patchDoc.SetID(parts[len(parts)-1])
+				_, err = tx.PatchDocument(ctx, patchDoc, storage.Filters{})
 			case "replace":
 				parts := strings.Split(op.Path, "/")
 				if len(parts) < 2 {
 					return storage.ErrNotFound
 				}
 				collection := strings.Join(parts[:len(parts)-1], "/")
-				_, err = tx.ReplaceDocument(ctx, op.Path, collection, common.Document(op.Data), storage.Filters{})
+				replaceDoc := common.Document(op.Data)
+				if replaceDoc == nil {
+					replaceDoc = make(common.Document)
+				}
+				replaceDoc.SetCollection(collection)
+				replaceDoc.SetID(parts[len(parts)-1])
+				_, err = tx.ReplaceDocument(ctx, replaceDoc, storage.Filters{})
 			case "delete":
 				err = tx.DeleteDocument(ctx, op.Path)
 			default:

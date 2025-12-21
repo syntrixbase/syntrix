@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"syntrix/internal/storage"
 	"testing"
+
+	"syntrix/internal/common"
+	"syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -17,18 +19,8 @@ func TestHandleTriggerGet(t *testing.T) {
 	server := NewServer(mockEngine, nil, nil)
 
 	// Mock Data
-	doc1 := &storage.Document{
-		Id:         "doc1",
-		Fullpath:   "users/alice",
-		Collection: "users",
-		Data:       map[string]interface{}{"name": "Alice"},
-	}
-	doc2 := &storage.Document{
-		Id:         "doc2",
-		Fullpath:   "users/bob",
-		Collection: "users",
-		Data:       map[string]interface{}{"name": "Bob"},
-	}
+	doc1 := common.Document{"id": "alice", "collection": "users", "name": "Alice", "version": int64(1)}
+	doc2 := common.Document{"id": "bob", "collection": "users", "name": "Bob", "version": int64(1)}
 
 	mockEngine.On("GetDocument", mock.Anything, "users/alice").Return(doc1, nil)
 	mockEngine.On("GetDocument", mock.Anything, "users/bob").Return(doc2, nil)
@@ -60,13 +52,13 @@ func TestHandleTriggerWrite(t *testing.T) {
 	server := NewServer(mockEngine, nil, nil)
 
 	// Mock Expectations
-	mockEngine.On("CreateDocument", mock.Anything, mock.MatchedBy(func(doc *storage.Document) bool {
-		return doc.Fullpath == "users/charlie" && doc.Data["name"] == "Charlie"
+	mockEngine.On("CreateDocument", mock.Anything, mock.MatchedBy(func(doc common.Document) bool {
+		return doc.GetCollection() == "users" && doc.GetID() == "charlie" && doc["name"] == "Charlie"
 	})).Return(nil)
 
-	mockEngine.On("PatchDocument", mock.Anything, "users/alice", mock.MatchedBy(func(data map[string]interface{}) bool {
-		return data["active"] == true
-	}), mock.Anything).Return(&storage.Document{}, nil)
+	mockEngine.On("PatchDocument", mock.Anything, mock.MatchedBy(func(data common.Document) bool {
+		return data.GetCollection() == "users" && data.GetID() == "alice" && data["active"] == true
+	}), mock.Anything).Return(common.Document{"active": true}, nil)
 
 	mockEngine.On("DeleteDocument", mock.Anything, "users/bob").Return(nil)
 

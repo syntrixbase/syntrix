@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"syntrix/internal/storage"
+	"syntrix/internal/common"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -182,11 +182,11 @@ match:
 				Auth: Auth{UID: "user1"},
 			},
 			mockSetup: func(m *MockQueryService) {
-				m.On("GetDocument", mock.Anything, "users/user1").Return(&storage.Document{
-					Id: "user1",
-					Data: map[string]interface{}{
-						"role": "admin",
-					},
+				m.On("GetDocument", mock.Anything, "users/user1").Return(common.Document{
+					"id": "user1",
+					"collection": "users",
+					"role": "admin",
+					"version": int64(1),
 				}, nil)
 			},
 			expected: true,
@@ -199,11 +199,11 @@ match:
 				Auth: Auth{UID: "user2"},
 			},
 			mockSetup: func(m *MockQueryService) {
-				m.On("GetDocument", mock.Anything, "users/user2").Return(&storage.Document{
-					Id: "user2",
-					Data: map[string]interface{}{
-						"role": "user",
-					},
+				m.On("GetDocument", mock.Anything, "users/user2").Return(common.Document{
+					"id": "user2",
+					"collection": "users",
+					"role": "user",
+					"version": int64(1),
 				}, nil)
 			},
 			expected: false,

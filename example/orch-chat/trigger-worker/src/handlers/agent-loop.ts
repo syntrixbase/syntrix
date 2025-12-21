@@ -10,7 +10,7 @@ const openai = new AzureOpenAI({
   apiVersion: '2024-05-01-preview',
 });
 
-const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
+// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 const AGENT_TOOLS = [
   {
@@ -68,6 +68,15 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
     const userId = parts[1];
     const chatId = parts[3];
     const subAgentId = parts[5];
+    const token = payload.preIssuedToken;
+
+    if (!token) {
+        console.error('Missing preIssuedToken');
+        res.status(401).send('Unauthorized');
+        return;
+    }
+
+    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
 
     console.log(`[AgentLoop] ChatID: ${chatId}, AgentID: ${subAgentId}`);
 

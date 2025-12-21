@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"syntrix/internal/common"
 	"syntrix/internal/query"
 	"syntrix/internal/storage"
 
@@ -278,9 +279,15 @@ func (l *authzLib) get(arg ref.Val) ref.Val {
 		return types.NewErr("error in get: %v", err)
 	}
 
+	data := common.Document{}
+	for k, v := range doc {
+		data[k] = v
+	}
+	data.StripProtectedFields()
+
 	res := map[string]interface{}{
-		"data": doc.Data,
-		"id":   doc.Id,
+		"data": data,
+		"id":   doc.GetID(),
 	}
 	return types.DefaultTypeAdapter.NativeToValue(res)
 }

@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strings"
 	"syntrix/internal/common"
 	"syntrix/internal/storage"
 )
@@ -28,49 +30,137 @@ func NewEngine(storage storage.StorageBackend, cspURL string) *Engine {
 }
 
 // GetDocument retrieves a document by path.
-func (e *Engine) GetDocument(ctx context.Context, path string) (*storage.Document, error) {
+func (e *Engine) GetDocument(ctx context.Context, path string) (common.Document, error) {
 	// Future: Add authorization check here
-	return e.storage.Get(ctx, path)
+	stored, err := e.storage.Get(ctx, path)
+	if err != nil {
+		return nil, err
+	}
+	return flattenStorageDocument(stored), nil
 }
 
 // CreateDocument creates a new document.
-func (e *Engine) CreateDocument(ctx context.Context, doc *storage.Document) error {
+func (e *Engine) CreateDocument(ctx context.Context, doc common.Document) error {
+	if doc == nil {
+		return errors.New("document cannot be nil")
+	}
+
+	doc.GenerateIDIfEmpty()
+	collection := doc.GetCollection()
+	if collection == "" {
+		return errors.New("collection is required")
+	}
+	fullpath := collection + "/" + doc.GetID()
+	doc.StripProtectedFields()
+
 	// Future: Add validation and authorization check here
-	return e.storage.Create(ctx, doc)
+	return e.storage.Create(ctx, storage.NewDocument(fullpath, collection, doc))
+}
+
+func flattenStorageDocument(doc *storage.Document) common.Document {
+	if doc == nil {
+		return nil
+	}
+	out := make(common.Document)
+	for k, v := range doc.Data {
+		out[k] = v
+	}
+	out.SetID(extractIDFromFullpath(doc.Fullpath))
+	out.SetCollection(doc.Collection)
+	out["version"] = doc.Version
+	out["updated_at"] = doc.UpdatedAt
+	out["created_at"] = doc.CreatedAt
+	if doc.Deleted {
+		out["deleted"] = true
+	}
+	return out
+}
+
+func extractIDFromFullpath(fullpath string) string {
+	idx := strings.LastIndex(fullpath, "/")
+	if idx == -1 {
+		return fullpath
+	}
+	return fullpath[idx+1:]
 }
 
 // ReplaceDocument replaces a document or creates it if it doesn't exist (Upsert).
-func (e *Engine) ReplaceDocument(
-	ctx context.Context, path string, collection string, data common.Document, pred storage.Filters) (*storage.Document, error) {
+func (e *Engine) ReplaceDocument(ctx context.Context, doc common.Document, pred storage.Filters) (common.Document, error) {
+	if doc == nil {
+		return nil, errors.New("document cannot be nil")
+	}
+
+	collection := doc.GetCollection()
+	if collection == "" {
+		return nil, errors.New("collection is required")
+	}
+
+	id := doc.GetID()
+	if id == "" {
+		return nil, errors.New("document ID is required")
+	}
+	doc.StripProtectedFields()
+
+	fullpath := collection + "/" + id
+
 	// Try Get first
-	_, err := e.storage.Get(ctx, path)
+	_, err := e.storage.Get(ctx, fullpath)
 	if err != nil {
 		if err == storage.ErrNotFound {
 			// Create
-			doc := storage.NewDocument(path, collection, data)
-			if err := e.storage.Create(ctx, doc); err != nil {
+			storedDoc := storage.NewDocument(fullpath, collection, doc)
+			if err := e.storage.Create(ctx, storedDoc); err != nil {
 				return nil, err
 			}
-			return doc, nil
+			return flattenStorageDocument(storedDoc), nil
 		}
 		return nil, err
 	}
 
 	// Update (Replace data)
-	if err := e.storage.Update(ctx, path, data, pred); err != nil {
+	if err := e.storage.Update(ctx, fullpath, map[string]interface{}(doc), pred); err != nil {
 		return nil, err
 	}
 
 	// Return updated doc
-	return e.storage.Get(ctx, path)
+	updatedDoc, err := e.storage.Get(ctx, fullpath)
+	if err != nil {
+		return nil, err
+	}
+
+	return flattenStorageDocument(updatedDoc), nil
 }
 
 // PatchDocument updates specific fields of a document (Merge + CAS).
-func (e *Engine) PatchDocument(ctx context.Context, fullpath string, data map[string]interface{}, pred storage.Filters) (*storage.Document, error) {
-	if err := e.storage.Patch(ctx, fullpath, data, pred); err != nil {
+func (e *Engine) PatchDocument(ctx context.Context, doc common.Document, pred storage.Filters) (common.Document, error) {
+	if doc == nil {
+		return nil, errors.New("document cannot be nil")
+	}
+
+	collection := doc.GetCollection()
+	if collection == "" {
+		return nil, errors.New("collection is required")
+	}
+
+	id := doc.GetID()
+	if id == "" {
+		return nil, errors.New("document ID is required")
+	}
+
+	fullpath := collection + "/" + id
+	doc.StripProtectedFields()
+	delete(doc, "id")
+
+	if err := e.storage.Patch(ctx, fullpath, map[string]interface{}(doc), pred); err != nil {
 		return nil, err
 	}
-	return e.storage.Get(ctx, fullpath)
+
+	updatedDoc, err := e.storage.Get(ctx, fullpath)
+	if err != nil {
+		return nil, err
+	}
+
+	return flattenStorageDocument(updatedDoc), nil
 }
 
 // DeleteDocument deletes a document.

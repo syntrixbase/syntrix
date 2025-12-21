@@ -25,13 +25,13 @@ type Document struct {
 	Id string `json:"id" bson:"_id"`
 
 	// Fullpath is the Full Pathname of document
-	Fullpath string `json:"fullpath" bson:"fullpath"`
+	Fullpath string `json:"-" bson:"fullpath"`
 
 	// Collection is the parent collection name
 	Collection string `json:"collection" bson:"collection"`
 
 	// Parent is the parent of collection
-	Parent string `json:"parent" bson:"parent"`
+	Parent string `json:"-" bson:"parent"`
 
 	// UpdatedAt is the timestamp of the last update (Unix millionseconds)
 	UpdatedAt int64 `json:"updated_at" bson:"updated_at"`
@@ -111,11 +111,11 @@ type Event struct {
 
 // Query represents a database query
 type Query struct {
-	Collection string  `json:"collection"`
-	Filters    Filters `json:"filters"`
-	OrderBy    []Order `json:"orderBy"`
-	Limit      int     `json:"limit"`
-	StartAfter string  `json:"startAfter"` // Cursor (usually the last document ID or sort key)
+	Collection  string  `json:"collection"`
+	Filters     Filters `json:"filters"`
+	OrderBy     []Order `json:"orderBy"`
+	Limit       int     `json:"limit"`
+	StartAfter  string  `json:"startAfter"` // Cursor (usually the last document ID or sort key)
 	ShowDeleted bool    `json:"showDeleted"`
 }
 

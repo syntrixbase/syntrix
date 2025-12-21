@@ -5,20 +5,22 @@ import { generateShortId } from './utils';
 export class SyntrixClient {
   private client: AxiosInstance;
 
-  constructor(baseURL: string = 'http://localhost:8080') {
+  constructor(baseURL: string, token: string) {
+    if (!token) {
+        throw new Error("SyntrixClient requires a pre-issued token");
+    }
     this.client = axios.create({
       baseURL,
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
       },
     });
   }
 
   async query<T>(query: SyntrixQuery): Promise<T[]> {
     try {
-      const response = await this.client.post('/v1/query', query);
-      // Syntrix Query API returns flattened documents (map[string]interface{})
-      // So response.data is an array of objects like { id: "...", role: "...", ... }
+      const response = await this.client.post('/v1/trigger/query', query);
       const docs = response.data;
       if (Array.isArray(docs)) {
           return docs as T[];
@@ -32,26 +34,49 @@ export class SyntrixClient {
 
   async getDocument<T>(path: string): Promise<T | null> {
     try {
-      const response = await this.client.get(`/v1/${path}`);
-      return response.data as T;
+      const response = await this.client.post('/v1/trigger/get', { paths: [path] });
+      if (response.data.documents && response.data.documents.length > 0) {
+          return response.data.documents[0] as T;
+      }
+      return null;
     } catch (error) {
       // console.error(`Failed to get document at ${path}:`, error);
       return null;
     }
   }
 
-  async createDocument(path: string, data: any) {
+  async createDocument(collectionPath: string, data: any) {
     try {
-      await this.client.post(`/v1/${path}`, data);
+      let docPath = collectionPath;
+      if (data.id) {
+          const cleanPath = collectionPath.endsWith('/') ? collectionPath.slice(0, -1) : collectionPath;
+          docPath = `${cleanPath}/${data.id}`;
+      } else {
+          throw new Error("Document ID required for trigger write");
+      }
+
+      await this.client.post('/v1/trigger/write', {
+        writes: [{
+          type: 'create',
+          path: docPath,
+          data: data
+        }]
+      });
     } catch (error) {
-      console.error(`Failed to create document at ${path}:`, error);
+      console.error(`Failed to create document at ${collectionPath}:`, error);
       throw error;
     }
   }
 
   async updateDocument(path: string, data: any) {
     try {
-      await this.client.patch(`/v1/${path}`, data);
+      await this.client.post('/v1/trigger/write', {
+        writes: [{
+          type: 'update',
+          path: path,
+          data: data
+        }]
+      });
     } catch (error) {
       console.error(`Failed to update document at ${path}:`, error);
       throw error;

@@ -42,6 +42,17 @@ func (doc Document) GenerateIDIfEmpty() {
 	}
 }
 
+func (doc Document) GetCollection() string {
+	if collection, ok := doc["collection"].(string); ok {
+		return collection
+	}
+	return ""
+}
+
+func (doc Document) SetCollection(collection string) {
+	doc["collection"] = collection
+}
+
 func (doc Document) HasVersion() bool {
 	_, exists := doc["version"]
 	return exists

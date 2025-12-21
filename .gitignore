@@ -6,7 +6,9 @@
 *.dylib
 /syntrix
 /syntrix-cli
-/bin
+/bin/
+
+node_modules/
 
 # Test binary
 *.test
