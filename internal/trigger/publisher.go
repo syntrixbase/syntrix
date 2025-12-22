@@ -24,7 +24,11 @@ func NewEventPublisher(nc *nats.Conn) (EventPublisher, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &natsPublisher{js: js}, nil
+	return NewEventPublisherFromJS(js), nil
+}
+
+func NewEventPublisherFromJS(js jetstream.JetStream) EventPublisher {
+	return &natsPublisher{js: js}
 }
 
 func (p *natsPublisher) Publish(ctx context.Context, task *DeliveryTask) error {

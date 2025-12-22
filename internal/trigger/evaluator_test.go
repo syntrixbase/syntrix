@@ -154,6 +154,44 @@ func TestCELEvaluator(t *testing.T) {
 			wantMatch: false,
 			wantErr:   true,
 		},
+		{
+			name: "Check Before State",
+			trigger: &Trigger{
+				Events:     []string{"update"},
+				Collection: "users",
+				Condition:  "event.before.status == 'pending' && event.document.status == 'active'",
+			},
+			event: &storage.Event{
+				Type: storage.EventUpdate,
+				Document: &storage.Document{
+					Collection: "users",
+					Data:       map[string]interface{}{"status": "active"},
+				},
+				Before: &storage.Document{
+					Collection: "users",
+					Data:       map[string]interface{}{"status": "pending"},
+				},
+			},
+			wantMatch: true,
+			wantErr:   false,
+		},
+		{
+			name: "Check Timestamp",
+			trigger: &Trigger{
+				Events:     []string{"create"},
+				Collection: "logs",
+				Condition:  "event.timestamp > 0",
+			},
+			event: &storage.Event{
+				Type:      storage.EventCreate,
+				Timestamp: 1234567890,
+				Document: &storage.Document{
+					Collection: "logs",
+				},
+			},
+			wantMatch: true,
+			wantErr:   false,
+		},
 	}
 
 	for _, tt := range tests {

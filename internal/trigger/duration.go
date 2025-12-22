@@ -37,16 +37,17 @@ func (d Duration) MarshalJSON() ([]byte, error) {
 }
 
 func (d *Duration) UnmarshalYAML(value *yaml.Node) error {
+	var i int64
+	if err := value.Decode(&i); err == nil {
+		*d = Duration(time.Duration(i))
+		return nil
+	}
+
 	var s string
 	if err := value.Decode(&s); err != nil {
-		// Try decoding as int (nanoseconds)
-		var i int64
-		if err := value.Decode(&i); err == nil {
-			*d = Duration(time.Duration(i))
-			return nil
-		}
 		return err
 	}
+
 	tmp, err := time.ParseDuration(s)
 	if err != nil {
 		return err
