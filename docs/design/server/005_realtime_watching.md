@@ -4,6 +4,7 @@
 **Topic:** Realtime Push Architecture and Change Stream Processing
 
 ## Scope & Assumptions
+
 - Single gateway, single port; realtime endpoints: `/realtime/ws` (WebSocket) and `/realtime/sse` (SSE).
 - Watch expressions: reuse the query/filter language from 002 (CEL subset) as the watch matcher to keep semantics and safety consistent.
 - Scale targets: aim for up to ~1M concurrent connections and ~10k events/s; initial phase at ~1/10 scale (~100k connections, ~1k events/s) with linear scaling headroom.
@@ -11,6 +12,7 @@
 - Client protocol: primarily WebSocket with brief-disconnect resume; SSE is supported for server-to-client streaming with same auth/semantics.
 
 ## 1) Change Stream Processor (CSP) Internals
+
 - Ingestion (Why: throughput and stability; How):
   - Subscribe to MongoDB change streams per collection; CSP nodes consume partitions by (collection, hash(documentKey)) to avoid single hot spots.
   - Pull in batches with rate limits (events/s, bytes/s) and server heartbeat checks.
@@ -28,6 +30,7 @@
   - When stale, surface an operator alert plus a client-visible `resync-required` status so downstream can reconcile.
 
 Example CSP loop (Go-style pseudocode):
+
 ```go
 for evt := range stream {
     part := partitionKey(evt.Collection, evt.DocumentKey)
@@ -57,6 +60,7 @@ for evt := range stream {
 ```
 
 ## 2) Query Matching Pipeline
+
 - Matcher language: reuse the expression engine from 002 (CEL subset) supporting field filters, ranges, and auth context.
 - Pipeline (Why: reduce per-event compute; How):
   1) Fast path: documentKey exact subscriptions (primary-key watches).
@@ -69,6 +73,7 @@ for evt := range stream {
   - Enforce TTL on inactive summaries; rebuild Blooms periodically to limit false-positive drift; size budgets per collection to prevent single-tenant blowup.
 
 Example of building a subscription index entry:
+
 ```go
 type SubscriptionSummary struct {
     ID        string
@@ -91,6 +96,7 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
 ```
 
 ## 3) Routing & Distribution
+
 - Topology (Why: horizontal scale; How):
   - CSP and Gateway clusters both use a consistent-hash ring; events route by (collection + docKey hash) to the responsible Gateway by default.
   - If the routing key is uncertain (e.g., range queries), CSP can broadcast to a small candidate set of Gateways; Gateways then filter locally.
@@ -107,6 +113,7 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
   - Broadcast trigger (Why: bound fan-out choices; How): if match index lookup latency p99 > 50ms or FP rate sampling >5% for a partition, temporarily expand candidate Gateways to a fixed fan-out (e.g., 3) and reevaluate after 1m.
 
 ## 4) Client Protocol (WebSocket / SSE)
+
 - Endpoints: `/realtime/ws` (bidi WebSocket), `/realtime/sse` (server-to-client SSE).
 - Connection: authenticate then establish stream; client declares tenant/project context.
 - Subscription management: client submits watch expressions; server returns subscription ids and current matcher version.
@@ -119,7 +126,9 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
   - Include protocol `version`, `tenant`, `subIds`, `seq`, `partition`, `lsn`, `payload`, optional `checksum`; reserve an `extensions` map for forward-compatible fields.
 
 Client brief-disconnect resume (protocol sketch):
+
 ```json
+
 // Client -> Gateway (reconnect)
 { "type": "resume", "token": "<resume-token>", "lastSeq": 12345 }
 
@@ -129,7 +138,151 @@ Client brief-disconnect resume (protocol sketch):
 // Gateway replays from sliding window [12346, latest], else asks for full resync
 ```
 
+### 4.1. Realtime Protocol (WebSocket/SSE)
+
+Endpoints (single gateway, single port):
+
+- WebSocket: `ws://host/realtime/ws`
+- SSE: `http://host/realtime/sse`
+
+### 4.2 Message Structure
+
+All messages follow a standard JSON envelope:
+
+```json
+{
+  "id": "request-id",
+  "type": "message-type",
+  "payload": { ... }
+}
+```
+
+### 4.3 Authentication
+
+**Client -> Server:**
+
+```json
+{
+  "id": "1",
+  "type": "auth",
+  "payload": {
+    "token": "jwt-token-here"
+  }
+}
+```
+
+**Server -> Client:**
+
+```json
+{
+  "id": "1",
+  "type": "auth_ack",
+  "payload": {
+    "status": "ok"
+  }
+}
+```
+
+### 4.4 Live Query (Subscription)
+
+**Client -> Server (Subscribe):**
+
+```json
+{
+  "id": "sub-1",
+  "type": "subscribe",
+  "payload": {
+    "query": {
+      "collection": "rooms/room-1/messages",
+      "filters": [{"field": "timestamp", "op": ">", "value": 1678888888000}]
+    }
+  }
+}
+```
+
+**Server -> Client (Event):**
+
+```json
+{
+  "type": "event",
+  "payload": {
+    "subId": "sub-1",
+    "delta": {
+      "op": "insert",
+      "doc": { "path": "rooms/room-1/messages/m3", "data": {...}, "version": 1 }
+    }
+  }
+}
+```
+
+### 4.5 Replication Stream (RxDB)
+
+**Client -> Server (Start Stream):**
+
+```json
+{
+  "id": "stream-1",
+  "type": "stream",
+  "payload": {
+    "collection": "rooms/room-1/messages",
+    "checkpoint": {
+      "updatedAt": 1678888888000,
+      "id": "last-doc-id"
+    }
+  }
+}
+```
+
+**Server -> Client (Stream Event):**
+
+```json
+{
+  "type": "stream-event",
+  "payload": {
+    "streamId": "stream-1",
+    "documents": [ ... ],
+    "checkpoint": {
+      "updatedAt": 1678889999000,
+      "id": "new-last-doc-id"
+    }
+  }
+}
+```
+
+### 4.6 Unsubscription
+
+**Client -> Server:**
+
+```json
+{
+  "id": "req-2",
+  "type": "unsubscribe",
+  "payload": {
+    "id": "sub-1" // The ID of the subscription or stream to cancel
+  }
+}
+```
+
+**Server -> Client (Unsubscribe Ack):**
+
+```json
+{
+  "id": "req-2",
+  "type": "unsubscribe_ack",
+  "payload": {
+    "status": "ok"
+  }
+}
+```
+
+### 4.7 SSE Notes
+
+- SSE shares the same auth and subscription semantics as WebSocket but is server-to-client only.
+- Events are sent as text/event-stream; payload envelopes mirror the WebSocket `event` messages.
+- Heartbeats via SSE comments; clients should reconnect with the last known resume token/seq if supported.
+
 ## 5) Reliability & Observability
+
 - Reliability: end-to-end at-least-once from CSP to Gateway to clients; dedupe via seq + subscription id; heartbeat/keepalive to detect dead links.
 - Observability:
   - Metrics: per-partition lag, events/s, match hit rate, Bloom false-positive rate, broadcast ratio, queue watermarks, reconnect/resume success.
@@ -139,11 +292,13 @@ Client brief-disconnect resume (protocol sketch):
   - Define target p99 delivery latency per partition and max acceptable Bloom FP rate; alerts tie directly to degradation policy in section 3.
 
 ## 6) Scalability Plan
+
 - Compute: CSP and Gateway both scale horizontally; partitions >= node count for rebalancing; Bloom/index parameters adjust with growth.
 - Data: subscription indexes and Blooms can be sharded by collection to avoid single-node memory blowup.
 - Migration: when nodes change, resume tokens and subscription indexes move with partitions for seamless recovery.
 
 ## 7) Shadow Validation / Replay (Note)
+
 - Reminder: matcher/routing changes should support shadow verification or offline replay of recorded change streams to validate correctness without impacting production traffic (details to be added later).
 - Shadow plan (Why: validate safely; How):
   - Capture sampled change streams (sanitized) to object storage; replay against a shadow CSP+Gateway deployment running new matcher/routing code; compare match sets and latency, block rollout if divergence exceeds threshold.

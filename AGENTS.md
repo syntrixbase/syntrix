@@ -13,9 +13,9 @@ applyTo: "**"
 
 ## � DOCUMENTATION STRUCTURE
 When creating design or implementation documentation, follow this structure:
-- `000_requirements.md`: Describe specific requirements and constraints.
-- `001_architecture.md`: Record the overall architecture, including module diagrams (ASCII art) and UI layout diagrams (ASCII art).
-- `002_xxx.md`: Specific module details, numbered sequentially.
+- `000.requirements.md`: Describe specific requirements and constraints.
+- `001.architecture.md`: Record the overall architecture, including module diagrams (ASCII art) and UI layout diagrams (ASCII art).
+- `002.xxx.md`: Specific module details, numbered sequentially.
 
 ## �🚨 STOP CONDITIONS
 IMMEDIATELY STOP and ask user when:
