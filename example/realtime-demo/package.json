@@ -1,0 +1,15 @@
+{
+  "name": "realtime-demo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun build src/main.ts --outfile dist/main.js --format esm && bunx serve -l 3000 -C"
+  },
+  "dependencies": {
+    "@syntrix/client": "file:../../sdk/syntrix-client-ts"
+  },
+  "devDependencies": {
+    "serve": "^14.2.0"
+  }
+}
