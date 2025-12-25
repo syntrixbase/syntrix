@@ -1,15 +1,13 @@
 import { Request, Response } from 'express';
 import { AzureOpenAI } from 'openai';
-import { SyntrixClient } from '../syntrix-client';
-import { WebhookPayload } from '../types';
+import { TriggerHandler, WebhookPayload } from '@syntrix/client';
+import { Message, ToolCall } from '../types';
 
 const openai = new AzureOpenAI({
   endpoint: process.env.AZURE_OPENAI_ENDPOINT,
   apiKey: process.env.AZURE_OPENAI_API_KEY,
   apiVersion: '2024-05-01-preview',
 });
-
-// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 const TOOLS = [
   {
@@ -56,8 +54,8 @@ export const llmHandler = async (req: Request, res: Response) => {
     console.log(`Received LLM trigger: ${payload.triggerId}`);
 
     // 1. Parse Context
-    // collection: users/demo-user/chats/chat-1/messages
-    // or users/demo-user/chats/chat-1/toolcall
+    // collection: users/demo-user/orch-chats/chat-1/messages
+    // or users/demo-user/orch-chats/chat-1/toolcall
     const parts = payload.collection.split('/');
     // parts: ["users", "demo-user", "chats", "chat-1", "messages"]
     if (parts.length < 5) {
@@ -68,19 +66,72 @@ export const llmHandler = async (req: Request, res: Response) => {
 
     const userId = parts[1];
     const chatId = parts[3];
-    const chatPath = `users/${userId}/chats/${chatId}`;
-    const token = payload.preIssuedToken;
-
-    if (!token) {
-        console.error('Missing preIssuedToken');
-        res.status(401).send('Unauthorized');
-        return;
+    const chatPath = `users/${userId}/orch-chats/${chatId}`;
+    if (!payload.preIssuedToken) {
+      console.error('Missing preIssuedToken');
+      res.status(401).send('Unauthorized');
+      return;
     }
 
-    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
+    const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL || 'http://localhost:8080/api/v1');
+    const syntrix = handler.syntrix;
 
     // 2. Reconstruct History
-    const history = await syntrix.fetchHistory(chatPath);
+    const messages = await syntrix
+        .collection<Message>(`${chatPath}/messages`)
+        .orderBy('createdAt', 'asc')
+        .get();
+
+    const toolCalls = await syntrix
+        .collection<ToolCall>(`${chatPath}/tool-calls`)
+        .orderBy('createdAt', 'asc')
+        .get();
+
+    const history: Message[] = [];
+    const allEvents = [
+      ...messages.map((m: Message) => ({ type: 'message' as const, data: m })),
+      ...toolCalls.map((t: ToolCall) => ({ type: 'tool' as const, data: t }))
+    ].sort((a, b) => a.data.createdAt - b.data.createdAt);
+
+    for (const event of allEvents) {
+      if (event.type === 'message') {
+        const m = event.data as Message;
+        history.push({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          tool_calls: m.tool_calls,
+          tool_call_id: m.tool_call_id,
+          createdAt: m.createdAt
+        });
+      } else {
+        const t = event.data as ToolCall;
+        history.push({
+          id: t.id,
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: t.id,
+            type: 'function',
+            function: {
+              name: t.toolName,
+              arguments: JSON.stringify(t.args)
+            }
+          }],
+          createdAt: t.createdAt
+        });
+
+        if (t.status === 'success' && t.result) {
+          history.push({
+            id: `${t.id}-result`,
+            role: 'tool',
+            tool_call_id: t.id,
+            content: t.result,
+            createdAt: t.createdAt + 1
+          });
+        }
+      }
+    }
 
     // 3. Safety Check (Max Turns)
     // Count how many tool calls are in the history
@@ -118,16 +169,25 @@ export const llmHandler = async (req: Request, res: Response) => {
     if (message.tool_calls && message.tool_calls.length > 0) {
       // Handle Tool Calls
       for (const toolCall of message.tool_calls) {
-        await syntrix.postToolCall(
-          chatPath,
-          toolCall.function.name,
-          JSON.parse(toolCall.function.arguments),
-          toolCall.id
-        );
+        await syntrix
+          .doc(`${chatPath}/tool-calls/${toolCall.id}`)
+          .set({
+            id: toolCall.id,
+            toolName: toolCall.function.name,
+            args: JSON.parse(toolCall.function.arguments),
+            status: 'pending',
+            createdAt: Date.now()
+          });
       }
     } else if (message.content) {
       // Handle Text Reply
-      await syntrix.postMessage(chatPath, message.content);
+      const id = `msg_${Date.now()}`;
+      await syntrix.doc(`${chatPath}/messages/${id}`).set({
+        id,
+        role: 'assistant',
+        content: message.content,
+        createdAt: Date.now()
+      });
     }
 
     res.status(200).send('OK');

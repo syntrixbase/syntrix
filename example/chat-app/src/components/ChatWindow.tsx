@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { getMessagesCollection, getToolCallsCollection, startChatSync, startToolCallSync, Message, ToolCall } from '../db';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { getMessagesCollection, getToolCallsCollection, getDatabase, startChatSync, startToolCallSync, Message, ToolCall, AgentTask } from '../db';
 import { MessageInput } from './MessageInput';
+import { TaskBlock } from './TaskBlock';
 
 interface ChatWindowProps {
   chatId: string;
@@ -8,7 +11,8 @@ interface ChatWindowProps {
 
 type ChatItem =
   | (Message & { type: 'message' })
-  | (ToolCall & { type: 'toolcall' });
+  | (ToolCall & { type: 'toolcall' })
+  | (Omit<AgentTask, 'type'> & { type: 'task'; taskType: AgentTask['type'] });
 
 const ToolCallItem: React.FC<{ item: ToolCall }> = ({ item }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -48,13 +52,16 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    setItems([]); // Clear items immediately when chatId changes
     let isMounted = true;
     let msgSub: any;
     let toolSub: any;
+    let taskSub: any;
     let msgSyncCancel: (() => void) | undefined;
     let toolSyncCancel: (() => void) | undefined;
 
     const init = async () => {
+      const db = await getDatabase();
       const msgCollection = await getMessagesCollection(chatId);
       const toolCollection = await getToolCallsCollection(chatId);
 
@@ -63,12 +70,23 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
       // Combine subscriptions
       let currentMessages: Message[] = [];
       let currentTools: ToolCall[] = [];
+      let currentTasks: AgentTask[] = [];
 
       const updateItems = () => {
         if (!isMounted) return;
+
+        // We need to interleave tasks.
+        // Tasks have `triggerMessageId`. We should place them AFTER that message.
+        // But for simplicity in sorting, we can use `createdAt`.
+        // However, `createdAt` of a task is usually slightly after the user message.
+
         const combined: ChatItem[] = [
           ...currentMessages.map(m => ({ ...m, type: 'message' } as const)),
-          ...currentTools.map(t => ({ ...t, type: 'toolcall' } as const))
+          ...currentTools.map(t => ({ ...t, type: 'toolcall' } as const)),
+          ...currentTasks.map(t => {
+            const { type, ...rest } = t;
+            return { ...rest, type: 'task', taskType: type } as const;
+          })
         ];
         combined.sort((a, b) => a.createdAt - b.createdAt);
         setItems(combined);
@@ -82,6 +100,14 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
       toolSub = toolCollection.find().sort({ createdAt: 'asc' }).$.subscribe(tools => {
         currentTools = tools.map(t => t.toJSON());
         updateItems();
+      });
+
+      taskSub = db.tasks.find({
+          selector: { chatId },
+          sort: [{ createdAt: 'asc' }]
+      }).$.subscribe(tasks => {
+          currentTasks = tasks.map(t => t.toJSON());
+          updateItems();
       });
 
       // Start Syncs
@@ -98,6 +124,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
       isMounted = false;
       if (msgSub) msgSub.unsubscribe();
       if (toolSub) toolSub.unsubscribe();
+      if (taskSub) taskSub.unsubscribe();
       if (msgSyncCancel) msgSyncCancel();
       if (toolSyncCancel) toolSyncCancel();
     };
@@ -114,9 +141,17 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ chatId }) => {
           if (item.type === 'message') {
             return (
               <div key={item.id} className={`message ${item.role}`}>
-                <div className="content">{item.content}</div>
+                <div className="content">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {item.content}
+                  </ReactMarkdown>
+                </div>
               </div>
             );
+          } else if (item.type === 'task') {
+              const { type, taskType, ...rest } = item;
+              const originalTask: AgentTask = { ...rest, type: taskType };
+              return <TaskBlock key={item.id} task={originalTask} chatId={chatId} />;
           } else {
             return <ToolCallItem key={item.id} item={item} />;
           }

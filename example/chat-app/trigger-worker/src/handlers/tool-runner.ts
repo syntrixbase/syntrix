@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { SyntrixClient } from '../syntrix-client';
 import { TavilyClient } from '../tools/tavily';
 import { WebhookPayload } from '../types';
+import { generateShortId } from '../utils';
 
 // const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 const tavily = new TavilyClient(process.env.TAVILY_API_KEY || '');
@@ -23,11 +24,10 @@ export const toolRunnerHandler = async (req: Request, res: Response) => {
     const callId = doc.id; // Assuming ID is in the document data
 
     // Parse chat path from collection
-    // collection: users/demo-user/chats/chat-1/toolcall
+    // collection: users/demo-user/orch-chats/chat-1/toolcall
+    // OR: users/demo-user/orch-chats/chat-1/sub-agents/agent-1/tool-calls
     const parts = payload.collection.split('/');
-    const userId = parts[1];
-    const chatId = parts[3];
-    const chatPath = `users/${userId}/chats/${chatId}`;
+    const isSubAgent = parts.includes('sub-agents');
     const token = payload.preIssuedToken;
 
     if (!token) {
@@ -54,8 +54,40 @@ export const toolRunnerHandler = async (req: Request, res: Response) => {
       result = `Error: Unknown tool ${toolName}`;
     }
 
-    // Update Tool Call Document
-    await syntrix.updateToolCall(chatPath, callId, result);
+    if (isSubAgent) {
+        const userId = parts[1];
+        const chatId = parts[3];
+        const subAgentId = parts[5];
+        console.log(`[ToolRunner] ChatID: ${chatId}, AgentID: ${subAgentId}, ToolCallID: ${callId}`);
+        const subAgentPath = `users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`;
+
+        // 1. Update Tool Call Document
+        await syntrix.updateDocument(`${subAgentPath}/tool-calls/${callId}`, {
+            status: 'success',
+            result,
+            updatedAt: Date.now()
+        });
+
+        // 2. Insert Tool Message (Triggers Agent Loop)
+        await syntrix.createDocument(`${subAgentPath}/messages`, {
+            id: generateShortId(),
+            userId,
+            subAgentId,
+            role: 'tool',
+            content: result,
+            toolCallId: callId,
+            createdAt: Date.now()
+        });
+    } else {
+        // Legacy / Main Chat Tool Call
+        const userId = parts[1];
+        const chatId = parts[3];
+        console.log(`[ToolRunner] ChatID: ${chatId}, ToolCallID: ${callId}`);
+        const chatPath = `users/${userId}/orch-chats/${chatId}`;
+
+        // Update Tool Call Document
+        await syntrix.updateToolCall(chatPath, callId, result);
+    }
 
     res.status(200).send('OK');
   } catch (error) {

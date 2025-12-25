@@ -92,7 +92,7 @@ export class SyntrixClient {
 
     // 2. Fetch Tool Calls
     const toolCalls = await this.query<ToolCall>({
-      collection: `${chatPath}/toolcall`,
+      collection: `${chatPath}/tool-calls`,
       orderBy: [{ field: 'createdAt', direction: 'asc' }],
     });
 
@@ -163,7 +163,7 @@ export class SyntrixClient {
     // Use the ID from OpenAI if provided, otherwise generate one
     const id = toolCallId || generateShortId();
     // POST to the collection
-    await this.createDocument(`${chatPath}/toolcall`, {
+    await this.createDocument(`${chatPath}/tool-calls`, {
       id,
       toolName,
       args,
@@ -173,7 +173,7 @@ export class SyntrixClient {
   }
 
   async updateToolCall(chatPath: string, callId: string, result: string) {
-    await this.updateDocument(`${chatPath}/toolcall/${callId}`, {
+    await this.updateDocument(`${chatPath}/tool-calls/${callId}`, {
       status: 'success',
       result
     });

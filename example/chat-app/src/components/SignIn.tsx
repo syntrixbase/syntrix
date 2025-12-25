@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { API_URL } from '../constants';
-import { parseJwt } from '../utils';
+import { loginWithSdk } from '../auth';
 
 interface SignInProps {
   onSignIn: (token: string, userId: string) => void;
@@ -18,37 +17,8 @@ export function SignIn({ onSignIn }: SignInProps) {
     setLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(text || 'Login failed');
-      }
-
-      const data = await response.json();
-      const accessToken = data.access_token;
-      const refreshToken = data.refresh_token;
-
-      if (!accessToken) {
-        throw new Error('No access token received');
-      }
-
-      if (refreshToken) {
-        localStorage.setItem('refresh_token', refreshToken);
-      }
-
-      const claims = parseJwt(accessToken);
-      if (!claims || !claims.username) {
-        throw new Error('Invalid token received');
-      }
-
-      onSignIn(accessToken, claims.username);
+      const { accessToken, userId } = await loginWithSdk(username, password);
+      onSignIn(accessToken, userId);
     } catch (err: any) {
       setError(err.message);
     } finally {

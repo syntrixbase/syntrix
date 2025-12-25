@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AzureOpenAI } from 'openai';
-import { SyntrixClient } from '../syntrix-client';
-import { WebhookPayload, SubAgentMessage, SubAgentToolCall, AgentTask, SubAgent } from '../types';
+import { TriggerHandler, WebhookPayload } from '@syntrix/client';
+import { SubAgentMessage, SubAgentToolCall, AgentTask, SubAgent } from '../types';
 import { generateShortId } from '../utils';
 
 const openai = new AzureOpenAI({
@@ -9,8 +9,6 @@ const openai = new AzureOpenAI({
   apiKey: process.env.AZURE_OPENAI_API_KEY,
   apiVersion: '2024-05-01-preview',
 });
-
-// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 const AGENT_TOOLS = [
   {
@@ -68,23 +66,22 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
     const userId = parts[1];
     const chatId = parts[3];
     const subAgentId = parts[5];
-    const token = payload.preIssuedToken;
-
-    if (!token) {
-        console.error('Missing preIssuedToken');
-        res.status(401).send('Unauthorized');
-        return;
+    if (!payload.preIssuedToken) {
+      console.error('Missing preIssuedToken');
+      res.status(401).send('Unauthorized');
+      return;
     }
 
-    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
+    const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL || 'http://localhost:8080/api/v1');
+    const syntrix = handler.syntrix;
 
     console.log(`[AgentLoop] ChatID: ${chatId}, AgentID: ${subAgentId}`);
 
     // 1. Pending Check
-    const pendingTools = await syntrix.query<SubAgentToolCall>({
-        collection: `users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/tool-calls`,
-        filters: [{ field: 'status', op: '==', value: 'pending' }]
-    });
+    const pendingTools = await syntrix
+      .collection<SubAgentToolCall>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/tool-calls`)
+      .where('status', '==', 'pending')
+      .get();
 
     if (pendingTools.length > 0) {
         console.log('Pending tools found, skipping LLM call.');
@@ -93,10 +90,10 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
     }
 
     // 2. Fetch History
-    const messages = await syntrix.query<SubAgentMessage>({
-        collection: `users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`,
-        orderBy: [{ field: 'createdAt', direction: 'asc' }]
-    });
+    const messages = await syntrix
+      .collection<SubAgentMessage>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`)
+      .orderBy('createdAt', 'asc')
+      .get();
 
     // 2.1 Check if Trigger Message is Last
     // This prevents race conditions where multiple tool outputs trigger multiple runs.
@@ -128,8 +125,8 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
         const toolCallIds = toolCalls.map((tc: any) => tc.id);
 
         // Check if we have tool messages for all these IDs
-        const toolResponses = messages.slice(lastAssistantWithToolsIndex + 1).filter(m => m.role === 'tool');
-        const respondedIds = new Set(toolResponses.map(m => m.toolCallId));
+        const toolResponses = messages.slice(lastAssistantWithToolsIndex + 1).filter((m: SubAgentMessage) => m.role === 'tool');
+        const respondedIds = new Set(toolResponses.map((m: SubAgentMessage) => m.toolCallId));
 
         const missingIds = toolCallIds.filter((id: string) => !respondedIds.has(id));
 
@@ -145,21 +142,23 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
     // If multiple triggers fire for the same state, only one will succeed in creating this record.
     const runId = `run_${message.id}`;
     try {
-        await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/runs`, {
-            id: runId,
-            triggerMsgId: message.id,
-            createdAt: Date.now(),
-            status: 'processing'
+        await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/runs/${runId}`).set({
+          id: runId,
+          triggerMsgId: message.id,
+          createdAt: Date.now(),
+          status: 'processing'
         });
-    } catch (error: any) {
-        // If creation fails (likely 409 Conflict), it means this state is already being processed.
-        console.log(`[AgentLoop] Run lock ${runId} already exists. Skipping duplicate execution.`);
-        res.status(200).send('Skipped (Duplicate Run)');
-        return;
-    }
+      } catch (error: any) {
+        if (error?.response?.status === 409) {
+          console.log(`[AgentLoop] Run lock ${runId} already exists. Skipping duplicate execution.`);
+          res.status(200).send('Skipped (Duplicate Run)');
+          return;
+        }
+        throw error;
+      }
 
     // 4. Call LLM
-    const openAIMessages = messages.map(m => {
+    const openAIMessages = messages.map((m: SubAgentMessage) => {
         const msg: any = {
             role: m.role,
             content: m.content
@@ -193,29 +192,30 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
             const answer = args.answer;
 
             // Create Assistant Message
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-                id: generateShortId(),
-                userId,
-                subAgentId,
-                role: 'assistant',
-                content: answer,
-                createdAt: Date.now()
+            const msgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${msgId}`).set({
+              id: msgId,
+              userId,
+              subAgentId,
+              role: 'assistant',
+              content: answer,
+              createdAt: Date.now()
             });
 
             // Update SubAgent -> completed
-            await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`, {
-                status: 'completed',
-                updatedAt: Date.now()
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).update({
+              status: 'completed',
+              updatedAt: Date.now()
             });
 
             // Update Task -> success
-            const subAgent = await syntrix.getDocument<SubAgent>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`);
+            const subAgent = await syntrix.doc<SubAgent>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).get();
             if (subAgent) {
-                await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/tasks/${subAgent.taskId}`, {
-                    status: 'success',
-                    result: answer,
-                    updatedAt: Date.now()
-                });
+              await syntrix.doc(`users/${userId}/orch-chats/${chatId}/tasks/${subAgent.taskId}`).update({
+                status: 'success',
+                result: answer,
+                updatedAt: Date.now()
+              });
             }
 
         } else if (askUserCall) {
@@ -224,68 +224,71 @@ export const agentLoopHandler = async (req: Request, res: Response) => {
             const question = args.question;
 
             // Create Assistant Message
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-                id: generateShortId(),
-                userId,
-                subAgentId,
-                role: 'assistant',
-                content: question,
-                createdAt: Date.now()
+            const msgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${msgId}`).set({
+              id: msgId,
+              userId,
+              subAgentId,
+              role: 'assistant',
+              content: question,
+              createdAt: Date.now()
             });
 
             // Update SubAgent -> waiting_for_user
-            await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`, {
-                status: 'waiting_for_user',
-                updatedAt: Date.now()
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).update({
+              status: 'waiting_for_user',
+              updatedAt: Date.now()
             });
 
             // Update Task -> waiting
-            const subAgent = await syntrix.getDocument<SubAgent>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`);
+            const subAgent = await syntrix.doc<SubAgent>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).get();
             if (subAgent) {
-                await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/tasks/${subAgent.taskId}`, {
-                    status: 'waiting',
-                    updatedAt: Date.now()
-                });
+              await syntrix.doc(`users/${userId}/orch-chats/${chatId}/tasks/${subAgent.taskId}`).update({
+                status: 'waiting',
+                updatedAt: Date.now()
+              });
             }
 
         } else {
             // Regular Tool Calls (e.g. tavily_search)
 
             // Create Assistant Message with tool_calls
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-                id: generateShortId(),
-                userId,
-                subAgentId,
-                role: 'assistant',
-                content: null,
-                toolCalls: responseMsg.tool_calls,
-                createdAt: Date.now()
+            const assistantMsgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${assistantMsgId}`).set({
+              id: assistantMsgId,
+              userId,
+              subAgentId,
+              role: 'assistant',
+              content: null,
+              toolCalls: responseMsg.tool_calls,
+              createdAt: Date.now()
             });
 
             // Create Tool Call Documents for ALL tool calls
             for (const tc of responseMsg.tool_calls) {
                 const tcArgs = JSON.parse(tc.function.arguments);
-                await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/tool-calls`, {
-                    id: tc.id,
-                    userId,
-                    subAgentId,
-                    toolName: tc.function.name,
-                    args: tcArgs,
-                    status: 'pending',
-                    createdAt: Date.now()
+                await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/tool-calls/${tc.id}`).set({
+                  id: tc.id,
+                  userId,
+                  subAgentId,
+                  toolName: tc.function.name,
+                  args: tcArgs,
+                  status: 'pending',
+                  createdAt: Date.now()
                 });
             }
         }
     } else if (responseMsg.content) {
         // Just a thought or chat (should be avoided by system prompt, but handle it)
-        await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-            id: generateShortId(),
-            userId,
-            subAgentId,
-            role: 'assistant',
-            content: responseMsg.content,
-            createdAt: Date.now()
-        });
+            const msgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${msgId}`).set({
+              id: msgId,
+              userId,
+              subAgentId,
+              role: 'assistant',
+              content: responseMsg.content,
+              createdAt: Date.now()
+            });
     }
 
     res.status(200).send('OK');

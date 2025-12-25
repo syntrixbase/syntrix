@@ -4,20 +4,26 @@ import { generateShortId } from '../utils';
 
 interface MessageInputProps {
   chatId: string;
+  customSubmit?: (text: string) => Promise<void>;
 }
 
-export const MessageInput: React.FC<MessageInputProps> = ({ chatId }) => {
+export const MessageInput: React.FC<MessageInputProps> = ({ chatId, customSubmit }) => {
   const [text, setText] = useState('');
 
   const sendMessage = async () => {
     if (!text.trim()) return;
-    const collection = await syncMessages(chatId);
-    await collection.insert({
-      id: generateShortId(),
-      role: 'user',
-      content: text,
-      createdAt: Date.now()
-    });
+
+    if (customSubmit) {
+        await customSubmit(text);
+    } else {
+        const collection = await syncMessages(chatId);
+        await collection.insert({
+          id: generateShortId(),
+          role: 'user',
+          content: text,
+          createdAt: Date.now()
+        });
+    }
     setText('');
   };
 

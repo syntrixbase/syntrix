@@ -4,40 +4,53 @@ CLI_APP_NAME=syntrix-cli
 APP_NAME=syntrix
 BUILD_DIR=bin
 
+ifeq ($(OS),Windows_NT)
+	MKDIR_P = powershell -NoProfile -Command "if (-not (Test-Path '$(BUILD_DIR)')) { New-Item -ItemType Directory -Path '$(BUILD_DIR)' | Out-Null }"
+	RM_RF = powershell -NoProfile -Command "if (Test-Path '$(BUILD_DIR)') { Remove-Item -Recurse -Force '$(BUILD_DIR)' }"
+	EXE_EXT = .exe
+else
+    MKDIR_P = mkdir -p $(BUILD_DIR)
+    RM_RF = rm -rf $(BUILD_DIR)
+	EXE_EXT =
+endif
+
+APP_BIN=$(BUILD_DIR)/$(APP_NAME)$(EXE_EXT)
+CLI_BIN=$(BUILD_DIR)/$(CLI_APP_NAME)$(EXE_EXT)
+
 build:
-	@mkdir -p $(BUILD_DIR)
+	@$(MKDIR_P)
 	@echo "Building $(CLI_APP_NAME)..."
-	@go build -o $(BUILD_DIR)/$(CLI_APP_NAME) ./cmd/syntrix-cli
+	@go build -o $(CLI_BIN) ./cmd/syntrix-cli
 	@echo "Building $(APP_NAME)..."
-	@go build -o $(BUILD_DIR)/$(APP_NAME) ./cmd/syntrix
+	@go build -o $(APP_BIN) ./cmd/syntrix
 
 run: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --all
+	@$(APP_BIN) --all
 
 run-query: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --query
+	@$(APP_BIN) --query
 
 run-csp: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --csp
+	@$(APP_BIN) --csp
 
 run-api: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --api
+	@$(APP_BIN) --api
 
 run-trigger-evaluator: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --trigger-evaluator
+	@$(APP_BIN) --trigger-evaluator
 
 run-trigger-worker: build
 	@echo "Running $(APP_NAME)..."
-	@./$(BUILD_DIR)/$(APP_NAME) --trigger-worker
+	@$(APP_BIN) --trigger-worker
 
 run-cli: build
 	@echo "Running $(CLI_APP_NAME)..."
-	@./$(BUILD_DIR)/$(CLI_APP_NAME)
+	@$(CLI_BIN)
 
 test:
 	@echo "Running tests..."
@@ -55,4 +68,4 @@ coverage:
 
 clean:
 	@echo "Cleaning..."
-	@rm -rf $(BUILD_DIR)
+	@$(RM_RF)

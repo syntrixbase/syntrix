@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { AzureOpenAI } from 'openai';
-import { SyntrixClient } from '../syntrix-client';
-import { WebhookPayload } from '../types';
+import { TriggerHandler, WebhookPayload } from '@syntrix/client';
 
 const openai = new AzureOpenAI({
   endpoint: process.env.AZURE_OPENAI_ENDPOINT,
@@ -9,15 +8,13 @@ const openai = new AzureOpenAI({
   apiVersion: '2024-05-01-preview',
 });
 
-// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
-
 export const generateTitleHandler = async (req: Request, res: Response) => {
   try {
     const payload = req.body as WebhookPayload;
     console.log(`Received Generate Title trigger: ${payload.triggerId}`);
 
     // 1. Parse Context
-    // collection: users/demo-user/chats/chat-1/messages
+    // collection: users/demo-user/orch-chats/chat-1/messages
     const parts = payload.collection.split('/');
     if (parts.length < 5) {
       console.error('Invalid collection path:', payload.collection);
@@ -27,19 +24,19 @@ export const generateTitleHandler = async (req: Request, res: Response) => {
 
     const userId = parts[1];
     const chatId = parts[3];
-    const chatPath = `users/${userId}/chats/${chatId}`;
-    const token = payload.preIssuedToken;
-
-    if (!token) {
-        console.error('Missing preIssuedToken');
-        res.status(401).send('Unauthorized');
-        return;
+    console.log(`[GenerateTitle] ChatID: ${chatId}`);
+    const chatPath = `users/${userId}/orch-chats/${chatId}`;
+    if (!payload.preIssuedToken) {
+      console.error('Missing preIssuedToken');
+      res.status(401).send('Unauthorized');
+      return;
     }
 
-    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
+    const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL || 'http://localhost:8080/api/v1');
+    const syntrix = handler.syntrix;
 
     // 2. Check if title is already generated
-    const chat = await syntrix.getDocument<any>(chatPath);
+    const chat = await syntrix.doc<any>(chatPath).get();
     if (chat && chat.titleGenerated) {
         console.log(`Title already generated for chat ${chatId}, skipping.`);
         res.status(200).send('Skipped');
@@ -48,7 +45,7 @@ export const generateTitleHandler = async (req: Request, res: Response) => {
 
     // 3. Get content
     // We use the content of the message that triggered this event.
-    const userContent = payload.after?.content;
+    const userContent = (payload.after as any)?.content;
 
     if (!userContent) {
         console.log('User content is empty, skipping.');
@@ -76,7 +73,7 @@ export const generateTitleHandler = async (req: Request, res: Response) => {
     console.log(`Generated title: "${title}" for chat ${chatId}`);
 
     // 5. Update Chat Title and set flag
-    await syntrix.updateDocument(chatPath, { title, titleGenerated: true });
+    await syntrix.doc(chatPath).update({ title, titleGenerated: true });
 
     res.status(200).send('Title updated');
 

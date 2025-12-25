@@ -1,5 +1,6 @@
 import { API_URL } from './constants';
 import { parseJwt } from './utils';
+import { getSyntrixClient, resetSyntrixClient } from './client';
 
 let authToken: string | null = null;
 let currentUserId: string | null = null;
@@ -12,9 +13,16 @@ export const onLogout = (handler: () => Promise<void>) => {
     logoutHandlers.push(handler);
 };
 
-export const setAuth = (token: string, userId: string) => {
+export const setAuth = (token: string, userId: string, refreshToken?: string) => {
     authToken = token;
     currentUserId = userId;
+    if (token) {
+        localStorage.setItem('access_token', token);
+    }
+    if (refreshToken) {
+        localStorage.setItem('refresh_token', refreshToken);
+    }
+    resetSyntrixClient(token, refreshToken || localStorage.getItem('refresh_token'));
 };
 
 export const logout = async () => {
@@ -23,7 +31,9 @@ export const logout = async () => {
     }
     authToken = null;
     currentUserId = null;
+    localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
+    resetSyntrixClient(null, null);
     window.location.reload();
 };
 
@@ -33,10 +43,21 @@ export const checkAuth = async (): Promise<boolean> => {
     if (checkAuthPromise) return checkAuthPromise;
 
     checkAuthPromise = (async () => {
+        const accessToken = localStorage.getItem('access_token');
         const refreshToken = localStorage.getItem('refresh_token');
-        if (!refreshToken) return false;
+        if (!refreshToken && !accessToken) return false;
 
         try {
+            if (accessToken) {
+                const claims = parseJwt(accessToken);
+                if (claims && claims.username) {
+                    setAuth(accessToken, claims.username, refreshToken || undefined);
+                    return true;
+                }
+            }
+
+            if (!refreshToken) return false;
+
             const response = await fetch(`${API_URL}/api/v1/auth/refresh`, {
                 method: 'POST',
                 headers: {
@@ -47,21 +68,17 @@ export const checkAuth = async (): Promise<boolean> => {
 
             if (response.ok) {
                 const data = await response.json();
-                const accessToken = data.access_token;
+                const newAccessToken = data.access_token;
                 const newRefreshToken = data.refresh_token;
 
-                if (accessToken) {
-                    const claims = parseJwt(accessToken);
+                if (newAccessToken) {
+                    const claims = parseJwt(newAccessToken);
                     if (claims && claims.username) {
-                        setAuth(accessToken, claims.username);
-                        if (newRefreshToken) {
-                            localStorage.setItem('refresh_token', newRefreshToken);
-                        }
+                        setAuth(newAccessToken, claims.username, newRefreshToken || refreshToken);
                         return true;
                     }
                 }
             } else {
-                // Refresh failed, clear token
                 localStorage.removeItem('refresh_token');
             }
         } catch (error) {
@@ -78,74 +95,15 @@ export const checkAuth = async (): Promise<boolean> => {
     }
 };
 
-// --- Auth Helper ---
-
-let isRefreshing = false;
-let refreshSubscribers: ((token: string) => void)[] = [];
-
-const onRefreshed = (token: string) => {
-    refreshSubscribers.map(cb => cb(token));
-    refreshSubscribers = [];
-};
-
-const addRefreshSubscriber = (cb: (token: string) => void) => {
-    refreshSubscribers.push(cb);
-};
-
-export const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
-    const headers: any = { ...options.headers };
-    if (authToken) {
-        headers['Authorization'] = `Bearer ${authToken}`;
+export const loginWithSdk = async (username: string, password: string) => {
+    const client = getSyntrixClient();
+    const result = await client.login(username, password);
+    const accessToken = result.access_token;
+    const refreshToken = result.refresh_token;
+    const claims = parseJwt(accessToken);
+    if (!claims || !claims.username) {
+        throw new Error('Invalid token received');
     }
-
-    const response = await fetch(url, { ...options, headers });
-
-    if (response.status === 401) {
-        if (!localStorage.getItem('refresh_token')) {
-            await logout();
-            throw new Error('Session expired');
-        }
-
-        if (isRefreshing) {
-            return new Promise((resolve) => {
-                addRefreshSubscriber(async (token) => {
-                    headers['Authorization'] = `Bearer ${token}`;
-                    resolve(await fetch(url, { ...options, headers }));
-                });
-            });
-        }
-
-        isRefreshing = true;
-        try {
-            const refreshResponse = await fetch(`${API_URL}/api/v1/auth/refresh`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ refresh_token: localStorage.getItem('refresh_token') })
-            });
-
-            if (refreshResponse.ok) {
-                const data = await refreshResponse.json();
-                authToken = data.access_token;
-                if (data.refresh_token) {
-                    localStorage.setItem('refresh_token', data.refresh_token);
-                }
-                isRefreshing = false;
-                onRefreshed(authToken!);
-
-                // Retry original request
-                headers['Authorization'] = `Bearer ${authToken}`;
-                return fetch(url, { ...options, headers });
-            } else {
-                isRefreshing = false;
-                await logout();
-                throw new Error('Session expired');
-            }
-        } catch (e) {
-            isRefreshing = false;
-            await logout();
-            throw e;
-        }
-    }
-
-    return response;
+    setAuth(accessToken, claims.username, refreshToken);
+    return { accessToken, userId: claims.username };
 };

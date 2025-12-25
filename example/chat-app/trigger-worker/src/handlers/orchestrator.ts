@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { AzureOpenAI } from 'openai';
-import { SyntrixClient } from '../syntrix-client';
-import { WebhookPayload, AgentTask, SubAgent, SubAgentMessage } from '../types';
+import { TriggerHandler, WebhookPayload } from '@syntrix/client';
+import { AgentTask, SubAgentMessage, Message, ToolCall } from '../types';
 import { generateShortId } from '../utils';
 
 const openai = new AzureOpenAI({
@@ -9,8 +9,6 @@ const openai = new AzureOpenAI({
   apiKey: process.env.AZURE_OPENAI_API_KEY,
   apiVersion: '2024-05-01-preview',
 });
-
-// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 const ORCHESTRATOR_TOOLS = [
   {
@@ -68,60 +66,113 @@ export const orchestratorHandler = async (req: Request, res: Response) => {
     const parts = payload.collection.split('/');
     const userId = parts[1];
     const chatId = parts[3];
-    const token = payload.preIssuedToken;
-
-    if (!token) {
-        console.error('Missing preIssuedToken');
-        res.status(401).send('Unauthorized');
-        return;
+    if (!payload.preIssuedToken) {
+      console.error('Missing preIssuedToken');
+      res.status(401).send('Unauthorized');
+      return;
     }
 
-    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
+    const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL || 'http://localhost:8080/api/v1');
+    const syntrix = handler.syntrix;
 
     console.log(`[Orchestrator] ChatID: ${chatId}`);
     const chatPath = `users/${userId}/orch-chats/${chatId}`;
 
     // Fetch History
-    const history = await syntrix.fetchHistory(chatPath);
+    const baseMessages = await syntrix
+      .collection<Message>(`${chatPath}/messages`)
+      .orderBy('createdAt', 'asc')
+      .get();
+
+    const toolCalls = await syntrix
+      .collection<ToolCall>(`${chatPath}/tool-calls`)
+      .orderBy('createdAt', 'asc')
+      .get();
+
+    const history: Message[] = [];
+    const allEvents = [
+      ...baseMessages.map((m: Message) => ({ type: 'message' as const, data: m })),
+      ...toolCalls.map((t: ToolCall) => ({ type: 'tool' as const, data: t }))
+    ].sort((a, b) => a.data.createdAt - b.data.createdAt);
+
+    for (const event of allEvents) {
+      if (event.type === 'message') {
+        const m = event.data as Message;
+        history.push({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          tool_calls: m.tool_calls,
+          tool_call_id: m.tool_call_id,
+          createdAt: m.createdAt
+        });
+      } else {
+        const t = event.data as ToolCall;
+        history.push({
+          id: t.id,
+          role: 'assistant',
+          content: null,
+          tool_calls: [{
+            id: t.id,
+            type: 'function',
+            function: {
+              name: t.toolName,
+              arguments: JSON.stringify(t.args)
+            }
+          }],
+          createdAt: t.createdAt
+        });
+
+        if (t.status === 'success' && t.result) {
+          history.push({
+            id: `${t.id}-result`,
+            role: 'tool',
+            tool_call_id: t.id,
+            content: t.result,
+            createdAt: t.createdAt + 1
+          });
+        }
+      }
+    }
 
     // Check if Trigger Message is Last
     if (history.length > 0) {
-        const lastMsg = history[history.length - 1];
-        const triggerMsgId = (payload.after as any).id;
-        if (lastMsg.id !== triggerMsgId) {
-             console.log(`[Orchestrator] Trigger message ${triggerMsgId} is not the last message (Last: ${lastMsg.id}). Skipping.`);
-             res.status(200).send('Skipped (Not Last Message)');
-             return;
-        }
+      const lastMsg = history[history.length - 1];
+      const triggerMsgId = (payload.after as any).id;
+      if (lastMsg.id !== triggerMsgId) {
+        console.log(`[Orchestrator] Trigger message ${triggerMsgId} is not the last message (Last: ${lastMsg.id}). Skipping.`);
+        res.status(200).send('Skipped (Not Last Message)');
+        return;
+      }
     }
 
     // Fetch Recent Tasks (Agents) to provide context to Orchestrator
     // We query 'tasks' instead of 'sub-agents' because tasks contain the semantic info (name, instruction).
-    const recentTasks = await syntrix.query<AgentTask>({
-        collection: `users/${userId}/orch-chats/${chatId}/tasks`,
-        orderBy: [{ field: 'updatedAt', direction: 'desc' }],
-        limit: 5
-    });
+    const recentTasks = await syntrix
+      .collection<AgentTask>(`users/${userId}/orch-chats/${chatId}/tasks`)
+      .orderBy('updatedAt', 'desc')
+      .limit(5)
+      .get();
 
     // Fetch Waiting Tasks (Agents needing input)
-    const waitingTasks = recentTasks.filter(t => t.status === 'waiting');
+    const waitingTasks = recentTasks.filter((t: AgentTask) => t.status === 'waiting');
 
     // For each waiting task, get the last question
-    const waitingAgentsInfo = await Promise.all(waitingTasks.map(async (task) => {
-        if (!task.subAgentId) return null;
-        const msgs = await syntrix.query<SubAgentMessage>({
-            collection: `users/${userId}/orch-chats/${chatId}/sub-agents/${task.subAgentId}/messages`,
-            orderBy: [{ field: 'createdAt', direction: 'desc' }],
-            limit: 1
-        });
-        const question = (msgs.length > 0 && msgs[0].role === 'assistant') ? msgs[0].content : "Unknown question";
-        return {
-            subAgentId: task.subAgentId,
-            name: task.name,
-            question
-        };
+    const waitingAgentsInfo = await Promise.all(waitingTasks.map(async (task: AgentTask) => {
+      if (!task.subAgentId) return null;
+      const msgs = await syntrix
+        .collection<SubAgentMessage>(`users/${userId}/orch-chats/${chatId}/sub-agents/${task.subAgentId}/messages`)
+        .orderBy('createdAt', 'desc')
+        .limit(1)
+        .get();
+      const question = (msgs.length > 0 && msgs[0].role === 'assistant') ? msgs[0].content : 'Unknown question';
+      return {
+        subAgentId: task.subAgentId,
+        name: task.name,
+        question
+      };
     }));
-    const validWaitingAgents = waitingAgentsInfo.filter(a => a !== null);
+    const validWaitingAgents = waitingAgentsInfo.filter((a: typeof waitingAgentsInfo[number]) => a !== null);
 
     // --- Context Injection for Caching Optimization ---
     // 1. Static System Prompt (Cacheable Prefix)
@@ -139,7 +190,7 @@ export const orchestratorHandler = async (req: Request, res: Response) => {
     const dynamicContext = `Current System State:
 
     Existing Sub-Agents (Tasks):
-    ${recentTasks.filter(t => t.subAgentId).map(t => `- Name: ${t.name}, AgentID: ${t.subAgentId}, Status: ${t.status}, Instruction: ${t.instruction}`).join('\n')}
+    ${recentTasks.filter((t: AgentTask) => t.subAgentId).map((t: AgentTask) => `- Name: ${t.name}, AgentID: ${t.subAgentId}, Status: ${t.status}, Instruction: ${t.instruction}`).join('\n')}
 
     WAITING AGENTS (These agents are waiting for user input):
     ${validWaitingAgents.map(a => `- Agent: ${a!.name} (ID: ${a!.subAgentId}) is asking: "${a!.question}"`).join('\n')}
@@ -207,41 +258,42 @@ export const orchestratorHandler = async (req: Request, res: Response) => {
                 type: 'agent',
                 name: `agent:${args.type}`,
                 instruction: args.instruction,
-                triggerMessageId: payload.docKey, // The user message ID
+                triggerMessageId: payload.docKey || (payload.after as any)?.id || '', // The user message ID
                 status: 'pending',
                 createdAt: Date.now(),
                 updatedAt: Date.now()
             };
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/tasks`, task);
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/tasks/${taskId}`).set(task);
         } else if (toolCall.function.name === 'reactivate_agent') {
             // Reactivate Agent
             const subAgentId = args.subAgentId;
             // 1. Update SubAgent status
-            await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`, {
-                status: 'active',
-                updatedAt: Date.now()
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).update({
+              status: 'active',
+              updatedAt: Date.now()
             });
 
             // 2. Inject User Message into SubAgent
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-                id: generateShortId(),
-                userId,
-                subAgentId,
-                role: 'user',
-                content: args.instruction,
-                createdAt: Date.now()
+            const msgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${msgId}`).set({
+              id: msgId,
+              userId,
+              subAgentId,
+              role: 'user',
+              content: args.instruction,
+              createdAt: Date.now()
             });
 
             // 3. Update parent task status
-            const tasks = await syntrix.query<AgentTask>({
-                collection: `users/${userId}/orch-chats/${chatId}/tasks`,
-                filters: [{ field: 'subAgentId', op: '==', value: subAgentId }]
-            });
+            const tasks = await syntrix
+              .collection<AgentTask>(`users/${userId}/orch-chats/${chatId}/tasks`)
+              .where('subAgentId', '==', subAgentId)
+              .get();
             if (tasks.length > 0) {
-                await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/tasks/${tasks[0].id}`, {
-                    status: 'running',
-                    updatedAt: Date.now()
-                });
+              await syntrix.doc(`users/${userId}/orch-chats/${chatId}/tasks/${tasks[0].id}`).update({
+                status: 'running',
+                updatedAt: Date.now()
+              });
             }
         } else if (toolCall.function.name === 'reply_to_agent') {
             // Reply to Agent
@@ -249,39 +301,52 @@ export const orchestratorHandler = async (req: Request, res: Response) => {
             const content = args.content;
 
             // 1. Update SubAgent status
-            await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`, {
-                status: 'active',
-                updatedAt: Date.now()
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).update({
+              status: 'active',
+              updatedAt: Date.now()
             });
 
             // 2. Inject User Message (from Orchestrator) into SubAgent
-            await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-                id: generateShortId(),
-                userId,
-                subAgentId,
-                role: 'user',
-                content: content,
-                createdAt: Date.now()
+            const msgId = generateShortId();
+            await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${msgId}`).set({
+              id: msgId,
+              userId,
+              subAgentId,
+              role: 'user',
+              content,
+              createdAt: Date.now()
             });
 
             // 3. Update parent task status
-            const tasks = await syntrix.query<AgentTask>({
-                collection: `users/${userId}/orch-chats/${chatId}/tasks`,
-                filters: [{ field: 'subAgentId', op: '==', value: subAgentId }]
-            });
+            const tasks = await syntrix
+              .collection<AgentTask>(`users/${userId}/orch-chats/${chatId}/tasks`)
+              .where('subAgentId', '==', subAgentId)
+              .get();
             if (tasks.length > 0) {
-                await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/tasks/${tasks[0].id}`, {
-                    status: 'running',
-                    updatedAt: Date.now()
-                });
+              await syntrix.doc(`users/${userId}/orch-chats/${chatId}/tasks/${tasks[0].id}`).update({
+                status: 'running',
+                updatedAt: Date.now()
+              });
             }
 
             // 4. Notify User (Optional but good for UX)
-            await syntrix.postMessage(chatPath, `(Forwarded to Agent: "${content}")`);
+            const notifyId = generateShortId();
+            await syntrix.doc(`${chatPath}/messages/${notifyId}`).set({
+              id: notifyId,
+              role: 'assistant',
+              content: `(Forwarded to Agent: "${content}")`,
+              createdAt: Date.now()
+            });
         }
     } else if (message.content) {
         // Direct Reply
-        await syntrix.postMessage(chatPath, message.content);
+        const msgId = generateShortId();
+        await syntrix.doc(`${chatPath}/messages/${msgId}`).set({
+          id: msgId,
+          role: 'assistant',
+          content: message.content,
+          createdAt: Date.now()
+        });
     }
 
     res.status(200).send('OK');

@@ -1,9 +1,7 @@
 import { Request, Response } from 'express';
-import { SyntrixClient } from '../syntrix-client';
-import { WebhookPayload, AgentTask, SubAgent } from '../types';
+import { TriggerHandler, WebhookPayload } from '@syntrix/client';
+import { AgentTask, SubAgent } from '../types';
 import { generateShortId } from '../utils';
-
-// const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL);
 
 export const agentInitHandler = async (req: Request, res: Response) => {
   try {
@@ -16,19 +14,18 @@ export const agentInitHandler = async (req: Request, res: Response) => {
         return;
     }
 
+    if (!payload.preIssuedToken) {
+      console.error('Missing preIssuedToken');
+      res.status(401).send('Unauthorized');
+      return;
+    }
+
     // collection: users/demo-user/orch-chats/chat-1/tasks
     const parts = payload.collection.split('/');
     const userId = parts[1];
     const chatId = parts[3];
-    const token = payload.preIssuedToken;
-
-    if (!token) {
-        console.error('Missing preIssuedToken');
-        res.status(401).send('Unauthorized');
-        return;
-    }
-
-    const syntrix = new SyntrixClient(process.env.SYNTRIX_API_URL || 'http://localhost:8080', token);
+    const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL || 'http://localhost:8080/api/v1');
+    const syntrix = handler.syntrix;
 
     console.log(`[AgentInit] ChatID: ${chatId}, TaskID: ${task.id}`);
 
@@ -45,13 +42,13 @@ export const agentInitHandler = async (req: Request, res: Response) => {
     };
 
     // 1. Create SubAgent
-    await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents`, subAgent);
+    await syntrix.doc<SubAgent>(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}`).set(subAgent);
 
     // 2. Update Task
-    await syntrix.updateDocument(`users/${userId}/orch-chats/${chatId}/tasks/${task.id}`, {
-        subAgentId: subAgentId,
-        status: 'running',
-        updatedAt: Date.now()
+    await syntrix.doc<AgentTask>(`users/${userId}/orch-chats/${chatId}/tasks/${task.id}`).update({
+      subAgentId: subAgentId,
+      status: 'running',
+      updatedAt: Date.now()
     });
 
     // 3. Bootstrap Messages
@@ -62,23 +59,25 @@ export const agentInitHandler = async (req: Request, res: Response) => {
     If you need clarification, ask the user.`;
 
     // System Message
-    await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-        id: generateShortId(),
-        userId,
-        subAgentId,
-        role: 'system',
-        content: systemPrompt,
-        createdAt: Date.now()
+    const systemMsgId = generateShortId();
+    await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${systemMsgId}`).set({
+      id: systemMsgId,
+      userId,
+      subAgentId,
+      role: 'system',
+      content: systemPrompt,
+      createdAt: Date.now()
     });
 
     // User Message (Instruction)
-    await syntrix.createDocument(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages`, {
-        id: generateShortId(),
-        userId,
-        subAgentId,
-        role: 'user',
-        content: task.instruction,
-        createdAt: Date.now() + 1
+    const instructionMsgId = generateShortId();
+    await syntrix.doc(`users/${userId}/orch-chats/${chatId}/sub-agents/${subAgentId}/messages/${instructionMsgId}`).set({
+      id: instructionMsgId,
+      userId,
+      subAgentId,
+      role: 'user',
+      content: task.instruction,
+      createdAt: Date.now() + 1
     });
 
     res.status(200).send('OK');
