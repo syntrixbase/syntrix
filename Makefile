@@ -43,10 +43,15 @@ test:
 	@echo "Running tests..."
 	@go test ./... -count=1
 
+ifeq ($(OS),Windows_NT)
+    COVERAGE_CMD = scripts\coverage.cmd
+else
+    COVERAGE_CMD = ./scripts/coverage.sh
+endif
+
 coverage:
 	@echo "Running tests with coverage..."
-	@go test ./... -coverprofile=coverage.out
-	@go tool cover -html=coverage.out
+	@$(COVERAGE_CMD)
 
 clean:
 	@echo "Cleaning..."
