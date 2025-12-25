@@ -6,7 +6,7 @@
 ## Scope & Assumptions
 
 - Single gateway, single port; realtime endpoints: `/realtime/ws` (WebSocket) and `/realtime/sse` (SSE).
-- Watch expressions: reuse the query/filter language from 002 (CEL subset) as the watch matcher to keep semantics and safety consistent.
+- Watch expressions: reuse the query/filter language from 003_query (CEL subset) as the watch matcher to keep semantics and safety consistent.
 - Scale targets: aim for up to ~1M concurrent connections and ~10k events/s; initial phase at ~1/10 scale (~100k connections, ~1k events/s) with linear scaling headroom.
 - Broadcast policy: small-scope broadcast is acceptable as a fallback; prefer directed routing first.
 - Client protocol: primarily WebSocket with brief-disconnect resume; SSE is supported for server-to-client streaming with same auth/semantics.
@@ -61,7 +61,7 @@ for evt := range stream {
 
 ## 2) Query Matching Pipeline
 
-- Matcher language: reuse the expression engine from 002 (CEL subset) supporting field filters, ranges, and auth context.
+- Matcher language: reuse the expression engine from 003_query (CEL subset) supporting field filters, ranges, and auth context.
 - Pipeline (Why: reduce per-event compute; How):
   1) Fast path: documentKey exact subscriptions (primary-key watches).
   2) Probabilistic filter: per-collection field hashes into Bloom/segmented Bloom; tunable parameters (initial phase uses conservative bits/k with headroom).

@@ -43,9 +43,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /replication/v1/push", h.protected(h.handlePush))
 
 	// Trigger Internal Operations
-	mux.HandleFunc("POST /api/v1/trigger/get", h.triggerProtected(h.handleTriggerGet))
-	mux.HandleFunc("POST /api/v1/trigger/query", h.triggerProtected(h.handleQuery))
-	mux.HandleFunc("POST /api/v1/trigger/write", h.triggerProtected(h.handleTriggerWrite))
+	mux.HandleFunc("POST /trigger/v1/get", h.triggerProtected(h.handleTriggerGet))
+	mux.HandleFunc("POST /trigger/v1/query", h.triggerProtected(h.handleQuery))
+	mux.HandleFunc("POST /trigger/v1/write", h.triggerProtected(h.handleTriggerWrite))
 
 	// Auth Operations
 	if h.auth != nil {

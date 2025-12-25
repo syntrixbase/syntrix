@@ -18,9 +18,10 @@ type TriggerGetResponse struct {
 }
 
 type TriggerWriteOp struct {
-	Type string                 `json:"type"` // create, update, delete
-	Path string                 `json:"path"`
-	Data map[string]interface{} `json:"data,omitempty"`
+	Type    string                 `json:"type"` // create, update, delete
+	Path    string                 `json:"path"`
+	Data    map[string]interface{} `json:"data,omitempty"`
+	IfMatch model.Filters          `json:"ifMatch,omitempty"`
 }
 
 type TriggerWriteRequest struct {
@@ -92,7 +93,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			patchDoc.SetCollection(collection)
 			patchDoc.SetID(id)
-			_, err = h.engine.PatchDocument(r.Context(), patchDoc, model.Filters{})
+			_, err = h.engine.PatchDocument(r.Context(), patchDoc, op.IfMatch)
 		case "replace":
 			replaceDoc := model.Document(op.Data)
 			if replaceDoc == nil {
@@ -100,9 +101,9 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			replaceDoc.SetCollection(collection)
 			replaceDoc.SetID(id)
-			_, err = h.engine.ReplaceDocument(r.Context(), replaceDoc, model.Filters{})
+			_, err = h.engine.ReplaceDocument(r.Context(), replaceDoc, op.IfMatch)
 		case "delete":
-			err = h.engine.DeleteDocument(r.Context(), op.Path, model.Filters{})
+			err = h.engine.DeleteDocument(r.Context(), op.Path, op.IfMatch)
 		default:
 			http.Error(w, "invalid write type", http.StatusBadRequest)
 			return

@@ -29,20 +29,20 @@ describe('Reference API', () => {
       const doc = new DocumentReferenceImpl(mockStorage, 'users/123', '123');
       const data = { name: 'Alice' };
       await doc.set(data);
-      expect(mockStorage.set).toHaveBeenCalledWith('users/123', data);
+      expect(mockStorage.set).toHaveBeenCalledWith('users/123', data, undefined);
     });
 
     it('should call storage.update', async () => {
       const doc = new DocumentReferenceImpl(mockStorage, 'users/123', '123');
       const data = { name: 'Alice' };
       await doc.update(data);
-      expect(mockStorage.update).toHaveBeenCalledWith('users/123', data);
+      expect(mockStorage.update).toHaveBeenCalledWith('users/123', data, undefined);
     });
 
     it('should call storage.delete', async () => {
       const doc = new DocumentReferenceImpl(mockStorage, 'users/123', '123');
       await doc.delete();
-      expect(mockStorage.delete).toHaveBeenCalledWith('users/123');
+      expect(mockStorage.delete).toHaveBeenCalledWith('users/123', undefined);
     });
 
     it('should create subcollection reference', () => {
@@ -87,9 +87,9 @@ describe('Reference API', () => {
         .get();
 
       expect(mockStorage.query).toHaveBeenCalledWith('/api/v1/query', {
-        from: 'users',
+        collection: 'users',
         filters: [{ field: 'age', op: '>=', value: 18 }],
-        sort: [{ field: 'name', direction: 'asc' }],
+        orderBy: [{ field: 'name', direction: 'asc' }],
         limit: 10
       });
     });

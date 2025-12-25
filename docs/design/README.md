@@ -6,16 +6,16 @@ This directory now splits designs into server-side and SDK-focused documents.
 
 - [server/000_requirements.md](server/000_requirements.md) - Requirements and constraints
 - [server/001_architecture.md](server/001_architecture.md) - Initial architecture overview
-- [server/002_storage_and_query.md](server/002_storage_and_query.md) - Storage and Query Engine design
-- [server/003_restful_api.md](server/003_restful_api.md) - RESTful API design
-- [server/004_replication.md](server/004_replication.md) - Replication protocol (server)
-- [server/005_realtime_watching.md](server/005_realtime_watching.md) - Realtime watching mechanism
-- [server/006_triggers.md](server/006_triggers.md) - Triggers system design
-- [server/007_authentication.md](server/007_authentication.md) - Authentication design
-- [server/008_authorization_rules.md](server/008_authorization_rules.md) - Authorization rules and logic
-- [server/009_console.md](server/009_console.md) - Console/Dashboard design
-- [server/010_control_plane.md](server/010_control_plane.md) - Control Plane design
-- [server/011_transaction_implementation.md](server/011_transaction_implementation.md) - Transaction implementation details
+- [server/002_storage.md](server/002_storage.md) - Storage interfaces, backend abstraction, data model
+- [server/003_query.md](server/003_query.md) - Query engine & DSL
+- [server/004_restful_api.md](server/004_restful_api.md) - RESTful API design
+- [server/005_replication.md](server/005_replication.md) - Replication protocol (server)
+- [server/006_realtime_watching.md](server/006_realtime_watching.md) - Realtime watching mechanism
+- [server/007_triggers.md](server/007_triggers.md) - Triggers system design
+- [server/008_authentication.md](server/008_authentication.md) - Authentication design
+- [server/009_authorization_rules.md](server/009_authorization_rules.md) - Authorization rules and logic
+- [server/010_console.md](server/010_console.md) - Console/Dashboard design
+- [server/011_control_plane.md](server/011_control_plane.md) - Control Plane design
 
 ## Automata
 

@@ -2,22 +2,33 @@ import { StorageClient } from '../internal/storage-client';
 import { CollectionReference, DocumentReference, Query } from './types';
 
 export class DocumentReferenceImpl<T> implements DocumentReference<T> {
+  protected _ifMatch: any[] = [];
+
   constructor(private storage: StorageClient, public path: string, public id: string) {}
+
+  ifMatch(field: string, op: string, value: any): DocumentReference<T> {
+    const ref = new DocumentReferenceImpl<T>(this.storage, this.path, this.id);
+    ref._ifMatch = [...this._ifMatch, { field, op, value }];
+    return ref;
+  }
 
   async get(): Promise<T | null> {
     return this.storage.get<T>(this.path);
   }
 
-  async set(data: T): Promise<T> {
-    return this.storage.set<T>(this.path, data);
+  async set(data: T, ifMatch?: any[]): Promise<T> {
+    const conditions = [...this._ifMatch, ...(ifMatch || [])];
+    return this.storage.set<T>(this.path, data, conditions.length > 0 ? conditions : undefined);
   }
 
-  async update(data: Partial<T>): Promise<T> {
-    return this.storage.update<T>(this.path, data);
+  async update(data: Partial<T>, ifMatch?: any[]): Promise<T> {
+    const conditions = [...this._ifMatch, ...(ifMatch || [])];
+    return this.storage.update<T>(this.path, data, conditions.length > 0 ? conditions : undefined);
   }
 
-  async delete(): Promise<void> {
-    return this.storage.delete(this.path);
+  async delete(ifMatch?: any[]): Promise<void> {
+    const conditions = [...this._ifMatch, ...(ifMatch || [])];
+    return this.storage.delete(this.path, conditions.length > 0 ? conditions : undefined);
   }
 
   collection<U>(path: string): CollectionReference<U> {
@@ -49,12 +60,34 @@ export class QueryImpl<T> implements Query<T> {
 
   async get(): Promise<T[]> {
     const query = {
-      from: this.path,
+      collection: this.path,
       filters: this.filters,
-      sort: this.sort,
+      orderBy: this.sort,
       limit: this.limitVal
     };
     return this.storage.query<T>('/api/v1/query', query);
+  }
+
+  async update(data: Partial<T>): Promise<void> {
+    const docs = await this.get();
+    const promises = docs.map((doc: any) => {
+      if (doc.id) {
+        return this.storage.update(`${this.path}/${doc.id}`, data);
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(promises);
+  }
+
+  async delete(): Promise<void> {
+    const docs = await this.get();
+    const promises = docs.map((doc: any) => {
+      if (doc.id) {
+        return this.storage.delete(`${this.path}/${doc.id}`);
+      }
+      return Promise.resolve();
+    });
+    await Promise.all(promises);
   }
 }
 

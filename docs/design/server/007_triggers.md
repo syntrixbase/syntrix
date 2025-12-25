@@ -23,7 +23,7 @@ Change Stream -> Trigger Evaluator (condition match) -> NATS JetStream (partitio
 
 ## 2) Trigger Definition & Matching
 
-- Conditions: reuse the CEL subset expression language (from 002) for trigger conditions.
+- Conditions: reuse the CEL subset expression language (from 003_query) for trigger conditions.
 - Events: create/update/delete; payload includes before/after snapshots, tenant, collection, docKey, lsn/seq.
 - Idempotency: key = (tenant, triggerId, lsn/seq) to dedupe downstream.
 - Config shape (Why: consistent rollout; How):
@@ -175,7 +175,7 @@ Notes:
 ### **Idempotency & preconditions**
 
 - `Idempotency-Key` is **required** for write/batch. Dedup key space: `(tenant, triggerId, key)`; repeat returns `409 IDEMPOTENCY_REPLAY` or the first result.
-- CAS/preconditions (optional): `ifMatchVersion`, `ifModifiedSince` guard against blind overwrites; failures return `412 PRECONDITION_FAILED`.
+- CAS/preconditions (optional): `ifMatchVersion`, `ifModifiedSince` guard against blind overwrites; failures return `412 PRECONDITION_FAILED` (or storage-specific conflict code).
 
 ### **Additional semantics & defaults**
 

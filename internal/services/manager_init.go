@@ -80,7 +80,7 @@ func (m *Manager) Init(ctx context.Context) error {
 }
 
 func (m *Manager) initStorage(ctx context.Context) error {
-	if !(m.opts.RunQuery || m.opts.RunCSP || m.opts.RunTriggerEvaluator || m.opts.RunAuth) {
+	if !(m.opts.RunQuery || m.opts.RunCSP || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker) {
 		return nil
 	}
 
@@ -100,7 +100,7 @@ func (m *Manager) initStorage(ctx context.Context) error {
 }
 
 func (m *Manager) initTokenService() error {
-	if !(m.opts.RunAuth || m.opts.RunTriggerWorker) {
+	if !(m.opts.RunAPI || m.opts.RunTriggerWorker) {
 		return nil
 	}
 
@@ -145,7 +145,7 @@ func (m *Manager) initTokenService() error {
 }
 
 func (m *Manager) initAuthService(ctx context.Context) error {
-	if !m.opts.RunAuth {
+	if !m.opts.RunAPI && !m.opts.RunTriggerWorker {
 		return nil
 	}
 

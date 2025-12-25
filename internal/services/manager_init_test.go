@@ -39,7 +39,7 @@ func TestManager_Init_StorageError(t *testing.T) {
 func TestManager_Init_TokenServiceError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Auth.PrivateKeyFile = "/nonexistent/dir/key.pem"
-	opt := Options{RunAuth: true}
+	opt := Options{RunAPI: true}
 	mgr := NewManager(cfg, opt)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -162,7 +162,13 @@ func TestManager_Init_RunAuthPath(t *testing.T) {
 
 	cfg := config.LoadConfig()
 	cfg.Auth.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
-	mgr := NewManager(cfg, Options{RunAuth: true})
+	
+	// Create a dummy rules file
+	rulesFile := filepath.Join(t.TempDir(), "security.yaml")
+	os.WriteFile(rulesFile, []byte("rules: []"), 0644)
+	cfg.Auth.RulesFile = rulesFile
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)

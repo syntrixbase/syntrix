@@ -51,7 +51,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.set('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.put).toHaveBeenCalledWith('/foo', { bar: 'baz' });
+    expect(mockAxios.put).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
   });
 
   it('should update resource', async () => {
@@ -61,7 +61,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.update('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.patch).toHaveBeenCalledWith('/foo', { bar: 'baz' });
+    expect(mockAxios.patch).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
   });
 
   it('should delete resource', async () => {
@@ -70,7 +70,7 @@ describe('RestTransport', () => {
     } as any;
     const transport = new RestTransport(mockAxios);
     await transport.delete('/foo');
-    expect(mockAxios.delete).toHaveBeenCalledWith('/foo');
+    expect(mockAxios.delete).toHaveBeenCalledWith('/foo', {});
   });
 
   it('should query resources', async () => {

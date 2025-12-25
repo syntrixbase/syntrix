@@ -8,7 +8,7 @@
 - Build an internal auth service that issues JWTs from username/password sign-up/sign-in.
 - Enforce Firestore-style CEL rules (deny-by-default) for all data access.
 - Single-tenant, self-hosted focus; external IdPs out of scope for this iteration.
-- Rule publish/rollback lives in the console doc: see [008_console.md](008_console.md).
+- Rule publish/rollback lives in the console doc: see [010_console.md](010_console.md).
 
 ## 2. Goals & Non-goals
 
@@ -16,7 +16,7 @@
   - Minimal, self-contained auth: sign-up, sign-in, sign-out (token revoke), password change.
   - JWT-based request authentication in `syntrix --api` and `--realtime`.
   - Rule evaluation identical to Firestore-style CEL rules (read/write conditions on resource data and request auth claims).
-- Non-goals (now): multi-factor auth, social login, SSO, SCIM, org/tenant hierarchy, password reset via email/SMS. Admin UI is documented separately in [008_console.md](008_console.md).
+- Non-goals (now): multi-factor auth, social login, SSO, SCIM, org/tenant hierarchy, password reset via email/SMS. Admin UI is documented separately in [010_console.md](010_console.md).
 
 ## 3. Identity Service (How)
 
@@ -123,7 +123,7 @@ Key rotation is **not implemented in this phase**. When picked up:
 3) Monitor for unknown `kid`/signature failures; ensure nodes refreshed JWKS.
 4) After access-token TTL + grace window, stop issuing with old key; remove old key from JWKS.
 5) Optionally revoke outstanding refresh tokens if rotating due to compromise.
-CLI/Admin path (future): handled via the console/CLI in [008_console.md](008_console.md).
+CLI/Admin path (future): handled via the console/CLI in [010_console.md](010_console.md).
 
 ## 12. Request Context for Rules
 
@@ -143,7 +143,7 @@ CLI/Admin path (future): handled via the console/CLI in [008_console.md](008_con
 - Publish flow: `syntrix-cli rules push` → server validates CEL syntax → stages with version → activate with atomic swap; keep last N versions; support `rules rollback <version>`.
 - AuthZ: only `role=admin` may push/rollback; enforced via admin endpoint.
 - Audit: record who pushed/rolled back rules, version, timestamp, diff summary.
-- Full publish/rollback UX lives in [008_console.md](008_console.md).
+- Full publish/rollback UX lives in [010_console.md](010_console.md).
 
 ## 15. API Surface (Auth)
 

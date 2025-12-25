@@ -30,7 +30,7 @@ func TestHandleTriggerGet(t *testing.T) {
 		Paths: []string{"users/alice", "users/bob"},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/get", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	// Execute
@@ -53,7 +53,7 @@ func TestHandleTriggerGet_EmptyPaths(t *testing.T) {
 
 	reqBody := TriggerGetRequest{Paths: []string{}}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/get", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -65,7 +65,7 @@ func TestHandleTriggerGet_BadJSON(t *testing.T) {
 	mockEngine := new(MockQueryService)
 	server := createTestServer(mockEngine, nil, nil)
 
-	req := httptest.NewRequest("POST", "/api/v1/trigger/get", bytes.NewReader([]byte("{bad")))
+	req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewReader([]byte("{bad")))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -83,7 +83,7 @@ func TestHandleTriggerGet_SkipNotFound(t *testing.T) {
 
 	reqBody := TriggerGetRequest{Paths: []string{"users/missing", "users/bob"}}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/get", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -104,7 +104,7 @@ func TestHandleTriggerGet_EngineError(t *testing.T) {
 
 	reqBody := TriggerGetRequest{Paths: []string{"users/alice"}}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/get", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -126,7 +126,7 @@ func TestHandleTriggerWrite(t *testing.T) {
 		return data.GetCollection() == "users" && data.GetID() == "alice" && data["active"] == true
 	}), mock.Anything).Return(model.Document{"active": true}, nil)
 
-	mockEngine.On("DeleteDocument", mock.Anything, "users/bob", model.Filters{}).Return(nil)
+	mockEngine.On("DeleteDocument", mock.Anything, "users/bob", model.Filters(nil)).Return(nil)
 
 	// Request
 	reqBody := TriggerWriteRequest{
@@ -137,7 +137,7 @@ func TestHandleTriggerWrite(t *testing.T) {
 		},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	// Execute
@@ -158,7 +158,7 @@ func TestHandleTriggerWrite_UpdateError(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "update", Path: "users/alice", Data: map[string]interface{}{"active": true}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -175,7 +175,7 @@ func TestHandleTriggerWrite_ReplacePathInvalid(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "replace", Path: "invalid", Data: map[string]interface{}{"name": "x"}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -193,7 +193,7 @@ func TestHandleTriggerWrite_ReplaceError(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "replace", Path: "users/alice", Data: map[string]interface{}{"name": "Alice"}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -206,13 +206,13 @@ func TestHandleTriggerWrite_DeleteNotFound(t *testing.T) {
 	mockEngine := new(MockQueryService)
 	server := createTestServer(mockEngine, nil, nil)
 
-	mockEngine.On("DeleteDocument", mock.Anything, "users/bob", model.Filters{}).Return(model.ErrNotFound)
+	mockEngine.On("DeleteDocument", mock.Anything, "users/bob", model.Filters(nil)).Return(model.ErrNotFound)
 
 	reqBody := TriggerWriteRequest{
 		Writes: []TriggerWriteOp{{Type: "delete", Path: "users/bob"}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -225,7 +225,7 @@ func TestHandleTriggerWrite_BadJSON(t *testing.T) {
 	mockEngine := new(MockQueryService)
 	server := createTestServer(mockEngine, nil, nil)
 
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader([]byte("{bad")))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader([]byte("{bad")))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -241,7 +241,7 @@ func TestHandleTriggerWrite_InvalidType(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "unknown", Path: "users/x", Data: map[string]interface{}{"a": 1}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -257,7 +257,7 @@ func TestHandleTriggerWrite_InvalidPath(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "create", Path: "invalid", Data: map[string]interface{}{"name": "x"}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -275,7 +275,7 @@ func TestHandleTriggerWrite_CreateExists(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "create", Path: "users/alice", Data: map[string]interface{}{"name": "Alice"}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -290,7 +290,7 @@ func TestHandleTriggerWrite_EmptyWrites(t *testing.T) {
 
 	reqBody := TriggerWriteRequest{Writes: []TriggerWriteOp{}}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -311,7 +311,7 @@ func TestHandleTriggerQuery(t *testing.T) {
 	// Request
 	q := model.Query{Collection: "users"}
 	body, _ := json.Marshal(q)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/query", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/query", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	// Execute
@@ -334,7 +334,7 @@ func TestHandleTriggerQuery_BadJSON(t *testing.T) {
 	mockEngine := new(MockQueryService)
 	server := createTestServer(mockEngine, nil, nil)
 
-	req := httptest.NewRequest("POST", "/api/v1/trigger/query", bytes.NewReader([]byte("{bad")))
+	req := httptest.NewRequest("POST", "/trigger/v1/query", bytes.NewReader([]byte("{bad")))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -348,7 +348,7 @@ func TestHandleTriggerQuery_ValidateError(t *testing.T) {
 
 	q := model.Query{Collection: ""} // invalid
 	body, _ := json.Marshal(q)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/query", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/query", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -364,7 +364,7 @@ func TestHandleTriggerQuery_Error(t *testing.T) {
 	mockEngine.On("ExecuteQuery", mock.Anything, q).Return(nil, assert.AnError)
 
 	body, _ := json.Marshal(q)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/query", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/query", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)
@@ -383,7 +383,7 @@ func TestHandleTriggerWrite_UnexpectedError(t *testing.T) {
 		Writes: []TriggerWriteOp{{Type: "create", Path: "users/fail", Data: map[string]interface{}{"name": "Fail"}}},
 	}
 	body, _ := json.Marshal(reqBody)
-	req := httptest.NewRequest("POST", "/api/v1/trigger/write", bytes.NewReader(body))
+	req := httptest.NewRequest("POST", "/trigger/v1/write", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 
 	server.ServeHTTP(w, req)

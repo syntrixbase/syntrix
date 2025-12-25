@@ -116,7 +116,6 @@ match:
 		RunAPI:              true,
 		RunQuery:            true,
 		RunCSP:              true,
-		RunAuth:             true,
 		RunTriggerEvaluator: true,
 		RunTriggerWorker:    true,
 	}

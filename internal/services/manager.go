@@ -18,12 +18,12 @@ import (
 
 type Options struct {
 	RunAPI              bool
-	RunAuth             bool
 	RunCSP              bool
 	RunQuery            bool
-	ForceQueryClient    bool
 	RunTriggerEvaluator bool
 	RunTriggerWorker    bool
+
+	ForceQueryClient bool
 }
 
 type triggerService interface {

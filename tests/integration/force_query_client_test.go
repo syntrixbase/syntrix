@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"sync/atomic"
 	"testing"
 
@@ -65,13 +66,12 @@ func TestIntegration_ForceQueryClient_API(t *testing.T) {
 	cfgMod := func(cfg *config.Config) {
 		cfg.Gateway.QueryServiceURL = queryStub.server.URL
 		cfg.Auth.RulesFile = "" // disable auth enforcement
-		cfg.Auth.PrivateKeyFile = ""
+		cfg.Auth.PrivateKeyFile = filepath.Join(t.TempDir(), "auth_private.pem")
 	}
 
 	optsMod := func(opts *services.Options) {
 		opts.RunQuery = false
 		opts.RunCSP = false
-		opts.RunAuth = false
 		opts.RunTriggerEvaluator = false
 		opts.RunTriggerWorker = false
 		opts.ForceQueryClient = true

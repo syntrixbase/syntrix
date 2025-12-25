@@ -21,18 +21,30 @@ export class RestTransport implements StorageClient {
     return response.data;
   }
 
-  async set<T>(path: string, data: T): Promise<T> {
-    const response = await this.axios.put(path, data);
+  async set<T>(path: string, data: T, ifMatch?: any[]): Promise<T> {
+    const payload: any = { doc: data };
+    if (ifMatch) {
+      payload.ifMatch = ifMatch;
+    }
+    const response = await this.axios.put(path, payload);
     return response.data;
   }
 
-  async update<T>(path: string, data: Partial<T>): Promise<T> {
-    const response = await this.axios.patch(path, data);
+  async update<T>(path: string, data: Partial<T>, ifMatch?: any[]): Promise<T> {
+    const payload: any = { doc: data };
+    if (ifMatch) {
+      payload.ifMatch = ifMatch;
+    }
+    const response = await this.axios.patch(path, payload);
     return response.data;
   }
 
-  async delete(path: string): Promise<void> {
-    await this.axios.delete(path);
+  async delete(path: string, ifMatch?: any[]): Promise<void> {
+    const config: any = {};
+    if (ifMatch) {
+      config.data = { ifMatch };
+    }
+    await this.axios.delete(path, config);
   }
 
   async query<T>(path: string, query: any): Promise<T[]> {

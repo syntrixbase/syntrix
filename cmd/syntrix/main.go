@@ -54,7 +54,6 @@ func main() {
 	// 2. Initialize Service Manager
 	opts := services.Options{
 		RunAPI:              *runAPI,
-		RunAuth:             *runAPI, // Enable Auth if API is enabled
 		RunCSP:              *runCSP,
 		RunQuery:            *runQuery,
 		RunTriggerEvaluator: *runTriggerEvaluator,

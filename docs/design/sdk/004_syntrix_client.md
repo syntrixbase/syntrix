@@ -39,7 +39,7 @@ Public HTTP client for application usage (web/mobile/backend) over `/api/v1/...`
 ## Usage Examples
 ### Standard client
 ```typescript
-const client = new SyntrixClient('https://api.syntrix.io', 'user-token');
+const client = new SyntrixClient('https://api.synbase.tech', 'user-token');
 
 // Fluent read
 const user = await client.doc('users/alice').get();
