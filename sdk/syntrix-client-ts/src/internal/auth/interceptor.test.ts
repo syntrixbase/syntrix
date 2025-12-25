@@ -9,6 +9,7 @@ describe('AuthInterceptor', () => {
       getToken: mock(async () => 'test-token'),
       refreshToken: mock(async () => 'new-token'),
       setToken: () => {},
+      setRefreshToken: () => {},
     } as TokenProvider;
 
     const instance = axios.create();
@@ -29,6 +30,7 @@ describe('AuthInterceptor', () => {
       getToken: mock(async () => 'old-token'),
       refreshToken: mock(async () => 'refreshed-token'),
       setToken: () => {},
+      setRefreshToken: () => {},
     } as TokenProvider;
 
     const instance = axios.create();

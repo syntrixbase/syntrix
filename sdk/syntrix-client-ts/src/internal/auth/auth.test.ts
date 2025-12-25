@@ -14,7 +14,7 @@ describe('DefaultTokenProvider', () => {
     axios.post = mock(async () => {
         callCount++;
         await new Promise(resolve => setTimeout(resolve, 50));
-        return { data: { token: 'new-token' } };
+        return { data: { access_token: 'new-token', refresh_token: 'new-refresh' } };
     }) as any;
 
     const provider = new DefaultTokenProvider({

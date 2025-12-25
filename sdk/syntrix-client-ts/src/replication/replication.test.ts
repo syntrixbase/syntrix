@@ -10,7 +10,8 @@ describe('Replication Scaffolding', () => {
   it('should start and stop coordinator', () => {
     const checkpoint = new CheckpointManager();
     const outbox = new Outbox();
-    const realtime = new RealtimeListener();
+    const mockTokenProvider = { getToken: async () => 'test', setToken: () => {}, setRefreshToken: () => {}, refreshToken: async () => 'test' };
+    const realtime = new RealtimeListener('ws://test', mockTokenProvider as any);
     const puller = new Puller();
     const pusher = new Pusher();
 
@@ -49,7 +50,8 @@ describe('Replication Scaffolding', () => {
     const pusher = new Pusher();
     await pusher.pushChanges([]);
 
-    const realtime = new RealtimeListener();
+    const mockTokenProvider2 = { getToken: async () => 'test', setToken: () => {}, setRefreshToken: () => {}, refreshToken: async () => 'test' };
+    const realtime = new RealtimeListener('ws://test', mockTokenProvider2 as any);
     realtime.connect();
     realtime.disconnect();
     realtime.onEvent(() => {});

@@ -1,12 +1,24 @@
 import { AxiosInstance } from 'axios';
 import { StorageClient } from '../storage-client';
 
+const API_PREFIX = '/api/v1';
+
 export class RestTransport implements StorageClient {
   constructor(private axios: AxiosInstance) {}
 
+  private buildPath(path: string): string {
+    // If path already starts with /api/v1, use as-is
+    if (path.startsWith('/api/v1')) {
+      return path;
+    }
+    // Remove leading slash if present, then add prefix
+    const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+    return `${API_PREFIX}/${cleanPath}`;
+  }
+
   async get<T>(path: string): Promise<T | null> {
     try {
-      const response = await this.axios.get(path);
+      const response = await this.axios.get(this.buildPath(path));
       return response.data;
     } catch (error: any) {
       if (error.response && error.response.status === 404) {
@@ -17,7 +29,7 @@ export class RestTransport implements StorageClient {
   }
 
   async create<T>(path: string, data: T): Promise<T> {
-    const response = await this.axios.post(path, data);
+    const response = await this.axios.post(this.buildPath(path), data);
     return response.data;
   }
 
@@ -26,7 +38,7 @@ export class RestTransport implements StorageClient {
     if (ifMatch) {
       payload.ifMatch = ifMatch;
     }
-    const response = await this.axios.put(path, payload);
+    const response = await this.axios.put(this.buildPath(path), payload);
     return response.data;
   }
 
@@ -35,7 +47,7 @@ export class RestTransport implements StorageClient {
     if (ifMatch) {
       payload.ifMatch = ifMatch;
     }
-    const response = await this.axios.patch(path, payload);
+    const response = await this.axios.patch(this.buildPath(path), payload);
     return response.data;
   }
 
@@ -44,11 +56,11 @@ export class RestTransport implements StorageClient {
     if (ifMatch) {
       config.data = { ifMatch };
     }
-    await this.axios.delete(path, config);
+    await this.axios.delete(this.buildPath(path), config);
   }
 
   async query<T>(path: string, query: any): Promise<T[]> {
-    const response = await this.axios.post(path, query);
+    const response = await this.axios.post(this.buildPath(path), query);
     if (response.data && Array.isArray(response.data.docs)) {
         return response.data.docs;
     }

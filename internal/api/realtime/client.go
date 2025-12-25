@@ -26,7 +26,8 @@ const (
 	// Time allowed to read the next pong message from the peer.
 	pongWait = 60 * time.Second
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	// Increased from 512 to 64KB to accommodate JWT tokens and larger payloads
+	maxMessageSize = 64 * 1024
 )
 
 // Send pings to peer with this period. Must be less than pongWait.

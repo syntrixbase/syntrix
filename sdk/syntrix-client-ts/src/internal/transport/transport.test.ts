@@ -39,7 +39,7 @@ describe('RestTransport', () => {
       post: mock(async () => ({ data: { id: '123' } })),
     } as any;
     const transport = new RestTransport(mockAxios);
-    const result = await transport.create('/foo', { bar: 'baz' });
+    const result = await transport.create<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
     expect(mockAxios.post).toHaveBeenCalledWith('/foo', { bar: 'baz' });
   });
@@ -49,7 +49,7 @@ describe('RestTransport', () => {
       put: mock(async () => ({ data: { id: '123' } })),
     } as any;
     const transport = new RestTransport(mockAxios);
-    const result = await transport.set('/foo', { bar: 'baz' });
+    const result = await transport.set<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
     expect(mockAxios.put).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
   });
@@ -59,7 +59,7 @@ describe('RestTransport', () => {
       patch: mock(async () => ({ data: { id: '123' } })),
     } as any;
     const transport = new RestTransport(mockAxios);
-    const result = await transport.update('/foo', { bar: 'baz' });
+    const result = await transport.update<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
     expect(mockAxios.patch).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
   });
