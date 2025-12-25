@@ -1,6 +1,9 @@
 package auth
 
 import (
+	"crypto/x509"
+	"encoding/pem"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -101,4 +104,43 @@ func TestTokenService_GenerateSystemToken(t *testing.T) {
 	assert.Equal(t, "system:worker", claims.Subject)
 	assert.Contains(t, claims.Roles, "system")
 	assert.Contains(t, claims.Roles, "service:worker")
+}
+
+func TestLoadPrivateKey(t *testing.T) {
+	// Test case 1: File does not exist
+	_, err := LoadPrivateKey("non_existent_key.pem")
+	assert.Error(t, err)
+
+	// Test case 2: Invalid PEM content
+	tmpDir := t.TempDir()
+	invalidKeyPath := filepath.Join(tmpDir, "invalid.pem")
+	err = os.WriteFile(invalidKeyPath, []byte("invalid pem content"), 0600)
+	require.NoError(t, err)
+
+	_, err = LoadPrivateKey(invalidKeyPath)
+	assert.Error(t, err)
+
+	// Test case 3: Valid Key
+	validKeyPath := filepath.Join(tmpDir, "valid.pem")
+	key, err := GeneratePrivateKey()
+	require.NoError(t, err)
+
+	// Save the generated key to file
+	keyBytes := x509.MarshalPKCS1PrivateKey(key)
+	pemBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: keyBytes,
+	}
+
+	f, err := os.Create(validKeyPath)
+	require.NoError(t, err)
+	err = pem.Encode(f, pemBlock)
+	require.NoError(t, err)
+	f.Close()
+
+	loadedKey, err := LoadPrivateKey(validKeyPath)
+	require.NoError(t, err)
+	assert.NotNil(t, loadedKey)
+	assert.Equal(t, key.N, loadedKey.N)
+	assert.Equal(t, key.E, loadedKey.E)
 }

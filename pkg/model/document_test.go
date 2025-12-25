@@ -33,6 +33,14 @@ func TestSettersAndGetters(t *testing.T) {
 	doc.SetCollection("col")
 	assert.Equal(t, "col", doc.GetCollection())
 
+	// Test invalid types for GetID and GetCollection
+	invalidDoc := Document{
+		"id":         123,
+		"collection": 123,
+	}
+	assert.Equal(t, "", invalidDoc.GetID())
+	assert.Equal(t, "", invalidDoc.GetCollection())
+
 	assert.False(t, doc.HasVersion())
 	assert.Equal(t, int64(-1), doc.GetVersion())
 

@@ -29,6 +29,7 @@ type Service interface {
 	ListUsers(ctx context.Context, limit int, offset int) ([]*User, error)
 	UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error
 	Logout(ctx context.Context, refreshToken string) error
+	GenerateSystemToken(serviceName string) (string, error)
 }
 
 type AuthService struct {

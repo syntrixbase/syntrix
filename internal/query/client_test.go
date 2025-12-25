@@ -382,3 +382,76 @@ func TestClient_WatchCollection_InvalidJSONSkipped(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, valid, events[0])
 }
+
+func TestClient_Pull(t *testing.T) {
+	expectedResp := &storage.ReplicationPullResponse{
+		Documents: []*storage.Document{
+			{Id: "1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}},
+		},
+		Checkpoint: 100,
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/internal/replication/v1/pull", r.URL.Path)
+		json.NewEncoder(w).Encode(expectedResp)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ts.URL)
+	req := storage.ReplicationPullRequest{
+		Checkpoint: 50,
+		Limit:      10,
+	}
+	resp, err := client.Pull(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Equal(t, expectedResp.Checkpoint, resp.Checkpoint)
+	assert.Len(t, resp.Documents, 1)
+}
+
+func TestClient_Push(t *testing.T) {
+	expectedResp := &storage.ReplicationPushResponse{
+		Conflicts: nil,
+	}
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "/internal/replication/v1/push", r.URL.Path)
+		json.NewEncoder(w).Encode(expectedResp)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ts.URL)
+	req := storage.ReplicationPushRequest{
+		Changes: []storage.ReplicationPushChange{
+			{
+				Doc: &storage.Document{Id: "1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}},
+			},
+		},
+	}
+	resp, err := client.Push(context.Background(), req)
+	assert.NoError(t, err)
+	assert.Empty(t, resp.Conflicts)
+}
+
+func TestClient_Pull_Error(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ts.URL)
+	req := storage.ReplicationPullRequest{}
+	_, err := client.Pull(context.Background(), req)
+	assert.Error(t, err)
+}
+
+func TestClient_Push_Error(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer ts.Close()
+
+	client := NewClient(ts.URL)
+	req := storage.ReplicationPushRequest{}
+	_, err := client.Push(context.Background(), req)
+	assert.Error(t, err)
+}

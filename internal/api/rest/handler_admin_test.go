@@ -67,6 +67,11 @@ func (m *MockAdminAuthService) UpdateUser(ctx context.Context, id string, roles 
 	return args.Error(0)
 }
 
+func (m *MockAdminAuthService) GenerateSystemToken(serviceName string) (string, error) {
+	args := m.Called(serviceName)
+	return args.String(0), args.Error(1)
+}
+
 type errReadCloser struct{ err error }
 
 func (e errReadCloser) Read(p []byte) (int, error) { return 0, e.err }

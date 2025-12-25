@@ -2,10 +2,12 @@ package query
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/pkg/model"
@@ -58,7 +60,72 @@ func TestServer_CreateDocument(t *testing.T) {
 
 	assert.Equal(t, http.StatusCreated, w.Code)
 }
+func TestServer_WatchCollection_InvalidBody(t *testing.T) {
+	server, _ := setupTestServer()
 
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBufferString("invalid json"))
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusBadRequest, w.Code)
+}
+
+func TestServer_WatchCollection_WatchError(t *testing.T) {
+	server, mockStorage := setupTestServer()
+
+	// Watch returns channel and error.
+	// We need to mock Watch to return error.
+	// Note: Watch returns <-chan Event, error
+	var ch <-chan storage.Event
+	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(ch, assert.AnError)
+
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+type NonFlusherWriter struct {
+	http.ResponseWriter
+}
+
+func TestServer_WatchCollection_NoFlusher(t *testing.T) {
+	server, _ := setupTestServer()
+
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
+	w := httptest.NewRecorder()
+
+	nw := &NonFlusherWriter{ResponseWriter: w}
+
+	server.ServeHTTP(nw, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestServer_WatchCollection_Success(t *testing.T) {
+	server, mockStorage := setupTestServer()
+
+	ch := make(chan storage.Event, 1)
+	ch <- storage.Event{Type: storage.EventCreate, Id: "1"}
+	close(ch)
+
+	// Cast to read-only channel
+	readCh := (<-chan storage.Event)(ch)
+	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(readCh, nil)
+
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
 func TestServer_CreateDocument_Errors(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
@@ -367,4 +434,26 @@ func TestServer_PullPush_Errors(t *testing.T) {
 		server.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusInternalServerError, w.Code)
 	})
+}
+
+func TestServer_WatchCollection_ContextCancel(t *testing.T) {
+	server, mockStorage := setupTestServer()
+
+	ch := make(chan storage.Event)
+	readCh := (<-chan storage.Event)(ch)
+	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(readCh, nil)
+
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody)).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
 }

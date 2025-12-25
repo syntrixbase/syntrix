@@ -144,6 +144,11 @@ func (m *MockAuthService) Logout(ctx context.Context, refreshToken string) error
 	return args.Error(0)
 }
 
+func (m *MockAuthService) GenerateSystemToken(serviceName string) (string, error) {
+	args := m.Called(serviceName)
+	return args.String(0), args.Error(1)
+}
+
 // MockAuthzService is a mock implementation of AuthzService
 type MockAuthzService struct {
 	mock.Mock

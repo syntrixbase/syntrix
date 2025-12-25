@@ -455,3 +455,22 @@ func TestAuthService_UpdateUser(t *testing.T) {
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
+
+func TestGenerateSystemToken(t *testing.T) {
+	mockStorage := new(MockStorage)
+	key, err := GeneratePrivateKey()
+	require.NoError(t, err)
+	tokenService, err := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
+	require.NoError(t, err)
+	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+
+	token, err := authService.GenerateSystemToken("test-service")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, token)
+
+	// Validate the token
+	claims, err := tokenService.ValidateToken(token)
+	assert.NoError(t, err)
+	assert.Equal(t, "system:test-service", claims.Subject)
+	assert.Contains(t, claims.Roles, "system")
+}

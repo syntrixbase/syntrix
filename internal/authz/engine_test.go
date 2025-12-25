@@ -171,7 +171,54 @@ match:
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 }
+func TestEvaluate_ActionAliases(t *testing.T) {
+	rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /test/{id}:
+        allow:
+          read: "true"
+          write: "true"
+`
+	tmpFile := t.TempDir() + "/security.yaml"
+	err := os.WriteFile(tmpFile, []byte(rules), 0644)
+	assert.NoError(t, err)
 
+	mockQuery := new(MockQueryService)
+	engine, err := NewEngine(mockQuery)
+	assert.NoError(t, err)
+	err = engine.LoadRules(tmpFile)
+	assert.NoError(t, err)
+
+	req := Request{Auth: Auth{UID: "user1"}}
+
+	// Test read aliases
+	for _, action := range []string{"get", "list"} {
+		allowed, err := engine.Evaluate(context.Background(), "/test/1", action, req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "Action %s should be allowed by read", action)
+	}
+
+	// Test write aliases
+	for _, action := range []string{"create", "update", "delete"} {
+		allowed, err := engine.Evaluate(context.Background(), "/test/1", action, req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "Action %s should be allowed by write", action)
+	}
+
+	// Test exact match
+	allowed, err := engine.Evaluate(context.Background(), "/test/1", "read", req, nil)
+	assert.True(t, allowed)
+	allowed, err = engine.Evaluate(context.Background(), "/test/1", "write", req, nil)
+	assert.True(t, allowed)
+
+	// Test mismatch
+	allowed, err = engine.Evaluate(context.Background(), "/test/1", "other", req, nil)
+	assert.False(t, allowed)
+}
 func TestEngine_UpdateRules(t *testing.T) {
 	engine, err := NewEngine(new(MockQueryService))
 	assert.NoError(t, err)
