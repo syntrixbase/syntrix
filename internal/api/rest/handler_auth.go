@@ -6,11 +6,28 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/codetrek/syntrix/internal/identity/authn"
+	"github.com/codetrek/syntrix/internal/identity"
 )
 
+func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
+	var req identity.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	tokenPair, err := h.auth.SignUp(r.Context(), req)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(tokenPair)
+}
+
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req authn.LoginRequest
+	var req identity.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -18,7 +35,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignIn(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, authn.ErrInvalidCredentials) || errors.Is(err, authn.ErrAccountDisabled) || errors.Is(err, authn.ErrAccountLocked) {
+		if errors.Is(err, identity.ErrInvalidCredentials) || errors.Is(err, identity.ErrAccountDisabled) || errors.Is(err, identity.ErrAccountLocked) {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
 			return
 		}
@@ -31,7 +48,7 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	var req authn.RefreshRequest
+	var req identity.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -52,7 +69,7 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	var refreshToken string
 
 	// Try body first
-	var req authn.RefreshRequest
+	var req identity.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.RefreshToken != "" {
 		refreshToken = req.RefreshToken
 	} else {

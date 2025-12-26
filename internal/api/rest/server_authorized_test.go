@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/identity/authz"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
@@ -37,12 +37,12 @@ func TestAuthorized_EvaluateError(t *testing.T) {
 	s := &Handler{engine: engine, authz: authzSvc}
 
 	engine.On("GetDocument", mock.Anything, "col/doc").Return(nil, model.ErrNotFound)
-	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*authz.Resource)(nil)).Return(false, errors.New("eval error"))
+	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, errors.New("eval error"))
 
 	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
 	req.SetPathValue("path", "col/doc")
-	ctx := context.WithValue(req.Context(), "userID", "user-1")
-	ctx = context.WithValue(ctx, "roles", []string{"admin", "user"})
+	ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-1")
+	ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"admin", "user"})
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()
@@ -59,7 +59,7 @@ func TestAuthorized_Denied(t *testing.T) {
 	s := &Handler{engine: engine, authz: authzSvc}
 
 	engine.On("GetDocument", mock.Anything, "col/doc").Return(nil, model.ErrNotFound)
-	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*authz.Resource)(nil)).Return(false, nil)
+	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
 	req.SetPathValue("path", "col/doc")
@@ -80,7 +80,7 @@ func TestAuthorized_AllowedWithExistingAndNewData(t *testing.T) {
 	existing := model.Document{"id": "123", "field": "old", "version": 1, "collection": "c"}
 	engine.On("GetDocument", mock.Anything, "col/doc").Return(existing, nil)
 
-	authzSvc.On("Evaluate", mock.Anything, "col/doc", "update", mock.MatchedBy(func(req authz.Request) bool {
+	authzSvc.On("Evaluate", mock.Anything, "col/doc", "update", mock.MatchedBy(func(req identity.Request) bool {
 		if req.Auth.UID != "user-1" {
 			return false
 		}
@@ -92,14 +92,14 @@ func TestAuthorized_AllowedWithExistingAndNewData(t *testing.T) {
 			return false
 		}
 		return true
-	}), mock.MatchedBy(func(res *authz.Resource) bool {
+	}), mock.MatchedBy(func(res *identity.Resource) bool {
 		return res != nil && res.ID == "123" && res.Data["field"] == "old" && res.Data["version"] == nil && res.Data["collection"] == nil
 	})).Return(true, nil)
 
 	req := httptest.NewRequest("PUT", "/api/v1/col/doc", strings.NewReader(`{"field":"new"}`))
 	req.SetPathValue("path", "col/doc")
-	ctx := context.WithValue(req.Context(), "userID", "user-1")
-	ctx = context.WithValue(ctx, "roles", []string{"admin"})
+	ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-1")
+	ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"admin"})
 	req = req.WithContext(ctx)
 
 	w := httptest.NewRecorder()

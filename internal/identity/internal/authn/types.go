@@ -5,6 +5,16 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 )
 
+// Context keys
+type ContextKey string
+
+const (
+	ContextKeyUser     ContextKey = "user"
+	ContextKeyUserID   ContextKey = "user_id"
+	ContextKeyUsername ContextKey = "username"
+	ContextKeyRoles    ContextKey = "roles"
+)
+
 // User is an alias to storage.User to avoid circular dependency
 type User = storage.User
 

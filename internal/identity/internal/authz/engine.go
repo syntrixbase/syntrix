@@ -3,10 +3,13 @@ package authz
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/query"
 	"github.com/codetrek/syntrix/pkg/model"
 
@@ -31,7 +34,7 @@ type ruleEngine struct {
 	query      query.Service
 }
 
-func NewEngine(q query.Service) (Engine, error) {
+func NewEngine(cfg config.AuthZConfig, q query.Service) (Engine, error) {
 	// Define CEL environment
 	env, err := cel.NewEnv(
 		cel.Declarations(
@@ -44,10 +47,18 @@ func NewEngine(q query.Service) (Engine, error) {
 		return nil, err
 	}
 
-	return &ruleEngine{
+	e := &ruleEngine{
 		celEnv: env,
 		query:  q,
-	}, nil
+	}
+
+	if cfg.RulesFile != "" {
+		if err := e.LoadRules(cfg.RulesFile); err != nil {
+			return nil, fmt.Errorf("failed to load rules from %s: %w", cfg.RulesFile, err)
+		}
+	}
+
+	return e, nil
 }
 
 func (e *ruleEngine) LoadRules(path string) error {
@@ -80,7 +91,36 @@ func (e *ruleEngine) matchPath(ctx context.Context, blocks map[string]MatchBlock
 		return false, nil
 	}
 
-	for pattern, block := range blocks {
+	patterns := make([]string, 0, len(blocks))
+	for p := range blocks {
+		patterns = append(patterns, p)
+	}
+
+	sort.Slice(patterns, func(i, j int) bool {
+		p1 := patterns[i]
+		p2 := patterns[j]
+
+		// 1. Concrete vs Wildcard (concrete first)
+		isWild1 := strings.Contains(p1, "{")
+		isWild2 := strings.Contains(p2, "{")
+		if !isWild1 && isWild2 {
+			return true
+		}
+		if isWild1 && !isWild2 {
+			return false
+		}
+
+		// 2. Path length (longer first)
+		if len(p1) != len(p2) {
+			return len(p1) > len(p2)
+		}
+
+		// 3. Alphabetical (for determinism)
+		return p1 < p2
+	})
+
+	for _, pattern := range patterns {
+		block := blocks[pattern]
 		matched, remaining, newVars := matchPattern(pattern, path)
 		if matched {
 			childVars := make(map[string]string)

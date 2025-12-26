@@ -7,8 +7,7 @@ import (
 	"testing"
 
 	"github.com/codetrek/syntrix/internal/api/realtime"
-	"github.com/codetrek/syntrix/internal/identity/authn"
-	"github.com/codetrek/syntrix/internal/identity/authz"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/query"
 	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
@@ -31,7 +30,7 @@ func (m *MockQueryService) GetDocument(ctx context.Context, path string) (model.
 
 type MockAuthService struct {
 	mock.Mock
-	authn.Service
+	identity.AuthN
 }
 
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
@@ -44,10 +43,10 @@ func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 
 type MockAuthzEngine struct {
 	mock.Mock
-	authz.Engine
+	identity.AuthZ
 }
 
-func (m *MockAuthzEngine) Evaluate(ctx context.Context, path string, action string, req authz.Request, existingRes *authz.Resource) (bool, error) {
+func (m *MockAuthzEngine) Evaluate(ctx context.Context, path string, action string, req identity.Request, existingRes *identity.Resource) (bool, error) {
 	args := m.Called(ctx, path, action, req, existingRes)
 	return args.Bool(0), args.Error(1)
 }

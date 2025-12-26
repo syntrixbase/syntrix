@@ -11,7 +11,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity/authn"
+	"github.com/codetrek/syntrix/internal/identity"
 )
 
 // Worker defines the interface for processing delivery tasks.
@@ -21,25 +21,25 @@ type Worker interface {
 
 // DeliveryWorker handles the execution of delivery tasks.
 type DeliveryWorker struct {
-	client       *http.Client
-	tokenService *authn.TokenService
+	client *http.Client
+	auth   identity.AuthN
 }
 
 // NewDeliveryWorker creates a new DeliveryWorker.
-func NewDeliveryWorker(tokenService *authn.TokenService) *DeliveryWorker {
+func NewDeliveryWorker(auth identity.AuthN) *DeliveryWorker {
 	return &DeliveryWorker{
 		client: &http.Client{
 			Timeout: 5 * time.Second,
 		},
-		tokenService: tokenService,
+		auth: auth,
 	}
 }
 
 // ProcessTask executes a single delivery task.
 func (w *DeliveryWorker) ProcessTask(ctx context.Context, task *DeliveryTask) error {
 	// Add System Token
-	if w.tokenService != nil {
-		token, err := w.tokenService.GenerateSystemToken("trigger-worker")
+	if w.auth != nil {
+		token, err := w.auth.GenerateSystemToken("trigger-worker")
 		if err != nil {
 			return fmt.Errorf("failed to generate system token: %w", err)
 		}

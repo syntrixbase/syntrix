@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -282,10 +283,7 @@ match:
 				tc.mockSetup(mockQuery)
 			}
 
-			engine, err := NewEngine(mockQuery)
-			assert.NoError(t, err)
-
-			err = engine.LoadRules(tmpFile)
+			engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
 			assert.NoError(t, err)
 
 			allowed, err := engine.Evaluate(context.Background(), tc.path, tc.action, tc.req, tc.existingRes)

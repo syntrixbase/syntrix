@@ -4,9 +4,11 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -80,27 +82,31 @@ func (m *MockStorage) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func TestSignIn_AutoRegister(t *testing.T) {
+func TestSignUp_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, err := GeneratePrivateKey()
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 	require.NoError(t, err)
-	tokenService, err := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	require.NoError(t, err)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	authService := svc.(*AuthService)
 
 	ctx := context.Background()
 	req := LoginRequest{
 		Username: "newuser",
-		Password: "password123",
+		Password: "password12345",
 	}
 
-	// Expect GetUserByUsername to return ErrUserNotFound
+	// Expect GetUserByUsername to return ErrUserNotFound (checking existence)
 	mockStorage.On("GetUserByUsername", ctx, "newuser").Return(nil, ErrUserNotFound)
 
 	// Expect CreateUser to be called
-	mockStorage.On("CreateUser", ctx, mock.AnythingOfType("*types.User")).Return(nil)
+	mockStorage.On("CreateUser", ctx, mock.Anything).Return(nil)
 
-	tokenPair, err := authService.SignIn(ctx, req)
+	tokenPair, err := authService.SignUp(ctx, req)
 	assert.NoError(t, err)
 	assert.NotNil(t, tokenPair)
 	assert.NotEmpty(t, tokenPair.AccessToken)
@@ -109,11 +115,42 @@ func TestSignIn_AutoRegister(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
+func TestSignIn_UserNotFound(t *testing.T) {
+	mockStorage := new(MockStorage)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, err := NewAuthService(cfg, mockStorage, mockStorage)
+	require.NoError(t, err)
+
+	ctx := context.Background()
+	req := LoginRequest{
+		Username: "nonexistent",
+		Password: "password12345",
+	}
+
+	mockStorage.On("GetUserByUsername", ctx, "nonexistent").Return(nil, ErrUserNotFound)
+
+	tokenPair, err := authService.SignIn(ctx, req)
+	assert.Error(t, err)
+	assert.Nil(t, tokenPair)
+	assert.Equal(t, ErrUserNotFound, err)
+
+	mockStorage.AssertExpectations(t)
+}
+
 func TestSignIn_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	req := LoginRequest{
@@ -141,9 +178,13 @@ func TestSignIn_Success(t *testing.T) {
 
 func TestSignIn_WrongPassword(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	req := LoginRequest{
@@ -172,9 +213,13 @@ func TestSignIn_WrongPassword(t *testing.T) {
 
 func TestSignIn_WrongPasswordLockout(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	req := LoginRequest{
@@ -207,9 +252,13 @@ func TestSignIn_WrongPasswordLockout(t *testing.T) {
 
 func TestSignIn_LockedOut(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	req := LoginRequest{Username: "locked", Password: "password123"}
@@ -227,9 +276,13 @@ func TestSignIn_LockedOut(t *testing.T) {
 
 func TestSignIn_Disabled(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	req := LoginRequest{Username: "disabled", Password: "password123"}
@@ -246,18 +299,23 @@ func TestSignIn_Disabled(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
-func TestSignIn_PasswordTooShort(t *testing.T) {
+func TestSignUp_PasswordTooShort(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
 
 	ctx := context.Background()
 	req := LoginRequest{Username: "newuser", Password: "short"}
 
 	mockStorage.On("GetUserByUsername", ctx, "newuser").Return(nil, ErrUserNotFound)
 
-	tokenPair, err := authService.SignIn(ctx, req)
+	tokenPair, err := authService.SignUp(ctx, req)
 	assert.Error(t, err)
 	assert.Nil(t, tokenPair)
 	assert.Contains(t, err.Error(), "password too short")
@@ -267,9 +325,15 @@ func TestSignIn_PasswordTooShort(t *testing.T) {
 
 func TestRefresh_Success(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	ctx := context.Background()
 
@@ -291,9 +355,15 @@ func TestRefresh_Success(t *testing.T) {
 
 func TestRefresh_Revoked(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	ctx := context.Background()
 
@@ -313,9 +383,15 @@ func TestRefresh_Revoked(t *testing.T) {
 
 func TestRefresh_DisabledUser(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	ctx := context.Background()
 
@@ -335,9 +411,15 @@ func TestRefresh_DisabledUser(t *testing.T) {
 
 func TestMiddleware(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	// Create a valid token
 	user := &User{ID: "user-id", Username: "user"}
@@ -345,8 +427,8 @@ func TestMiddleware(t *testing.T) {
 
 	// Create a handler that checks context
 	handler := authService.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		userID := r.Context().Value("userID")
-		username := r.Context().Value("username")
+		userID := r.Context().Value(ContextKeyUserID)
+		username := r.Context().Value(ContextKeyUsername)
 		assert.Equal(t, "user-id", userID)
 		assert.Equal(t, "user", username)
 		w.WriteHeader(http.StatusOK)
@@ -375,9 +457,13 @@ func TestMiddleware(t *testing.T) {
 
 func TestLogout_InvalidToken(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 
@@ -387,9 +473,15 @@ func TestLogout_InvalidToken(t *testing.T) {
 
 func TestMiddlewareOptional(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, _ := GeneratePrivateKey()
-	tokenService, _ := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, _ := NewAuthService(cfg, mockStorage, mockStorage)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	user := &User{ID: "user-id", Username: "user"}
 	pair, _ := tokenService.GenerateTokenPair(user)
@@ -423,7 +515,13 @@ func TestMiddlewareOptional(t *testing.T) {
 
 func TestAuthService_ListUsers(t *testing.T) {
 	mockStorage := new(MockStorage)
-	authService := NewAuthService(mockStorage, mockStorage, nil)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	users := []*User{
@@ -441,7 +539,13 @@ func TestAuthService_ListUsers(t *testing.T) {
 
 func TestAuthService_UpdateUser(t *testing.T) {
 	mockStorage := new(MockStorage)
-	authService := NewAuthService(mockStorage, mockStorage, nil)
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
 	user := &User{ID: "1", Username: "user1", Roles: []string{"user"}, Disabled: false}
@@ -458,11 +562,16 @@ func TestAuthService_UpdateUser(t *testing.T) {
 
 func TestGenerateSystemToken(t *testing.T) {
 	mockStorage := new(MockStorage)
-	key, err := GeneratePrivateKey()
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 7 * 24 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 	require.NoError(t, err)
-	tokenService, err := NewTokenService(key, 15*time.Minute, 7*24*time.Hour, 2*time.Minute)
-	require.NoError(t, err)
-	authService := NewAuthService(mockStorage, mockStorage, tokenService)
+	authService := svc.(*AuthService)
+	tokenService := authService.tokenService
 
 	token, err := authService.GenerateSystemToken("test-service")
 	assert.NoError(t, err)

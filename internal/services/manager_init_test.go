@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/identity/authn"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/pkg/model"
 
@@ -16,11 +16,11 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
-func TestManager_TokenServiceGetter(t *testing.T) {
+func TestManager_AuthServiceGetter(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{})
 
-	assert.Nil(t, mgr.TokenService())
+	assert.Nil(t, mgr.AuthService())
 }
 
 func TestNewManager_DefaultListenHost(t *testing.T) {
@@ -48,7 +48,7 @@ func TestManager_Init_StorageError(t *testing.T) {
 
 func TestManager_Init_TokenServiceError(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Auth.PrivateKeyFile = "/nonexistent/dir/key.pem"
+	cfg.Identity.AuthN.PrivateKeyFile = "/nonexistent/dir/key.pem"
 	opt := Options{RunAPI: true}
 	mgr := NewManager(cfg, opt)
 
@@ -61,7 +61,7 @@ func TestManager_Init_TokenServiceError(t *testing.T) {
 
 func TestManager_Init_AuthzRulesLoadError(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Auth.RulesFile = "__missing_rules_file__"
+	cfg.Identity.AuthZ.RulesFile = "__missing_rules_file__"
 	opts := Options{RunAPI: true}
 	mgr := NewManager(cfg, opts)
 
@@ -72,16 +72,34 @@ func TestManager_Init_AuthzRulesLoadError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestManager_InitTokenService_GenerateKey(t *testing.T) {
+func TestManager_InitAuthService_GenerateKey(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Auth.PrivateKeyFile = filepath.Join(t.TempDir(), "private.pem")
+	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "private.pem")
 	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
 
-	err := mgr.initTokenService()
-	assert.NoError(t, err)
-	assert.NotNil(t, mgr.tokenService)
+	// Mock storage factory
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+	defer func() {
+		storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+			return storage.NewFactory(ctx, cfg)
+		}
+	}()
 
-	_, statErr := os.Stat(cfg.Auth.PrivateKeyFile)
+	// We need to init storage first because initAuthService depends on it
+	err := mgr.initStorage(context.Background())
+	assert.NoError(t, err)
+
+	err = mgr.initAuthService(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.authService)
+
+	_, statErr := os.Stat(cfg.Identity.AuthN.PrivateKeyFile)
 	assert.NoError(t, statErr)
 }
 
@@ -91,7 +109,7 @@ func TestManager_InitAPIServer_WithRules(t *testing.T) {
 	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
 	rulesContent := "match:\n  /databases/{db}/documents/{doc}:\n    allow:\n      get: \"true\"\n"
 	assert.NoError(t, os.WriteFile(rulesPath, []byte(rulesContent), 0644))
-	cfg.Auth.RulesFile = rulesPath
+	cfg.Identity.AuthZ.RulesFile = rulesPath
 
 	mgr := NewManager(cfg, Options{})
 	querySvc := &stubQueryService{}
@@ -105,7 +123,7 @@ func TestManager_InitAPIServer_WithRules(t *testing.T) {
 func TestManager_InitAPIServer_NoRules(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Gateway.Port = 0
-	cfg.Auth.RulesFile = ""
+	cfg.Identity.AuthZ.RulesFile = ""
 
 	mgr := NewManager(cfg, Options{})
 	querySvc := &stubQueryService{}
@@ -119,7 +137,7 @@ func TestManager_InitAPIServer_NoRules(t *testing.T) {
 func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Gateway.Port = 0
-	cfg.Auth.RulesFile = ""
+	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{})
 
 	err := mgr.initAPIServer(&stubQueryService{})
@@ -177,19 +195,18 @@ func TestManager_Init_RunAuthPath(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Auth.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
+	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
 
 	// Create a dummy rules file
 	rulesFile := filepath.Join(t.TempDir(), "security.yaml")
 	os.WriteFile(rulesFile, []byte("rules: []"), 0644)
-	cfg.Auth.RulesFile = rulesFile
+	cfg.Identity.AuthZ.RulesFile = rulesFile
 
 	mgr := NewManager(cfg, Options{RunAPI: true})
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.authService)
-	assert.NotNil(t, mgr.tokenService)
 }
 
 func TestManager_Init_RunQueryPath(t *testing.T) {
@@ -240,7 +257,7 @@ func TestManager_Init_RunRealtimePath(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Gateway.Port = 0
 
-	cfg.Auth.RulesFile = ""
+	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{RunAPI: true})
 
 	err := mgr.Init(context.Background())
@@ -281,17 +298,17 @@ type fakeAuthStore struct {
 	ensureCalled bool
 }
 
-func (f *fakeAuthStore) CreateUser(ctx context.Context, user *authn.User) error { return nil }
-func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, username string) (*authn.User, error) {
-	return nil, authn.ErrUserNotFound
+func (f *fakeAuthStore) CreateUser(ctx context.Context, user *identity.User) error { return nil }
+func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, username string) (*identity.User, error) {
+	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) GetUserByID(ctx context.Context, id string) (*authn.User, error) {
-	return nil, authn.ErrUserNotFound
+func (f *fakeAuthStore) GetUserByID(ctx context.Context, id string) (*identity.User, error) {
+	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) ListUsers(ctx context.Context, limit int, offset int) ([]*authn.User, error) {
+func (f *fakeAuthStore) ListUsers(ctx context.Context, limit int, offset int) ([]*identity.User, error) {
 	return nil, nil
 }
-func (f *fakeAuthStore) UpdateUser(ctx context.Context, user *authn.User) error { return nil }
+func (f *fakeAuthStore) UpdateUser(ctx context.Context, user *identity.User) error { return nil }
 func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
@@ -318,13 +335,13 @@ func (f *fakeDocumentProvider) Document() storage.DocumentStore { return f.store
 func (f *fakeDocumentProvider) Close(ctx context.Context) error { return nil }
 
 type fakeAuthProvider struct {
-	users       authn.UserStore
-	revocations authn.TokenRevocationStore
+	users       storage.UserStore
+	revocations storage.TokenRevocationStore
 }
 
-func (f *fakeAuthProvider) Users() authn.UserStore                  { return f.users }
-func (f *fakeAuthProvider) Revocations() authn.TokenRevocationStore { return f.revocations }
-func (f *fakeAuthProvider) Close(ctx context.Context) error        { return nil }
+func (f *fakeAuthProvider) Users() storage.UserStore                  { return f.users }
+func (f *fakeAuthProvider) Revocations() storage.TokenRevocationStore { return f.revocations }
+func (f *fakeAuthProvider) Close(ctx context.Context) error           { return nil }
 
 type stubQueryService struct{}
 

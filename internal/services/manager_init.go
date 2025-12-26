@@ -6,16 +6,13 @@ import (
 	"log"
 	"net"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/codetrek/syntrix/internal/api"
 	"github.com/codetrek/syntrix/internal/api/realtime"
 	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/csp"
-	"github.com/codetrek/syntrix/internal/identity/authn"
-	"github.com/codetrek/syntrix/internal/identity/authz"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/query"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/internal/trigger"
@@ -34,10 +31,6 @@ var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (stora
 
 func (m *Manager) Init(ctx context.Context) error {
 	if err := m.initStorage(ctx); err != nil {
-		return err
-	}
-
-	if err := m.initTokenService(); err != nil {
 		return err
 	}
 
@@ -95,61 +88,16 @@ func (m *Manager) initStorage(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) initTokenService() error {
-	if !(m.opts.RunAPI || m.opts.RunTriggerWorker) {
-		return nil
-	}
-
-	keyFile := m.cfg.Auth.PrivateKeyFile
-	if keyFile == "" {
-		return fmt.Errorf("No token private cert file")
-	}
-
-	if _, err := os.Stat(keyFile); os.IsNotExist(err) {
-		log.Printf("Generating new private key at %s", keyFile)
-		var privateKey, err = authn.GeneratePrivateKey()
-		if err != nil {
-			return fmt.Errorf("failed to generate private key: %w", err)
-		}
-
-		if err := os.MkdirAll(filepath.Dir(keyFile), 0755); err != nil {
-			return fmt.Errorf("failed to create directory for private key: %w", err)
-		}
-
-		if err := authn.SavePrivateKey(keyFile, privateKey); err != nil {
-			return fmt.Errorf("failed to save private key: %w", err)
-		}
-	}
-
-	log.Printf("Loading private key from %s", keyFile)
-	var privateKey, err = authn.LoadPrivateKey(keyFile)
-	if err != nil {
-		return fmt.Errorf("failed to load private key: %w", err)
-	}
-
-	m.tokenService, err = authn.NewTokenService(
-		privateKey,
-		m.cfg.Auth.AccessTokenTTL,
-		m.cfg.Auth.RefreshTokenTTL,
-		m.cfg.Auth.AuthCodeTTL,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create token service: %w", err)
-	}
-
-	return nil
-}
-
 func (m *Manager) initAuthService(ctx context.Context) error {
 	if !m.opts.RunAPI && !m.opts.RunTriggerWorker {
 		return nil
 	}
 
-	m.authService = authn.NewAuthService(
-		m.userStore,
-		m.revocationStore,
-		m.tokenService,
-	)
+	var authErr error
+	m.authService, authErr = identity.NewAuthN(m.cfg.Identity.AuthN, m.userStore, m.revocationStore)
+	if authErr != nil {
+		return fmt.Errorf("failed to create auth service: %w", authErr)
+	}
 
 	log.Println("Initialized Auth Service")
 	return nil
@@ -173,21 +121,16 @@ func (m *Manager) initQueryServices() query.Service {
 }
 
 func (m *Manager) initAPIServer(queryService query.Service) error {
-	var authzEngine authz.Engine
+	var authzEngine identity.AuthZ
 
-	if m.cfg.Auth.RulesFile != "" {
+	if m.cfg.Identity.AuthZ.RulesFile != "" {
 		var err error
-		authzEngine, err = authz.NewEngine(queryService)
+		authzEngine, err = identity.NewAuthZ(m.cfg.Identity.AuthZ, queryService)
 		if err != nil {
 			return fmt.Errorf("failed to create authz engine: %w", err)
 		}
 
-		if err := authzEngine.LoadRules(m.cfg.Auth.RulesFile); err != nil {
-			log.Printf("Error: failed to load rules from %s: %v", m.cfg.Auth.RulesFile, err)
-			return fmt.Errorf("failed to load authorization rules")
-		}
-
-		log.Printf("Loaded authorization rules from %s", m.cfg.Auth.RulesFile)
+		log.Printf("Loaded authorization rules from %s", m.cfg.Identity.AuthZ.RulesFile)
 	}
 
 	// Always initialize realtime server as part of gateway
@@ -259,7 +202,7 @@ func (m *Manager) initTriggerServices() error {
 	}
 
 	if m.opts.RunTriggerWorker {
-		worker := trigger.NewDeliveryWorker(m.tokenService)
+		worker := trigger.NewDeliveryWorker(m.authService)
 		m.triggerConsumer, err = triggerConsumerFactory(nc, worker, m.cfg.Trigger.WorkerCount)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger consumer: %w", err)

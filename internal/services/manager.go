@@ -6,8 +6,8 @@ import (
 	"sync"
 
 	"github.com/codetrek/syntrix/internal/api/realtime"
-	"github.com/codetrek/syntrix/internal/identity/authn"
 	"github.com/codetrek/syntrix/internal/config"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/internal/trigger"
 
@@ -43,8 +43,7 @@ type Manager struct {
 	docStore        storage.DocumentStore
 	userStore       storage.UserStore
 	revocationStore storage.TokenRevocationStore
-	authService     authn.Service
-	tokenService    *authn.TokenService
+	authService     identity.AuthN
 	rtServer        *realtime.Server
 	triggerConsumer triggerConsumer
 	triggerService  triggerService
@@ -63,6 +62,6 @@ func NewManager(cfg *config.Config, opts Options) *Manager {
 	}
 }
 
-func (m *Manager) TokenService() *authn.TokenService {
-	return m.tokenService
+func (m *Manager) AuthService() identity.AuthN {
+	return m.authService
 }
