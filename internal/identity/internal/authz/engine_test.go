@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/pkg/model"
 
@@ -94,10 +95,7 @@ match:
 	assert.NoError(t, err)
 
 	mockQuery := new(MockQueryService)
-	engine, err := NewEngine(mockQuery)
-	assert.NoError(t, err)
-
-	err = engine.LoadRules(tmpFile)
+	engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
 	assert.NoError(t, err)
 
 	// Test Case 1: Allowed Read (User matches)
@@ -188,9 +186,7 @@ match:
 	assert.NoError(t, err)
 
 	mockQuery := new(MockQueryService)
-	engine, err := NewEngine(mockQuery)
-	assert.NoError(t, err)
-	err = engine.LoadRules(tmpFile)
+	engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
 	assert.NoError(t, err)
 
 	req := Request{Auth: Auth{UID: "user1"}}
@@ -220,7 +216,7 @@ match:
 	assert.False(t, allowed)
 }
 func TestEngine_UpdateRules(t *testing.T) {
-	engine, err := NewEngine(new(MockQueryService))
+	engine, err := NewEngine(config.AuthZConfig{}, new(MockQueryService))
 	assert.NoError(t, err)
 
 	rules := `

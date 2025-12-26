@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/auth"
+	"github.com/codetrek/syntrix/internal/config"
+	"github.com/codetrek/syntrix/internal/identity"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -77,9 +79,12 @@ func TestDeliveryWorker_ProcessTask_Failure(t *testing.T) {
 }
 
 func TestDeliveryWorker_ProcessTask_WithToken(t *testing.T) {
-	// 1. Setup Token Service
-	key, _ := auth.GeneratePrivateKey()
-	tokenService, err := auth.NewTokenService(key, time.Hour, time.Hour, time.Minute)
+	auth, err := identity.NewAuthN(config.AuthNConfig{
+		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
+		AccessTokenTTL:  time.Hour,
+		RefreshTokenTTL: time.Hour,
+		AuthCodeTTL:     time.Minute,
+	}, nil, nil)
 	assert.NoError(t, err)
 
 	// 2. Setup Mock Server
@@ -97,7 +102,7 @@ func TestDeliveryWorker_ProcessTask_WithToken(t *testing.T) {
 	defer server.Close()
 
 	// 3. Setup Worker
-	worker := NewDeliveryWorker(tokenService)
+	worker := NewDeliveryWorker(auth)
 
 	// 4. Create Task
 	task := &DeliveryTask{

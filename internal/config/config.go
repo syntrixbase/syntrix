@@ -12,8 +12,8 @@ import (
 
 // Config holds the application configuration
 type Config struct {
-	Storage StorageConfig `yaml:"storage"`
-	Auth    AuthConfig    `yaml:"auth"`
+	Storage  StorageConfig  `yaml:"storage"`
+	Identity IdentityConfig `yaml:"identity"`
 
 	Gateway GatewayConfig `yaml:"gateway"`
 	Query   QueryConfig   `yaml:"query"`
@@ -88,12 +88,20 @@ type MongoConfig struct {
 	DatabaseName string `yaml:"database_name"`
 }
 
-type AuthConfig struct {
+type IdentityConfig struct {
+	AuthN AuthNConfig `yaml:"authn"`
+	AuthZ AuthZConfig `yaml:"authz"`
+}
+
+type AuthNConfig struct {
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"`
 	AuthCodeTTL     time.Duration `yaml:"auth_code_ttl"`
-	RulesFile       string        `yaml:"rules_file"`
 	PrivateKeyFile  string        `yaml:"private_key_file"`
+}
+
+type AuthZConfig struct {
+	RulesFile string `yaml:"rules_file"`
 }
 
 // LoadConfig loads configuration from files and environment variables
@@ -137,12 +145,16 @@ func LoadConfig() *Config {
 				},
 			},
 		},
-		Auth: AuthConfig{
-			AccessTokenTTL:  15 * time.Minute,
-			RefreshTokenTTL: 7 * 24 * time.Hour,
-			AuthCodeTTL:     2 * time.Minute,
-			RulesFile:       "security.yaml",
-			PrivateKeyFile:  "keys/auth_private.pem",
+		Identity: IdentityConfig{
+			AuthN: AuthNConfig{
+				AccessTokenTTL:  15 * time.Minute,
+				RefreshTokenTTL: 7 * 24 * time.Hour,
+				AuthCodeTTL:     2 * time.Minute,
+				PrivateKeyFile:  "keys/auth_private.pem",
+			},
+			AuthZ: AuthZConfig{
+				RulesFile: "security.yaml",
+			},
 		},
 		Gateway: GatewayConfig{
 			Port:            8080,
@@ -221,8 +233,8 @@ func LoadConfig() *Config {
 
 func (c *Config) resolvePaths() {
 	configDir := "config"
-	c.Auth.RulesFile = resolvePath(configDir, c.Auth.RulesFile)
-	c.Auth.PrivateKeyFile = resolvePath(configDir, c.Auth.PrivateKeyFile)
+	c.Identity.AuthZ.RulesFile = resolvePath(configDir, c.Identity.AuthZ.RulesFile)
+	c.Identity.AuthN.PrivateKeyFile = resolvePath(configDir, c.Identity.AuthN.PrivateKeyFile)
 	c.Trigger.RulesFile = resolvePath(configDir, c.Trigger.RulesFile)
 }
 

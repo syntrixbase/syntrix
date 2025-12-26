@@ -7,19 +7,18 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/auth"
-	"github.com/codetrek/syntrix/internal/authz"
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/query"
 	"github.com/codetrek/syntrix/pkg/model"
 )
 
 type Handler struct {
 	engine query.Service
-	auth   auth.Service
-	authz  authz.Engine
+	auth   identity.AuthN
+	authz  identity.AuthZ
 }
 
-func NewHandler(engine query.Service, auth auth.Service, authz authz.Engine) *Handler {
+func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *Handler {
 	return &Handler{
 		engine: engine,
 		auth:   auth,
@@ -49,9 +48,10 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Auth Operations
 	if h.auth != nil {
-		mux.HandleFunc("POST /api/v1/auth/login", h.handleLogin)
-		mux.HandleFunc("POST /api/v1/auth/refresh", h.handleRefresh)
-		mux.HandleFunc("POST /api/v1/auth/logout", h.handleLogout)
+		mux.HandleFunc("POST /auth/v1/signup", h.handleSignUp)
+		mux.HandleFunc("POST /auth/v1/login", h.handleLogin)
+		mux.HandleFunc("POST /auth/v1/refresh", h.handleRefresh)
+		mux.HandleFunc("POST /auth/v1/logout", h.handleLogout)
 
 		// Admin Operations
 		mux.HandleFunc("GET /admin/users", h.adminOnly(h.handleAdminListUsers))
@@ -93,18 +93,18 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		path := r.PathValue("path")
 
 		// Build Request Context
-		reqCtx := authz.Request{
+		reqCtx := identity.Request{
 			Time: time.Now(),
 		}
 
 		// Extract Auth
-		if uid, ok := r.Context().Value("userID").(string); ok {
+		if uid, ok := r.Context().Value(identity.ContextKeyUserID).(string); ok {
 			reqCtx.Auth.UID = uid
 		}
 		reqCtx.Auth.Token = map[string]interface{}{
 			"uid": reqCtx.Auth.UID,
 		}
-		if roles, ok := r.Context().Value("roles").([]string); ok {
+		if roles, ok := r.Context().Value(identity.ContextKeyRoles).([]string); ok {
 			rInterface := make([]interface{}, len(roles))
 			for i, v := range roles {
 				rInterface[i] = v
@@ -113,7 +113,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		}
 
 		// Fetch Existing Resource if needed
-		var existingRes *authz.Resource
+		var existingRes *identity.Resource
 		if action != "create" {
 			doc, err := h.engine.GetDocument(r.Context(), path)
 			if err == nil {
@@ -122,7 +122,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 					data[k] = v
 				}
 				data.StripProtectedFields()
-				existingRes = &authz.Resource{
+				existingRes = &identity.Resource{
 					Data: data,
 					ID:   doc.GetID(),
 				}
@@ -139,7 +139,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 
 			var data map[string]interface{}
 			if err := json.Unmarshal(bodyBytes, &data); err == nil {
-				reqCtx.Resource = &authz.Resource{Data: data}
+				reqCtx.Resource = &identity.Resource{Data: data}
 			}
 		}
 
@@ -167,7 +167,7 @@ func (h *Handler) triggerProtected(handler http.HandlerFunc) http.HandlerFunc {
 		// First, run standard auth middleware to validate token
 		h.auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check roles
-			roles, ok := r.Context().Value("roles").([]string)
+			roles, ok := r.Context().Value(identity.ContextKeyRoles).([]string)
 			if !ok {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return
@@ -196,7 +196,7 @@ func (h *Handler) adminOnly(handler http.HandlerFunc) http.HandlerFunc {
 		// First, run standard auth middleware to validate token
 		h.auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Check roles
-			roles, ok := r.Context().Value("roles").([]string)
+			roles, ok := r.Context().Value(identity.ContextKeyRoles).([]string)
 			if !ok {
 				http.Error(w, "Forbidden", http.StatusForbidden)
 				return

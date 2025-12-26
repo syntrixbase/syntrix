@@ -22,12 +22,14 @@ storage:
       primary: default_mongo
       collection: revocations
 
-auth:
-  access_token_ttl: 15m
-  refresh_token_ttl: 168h # 7 days
-  auth_code_ttl: 2m
-  rules_file: "security.yaml"
-  private_key_file: "keys/auth_private.pem"
+identity:
+  authn:
+    access_token_ttl: 15m
+    refresh_token_ttl: 168h # 7 days
+    auth_code_ttl: 2m
+    private_key_file: "keys/auth_private.pem"
+  authz:
+    rules_file: "security.yaml"
 
 gateway:
   port: 8080

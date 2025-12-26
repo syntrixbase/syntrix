@@ -25,6 +25,10 @@ type Consumer struct {
 
 // NewConsumer creates a new Consumer.
 func NewConsumer(nc *nats.Conn, worker Worker, numWorkers int) (*Consumer, error) {
+	if nc == nil {
+		return nil, fmt.Errorf("nats connection cannot be nil")
+	}
+
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, err

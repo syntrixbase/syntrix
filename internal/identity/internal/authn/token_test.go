@@ -1,4 +1,4 @@
-package auth
+package authn
 
 import (
 	"crypto/x509"
@@ -8,13 +8,21 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTokenService_GenerateAndValidate(t *testing.T) {
-	key, _ := GeneratePrivateKey()
-	ts, err := NewTokenService(key, 15*time.Minute, 1*time.Hour, 2*time.Minute)
+	keyFile := filepath.Join(t.TempDir(), "key.pem")
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  keyFile,
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 1 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+
+	ts, err := NewTokenService(cfg)
 	require.NoError(t, err)
 
 	user := &User{
@@ -47,8 +55,13 @@ func TestTokenService_GenerateAndValidate(t *testing.T) {
 
 func TestTokenService_ExpiredToken(t *testing.T) {
 	// Create service with very short TTL
-	key, _ := GeneratePrivateKey()
-	ts, err := NewTokenService(key, 1*time.Millisecond, 1*time.Millisecond, 0)
+	keyFile := filepath.Join(t.TempDir(), "key.pem")
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  keyFile,
+		AccessTokenTTL:  1 * time.Millisecond,
+		RefreshTokenTTL: 1 * time.Millisecond,
+	}
+	ts, err := NewTokenService(cfg)
 	require.NoError(t, err)
 
 	user := &User{ID: "user-1", Username: "user"}
@@ -65,10 +78,21 @@ func TestTokenService_ExpiredToken(t *testing.T) {
 }
 
 func TestTokenService_InvalidSignature(t *testing.T) {
-	key1, _ := GeneratePrivateKey()
-	ts1, _ := NewTokenService(key1, 1*time.Hour, 1*time.Hour, 0)
-	key2, _ := GeneratePrivateKey()
-	ts2, _ := NewTokenService(key2, 1*time.Hour, 1*time.Hour, 0) // Different keys
+	keyFile1 := filepath.Join(t.TempDir(), "key1.pem")
+	cfg1 := config.AuthNConfig{
+		PrivateKeyFile:  keyFile1,
+		AccessTokenTTL:  1 * time.Hour,
+		RefreshTokenTTL: 1 * time.Hour,
+	}
+	ts1, _ := NewTokenService(cfg1)
+
+	keyFile2 := filepath.Join(t.TempDir(), "key2.pem")
+	cfg2 := config.AuthNConfig{
+		PrivateKeyFile:  keyFile2,
+		AccessTokenTTL:  1 * time.Hour,
+		RefreshTokenTTL: 1 * time.Hour,
+	}
+	ts2, _ := NewTokenService(cfg2) // Different keys
 
 	user := &User{ID: "user-1", Username: "user"}
 	pair, _ := ts1.GenerateTokenPair(user)
@@ -92,8 +116,14 @@ func TestTokenService_SaveAndLoadPrivateKey(t *testing.T) {
 }
 
 func TestTokenService_GenerateSystemToken(t *testing.T) {
-	key, _ := GeneratePrivateKey()
-	ts, err := NewTokenService(key, 15*time.Minute, 1*time.Hour, 2*time.Minute)
+	keyFile := filepath.Join(t.TempDir(), "key.pem")
+	cfg := config.AuthNConfig{
+		PrivateKeyFile:  keyFile,
+		AccessTokenTTL:  15 * time.Minute,
+		RefreshTokenTTL: 1 * time.Hour,
+		AuthCodeTTL:     2 * time.Minute,
+	}
+	ts, err := NewTokenService(cfg)
 	require.NoError(t, err)
 
 	token, err := ts.GenerateSystemToken("worker")

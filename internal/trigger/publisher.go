@@ -20,6 +20,9 @@ type natsPublisher struct {
 }
 
 func NewEventPublisher(nc *nats.Conn) (EventPublisher, error) {
+	if nc == nil {
+		return nil, fmt.Errorf("nats connection cannot be nil")
+	}
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, err

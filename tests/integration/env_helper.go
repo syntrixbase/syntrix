@@ -15,9 +15,12 @@ import (
 	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/services"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
+	"golang.org/x/crypto/bcrypt"
 )
 
 type ServiceEnv struct {
@@ -127,12 +130,16 @@ match:
 				},
 			},
 		},
-		Auth: config.AuthConfig{
-			AccessTokenTTL:  15 * time.Minute,
-			RefreshTokenTTL: 7 * 24 * time.Hour,
-			AuthCodeTTL:     2 * time.Minute,
-			RulesFile:       rulesFile,
-			PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
+		Identity: config.IdentityConfig{
+			AuthN: config.AuthNConfig{
+				AccessTokenTTL:  15 * time.Minute,
+				RefreshTokenTTL: 7 * 24 * time.Hour,
+				AuthCodeTTL:     2 * time.Minute,
+				PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
+			},
+			AuthZ: config.AuthZConfig{
+				RulesFile: rulesFile,
+			},
 		},
 	}
 
@@ -189,20 +196,23 @@ match:
 }
 
 func (e *ServiceEnv) GenerateSystemToken(t *testing.T) string {
-	tokenService := e.Manager.TokenService()
-	token, err := tokenService.GenerateSystemToken("system-worker")
+	authService := e.Manager.AuthService()
+	token, err := authService.GenerateSystemToken("system-worker")
 	require.NoError(t, err)
 	return token
 }
 
 func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
+	// Ensure user exists in DB with correct role
+	e.createUserInDB(t, uid, role)
+
 	// Login
 	loginBody := map[string]string{
 		"username": uid,
 		"password": "password",
 	}
 	bodyBytes, _ := json.Marshal(loginBody)
-	resp, err := http.Post(e.APIURL+"/api/v1/auth/login", "application/json", bytes.NewBuffer(bodyBytes))
+	resp, err := http.Post(e.APIURL+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -215,6 +225,37 @@ func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
 	token, ok := res["access_token"].(string)
 	require.True(t, ok, "access_token not found in response")
 	return token
+}
+
+func (e *ServiceEnv) createUserInDB(t *testing.T, username, role string) {
+	ctx := context.Background()
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(e.MongoURI))
+	require.NoError(t, err)
+	defer client.Disconnect(ctx)
+
+	coll := client.Database(e.DBName).Collection("users")
+
+	// Check if exists
+	count, err := coll.CountDocuments(ctx, bson.M{"username": username})
+	require.NoError(t, err)
+	if count > 0 {
+		return
+	}
+
+	// Hash password "password"
+	hash, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
+	require.NoError(t, err)
+
+	_, err = coll.InsertOne(ctx, bson.M{
+		"_id":           uuid.New().String(),
+		"username":      username,
+		"password_hash": string(hash),
+		"password_algo": "bcrypt",
+		"roles":         []string{role},
+		"created_at":    time.Now(),
+		"updated_at":    time.Now(),
+	})
+	require.NoError(t, err)
 }
 
 func (e *ServiceEnv) MakeRequest(t *testing.T, method, path string, body interface{}, token string) *http.Response {

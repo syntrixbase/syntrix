@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
-# Generate Go test coverage report with summary and file output.
+# Generate Go test coverage report.
+# Usage: ./scripts/coverage.sh [html|func]
+#   html: (default) Generate HTML report and print summary.
+#   func: Print function-level coverage details.
+
 set -euo pipefail
+
+MODE=${1:-html}
 
 # Optional output path override: COVERPROFILE=/path/to/coverage.out ./scripts/coverage.sh
 COVERPROFILE=${COVERPROFILE:-"/tmp/coverage.out"}
@@ -12,7 +18,6 @@ EXCLUDE_REGEX="${DEFAULT_EXCLUDE}${EXTRA_EXCLUDE:+|${EXTRA_EXCLUDE}}"
 
 PKGS=$(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
 
-echo "Running go test with coverage..."
 echo "Excluding packages matching: ${EXCLUDE_REGEX}"
 # Use a temp file to capture output for sorting
 TMP_OUTPUT=$(mktemp)
@@ -45,8 +50,30 @@ if [ $EXIT_CODE -ne 0 ]; then
     exit $EXIT_CODE
 fi
 
-echo -e "\nCoverage summary:"
-go tool cover -func="$COVERPROFILE" | tail -n 1 | awk '{printf "%-10s %-15s %s\n", $1, $2, $3}'
+if [ "$MODE" == "func" ]; then
+    echo -e "\nFunction coverage details (excluding 100%):"
+    printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+    echo "---------------------------------------------------------------------------------------------------------"
 
-go tool cover -html=$COVERPROFILE -o test_coverage.html
-echo -e "\nTo view HTML report: go tool cover -html=$COVERPROFILE"
+    FUNC_DATA=$(go tool cover -func="$COVERPROFILE" | sed 's/github.com\/codetrek\/syntrix\///g')
+
+    echo "$FUNC_DATA" | \
+        grep -v "^total:" | \
+        awk '$3 != "100.0%" {printf "%-60s %-35s %s\n", $1, $2, $3}' | \
+        sort -k3 -nr
+
+    echo "---------------------------------------------------------------------------------------------------------"
+
+    COUNT=$(echo "$FUNC_DATA" | awk '$3 == "100.0%"' | wc -l)
+    echo "Functions with 100% coverage: $COUNT"
+
+    echo "$FUNC_DATA" | \
+        grep "^total:" | \
+        awk '{printf "%-96s %s\n", "TOTAL", $3}'
+else
+    echo -e "\nCoverage summary:"
+    go tool cover -func="$COVERPROFILE" | tail -n 1 | awk '{printf "%-10s %-15s %s\n", $1, $2, $3}'
+
+    go tool cover -html=$COVERPROFILE -o test_coverage.html
+    echo -e "\nTo view HTML report: go tool cover -html=$COVERPROFILE"
+fi

@@ -1,4 +1,4 @@
-package auth
+package authn
 
 import (
 	"crypto/rand"
@@ -6,9 +6,13 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"log"
 	"os"
+	"path/filepath"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -21,13 +25,22 @@ type TokenService struct {
 	refreshOverlap time.Duration
 }
 
-func NewTokenService(privateKey *rsa.PrivateKey, accessTTL, refreshTTL, refreshOverlap time.Duration) (*TokenService, error) {
+func (s *TokenService) RefreshOverlap() time.Duration {
+	return s.refreshOverlap
+}
+
+func NewTokenService(cfg config.AuthNConfig) (*TokenService, error) {
+	key, err := EnsurePrivateKey(cfg.PrivateKeyFile)
+	if err != nil {
+		return nil, err
+	}
+
 	return &TokenService{
-		privateKey:     privateKey,
-		publicKey:      &privateKey.PublicKey,
-		accessTTL:      accessTTL,
-		refreshTTL:     refreshTTL,
-		refreshOverlap: refreshOverlap,
+		privateKey:     key,
+		publicKey:      &key.PublicKey,
+		accessTTL:      cfg.AccessTokenTTL,
+		refreshTTL:     cfg.RefreshTokenTTL,
+		refreshOverlap: cfg.AuthCodeTTL,
 	}, nil
 }
 
@@ -43,6 +56,31 @@ func LoadPrivateKey(path string) (*rsa.PrivateKey, error) {
 	}
 
 	return x509.ParsePKCS1PrivateKey(block.Bytes)
+}
+
+func EnsurePrivateKey(path string) (*rsa.PrivateKey, error) {
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		log.Printf("[Warning][AuthN] Private key not found at %s, generating new key...", path)
+		// Generate new key
+		key, err := GeneratePrivateKey()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate key: %w", err)
+		}
+
+		// Ensure directory exists
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return nil, fmt.Errorf("failed to create directory: %w", err)
+		}
+
+		// Save key
+		if err := SavePrivateKey(path, key); err != nil {
+			return nil, fmt.Errorf("failed to save key: %w", err)
+		}
+		return key, nil
+	}
+
+	// Load existing key
+	return LoadPrivateKey(path)
 }
 
 func SavePrivateKey(path string, key *rsa.PrivateKey) error {

@@ -1,4 +1,4 @@
-package auth
+package authn
 
 import (
 	"context"
@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/google/uuid"
 )
@@ -25,11 +26,13 @@ type Service interface {
 	Middleware(next http.Handler) http.Handler
 	MiddlewareOptional(next http.Handler) http.Handler
 	SignIn(ctx context.Context, req LoginRequest) (*TokenPair, error)
+	SignUp(ctx context.Context, req LoginRequest) (*TokenPair, error)
 	Refresh(ctx context.Context, req RefreshRequest) (*TokenPair, error)
 	ListUsers(ctx context.Context, limit int, offset int) ([]*User, error)
 	UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error
 	Logout(ctx context.Context, refreshToken string) error
 	GenerateSystemToken(serviceName string) (string, error)
+	ValidateToken(tokenString string) (*Claims, error)
 }
 
 type AuthService struct {
@@ -38,21 +41,25 @@ type AuthService struct {
 	tokenService *TokenService
 }
 
-func NewAuthService(users UserStore, revocations TokenRevocationStore, tokenService *TokenService) Service {
+func NewAuthService(cfg config.AuthNConfig, users UserStore, revocations TokenRevocationStore) (Service, error) {
+	tokenService, err := NewTokenService(cfg)
+	if err != nil {
+		return nil, err
+	}
 	return &AuthService{
 		users:        users,
 		revocations:  revocations,
 		tokenService: tokenService,
-	}
+	}, nil
+}
+
+func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
+	return s.tokenService.ValidateToken(tokenString)
 }
 
 func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair, error) {
 	user, err := s.users.GetUserByUsername(ctx, req.Username)
 	if err != nil {
-		if errors.Is(err, ErrUserNotFound) {
-			// Auto-register
-			return s.register(ctx, req)
-		}
 		return nil, err
 	}
 
@@ -89,11 +96,21 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 	return s.tokenService.GenerateTokenPair(user)
 }
 
-func (s *AuthService) register(ctx context.Context, req LoginRequest) (*TokenPair, error) {
-	// Validate password strength (simple check for now)
-	if len(req.Password) < 8 {
-		return nil, errors.New("password too short")
+func (s *AuthService) SignUp(ctx context.Context, req LoginRequest) (*TokenPair, error) {
+	// Check if user already exists
+	_, err := s.users.GetUserByUsername(ctx, req.Username)
+	if err == nil {
+		return nil, errors.New("user already exists")
 	}
+	if !errors.Is(err, ErrUserNotFound) {
+		return nil, err
+	}
+
+	// Validate password strength
+	if len(req.Password) < 12 {
+		return nil, errors.New("password too short (min 12 chars)")
+	}
+	// TODO: Add complexity check and breached password check
 
 	hash, algo, err := HashPassword(req.Password)
 	if err != nil {
@@ -132,7 +149,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 	}
 
 	// Check revocation with overlap
-	revoked, err := s.revocations.IsRevoked(ctx, claims.ID, s.tokenService.refreshOverlap)
+	revoked, err := s.revocations.IsRevoked(ctx, claims.ID, s.tokenService.RefreshOverlap())
 	if err != nil {
 		return nil, err
 	}
@@ -194,9 +211,9 @@ func (s *AuthService) Middleware(next http.Handler) http.Handler {
 		}
 
 		// Add user info to context
-		ctx := context.WithValue(r.Context(), "userID", claims.Subject)
-		ctx = context.WithValue(ctx, "username", claims.Username)
-		ctx = context.WithValue(ctx, "roles", claims.Roles)
+		ctx := context.WithValue(r.Context(), ContextKeyUserID, claims.Subject)
+		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
+		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -224,9 +241,9 @@ func (s *AuthService) MiddlewareOptional(next http.Handler) http.Handler {
 		}
 
 		// Add user info to context
-		ctx := context.WithValue(r.Context(), "userID", claims.Subject)
-		ctx = context.WithValue(ctx, "username", claims.Username)
-		ctx = context.WithValue(ctx, "roles", claims.Roles)
+		ctx := context.WithValue(r.Context(), ContextKeyUserID, claims.Subject)
+		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
+		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

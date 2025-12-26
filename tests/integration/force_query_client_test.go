@@ -65,8 +65,8 @@ func TestIntegration_ForceQueryClient_API(t *testing.T) {
 
 	cfgMod := func(cfg *config.Config) {
 		cfg.Gateway.QueryServiceURL = queryStub.server.URL
-		cfg.Auth.RulesFile = "" // disable auth enforcement
-		cfg.Auth.PrivateKeyFile = filepath.Join(t.TempDir(), "auth_private.pem")
+		cfg.Identity.AuthZ.RulesFile = "" // disable auth enforcement
+		cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth_private.pem")
 	}
 
 	optsMod := func(opts *services.Options) {

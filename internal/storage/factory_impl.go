@@ -35,13 +35,18 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	f := &factory{
 		providers: make(map[string]Provider),
 	}
+	success := false
+	defer func() {
+		if !success {
+			f.Close()
+		}
+	}()
 
 	// 1. Initialize Providers
 	for name, backendCfg := range cfg.Storage.Backends {
 		if backendCfg.Type == "mongo" {
 			p, err := newMongoProvider(ctx, backendCfg.Mongo.URI, backendCfg.Mongo.DatabaseName)
 			if err != nil {
-				f.Close() // Cleanup any already opened
 				return nil, fmt.Errorf("failed to initialize backend %s: %w", name, err)
 			}
 			f.providers[name] = p
@@ -53,7 +58,6 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	// 2. Initialize Document Store
 	docRouter, err := f.createDocumentRouter(cfg.Storage.Topology.Document)
 	if err != nil {
-		f.Close()
 		return nil, err
 	}
 	f.docStore = router.NewRoutedDocumentStore(docRouter)
@@ -61,7 +65,6 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	// 3. Initialize User Store
 	usrRouter, err := f.createUserRouter(cfg.Storage.Topology.User)
 	if err != nil {
-		f.Close()
 		return nil, err
 	}
 	f.usrStore = router.NewRoutedUserStore(usrRouter)
@@ -69,10 +72,10 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	// 4. Initialize Revocation Store
 	revRouter, err := f.createRevocationRouter(cfg.Storage.Topology.Revocation)
 	if err != nil {
-		f.Close()
 		return nil, err
 	}
 	f.revStore = router.NewRoutedRevocationStore(revRouter)
+	success = true
 
 	return f, nil
 }
@@ -85,9 +88,10 @@ func (f *factory) createDocumentRouter(cfg config.DocumentTopology) (types.Docum
 
 	primaryStore := mongo.NewDocumentStore(primary.Client(), primary.Client().Database(primary.DatabaseName()), cfg.DataCollection, cfg.SysCollection, cfg.SoftDeleteRetention)
 
-	if cfg.Strategy == "single" {
+	switch cfg.Strategy {
+	case "single":
 		return router.NewSingleDocumentRouter(primaryStore), nil
-	} else if cfg.Strategy == "read_write_split" {
+	case "read_write_split":
 		replica, err := f.getMongoProvider(cfg.Replica)
 		if err != nil {
 			return nil, err
@@ -107,9 +111,10 @@ func (f *factory) createUserRouter(cfg config.CollectionTopology) (types.UserRou
 
 	primaryStore := mongo.NewUserStore(primary.Client().Database(primary.DatabaseName()), cfg.Collection)
 
-	if cfg.Strategy == "single" {
+	switch cfg.Strategy {
+	case "single":
 		return router.NewSingleUserRouter(primaryStore), nil
-	} else if cfg.Strategy == "read_write_split" {
+	case "read_write_split":
 		replica, err := f.getMongoProvider(cfg.Replica)
 		if err != nil {
 			return nil, err
@@ -129,9 +134,10 @@ func (f *factory) createRevocationRouter(cfg config.CollectionTopology) (types.R
 
 	primaryStore := mongo.NewRevocationStore(primary.Client().Database(primary.DatabaseName()), cfg.Collection)
 
-	if cfg.Strategy == "single" {
+	switch cfg.Strategy {
+	case "single":
 		return router.NewSingleRevocationRouter(primaryStore), nil
-	} else if cfg.Strategy == "read_write_split" {
+	case "read_write_split":
 		replica, err := f.getMongoProvider(cfg.Replica)
 		if err != nil {
 			return nil, err
