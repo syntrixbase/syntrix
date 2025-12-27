@@ -51,20 +51,20 @@ jobs:
 
           # Generate function report
           go tool cover -func=coverage.out > coverage.txt
-          
+
           # Print formatted table (similar to scripts/coverage.sh)
           echo -e "\nFunction coverage details (excluding 100%):"
           printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
           echo "---------------------------------------------------------------------------------------------------------"
-          
+
           # Clean up package names for display
           sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt | \
             grep -v "^total:" | \
             awk '$3 != "100.0%" {printf "%-60s %-35s %s\n", $1, $2, $3}' | \
             sort -k3 -nr
-            
+
           echo "---------------------------------------------------------------------------------------------------------"
-          
+
           COUNT=$(grep "100.0%" coverage.txt | wc -l)
           echo "Functions with 100% coverage: $COUNT"
 
@@ -79,8 +79,9 @@ jobs:
 
           # Check Individual Function Coverage (>= 60%)
           # Filter out "total:" line, check if percentage < 60.0
-          FAILED_FUNCS=$(grep -v "total:" coverage.txt | awk '{p=$3; sub(/%/, "", p); if (p < 60.0) print $0}')
-
+          # Use p+0 to force numeric comparison in awk
+          FAILED_FUNCS=$(grep -v "total:" coverage.txt | sed 's/github.com\/codetrek\/syntrix\///g' | awk '{p=$3; sub(/%/, "", p); if (p+0 < 60.0) print $0}')
+          
           if [ -n "$FAILED_FUNCS" ]; then
             echo "::error::The following functions have coverage less than 60%:"
             echo "$FAILED_FUNCS"
