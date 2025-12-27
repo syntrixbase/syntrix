@@ -19,6 +19,7 @@ jobs:
   syntrix-server:
     name: Syntrix Server (Go)
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,5 +44,45 @@ jobs:
       - name: Build
         run: make build
 
-      - name: Test
-        run: make test
+      - name: Test and Coverage
+        run: |
+          # Run tests with coverage, excluding cmd/ directory
+          go test -coverprofile=coverage.out $(go list ./... | grep -v "/cmd/")
+
+          # Generate function report
+          go tool cover -func=coverage.out > coverage.txt
+          
+          # Print formatted table (similar to scripts/coverage.sh)
+          echo -e "\nFunction coverage details (excluding 100%):"
+          printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+          echo "---------------------------------------------------------------------------------------------------------"
+          
+          # Clean up package names for display
+          sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt | \
+            grep -v "^total:" | \
+            awk '$3 != "100.0%" {printf "%-60s %-35s %s\n", $1, $2, $3}' | \
+            sort -k3 -nr
+            
+          echo "---------------------------------------------------------------------------------------------------------"
+          
+          COUNT=$(grep "100.0%" coverage.txt | wc -l)
+          echo "Functions with 100% coverage: $COUNT"
+
+          # Check Total Coverage (>= 85%)
+          TOTAL_COV=$(grep "total:" coverage.txt | awk '{print $3}' | sed 's/%//')
+          echo "Total Coverage: ${TOTAL_COV}%"
+
+          if (( $(echo "$TOTAL_COV < 85.0" | bc -l) )); then
+            echo "::error::Total coverage ${TOTAL_COV}% is below the required 85%"
+            exit 1
+          fi
+
+          # Check Individual Function Coverage (>= 60%)
+          # Filter out "total:" line, check if percentage < 60.0
+          FAILED_FUNCS=$(grep -v "total:" coverage.txt | awk '{p=$3; sub(/%/, "", p); if (p < 60.0) print $0}')
+
+          if [ -n "$FAILED_FUNCS" ]; then
+            echo "::error::The following functions have coverage less than 60%:"
+            echo "$FAILED_FUNCS"
+            exit 1
+          fi
