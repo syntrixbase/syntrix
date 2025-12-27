@@ -78,12 +78,30 @@ jobs:
           fi
 
           # Check Individual Function Coverage (>= 60%)
-          # Filter out "total:" line, check if percentage < 60.0
-          # Use p+0 to force numeric comparison in awk
-          FAILED_FUNCS=$(grep -v "total:" coverage.txt | sed 's/github.com\/codetrek\/syntrix\///g' | awk '{p=$3; sub(/%/, "", p); if (p+0 < 60.0) print $0}')
-          
-          if [ -n "$FAILED_FUNCS" ]; then
-            echo "::error::The following functions have coverage less than 60%:"
-            echo "$FAILED_FUNCS"
-            exit 1
-          fi
+          echo "Checking for functions with coverage < 60%..."
+
+          awk -v threshold="60.0" '
+            $1 != "total:" && $3 != "100.0%" {
+                # Remove package prefix for cleaner output
+                clean_path = $1
+                sub("github.com/codetrek/syntrix/", "", clean_path)
+
+                # Parse coverage
+                cov = $3
+                sub("%", "", cov)
+
+                if (cov + 0 < threshold) {
+                    # Parse file and line from clean_path (e.g., "internal/foo.go:123:")
+                    split(clean_path, parts, ":")
+                    file = parts[1]
+                    line = parts[2]
+
+                    # Print error annotation
+                    printf "::error file=%s,line=%s::Function %s has coverage %s (< 60%%)\n", file, line, $2, $3
+                    failed = 1
+                }
+            }
+            END {
+                if (failed) exit 1
+            }
+          ' coverage.txt
