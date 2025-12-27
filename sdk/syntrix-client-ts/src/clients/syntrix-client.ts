@@ -7,11 +7,13 @@ import { StorageClient } from '../internal/storage-client';
 import { CollectionReference, DocumentReference } from '../api/types';
 import { CollectionReferenceImpl, DocumentReferenceImpl } from '../api/reference';
 import { RealtimeClient, RealtimeCallbacks, SubscribeOptions, ConnectionState } from '../replication/realtime';
+import { RealtimeSSEClient, RealtimeSSEOptions } from '../replication/realtime-sse';
 
 export class SyntrixClient implements AuthService {
   private storage: StorageClient;
   private tokenProvider: DefaultTokenProvider;
   private realtimeClient: RealtimeClient | null = null;
+  private realtimeSseClient: RealtimeSSEClient | null = null;
   private baseUrl: string;
 
   constructor(baseUrl: string, authConfig: AuthConfig = {}) {
@@ -23,8 +25,8 @@ export class SyntrixClient implements AuthService {
   }
 
   // Auth methods
-  async login(username: string, password: string): Promise<LoginResponse> {
-    return this.tokenProvider.login(username, password);
+  async login(username: string, password: string, tenantId?: string): Promise<LoginResponse> {
+    return this.tokenProvider.login(username, password, tenantId);
   }
 
   async logout(): Promise<void> {
@@ -59,6 +61,13 @@ export class SyntrixClient implements AuthService {
     return this.realtimeClient;
   }
 
+  realtimeSSE(): RealtimeSSEClient {
+    if (!this.realtimeSseClient) {
+      this.realtimeSseClient = new RealtimeSSEClient(this.baseUrl, this.tokenProvider);
+    }
+    return this.realtimeSseClient;
+  }
+
   // Convenience method for subscribing to a collection
   subscribe(
     collection: string,
@@ -70,7 +79,7 @@ export class SyntrixClient implements AuthService {
     options?: Partial<SubscribeOptions>
   ): { subId: string; unsubscribe: () => void } {
     const rt = this.realtime();
-    
+
     if (callbacks.onEvent) rt.on('onEvent', callbacks.onEvent);
     if (callbacks.onSnapshot) rt.on('onSnapshot', callbacks.onSnapshot);
     if (callbacks.onError) rt.on('onError', callbacks.onError);

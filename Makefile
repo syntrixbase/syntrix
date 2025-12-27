@@ -57,20 +57,14 @@ test:
 	@go test ./... -count=1
 
 ifeq ($(OS),Windows_NT)
-    COVERAGE_CMD = scripts\coverage.cmd
-    FUNC_COVERAGE_CMD = scripts\coverage.cmd func
+    COVERAGE_CMD = scripts\coverage.cmd func
 else
-    COVERAGE_CMD = ./scripts/coverage.sh
-    FUNC_COVERAGE_CMD = ./scripts/coverage.sh func
+    COVERAGE_CMD = ./scripts/coverage.sh func
 endif
 
 coverage:
 	@echo "Running tests with coverage..."
 	@$(COVERAGE_CMD)
-
-func-coverage:
-	@echo "Running tests with function coverage..."
-	@$(FUNC_COVERAGE_CMD)
 
 clean:
 	@echo "Cleaning..."

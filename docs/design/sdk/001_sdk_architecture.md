@@ -1,7 +1,7 @@
 # TypeScript Client SDK Architecture
 
-**Date:** December 21, 2025
-**Status:** Architecture finalized; submodules pending implementation
+**Date:** December 27, 2025
+**Status:** Architecture finalized; realtime auth (WS/SSE) and tenant-aware login updated
 
 **Related:** [003_authentication.md](003_authentication.md) defines the shared auth surface used by HTTP clients, replication, and realtime. Client specifics: [004_syntrix_client.md](004_syntrix_client.md), [005_trigger_client.md](005_trigger_client.md).
 
@@ -9,51 +9,45 @@
 
 ## 1. Overview
 
-The Syntrix TypeScript SDK is designed with a **"Semantic Separation, Shared Abstraction"** philosophy. It provides two distinct clients to address the fundamentally different requirements of external applications and internal trigger workers, while sharing a common fluent API for developer experience.
+The Syntrix TypeScript SDK follows a "Semantic Separation, Shared Abstraction" philosophy: two distinct clients (external vs. trigger) share a fluent reference API while isolating transport, auth, and capabilities.
 
 ## 2. Core Design Principles
 
 ### 2.1 Semantic Separation
-We explicitly reject the "One Client Fits All" approach. The lifecycle, authentication, and capabilities of an external app differ significantly from a server-side trigger worker.
 
-*   **`SyntrixClient` (Standard)**:
-    *   **Target**: External applications (Web, Mobile, Backend).
-    *   **Auth**: Long-lived tokens or User tokens.
-    *   **Transport**: Standard REST API (`/api/v1/...`).
-    *   **Semantics**: Standard HTTP behavior (e.g., 404 returns null).
-
-*   **`TriggerClient` (Trigger)**:
-    *   **Target**: Internal Trigger Workers (Serverless/Container).
-    *   **Auth**: Ephemeral `preIssuedToken` (Strictly scoped to the trigger event).
-    *   **Transport**: Internal Trigger RPC (`/api/v1/trigger/...`).
-    *   **Capabilities**: Privileged operations like **Atomic Batch Writes** (`batch()`).
+- **SyntrixClient (Standard)** — Target: external applications (Web, Mobile, Backend); Auth: user/long-lived tokens, tenant-aware; Transport: REST `/api/v1/...`; Semantics: HTTP-style (404 -> null).
+- **TriggerClient (Trigger)** — Target: trigger workers (serverless/container); Auth: ephemeral `preIssuedToken` scoped to the trigger event; Transport: Trigger RPC `/api/v1/trigger/...`; Capabilities: privileged atomic `batch()`.
 
 ### 2.2 Interface-Based Polymorphism
-To decouple the high-level API from the underlying transport (REST vs RPC), we define a core contract:
 
 ```typescript
 /** @internal */
 export interface StorageClient {
-    get<T>(path: string): Promise<T | null>;
-    create<T>(collection: string, data: any, id?: string): Promise<T>;
-    update<T>(path: string, data: any): Promise<T>;
-    replace<T>(path: string, data: any): Promise<T>;
-    delete(path: string): Promise<void>;
-    query<T>(query: Query): Promise<T[]>;
+  get<T>(path: string): Promise<T | null>;
+  create<T>(collection: string, data: any, id?: string): Promise<T>;
+  update<T>(path: string, data: any): Promise<T>;
+  replace<T>(path: string, data: any): Promise<T>;
+  delete(path: string): Promise<void>;
+  query<T>(query: Query): Promise<T[]>;
 }
 ```
 
-Both `SyntrixClient` and `TriggerClient` implement this interface. This allows the upper-level "Reference" API to work identically regardless of which client is being used.
+Both clients implement `StorageClient`, enabling the Reference API to stay transport-agnostic.
 
-### 2.3 Developer Experience (DX) First - Fluent API
-We prioritize readability and ease of use by exposing a **Reference-based** API (inspired by Firestore) rather than raw HTTP methods.
+### 2.3 DX-First Fluent API
 
-*   **CollectionReference**: `client.collection('users')`
-*   **DocumentReference**: `client.doc('users/alice')`
-*   **QueryBuilder**: `client.collection('posts').where('status', '==', 'published').orderBy('date')`
+- CollectionReference: `client.collection('users')`
+- DocumentReference: `client.doc('users/alice')`
+- QueryBuilder: `client.collection('posts').where('status', '==', 'published').orderBy('date')`
 
 ### 2.4 Internal Encapsulation
-Implementation details that users shouldn't depend on are hidden in the `src/internal` directory and marked with `/** @internal */`. This keeps the public API surface clean and prevents leaky abstractions.
+
+Internal details live under `src/internal` and are marked `/** @internal */`, keeping the public surface minimal.
+
+### 2.5 Realtime Auth & Transports (WS + SSE)
+
+- Why: Realtime must honor the same tenant-aware auth as REST; browsers may need SSE in constrained environments.
+- How: WS sends Bearer on HTTP upgrade and a frame-level `auth`; on auth errors, a single token refresh is attempted then surfaced. SSE uses Authorization header only, rejects query tokens, and applies the same tenant scoping.
 
 ## 3. Architecture
 
@@ -76,28 +70,40 @@ graph TD
 
     SyntrixClient -- HTTP REST --> Server[/api/v1/...]
     TriggerClient -- Trigger RPC --> Server[/api/v1/trigger/...]
+    SyntrixClient -- Realtime WS/SSE --> Server[/realtime/ws|sse]
 ```
 
 ## 4. Implementation Details
 
 ### 4.1 Directory Structure
+
 ```text
 pkg/syntrix-client-ts/src/
 ├── api/                # Reference layer
 ├── clients/            # SyntrixClient, TriggerClient
-├── internal/           # 🔒 StorageClient contract & helpers
-├── replication/        # RxDB replication adapters (planned)
+├── internal/           # StorageClient contract & helpers
+├── replication/        # Realtime + replication helpers (WS/SSE)
 ├── trigger/            # TriggerHandler helper
 ├── types.ts            # Shared types
 └── index.ts            # Public exports
 ```
-## 5. Replication (overview)
-High-level replication approach: reuse `StorageClient`-based transports for pull/push; RxDB handles local state; realtime events only trigger pulls while checkpoints are advanced by pull responses. Detailed replication design, auth interplay, and testing plan are in [002_replication_client.md](002_replication_client.md).
 
-## 6. Primary Test Coverage (to implement)
-- SyntrixClient: 401/403 triggers single refresh+retry; 404 returns null; create with/without id; query posts correct shape.
-- TriggerClient: create without id rejects; batch forwards writes; trigger/get empty array returns null; missing token fails fast.
-- Authentication layer: serialized refresh under concurrent 401s; hooks fire (auth error/retry/refreshed) without leaking tokens; realtime auth failure closes channel and resumes after new token.
-- Replication (per 002): auth failures do not advance checkpoint; refresh then resume; realtime-triggered pull scheduling coalesces; outbox/pull concurrency doesn’t corrupt checkpoint.
+### 4.2 Auth
 
-More cases (error corners, perf, GC policies) will be added alongside implementation.
+- AuthConfig carries `tenantId`; login accepts `tenantId` and derives `/auth/v1/login`.
+- Token refresh serialized; hooks for refresh/error callbacks.
+- Realtime WS retries auth once after refresh; SSE relies on header-only auth.
+
+## 5. Replication (Overview)
+
+Reuse `StorageClient` transports for pull/push; realtime events trigger pulls; checkpoints advance via pull responses. Details are in [002_replication_client.md](002_replication_client.md).
+
+## 6. Primary Test Coverage (Planned/Implemented)
+
+- SyntrixClient: 401/403 single refresh + retry; 404 -> null; create with/without id; query shape.
+- TriggerClient: reject create without id; batch forwards writes; get returns null on empty; missing token fails fast.
+- Auth layer: serialized refresh under concurrent 401s; hooks fire correctly; realtime auth failure retries once then surfaces.
+- Realtime: WS auth ack gates resubscribe; SSE delivers events/snapshots with header auth; inactivity triggers reconnect.
+- Replication (per 002): auth failures do not advance checkpoint; refresh then resume; realtime-triggered pull scheduling coalesces; outbox/pull concurrency keeps checkpoint correct.
+
+More error corners and perf cases will be added as features land.

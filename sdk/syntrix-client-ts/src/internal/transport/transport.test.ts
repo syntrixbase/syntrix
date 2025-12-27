@@ -41,7 +41,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.create<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.post).toHaveBeenCalledWith('/foo', { bar: 'baz' });
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/foo', { bar: 'baz' });
   });
 
   it('should set resource', async () => {
@@ -51,7 +51,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.set<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.put).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
+    expect(mockAxios.put).toHaveBeenCalledWith('/api/v1/foo', { doc: { bar: 'baz' } });
   });
 
   it('should update resource', async () => {
@@ -61,7 +61,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.update<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.patch).toHaveBeenCalledWith('/foo', { doc: { bar: 'baz' } });
+    expect(mockAxios.patch).toHaveBeenCalledWith('/api/v1/foo', { doc: { bar: 'baz' } });
   });
 
   it('should delete resource', async () => {
@@ -70,7 +70,7 @@ describe('RestTransport', () => {
     } as any;
     const transport = new RestTransport(mockAxios);
     await transport.delete('/foo');
-    expect(mockAxios.delete).toHaveBeenCalledWith('/foo', {});
+    expect(mockAxios.delete).toHaveBeenCalledWith('/api/v1/foo', {});
   });
 
   it('should query resources', async () => {
@@ -80,6 +80,7 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.query('/query', {});
     expect(result).toEqual([{ id: '1' }]);
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/query', {});
   });
 
   it('should query resources returning raw array', async () => {
@@ -89,5 +90,6 @@ describe('RestTransport', () => {
     const transport = new RestTransport(mockAxios);
     const result = await transport.query('/query', {});
     expect(result).toEqual([{ id: '1' }]);
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/query', {});
   });
 });
