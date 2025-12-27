@@ -299,6 +299,17 @@ func (e *Engine) Push(ctx context.Context, tenant string, req storage.Replicatio
 		// Ensure collection matches
 		doc.Collection = req.Collection
 
+		if doc.Fullpath == "" {
+			var id string
+			if v, ok := doc.Data["id"].(string); ok {
+				id = v
+			}
+
+			if id != "" {
+				doc.Fullpath = doc.Collection + "/" + id
+			}
+		}
+
 		// Try to replace (Upsert)
 		// If version is provided, it acts as CAS.
 		// If not, we might want to force overwrite or check existence.

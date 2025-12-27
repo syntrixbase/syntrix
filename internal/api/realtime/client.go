@@ -441,11 +441,6 @@ func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http
 func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	if tokenFromQuery(r) != "" {
-		http.Error(w, "Query token not allowed", http.StatusUnauthorized)
-		return
-	}
-
 	origin := r.Header.Get("Origin")
 	if err := checkAllowedOrigin(origin, r.Host, cfg, hasCredentials(r)); err != nil {
 		http.Error(w, err.Error(), http.StatusForbidden)
