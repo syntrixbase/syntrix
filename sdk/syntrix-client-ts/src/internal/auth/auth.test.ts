@@ -9,6 +9,37 @@ describe('DefaultTokenProvider', () => {
     axios.post = originalPost;
   });
 
+  it('should call derived /login endpoint with tenant and set tokens', async () => {
+    const postMock = mock(async (url: string, body: any) => {
+      expect(url).toBe('http://auth/auth/v1/login');
+      expect(body).toEqual({ username: 'alice', password: 'pw', tenantId: 't1' });
+      return { data: { access_token: 'at', refresh_token: 'rt', expires_in: 3600 } };
+    }) as any;
+    axios.post = postMock;
+
+    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', tenantId: 't1' });
+    const resp = await provider.login('alice', 'pw');
+
+    expect(resp.access_token).toBe('at');
+    expect(resp.refresh_token).toBe('rt');
+    expect(await provider.getToken()).toBe('at');
+  });
+
+  it('should call derived /logout endpoint when refresh token exists', async () => {
+    const postMock = mock(async (url: string, body: any) => {
+      expect(url).toBe('http://auth/auth/v1/logout');
+      expect(body).toEqual({ refresh_token: 'rt' });
+      return { data: {} };
+    }) as any;
+    axios.post = postMock;
+
+    const provider = new DefaultTokenProvider({ refreshToken: 'rt', refreshUrl: 'http://auth/auth/v1/refresh' });
+    await provider.logout();
+
+    expect(postMock).toHaveBeenCalled();
+    expect(await provider.getToken()).toBeNull();
+  });
+
   it('should serialize refresh calls', async () => {
     let callCount = 0;
     axios.post = mock(async () => {

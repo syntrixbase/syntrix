@@ -1,6 +1,6 @@
 # TypeScript Client SDK Reference
 
-The `@syntrix/client` package provides a type-safe, fluent interface for interacting with Syntrix. It includes two distinct clients: `SyntrixClient` for external applications and `TriggerClient` for internal trigger workers.
+The `@syntrix/client` package provides a type-safe interface for Syntrix. It includes `SyntrixClient` for external apps and `TriggerClient` for trigger workers.
 
 ## Installation
 
@@ -12,140 +12,103 @@ bun add @syntrix/client
 
 ## 1. SyntrixClient (Standard)
 
-Use this client in your external applications (Web, Mobile, Backend).
-
-### Initialization
+Use this client in external applications (Web, Mobile, Backend). Multi-tenant auth requires a tenant ID during login.
 
 ```typescript
 import { SyntrixClient } from '@syntrix/client';
 
-const client = new SyntrixClient('<URL_ENDPOINT>', 'YOUR_ACCESS_TOKEN');
+const client = new SyntrixClient('<URL_ENDPOINT>', {
+  tenantId: 'my-tenant',
+});
+
+await client.login('username', 'password', 'my-tenant');
 ```
 
 ### Methods
 
 #### `doc<T>(path: string): DocumentReference<T>`
-Creates a reference to a specific document.
+
+Creates a reference to a document.
 
 #### `collection<T>(path: string): CollectionReference<T>`
-Creates a reference to a collection.
 
----
+Creates a reference to a collection.
 
 ## 2. TriggerClient (Internal)
 
-Use this client **only** within Syntrix Trigger Workers. It requires the `preIssuedToken` from the webhook payload.
-
-### Initialization (via TriggerHandler)
-
-The recommended way to initialize is using the `TriggerHandler` helper.
+Use only within Syntrix Trigger Workers. It requires the `preIssuedToken` from the webhook payload.
 
 ```typescript
 import { TriggerHandler, WebhookPayload } from '@syntrix/client';
 
-// Inside your Express/HTTP handler
 const payload = req.body as WebhookPayload;
 const handler = new TriggerHandler(payload, process.env.SYNTRIX_API_URL);
-const client = handler.syntrix; // Returns TriggerClient
+const client = handler.syntrix; // TriggerClient
 ```
 
 ### Exclusive Methods
 
 #### `batch(writes: WriteOp[]): Promise<void>`
+
 Performs an atomic batch of write operations.
 
 ```typescript
 await client.batch([
   { type: 'create', path: 'users/123', data: { name: 'Alice' } },
-  { type: 'update', path: 'stats/daily', data: { count: 1 } }
+  { type: 'update', path: 'stats/daily', data: { count: 1 } },
 ]);
 ```
 
----
-
 ## 3. Fluent API (Shared)
 
-Both clients return `DocumentReference` and `CollectionReference` objects that share the same API.
+Both clients return `DocumentReference` and `CollectionReference` objects with the same API.
 
 ### DocumentReference `<T>`
 
-Represents a single document.
-
-*   **`get(): Promise<T | null>`**
-    Fetch the document. Returns `null` if not found.
-    ```typescript
-    const doc = await client.doc('users/alice').get();
-    ```
-
-*   **`set(data: T): Promise<T>`**
-    Overwrite the document (equivalent to HTTP PUT).
-    ```typescript
-    await client.doc('users/alice').set({ name: 'Alice', age: 30 });
-    ```
-
-*   **`update(data: Partial<T>): Promise<T>`**
-    Partially update the document (equivalent to HTTP PATCH).
-    ```typescript
-    await client.doc('users/alice').update({ age: 31 });
-    ```
-
-*   **`delete(): Promise<void>`**
-    Delete the document.
-    ```typescript
-    await client.doc('users/alice').delete();
-    ```
-
-*   **`collection(path: string): CollectionReference`**
-    Get a sub-collection reference.
-    ```typescript
-    const posts = client.doc('users/alice').collection('posts');
-    ```
+- **`get(): Promise<T | null>`** — fetch the document.
+- **`set(data: T): Promise<T>`** — overwrite the document.
+- **`update(data: Partial<T>): Promise<T>`** — partial update.
+- **`delete(): Promise<void>`** — delete the document.
+- **`collection(path: string): CollectionReference`** — sub-collection reference.
 
 ### CollectionReference `<T>`
 
-Represents a collection of documents.
+- **`doc(id: string): DocumentReference<T>`** — reference by ID.
+- **`add(data: T, id?: string): Promise<DocumentReference<T>>`** — create (auto-ID for standard client).
+- **`get(): Promise<T[]>`** — list documents.
+- **`where(field, op, value): QueryBuilder<T>`** — start a query.
+- **`orderBy(field, direction): QueryBuilder<T>`** — sort.
+- **`limit(n: number): QueryBuilder<T>`** — limit results.
 
-*   **`doc(id: string): DocumentReference<T>`**
-    Get a reference to a specific document in this collection.
+## 4. Realtime (WS & SSE)
 
-*   **`add(data: T, id?: string): Promise<DocumentReference<T>>`**
-    Create a new document. If `id` is omitted, the server will generate one (Standard Client only).
-    ```typescript
-    const newDocRef = await client.collection('posts').add({ title: 'New Post' });
-    ```
-
-*   **`get(): Promise<T[]>`**
-    Fetch all documents in the collection (default limit applies).
-
-*   **`where(field: string, op: string, value: any): QueryBuilder<T>`**
-    Start a query.
-    ```typescript
-    const activeUsers = await client.collection('users')
-        .where('status', '==', 'active')
-        .get();
-    ```
-
-*   **`orderBy(field: string, direction: 'asc' | 'desc'): QueryBuilder<T>`**
-    Sort results.
-
-*   **`limit(n: number): QueryBuilder<T>`**
-    Limit the number of results.
-
----
-
-## 4. Types
-
-### `WebhookPayload`
-The payload received by a Trigger Worker.
+### WebSocket (default)
 
 ```typescript
-interface WebhookPayload<T = any> {
-    triggerId: string;
-    event: 'create' | 'update' | 'delete';
-    collection: string;
-    preIssuedToken?: string; // Critical for TriggerClient
-    before?: T;
-    after?: T;
-    // ... other fields
-}
+const rt = client.realtime();
+rt.on('onEvent', (evt) => console.log(evt));
+await rt.connect(); // Auth sent via Bearer token; tenant enforced server-side
+
+const sub = rt.subscribe({
+  query: { collection: 'users' },
+});
 ```
+
+### Server-Sent Events (SSE)
+
+```typescript
+const sse = client.realtimeSSE();
+await sse.connect(
+  {
+    onEvent: (evt) => console.log(evt),
+    onSnapshot: (snap) => console.log(snap),
+  },
+  { collection: 'users' }
+);
+```
+
+Notes:
+
+- Authentication is sent via Authorization header (sourced from the SDK token provider); query-string tokens are rejected.
+
+- WS auth failures trigger a single token refresh and retry; subsequent failures surface via `onError`.

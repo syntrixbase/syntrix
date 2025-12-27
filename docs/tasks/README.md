@@ -15,3 +15,4 @@ Index of task planning documents for Syntrix.
 - [005.2025-12-25-identity-alignment.md](005.2025-12-25-identity-alignment.md) — Identity Alignment (AuthN/AuthZ). Status: In Progress.
 - [006.2025-12-26-multi-tenant-storage-plan.md](006.2025-12-26-multi-tenant-storage-plan.md) — Multi-Tenant Storage Implementation Plan. Status: Planned.
 - [007.2025-12-26-realtime-auth-plan.md](007.2025-12-26-realtime-auth-plan.md) — Realtime Auth (WS/SSE). Status: In Progress.
+- [008.2025-12-27-sdk-auth-realtime-review.md](008.2025-12-27-sdk-auth-realtime-review.md) — SDK WS/SSE Auth + Multi-Tenant Review. Status: In Progress.

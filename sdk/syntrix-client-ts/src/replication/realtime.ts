@@ -77,6 +77,7 @@ export class RealtimeClient {
   private activityTimeoutMs: number;
   private lastMessageTime: number = 0;
   private activityCheckTimer: ReturnType<typeof setInterval> | null = null;
+  private authRetryAttempted = false;
 
   constructor(wsUrl: string, tokenProvider: TokenProvider, options?: RealtimeClientOptions) {
     this.wsUrl = wsUrl;
@@ -121,23 +122,14 @@ export class RealtimeClient {
           this.reconnectAttempts = 0;
           this.lastMessageTime = Date.now();
           this.startActivityCheck();
+          this.authRetryAttempted = false;
           // Send auth message
           const token = await this.tokenProvider.getToken();
           if (token) {
-            this.sendMessage({
-              id: 'auth-init',
-              type: MessageType.Auth,
-              payload: { token },
-            });
+            this.sendMessage({ id: 'auth-init', type: MessageType.Auth, payload: { token } });
           }
+          // Mark connected for liveness tracking, onConnect callback will fire on auth ack
           this.setState('connected');
-          this.callbacks.onConnect?.();
-          
-          // Resubscribe to existing subscriptions
-          for (const [subId, options] of this.subscriptions) {
-            this.sendSubscribe(subId, options);
-          }
-          
           resolve();
         };
 
@@ -189,7 +181,7 @@ export class RealtimeClient {
     const baseDelay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
     const jitter = 0.5 + Math.random(); // 0.5 ~ 1.5
     const delay = Math.floor(baseDelay * jitter);
-    
+
     setTimeout(() => {
       if (this.state === 'disconnected') {
         this.connect().catch(() => {});
@@ -253,13 +245,18 @@ export class RealtimeClient {
 
     switch (msg.type) {
       case MessageType.AuthAck:
-        // Auth successful
+        this.setState('connected');
+        this.callbacks.onConnect?.();
+        // Resubscribe after successful auth
+        for (const [subId, options] of this.subscriptions) {
+          this.sendSubscribe(subId, options);
+        }
         break;
       case MessageType.Event:
         if (msg.payload) {
           // Payload is already parsed JSON object
-          const event: RealtimeEvent = typeof msg.payload === 'string' 
-            ? JSON.parse(msg.payload) 
+          const event: RealtimeEvent = typeof msg.payload === 'string'
+            ? JSON.parse(msg.payload)
             : msg.payload;
           this.callbacks.onEvent?.(event);
         }
@@ -278,7 +275,22 @@ export class RealtimeClient {
           const error = typeof msg.payload === 'string'
             ? JSON.parse(msg.payload)
             : msg.payload;
-          this.callbacks.onError?.(new Error(error.message));
+          const errMsg = error?.message || 'Unknown realtime error';
+          // Attempt a single refresh-and-auth on auth failures
+          if (!this.authRetryAttempted && typeof errMsg === 'string' && errMsg.toLowerCase().includes('unauthor')) {
+            this.authRetryAttempted = true;
+            this.tokenProvider.refreshToken()
+              .then((newToken) => {
+                this.sendMessage({ id: 'auth-retry', type: MessageType.Auth, payload: { token: newToken } });
+              })
+              .catch((e) => {
+                this.setState('error');
+                this.callbacks.onError?.(e as Error);
+                this.disconnect();
+              });
+          } else {
+            this.callbacks.onError?.(new Error(errMsg));
+          }
         }
         break;
     }

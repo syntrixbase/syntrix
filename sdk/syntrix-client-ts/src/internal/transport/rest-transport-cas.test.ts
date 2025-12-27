@@ -26,7 +26,7 @@ describe('RestTransport CAS', () => {
 
     await transport.set('users/1', { name: 'Alice' }, ifMatch);
 
-    expect(mockAxiosInstance.put).toHaveBeenCalledWith('users/1', {
+    expect(mockAxiosInstance.put).toHaveBeenCalledWith('/api/v1/users/1', {
       doc: { name: 'Alice' },
       ifMatch
     });
@@ -38,7 +38,7 @@ describe('RestTransport CAS', () => {
 
     await transport.update('users/1', { age: 30 }, ifMatch);
 
-    expect(mockAxiosInstance.patch).toHaveBeenCalledWith('users/1', {
+    expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/api/v1/users/1', {
       doc: { age: 30 },
       ifMatch
     });
@@ -50,7 +50,7 @@ describe('RestTransport CAS', () => {
 
     await transport.delete('users/1', ifMatch);
 
-    expect(mockAxiosInstance.delete).toHaveBeenCalledWith('users/1', {
+    expect(mockAxiosInstance.delete).toHaveBeenCalledWith('/api/v1/users/1', {
       data: { ifMatch }
     });
   });

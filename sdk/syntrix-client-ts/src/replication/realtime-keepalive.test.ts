@@ -14,6 +14,8 @@ class MockWebSocket {
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: ((event: any) => void) | null = null;
 
+  sentMessages: string[] = [];
+
   constructor(public url: string) {
     // Simulate async connection
     setTimeout(() => {
@@ -23,7 +25,7 @@ class MockWebSocket {
   }
 
   send(data: string) {
-    // Mock send
+    this.sentMessages.push(data);
   }
 
   close() {
@@ -103,6 +105,58 @@ describe('RealtimeClient Keepalive', () => {
     ws.simulateMessage({ type: 'auth_ack' });
 
     expect(client.getLastMessageTime()).toBeGreaterThan(initialTime);
+
+    client.disconnect();
+  });
+
+  it('should send auth message with token on connect', async () => {
+    const tokenProvider = { getToken: async () => 'auth-token' };
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+
+    await client.connect();
+
+    // @ts-ignore - access private ws for testing
+    const ws = client['ws'] as MockWebSocket;
+    const payloads = ws.sentMessages.map((m) => JSON.parse(m));
+
+    const authMsg = payloads.find((m) => m.type === 'auth');
+    expect(authMsg).toBeDefined();
+    expect(authMsg.payload.token).toBe('auth-token');
+
+    client.disconnect();
+  });
+
+  it('should refresh token and retry auth on unauthorized error once', async () => {
+    const tokenProvider = {
+      getToken: mock(async () => 'stale-token'),
+      refreshToken: mock(async () => 'fresh-token'),
+    } as any;
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+
+    await client.connect();
+
+    // @ts-ignore
+    const ws = client['ws'] as MockWebSocket;
+    ws.sentMessages = []; // reset messages to inspect retry
+
+    // Simulate server auth error
+    ws.simulateMessage({ type: 'error', payload: { message: 'unauthorized' } });
+
+    // Allow async refresh to run
+    await new Promise((resolve) => setTimeout(resolve, 10));
+
+    const payloads = ws.sentMessages.map((m) => JSON.parse(m));
+    const retry = payloads.find((m) => m.type === 'auth' && m.id === 'auth-retry');
+
+    expect(tokenProvider.refreshToken).toHaveBeenCalledTimes(1);
+    expect(retry).toBeDefined();
+    expect(retry.payload.token).toBe('fresh-token');
+
+    // Subsequent unauthorized should not trigger another refresh
+    ws.sentMessages = [];
+    ws.simulateMessage({ type: 'error', payload: { message: 'unauthorized again' } });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(ws.sentMessages.length).toBe(0);
 
     client.disconnect();
   });
