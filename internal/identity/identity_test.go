@@ -18,42 +18,42 @@ type MockUserStore struct {
 	mock.Mock
 }
 
-func (m *MockUserStore) CreateUser(ctx context.Context, user *storage.User) error {
-	args := m.Called(ctx, user)
+func (m *MockUserStore) CreateUser(ctx context.Context, tenant string, user *storage.User) error {
+	args := m.Called(ctx, tenant, user)
 	return args.Error(0)
 }
 
-func (m *MockUserStore) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
-	args := m.Called(ctx, username)
+func (m *MockUserStore) GetUserByUsername(ctx context.Context, tenant, username string) (*storage.User, error) {
+	args := m.Called(ctx, tenant, username)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
-	args := m.Called(ctx, id)
+func (m *MockUserStore) GetUserByID(ctx context.Context, tenant, id string) (*storage.User, error) {
+	args := m.Called(ctx, tenant, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockUserStore) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*storage.User, error) {
+	args := m.Called(ctx, tenant, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) UpdateUser(ctx context.Context, user *storage.User) error {
-	args := m.Called(ctx, user)
+func (m *MockUserStore) UpdateUser(ctx context.Context, tenant string, user *storage.User) error {
+	args := m.Called(ctx, tenant, user)
 	return args.Error(0)
 }
 
-func (m *MockUserStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	args := m.Called(ctx, id, lastLogin, attempts, lockoutUntil)
+func (m *MockUserStore) UpdateUserLoginStats(ctx context.Context, tenant, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	args := m.Called(ctx, tenant, id, lastLogin, attempts, lockoutUntil)
 	return args.Error(0)
 }
 
@@ -72,18 +72,18 @@ type MockTokenRevocationStore struct {
 	mock.Mock
 }
 
-func (m *MockTokenRevocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, jti, expiresAt)
+func (m *MockTokenRevocationStore) RevokeToken(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, tenant, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockTokenRevocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, jti, expiresAt)
+func (m *MockTokenRevocationStore) RevokeTokenImmediate(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, tenant, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockTokenRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
-	args := m.Called(ctx, jti, gracePeriod)
+func (m *MockTokenRevocationStore) IsRevoked(ctx context.Context, tenant, jti string, gracePeriod time.Duration) (bool, error) {
+	args := m.Called(ctx, tenant, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -102,66 +102,66 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (model.Document, error) {
-	args := m.Called(ctx, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc model.Document) error {
-	args := m.Called(ctx, doc)
+func (m *MockQueryService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+	args := m.Called(ctx, tenant, doc)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, data, pred)
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, tenant, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, data, pred)
+func (m *MockQueryService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, tenant, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
-	args := m.Called(ctx, path, pred)
+func (m *MockQueryService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+	args := m.Called(ctx, tenant, path, pred)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
-	args := m.Called(ctx, q)
+func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+	args := m.Called(ctx, tenant, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
-	args := m.Called(ctx, collection)
+func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
+	args := m.Called(ctx, tenant, collection)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(<-chan storage.Event), args.Error(1)
 }
 
-func (m *MockQueryService) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.ReplicationPullResponse), args.Error(1)
 }
 
-func (m *MockQueryService) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

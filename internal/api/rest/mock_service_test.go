@@ -17,66 +17,66 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (model.Document, error) {
-	args := m.Called(ctx, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc model.Document) error {
-	args := m.Called(ctx, doc)
+func (m *MockQueryService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+	args := m.Called(ctx, tenant, doc)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, data, pred)
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, tenant, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, data, pred)
+func (m *MockQueryService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, tenant, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
-	args := m.Called(ctx, path, pred)
+func (m *MockQueryService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+	args := m.Called(ctx, tenant, path, pred)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
-	args := m.Called(ctx, q)
+func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+	args := m.Called(ctx, tenant, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
-	args := m.Called(ctx, collection)
+func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
+	args := m.Called(ctx, tenant, collection)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(<-chan storage.Event), args.Error(1)
 }
 
-func (m *MockQueryService) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.ReplicationPullResponse), args.Error(1)
 }
 
-func (m *MockQueryService) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	args := m.Called(ctx, req)
+func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -89,24 +89,45 @@ type MockAuthService struct {
 }
 
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
-	// For testing, we can just pass through or mock behavior if needed.
-	// But since it returns http.Handler, it's tricky to mock with testify directly in a way that executes 'next'.
-	// Usually we mock the side effects (context setting).
-	// For now, let's assume the test sets up the context manually or we implement a simple pass-through.
-	// Or we can use the mock to return a handler.
-	args := m.Called(next)
-	if args.Get(0) != nil {
-		return args.Get(0).(http.Handler)
+	if len(m.ExpectedCalls) == 0 {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
-	return next
+
+	args := m.Called(next)
+	if handler, ok := args.Get(0).(http.Handler); ok {
+		return handler
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
-	args := m.Called(next)
-	if args.Get(0) != nil {
-		return args.Get(0).(http.Handler)
+	if len(m.ExpectedCalls) == 0 {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
 	}
-	return next
+
+	args := m.Called(next)
+	if handler, ok := args.Get(0).(http.Handler); ok {
+		return handler
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (m *MockAuthService) SignIn(ctx context.Context, req identity.LoginRequest) (*identity.TokenPair, error) {
@@ -117,7 +138,7 @@ func (m *MockAuthService) SignIn(ctx context.Context, req identity.LoginRequest)
 	return args.Get(0).(*identity.TokenPair), args.Error(1)
 }
 
-func (m *MockAuthService) SignUp(ctx context.Context, req identity.LoginRequest) (*identity.TokenPair, error) {
+func (m *MockAuthService) SignUp(ctx context.Context, req identity.SignupRequest) (*identity.TokenPair, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
@@ -212,6 +233,9 @@ func (s *TestServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func createTestServer(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *TestServer {
+	if auth == nil {
+		auth = new(MockAuthService)
+	}
 	h := NewHandler(engine, auth, authz)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

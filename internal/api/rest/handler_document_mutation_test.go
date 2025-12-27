@@ -7,11 +7,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestHandleReplaceDocument_IdMutation(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := createTestServer(mockService, nil, nil)
+	mockAuth := new(MockAuthService)
+	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
+	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	server := createTestServer(mockService, mockAuth, nil)
 
 	// Try to replace document msg-1 with body containing id: msg-2
 	body := []byte(`{"doc":{"id": "msg-2", "name": "Bob"}}`)
@@ -26,7 +30,10 @@ func TestHandleReplaceDocument_IdMutation(t *testing.T) {
 
 func TestHandleUpdateDocument_IdMutation(t *testing.T) {
 	mockService := new(MockQueryService)
-	server := createTestServer(mockService, nil, nil)
+	mockAuth := new(MockAuthService)
+	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
+	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	server := createTestServer(mockService, mockAuth, nil)
 
 	// Try to update document msg-1 with body containing id: msg-2
 	body := []byte(`{"doc":{"id": "msg-2", "name": "Bob"}}`)

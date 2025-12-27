@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -25,6 +26,13 @@ type GatewayConfig struct {
 	Port            int               `yaml:"port"`
 	QueryServiceURL string            `yaml:"query_service_url"`
 	Auth            GatewayAuthConfig `yaml:"auth"`
+	Realtime        RealtimeConfig    `yaml:"realtime"`
+}
+
+type RealtimeConfig struct {
+	AllowedOrigins []string `yaml:"allowed_origins"`
+	AllowDevOrigin bool     `yaml:"allow_dev_origin"`
+	EnableAuth     bool     `yaml:"enable_auth"`
 }
 
 type GatewayAuthConfig struct {
@@ -52,6 +60,11 @@ type TriggerConfig struct {
 type StorageConfig struct {
 	Backends map[string]BackendConfig `yaml:"backends"`
 	Topology TopologyConfig           `yaml:"topology"`
+	Tenants  map[string]TenantConfig  `yaml:"tenants"`
+}
+
+type TenantConfig struct {
+	Backend string `yaml:"backend"`
 }
 
 type BackendConfig struct {
@@ -144,6 +157,11 @@ func LoadConfig() *Config {
 					Collection: "revocations",
 				},
 			},
+			Tenants: map[string]TenantConfig{
+				"default": {
+					Backend: "default_mongo",
+				},
+			},
 		},
 		Identity: IdentityConfig{
 			AuthN: AuthNConfig{
@@ -159,6 +177,11 @@ func LoadConfig() *Config {
 		Gateway: GatewayConfig{
 			Port:            8080,
 			QueryServiceURL: "http://localhost:8082",
+			Realtime: RealtimeConfig{
+				AllowedOrigins: []string{"http://localhost:8080", "http://localhost:3000", "http://localhost:5173"},
+				AllowDevOrigin: true,
+				EnableAuth:     true,
+			},
 		},
 		Query: QueryConfig{
 			Port:          8082,
@@ -228,7 +251,25 @@ func LoadConfig() *Config {
 	// 5. Resolve paths relative to config directory
 	cfg.resolvePaths()
 
+	// 6. Validate configuration
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Configuration error: %v", err)
+	}
+
 	return cfg
+}
+
+func (c *Config) Validate() error {
+	// Validate Storage Tenants
+	if _, ok := c.Storage.Tenants["default"]; !ok {
+		return fmt.Errorf("storage.tenants.default is required")
+	}
+	for tID, tCfg := range c.Storage.Tenants {
+		if _, ok := c.Storage.Backends[tCfg.Backend]; !ok {
+			return fmt.Errorf("tenant '%s' references unknown backend '%s'", tID, tCfg.Backend)
+		}
+	}
+	return nil
 }
 
 func (c *Config) resolvePaths() {

@@ -16,6 +16,7 @@ import (
 )
 
 func TestAuthzIntegration(t *testing.T) {
+	t.Parallel()
 	// 1. Define Rules
 	rules := `
 rules_version: '1'
@@ -87,12 +88,12 @@ match:
 	backend := factory.Document()
 
 	docs := []interface{}{
-		&storage.Document{Id: storage.CalculateID("public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
-		&storage.Document{Id: storage.CalculateID("private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
-		&storage.Document{Id: storage.CalculateID("admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
+		&storage.Document{Id: storage.CalculateTenantID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
+		&storage.Document{Id: storage.CalculateTenantID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
+		&storage.Document{Id: storage.CalculateTenantID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
 	}
 	for _, d := range docs {
-		err := backend.Create(ctx, d.(*storage.Document))
+		err := backend.Create(ctx, "default", d.(*storage.Document))
 		require.NoError(t, err)
 	}
 
@@ -117,13 +118,16 @@ match:
 
 	// 4. Test Scenarios
 
-	// Scenario 1: Public Access (No Token)
+	// Scenario 1: Public Access (Token required for tenant context)
 	t.Run("Public Access", func(t *testing.T) {
-		code := makeRequest("GET", "/api/v1/public/doc1", "", nil)
+		token := env.GetToken(t, "user-public", "user")
+		require.NotEmpty(t, token)
+
+		code := makeRequest("GET", "/api/v1/public/doc1", token, nil)
 		assert.Equal(t, http.StatusOK, code)
 	})
 
-	// Scenario 2: Private Access (No Token) -> Deny
+	// Scenario 2: Private Access (No Token) -> Deny (missing tenant)
 	t.Run("Private Access No Token", func(t *testing.T) {
 		code := makeRequest("GET", "/api/v1/private/doc1", "", nil)
 		assert.Equal(t, http.StatusForbidden, code)

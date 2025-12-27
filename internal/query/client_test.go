@@ -30,13 +30,14 @@ func TestClient_GetDocument(t *testing.T) {
 		var req map[string]string
 		json.NewDecoder(r.Body).Decode(&req)
 		assert.Equal(t, "test/1", req["path"])
+		assert.Equal(t, "default", req["tenant"])
 
 		json.NewEncoder(w).Encode(expectedDoc)
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	doc, err := client.GetDocument(context.Background(), "test/1")
+	doc, err := client.GetDocument(context.Background(), "default", "test/1")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedDoc, doc)
 }
@@ -44,19 +45,25 @@ func TestClient_GetDocument(t *testing.T) {
 func TestClient_CreateDocument(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/internal/v1/document/create", r.URL.Path)
+		var req map[string]interface{}
+		json.NewDecoder(r.Body).Decode(&req)
+		assert.Equal(t, "default", req["tenant"])
 		w.WriteHeader(http.StatusCreated)
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
 	doc := model.Document{"id": "1", "collection": "test"}
-	err := client.CreateDocument(context.Background(), doc)
+	err := client.CreateDocument(context.Background(), "default", doc)
 	assert.NoError(t, err)
 }
 
 func TestClient_WatchCollection(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/internal/v1/watch", r.URL.Path)
+		var req map[string]string
+		json.NewDecoder(r.Body).Decode(&req)
+		assert.Equal(t, "default", req["tenant"])
 
 		// Send two events then close
 		evt1 := storage.Event{Type: "create", Id: "test/1"}
@@ -75,7 +82,7 @@ func TestClient_WatchCollection(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	stream, err := client.WatchCollection(ctx, "test")
+	stream, err := client.WatchCollection(ctx, "default", "test")
 	assert.NoError(t, err)
 
 	var events []storage.Event
@@ -95,7 +102,7 @@ func TestClient_ErrorHandling(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	_, err := client.GetDocument(context.Background(), "test/1")
+	_, err := client.GetDocument(context.Background(), "default", "test/1")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unexpected status code: 500")
 }
@@ -107,7 +114,7 @@ func TestClient_GetDocument_NotFound(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	_, err := client.GetDocument(context.Background(), "test/1")
+	_, err := client.GetDocument(context.Background(), "default", "test/1")
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }
 
@@ -119,7 +126,7 @@ func TestClient_GetDocument_DecodeError(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.GetDocument(context.Background(), "test/1")
+	res, err := client.GetDocument(context.Background(), "default", "test/1")
 	assert.Error(t, err)
 	assert.Nil(t, res)
 }
@@ -131,7 +138,7 @@ func TestClient_CreateDocument_BadStatus(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	err := client.CreateDocument(context.Background(), model.Document{"collection": "c"})
+	err := client.CreateDocument(context.Background(), "default", model.Document{"collection": "c"})
 	assert.Error(t, err)
 }
 
@@ -142,7 +149,7 @@ func TestClient_ReplaceDocument_BadStatus(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.ReplaceDocument(context.Background(), model.Document{"collection": "c", "id": "1"}, nil)
+	res, err := client.ReplaceDocument(context.Background(), "default", model.Document{"collection": "c", "id": "1"}, nil)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 }
@@ -155,7 +162,7 @@ func TestClient_PatchDocument_Statuses(t *testing.T) {
 		defer ts.Close()
 
 		client := NewClient(ts.URL)
-		res, err := client.PatchDocument(context.Background(), model.Document{"collection": "c", "id": "1"}, nil)
+		res, err := client.PatchDocument(context.Background(), "default", model.Document{"collection": "c", "id": "1"}, nil)
 		assert.ErrorIs(t, err, model.ErrNotFound)
 		assert.Nil(t, res)
 	})
@@ -167,7 +174,7 @@ func TestClient_PatchDocument_Statuses(t *testing.T) {
 		defer ts.Close()
 
 		client := NewClient(ts.URL)
-		res, err := client.PatchDocument(context.Background(), model.Document{"collection": "c", "id": "1"}, nil)
+		res, err := client.PatchDocument(context.Background(), "default", model.Document{"collection": "c", "id": "1"}, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
@@ -181,7 +188,7 @@ func TestClient_DeleteDocument_Statuses(t *testing.T) {
 		defer ts.Close()
 
 		client := NewClient(ts.URL)
-		err := client.DeleteDocument(context.Background(), "c/1", nil)
+		err := client.DeleteDocument(context.Background(), "default", "c/1", nil)
 		assert.ErrorIs(t, err, model.ErrNotFound)
 	})
 
@@ -192,7 +199,7 @@ func TestClient_DeleteDocument_Statuses(t *testing.T) {
 		defer ts.Close()
 
 		client := NewClient(ts.URL)
-		err := client.DeleteDocument(context.Background(), "c/1", nil)
+		err := client.DeleteDocument(context.Background(), "default", "c/1", nil)
 		assert.Error(t, err)
 	})
 
@@ -203,7 +210,7 @@ func TestClient_DeleteDocument_Statuses(t *testing.T) {
 		defer ts.Close()
 
 		client := NewClient(ts.URL)
-		err := client.DeleteDocument(context.Background(), "c/1", nil)
+		err := client.DeleteDocument(context.Background(), "default", "c/1", nil)
 		assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 	})
 }
@@ -215,7 +222,7 @@ func TestClient_ExecuteQuery_StatusError(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.ExecuteQuery(context.Background(), model.Query{Collection: "c"})
+	res, err := client.ExecuteQuery(context.Background(), "default", model.Query{Collection: "c"})
 	assert.Error(t, err)
 	assert.Nil(t, res)
 }
@@ -227,7 +234,7 @@ func TestClient_WatchCollection_StatusError(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.WatchCollection(context.Background(), "c")
+	res, err := client.WatchCollection(context.Background(), "default", "c")
 	assert.Error(t, err)
 	assert.Nil(t, res)
 }
@@ -255,13 +262,14 @@ func TestClient_ReplaceDocument_Success(t *testing.T) {
 		var body map[string]interface{}
 		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
 		require.Contains(t, body, "data")
+		require.Equal(t, "default", body["tenant"])
 		w.WriteHeader(http.StatusOK)
 		require.NoError(t, json.NewEncoder(w).Encode(expected))
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	doc, err := client.ReplaceDocument(context.Background(), expected, nil)
+	doc, err := client.ReplaceDocument(context.Background(), "default", expected, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, doc)
 }
@@ -270,13 +278,16 @@ func TestClient_PatchDocument_Success(t *testing.T) {
 	expected := model.Document{"id": "1", "collection": "c", "v": float64(3)}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/v1/document/patch", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		w.WriteHeader(http.StatusOK)
 		require.NoError(t, json.NewEncoder(w).Encode(expected))
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	doc, err := client.PatchDocument(context.Background(), expected, nil)
+	doc, err := client.PatchDocument(context.Background(), "default", expected, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, expected, doc)
 }
@@ -285,13 +296,16 @@ func TestClient_ExecuteQuery_Success(t *testing.T) {
 	expected := []model.Document{{"id": "1", "collection": "c"}}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/v1/query/execute", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		w.WriteHeader(http.StatusOK)
 		require.NoError(t, json.NewEncoder(w).Encode(expected))
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.ExecuteQuery(context.Background(), model.Query{Collection: "c"})
+	res, err := client.ExecuteQuery(context.Background(), "default", model.Query{Collection: "c"})
 	assert.NoError(t, err)
 	assert.Equal(t, expected, res)
 }
@@ -300,13 +314,16 @@ func TestClient_Pull_Success(t *testing.T) {
 	expected := storage.ReplicationPullResponse{Checkpoint: 10}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/replication/v1/pull", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		w.WriteHeader(http.StatusOK)
 		require.NoError(t, json.NewEncoder(w).Encode(expected))
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.Pull(context.Background(), storage.ReplicationPullRequest{Collection: "c"})
+	res, err := client.Pull(context.Background(), "default", storage.ReplicationPullRequest{Collection: "c"})
 	assert.NoError(t, err)
 	assert.Equal(t, &expected, res)
 }
@@ -315,13 +332,16 @@ func TestClient_Push_Success(t *testing.T) {
 	expected := storage.ReplicationPushResponse{Conflicts: []*storage.Document{}}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/replication/v1/push", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		w.WriteHeader(http.StatusOK)
 		require.NoError(t, json.NewEncoder(w).Encode(expected))
 	}))
 	defer ts.Close()
 
 	client := NewClient(ts.URL)
-	res, err := client.Push(context.Background(), storage.ReplicationPushRequest{Collection: "c"})
+	res, err := client.Push(context.Background(), "default", storage.ReplicationPushRequest{Collection: "c"})
 	assert.NoError(t, err)
 	assert.Equal(t, &expected, res)
 }
@@ -329,6 +349,9 @@ func TestClient_Push_Success(t *testing.T) {
 func TestClient_WatchCollection_CancelCloses(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/v1/watch", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		flusher, ok := w.(http.Flusher)
 		require.True(t, ok)
 		w.WriteHeader(http.StatusOK)
@@ -340,7 +363,7 @@ func TestClient_WatchCollection_CancelCloses(t *testing.T) {
 
 	client := NewClient(ts.URL)
 	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := client.WatchCollection(ctx, "c")
+	stream, err := client.WatchCollection(ctx, "default", "c")
 	require.NoError(t, err)
 
 	cancel()
@@ -359,6 +382,9 @@ func TestClient_WatchCollection_InvalidJSONSkipped(t *testing.T) {
 	valid := storage.Event{Type: storage.EventCreate, Id: "c/1"}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/v1/watch", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		flusher, ok := w.(http.Flusher)
 		require.True(t, ok)
 		_, _ = w.Write([]byte("not-json\n"))
@@ -371,7 +397,7 @@ func TestClient_WatchCollection_InvalidJSONSkipped(t *testing.T) {
 	client := NewClient(ts.URL)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	stream, err := client.WatchCollection(ctx, "c")
+	stream, err := client.WatchCollection(ctx, "default", "c")
 	require.NoError(t, err)
 
 	var events []storage.Event
@@ -393,6 +419,9 @@ func TestClient_Pull(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/internal/replication/v1/pull", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		json.NewEncoder(w).Encode(expectedResp)
 	}))
 	defer ts.Close()
@@ -402,7 +431,7 @@ func TestClient_Pull(t *testing.T) {
 		Checkpoint: 50,
 		Limit:      10,
 	}
-	resp, err := client.Pull(context.Background(), req)
+	resp, err := client.Pull(context.Background(), "default", req)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedResp.Checkpoint, resp.Checkpoint)
 	assert.Len(t, resp.Documents, 1)
@@ -415,6 +444,9 @@ func TestClient_Push(t *testing.T) {
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "/internal/replication/v1/push", r.URL.Path)
+		var body map[string]interface{}
+		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
+		require.Equal(t, "default", body["tenant"])
 		json.NewEncoder(w).Encode(expectedResp)
 	}))
 	defer ts.Close()
@@ -427,7 +459,7 @@ func TestClient_Push(t *testing.T) {
 			},
 		},
 	}
-	resp, err := client.Push(context.Background(), req)
+	resp, err := client.Push(context.Background(), "default", req)
 	assert.NoError(t, err)
 	assert.Empty(t, resp.Conflicts)
 }
@@ -440,7 +472,7 @@ func TestClient_Pull_Error(t *testing.T) {
 
 	client := NewClient(ts.URL)
 	req := storage.ReplicationPullRequest{}
-	_, err := client.Pull(context.Background(), req)
+	_, err := client.Pull(context.Background(), "default", req)
 	assert.Error(t, err)
 }
 
@@ -452,6 +484,6 @@ func TestClient_Push_Error(t *testing.T) {
 
 	client := NewClient(ts.URL)
 	req := storage.ReplicationPushRequest{}
-	_, err := client.Push(context.Background(), req)
+	_, err := client.Push(context.Background(), "default", req)
 	assert.Error(t, err)
 }

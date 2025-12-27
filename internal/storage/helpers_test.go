@@ -16,16 +16,18 @@ func TestCalculateID(t *testing.T) {
 func TestNewDocument(t *testing.T) {
 	path := "users/bob"
 	collection := "users"
+	tenant := "default"
 	data := map[string]interface{}{"foo": "bar"}
 
 	before := time.Now().UnixMilli()
-	doc := NewDocument(path, collection, data)
+	doc := NewDocument(tenant, path, collection, data)
 	after := time.Now().UnixMilli()
 
-	assert.Equal(t, CalculateID(path), doc.Id)
+	assert.Equal(t, CalculateTenantID(tenant, path), doc.Id)
 	assert.Equal(t, collection, doc.Collection)
 	assert.Equal(t, data, doc.Data)
 	assert.Equal(t, int64(1), doc.Version)
+	assert.Equal(t, tenant, doc.TenantID)
 
 	// Check timestamp is within reasonable range
 	assert.GreaterOrEqual(t, doc.UpdatedAt, before)
@@ -35,10 +37,11 @@ func TestNewDocument(t *testing.T) {
 func TestNewDocumentTimestamps(t *testing.T) {
 	path := "users/alice"
 	collection := "users"
+	tenant := "default"
 	data := map[string]interface{}{"hello": "world"}
 
 	before := time.Now().UnixMilli()
-	doc := NewDocument(path, collection, data)
+	doc := NewDocument(tenant, path, collection, data)
 	after := time.Now().UnixMilli()
 
 	assert.Equal(t, doc.CreatedAt, doc.UpdatedAt)

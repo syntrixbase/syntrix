@@ -18,57 +18,57 @@ type MockStorage struct {
 	mock.Mock
 }
 
-func (m *MockStorage) CreateUser(ctx context.Context, user *User) error {
-	args := m.Called(ctx, user)
+func (m *MockStorage) CreateUser(ctx context.Context, tenant string, user *User) error {
+	args := m.Called(ctx, tenant, user)
 	return args.Error(0)
 }
 
-func (m *MockStorage) GetUserByUsername(ctx context.Context, username string) (*User, error) {
-	args := m.Called(ctx, username)
+func (m *MockStorage) GetUserByUsername(ctx context.Context, tenant string, username string) (*User, error) {
+	args := m.Called(ctx, tenant, username)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*User), args.Error(1)
 }
 
-func (m *MockStorage) GetUserByID(ctx context.Context, id string) (*User, error) {
-	args := m.Called(ctx, id)
+func (m *MockStorage) GetUserByID(ctx context.Context, tenant string, id string) (*User, error) {
+	args := m.Called(ctx, tenant, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*User), args.Error(1)
 }
 
-func (m *MockStorage) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	args := m.Called(ctx, id, lastLogin, attempts, lockoutUntil)
+func (m *MockStorage) UpdateUserLoginStats(ctx context.Context, tenant string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	args := m.Called(ctx, tenant, id, lastLogin, attempts, lockoutUntil)
 	return args.Error(0)
 }
 
-func (m *MockStorage) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, jti, expiresAt)
+func (m *MockStorage) RevokeToken(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, tenant, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockStorage) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, jti, expiresAt)
+func (m *MockStorage) RevokeTokenImmediate(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, tenant, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockStorage) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
-	args := m.Called(ctx, jti, gracePeriod)
+func (m *MockStorage) IsRevoked(ctx context.Context, tenant string, jti string, gracePeriod time.Duration) (bool, error) {
+	args := m.Called(ctx, tenant, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
 
-func (m *MockStorage) ListUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockStorage) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*User, error) {
+	args := m.Called(ctx, tenant, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*User), args.Error(1)
 }
 
-func (m *MockStorage) UpdateUser(ctx context.Context, user *User) error {
-	args := m.Called(ctx, user)
+func (m *MockStorage) UpdateUser(ctx context.Context, tenant string, user *User) error {
+	args := m.Called(ctx, tenant, user)
 	return args.Error(0)
 }
 
@@ -95,16 +95,17 @@ func TestSignUp_Success(t *testing.T) {
 	authService := svc.(*AuthService)
 
 	ctx := context.Background()
-	req := LoginRequest{
+	req := SignupRequest{
+		TenantID: "default",
 		Username: "newuser",
 		Password: "password12345",
 	}
 
 	// Expect GetUserByUsername to return ErrUserNotFound (checking existence)
-	mockStorage.On("GetUserByUsername", ctx, "newuser").Return(nil, ErrUserNotFound)
+	mockStorage.On("GetUserByUsername", ctx, "default", "newuser").Return(nil, ErrUserNotFound)
 
 	// Expect CreateUser to be called
-	mockStorage.On("CreateUser", ctx, mock.Anything).Return(nil)
+	mockStorage.On("CreateUser", ctx, "default", mock.Anything).Return(nil)
 
 	tokenPair, err := authService.SignUp(ctx, req)
 	assert.NoError(t, err)
@@ -128,11 +129,12 @@ func TestSignIn_UserNotFound(t *testing.T) {
 
 	ctx := context.Background()
 	req := LoginRequest{
+		TenantID: "default",
 		Username: "nonexistent",
 		Password: "password12345",
 	}
 
-	mockStorage.On("GetUserByUsername", ctx, "nonexistent").Return(nil, ErrUserNotFound)
+	mockStorage.On("GetUserByUsername", ctx, "default", "nonexistent").Return(nil, ErrUserNotFound)
 
 	tokenPair, err := authService.SignIn(ctx, req)
 	assert.Error(t, err)
@@ -154,6 +156,7 @@ func TestSignIn_Success(t *testing.T) {
 
 	ctx := context.Background()
 	req := LoginRequest{
+		TenantID: "default",
 		Username: "existinguser",
 		Password: "password123",
 	}
@@ -161,13 +164,14 @@ func TestSignIn_Success(t *testing.T) {
 	hash, algo, _ := HashPassword("password123")
 	user := &User{
 		ID:           "user-id",
+		TenantID:     "default",
 		Username:     "existinguser",
 		PasswordHash: hash,
 		PasswordAlgo: algo,
 	}
 
-	mockStorage.On("GetUserByUsername", ctx, "existinguser").Return(user, nil)
-	mockStorage.On("UpdateUserLoginStats", ctx, "user-id", mock.Anything, 0, mock.Anything).Return(nil)
+	mockStorage.On("GetUserByUsername", ctx, "default", "existinguser").Return(user, nil)
+	mockStorage.On("UpdateUserLoginStats", ctx, "default", "user-id", mock.Anything, 0, mock.Anything).Return(nil)
 
 	tokenPair, err := authService.SignIn(ctx, req)
 	assert.NoError(t, err)
@@ -188,6 +192,7 @@ func TestSignIn_WrongPassword(t *testing.T) {
 
 	ctx := context.Background()
 	req := LoginRequest{
+		TenantID: "default",
 		Username: "existinguser",
 		Password: "wrongpassword",
 	}
@@ -195,13 +200,14 @@ func TestSignIn_WrongPassword(t *testing.T) {
 	hash, algo, _ := HashPassword("password123")
 	user := &User{
 		ID:           "user-id",
+		TenantID:     "default",
 		Username:     "existinguser",
 		PasswordHash: hash,
 		PasswordAlgo: algo,
 	}
 
-	mockStorage.On("GetUserByUsername", ctx, "existinguser").Return(user, nil)
-	mockStorage.On("UpdateUserLoginStats", ctx, "user-id", mock.Anything, 1, mock.Anything).Return(nil)
+	mockStorage.On("GetUserByUsername", ctx, "default", "existinguser").Return(user, nil)
+	mockStorage.On("UpdateUserLoginStats", ctx, "default", "user-id", mock.Anything, 1, mock.Anything).Return(nil)
 
 	tokenPair, err := authService.SignIn(ctx, req)
 	assert.Error(t, err)
@@ -223,6 +229,7 @@ func TestSignIn_WrongPasswordLockout(t *testing.T) {
 
 	ctx := context.Background()
 	req := LoginRequest{
+		TenantID: "default",
 		Username: "existinguser",
 		Password: "wrongpassword",
 	}
@@ -230,6 +237,7 @@ func TestSignIn_WrongPasswordLockout(t *testing.T) {
 	hash, algo, _ := HashPassword("password123")
 	user := &User{
 		ID:            "user-id",
+		TenantID:      "default",
 		Username:      "existinguser",
 		PasswordHash:  hash,
 		PasswordAlgo:  algo,
@@ -237,8 +245,8 @@ func TestSignIn_WrongPasswordLockout(t *testing.T) {
 	}
 
 	expectedLockoutThreshold := time.Now().Add(4 * time.Minute)
-	mockStorage.On("GetUserByUsername", ctx, "existinguser").Return(user, nil)
-	mockStorage.On("UpdateUserLoginStats", ctx, "user-id", mock.Anything, 10, mock.MatchedBy(func(lockoutUntil time.Time) bool {
+	mockStorage.On("GetUserByUsername", ctx, "default", "existinguser").Return(user, nil)
+	mockStorage.On("UpdateUserLoginStats", ctx, "default", "user-id", mock.Anything, 10, mock.MatchedBy(func(lockoutUntil time.Time) bool {
 		return lockoutUntil.After(expectedLockoutThreshold)
 	})).Return(nil)
 
@@ -261,10 +269,10 @@ func TestSignIn_LockedOut(t *testing.T) {
 	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
-	req := LoginRequest{Username: "locked", Password: "password123"}
+	req := LoginRequest{TenantID: "default", Username: "locked", Password: "password123"}
 
-	user := &User{ID: "user-id", Username: "locked", LockoutUntil: time.Now().Add(time.Hour)}
-	mockStorage.On("GetUserByUsername", ctx, "locked").Return(user, nil)
+	user := &User{ID: "user-id", TenantID: "default", Username: "locked", LockoutUntil: time.Now().Add(time.Hour)}
+	mockStorage.On("GetUserByUsername", ctx, "default", "locked").Return(user, nil)
 
 	tokenPair, err := authService.SignIn(ctx, req)
 	assert.Error(t, err)
@@ -285,11 +293,11 @@ func TestSignIn_Disabled(t *testing.T) {
 	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
 	ctx := context.Background()
-	req := LoginRequest{Username: "disabled", Password: "password123"}
+	req := LoginRequest{TenantID: "default", Username: "disabled", Password: "password123"}
 
 	hash, algo, _ := HashPassword("password123")
-	user := &User{ID: "user-id", Username: "disabled", PasswordHash: hash, PasswordAlgo: algo, Disabled: true}
-	mockStorage.On("GetUserByUsername", ctx, "disabled").Return(user, nil)
+	user := &User{ID: "user-id", TenantID: "default", Username: "disabled", PasswordHash: hash, PasswordAlgo: algo, Disabled: true}
+	mockStorage.On("GetUserByUsername", ctx, "default", "disabled").Return(user, nil)
 
 	tokenPair, err := authService.SignIn(ctx, req)
 	assert.Error(t, err)
@@ -311,9 +319,9 @@ func TestSignUp_PasswordTooShort(t *testing.T) {
 	authService := svc.(*AuthService)
 
 	ctx := context.Background()
-	req := LoginRequest{Username: "newuser", Password: "short"}
+	req := SignupRequest{TenantID: "default", Username: "newuser", Password: "short"}
 
-	mockStorage.On("GetUserByUsername", ctx, "newuser").Return(nil, ErrUserNotFound)
+	mockStorage.On("GetUserByUsername", ctx, "default", "newuser").Return(nil, ErrUserNotFound)
 
 	tokenPair, err := authService.SignUp(ctx, req)
 	assert.Error(t, err)
@@ -338,12 +346,12 @@ func TestRefresh_Success(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a valid refresh token
-	user := &User{ID: "user-id", Username: "user"}
+	user := &User{ID: "user-id", Username: "user", TenantID: "default"}
 	pair, _ := tokenService.GenerateTokenPair(user)
 
-	mockStorage.On("IsRevoked", ctx, mock.Anything, 2*time.Minute).Return(false, nil)
-	mockStorage.On("GetUserByID", ctx, "user-id").Return(user, nil)
-	mockStorage.On("RevokeToken", ctx, mock.Anything, mock.Anything).Return(nil)
+	mockStorage.On("IsRevoked", ctx, "default", mock.Anything, 2*time.Minute).Return(false, nil)
+	mockStorage.On("GetUserByID", ctx, "default", "user-id").Return(user, nil)
+	mockStorage.On("RevokeToken", ctx, "default", mock.Anything, mock.Anything).Return(nil)
 
 	newPair, err := authService.Refresh(ctx, RefreshRequest{RefreshToken: pair.RefreshToken})
 	assert.NoError(t, err)
@@ -368,10 +376,10 @@ func TestRefresh_Revoked(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a valid refresh token
-	user := &User{ID: "user-id", Username: "user"}
+	user := &User{ID: "user-id", TenantID: "default", Username: "user"}
 	pair, _ := tokenService.GenerateTokenPair(user)
 
-	mockStorage.On("IsRevoked", ctx, mock.Anything, 2*time.Minute).Return(true, nil)
+	mockStorage.On("IsRevoked", ctx, "default", mock.Anything, 2*time.Minute).Return(true, nil)
 
 	newPair, err := authService.Refresh(ctx, RefreshRequest{RefreshToken: pair.RefreshToken})
 	assert.Error(t, err)
@@ -395,11 +403,11 @@ func TestRefresh_DisabledUser(t *testing.T) {
 
 	ctx := context.Background()
 
-	user := &User{ID: "user-id", Username: "user", Disabled: true}
+	user := &User{ID: "user-id", TenantID: "default", Username: "user", Disabled: true}
 	pair, _ := tokenService.GenerateTokenPair(user)
 
-	mockStorage.On("IsRevoked", ctx, mock.Anything, 2*time.Minute).Return(false, nil)
-	mockStorage.On("GetUserByID", ctx, "user-id").Return(user, nil)
+	mockStorage.On("IsRevoked", ctx, "default", mock.Anything, 2*time.Minute).Return(false, nil)
+	mockStorage.On("GetUserByID", ctx, "default", "user-id").Return(user, nil)
 
 	newPair, err := authService.Refresh(ctx, RefreshRequest{RefreshToken: pair.RefreshToken})
 	assert.Error(t, err)
@@ -422,7 +430,7 @@ func TestMiddleware(t *testing.T) {
 	tokenService := authService.tokenService
 
 	// Create a valid token
-	user := &User{ID: "user-id", Username: "user"}
+	user := &User{ID: "user-id", TenantID: "default", Username: "user"}
 	pair, _ := tokenService.GenerateTokenPair(user)
 
 	// Create a handler that checks context
@@ -483,7 +491,7 @@ func TestMiddlewareOptional(t *testing.T) {
 	authService := svc.(*AuthService)
 	tokenService := authService.tokenService
 
-	user := &User{ID: "user-id", Username: "user"}
+	user := &User{ID: "user-id", TenantID: "default", Username: "user"}
 	pair, _ := tokenService.GenerateTokenPair(user)
 
 	// No header should pass through
@@ -523,13 +531,13 @@ func TestAuthService_ListUsers(t *testing.T) {
 	}
 	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ContextKeyTenant, "default")
 	users := []*User{
 		{ID: "1", Username: "user1"},
 		{ID: "2", Username: "user2"},
 	}
 
-	mockStorage.On("ListUsers", ctx, 10, 0).Return(users, nil)
+	mockStorage.On("ListUsers", ctx, "default", 10, 0).Return(users, nil)
 
 	result, err := authService.ListUsers(ctx, 10, 0)
 	assert.NoError(t, err)
@@ -547,11 +555,11 @@ func TestAuthService_UpdateUser(t *testing.T) {
 	}
 	authService, _ := NewAuthService(cfg, mockStorage, mockStorage)
 
-	ctx := context.Background()
+	ctx := context.WithValue(context.Background(), ContextKeyTenant, "default")
 	user := &User{ID: "1", Username: "user1", Roles: []string{"user"}, Disabled: false}
 
-	mockStorage.On("GetUserByID", ctx, "1").Return(user, nil)
-	mockStorage.On("UpdateUser", ctx, mock.MatchedBy(func(u *User) bool {
+	mockStorage.On("GetUserByID", ctx, "default", "1").Return(user, nil)
+	mockStorage.On("UpdateUser", ctx, "default", mock.MatchedBy(func(u *User) bool {
 		return u.ID == "1" && u.Disabled == true && len(u.Roles) == 1 && u.Roles[0] == "admin"
 	})).Return(nil)
 

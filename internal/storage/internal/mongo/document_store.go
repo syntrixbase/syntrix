@@ -40,12 +40,12 @@ func (m *documentStore) getCollection(nameOrPath string) *mongo.Collection {
 	return m.db.Collection(m.dataCollection)
 }
 
-func (m *documentStore) Get(ctx context.Context, fullpath string) (*types.Document, error) {
+func (m *documentStore) Get(ctx context.Context, tenant string, fullpath string) (*types.Document, error) {
 	collection := m.getCollection(fullpath)
-	id := types.CalculateID(fullpath)
+	id := types.CalculateTenantID(tenant, fullpath)
 
 	var doc types.Document
-	err := collection.FindOne(ctx, bson.M{"_id": id, "deleted": bson.M{"$ne": true}}).Decode(&doc)
+	err := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant, "deleted": bson.M{"$ne": true}}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, model.ErrNotFound
@@ -56,13 +56,14 @@ func (m *documentStore) Get(ctx context.Context, fullpath string) (*types.Docume
 	return &doc, nil
 }
 
-func (m *documentStore) Create(ctx context.Context, doc *types.Document) error {
+func (m *documentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
 	collection := m.getCollection(doc.Collection)
 
 	// Ensure derived fields are populated
 	if doc.CollectionHash == "" {
 		doc.CollectionHash = types.CalculateCollectionHash(doc.Collection)
 	}
+	doc.TenantID = tenant
 
 	// Ensure soft-delete fields are reset
 	doc.Deleted = false
@@ -70,12 +71,12 @@ func (m *documentStore) Create(ctx context.Context, doc *types.Document) error {
 	_, err := collection.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
 		// Check if the document exists but is soft-deleted
-		id := types.CalculateID(doc.Fullpath)
+		id := types.CalculateTenantID(tenant, doc.Fullpath)
 		var existingDoc types.Document
-		if findErr := collection.FindOne(ctx, bson.M{"_id": id}).Decode(&existingDoc); findErr == nil {
+		if findErr := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant}).Decode(&existingDoc); findErr == nil {
 			if existingDoc.Deleted {
 				// Overwrite the soft-deleted document
-				_, replaceErr := collection.ReplaceOne(ctx, bson.M{"_id": id}, doc)
+				_, replaceErr := collection.ReplaceOne(ctx, bson.M{"_id": id, "tenant_id": tenant}, doc)
 				return replaceErr
 			}
 		}
@@ -84,12 +85,13 @@ func (m *documentStore) Create(ctx context.Context, doc *types.Document) error {
 	return err
 }
 
-func (m *documentStore) Update(ctx context.Context, path string, data map[string]interface{}, precond model.Filters) error {
+func (m *documentStore) Update(ctx context.Context, tenant string, path string, data map[string]interface{}, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateID(path)
+	id := types.CalculateTenantID(tenant, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
+	filter["tenant_id"] = tenant
 	filter["deleted"] = bson.M{"$ne": true}
 
 	update := bson.M{
@@ -118,12 +120,13 @@ func (m *documentStore) Update(ctx context.Context, path string, data map[string
 	return nil
 }
 
-func (m *documentStore) Patch(ctx context.Context, path string, data map[string]interface{}, precond model.Filters) error {
+func (m *documentStore) Patch(ctx context.Context, tenant string, path string, data map[string]interface{}, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateID(path)
+	id := types.CalculateTenantID(tenant, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
+	filter["tenant_id"] = tenant
 	filter["deleted"] = bson.M{"$ne": true}
 
 	updates := bson.M{
@@ -146,7 +149,7 @@ func (m *documentStore) Patch(ctx context.Context, path string, data map[string]
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "tenant_id": tenant})
 		if count == 0 {
 			return model.ErrNotFound
 		}
@@ -156,12 +159,13 @@ func (m *documentStore) Patch(ctx context.Context, path string, data map[string]
 	return nil
 }
 
-func (m *documentStore) Delete(ctx context.Context, path string, precond model.Filters) error {
+func (m *documentStore) Delete(ctx context.Context, tenant string, path string, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateID(path)
+	id := types.CalculateTenantID(tenant, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
+	filter["tenant_id"] = tenant
 	filter["deleted"] = bson.M{"$ne": true}
 
 	update := bson.M{
@@ -182,14 +186,14 @@ func (m *documentStore) Delete(ctx context.Context, path string, precond model.F
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "tenant_id": tenant})
 		if count == 0 {
 			return model.ErrNotFound
 		}
 		// If document exists but matched count is 0, it means version conflict or already deleted
 		// We can check if it is already deleted
 		var doc types.Document
-		if err := collection.FindOne(ctx, bson.M{"_id": id}).Decode(&doc); err == nil {
+		if err := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant}).Decode(&doc); err == nil {
 			if doc.Deleted {
 				return model.ErrNotFound // Already deleted
 			}
@@ -200,10 +204,11 @@ func (m *documentStore) Delete(ctx context.Context, path string, precond model.F
 	return nil
 }
 
-func (m *documentStore) Query(ctx context.Context, q model.Query) ([]*types.Document, error) {
+func (m *documentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
 	collection := m.getCollection(q.Collection)
 
 	filter := makeFilterBSON(q.Filters)
+	filter["tenant_id"] = tenant
 	filter["collection_hash"] = types.CalculateCollectionHash(q.Collection)
 	if !q.ShowDeleted {
 		filter["deleted"] = bson.M{"$ne": true}
@@ -242,8 +247,26 @@ func (m *documentStore) Query(ctx context.Context, q model.Query) ([]*types.Docu
 	return docs, nil
 }
 
-func (m *documentStore) Watch(ctx context.Context, collectionName string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
+func (m *documentStore) Watch(ctx context.Context, tenant string, collectionName string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
 	pipeline := mongo.Pipeline{}
+
+	// Tenant filter
+	if tenant != "" {
+		tenantMatch := bson.D{
+			{Key: "$or", Value: bson.A{
+				bson.D{
+					{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"insert", "update", "replace"}}}},
+					{Key: "fullDocument.tenant_id", Value: tenant},
+				},
+				bson.D{
+					{Key: "operationType", Value: "delete"},
+					{Key: "documentKey._id", Value: bson.D{{Key: "$regex", Value: "^" + tenant + ":"}}},
+				},
+			}},
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: tenantMatch}})
+	}
+
 	if collectionName != "" {
 		// Filter by fullDocument.collection for insert/update/replace
 		// OR operationType is delete (since we can't filter deletes by collection with hash ID)
@@ -292,6 +315,19 @@ func (m *documentStore) Watch(ctx context.Context, collectionName string, resume
 				continue
 			}
 
+			// Client-side filtering for tenant (double check)
+			if tenant != "" {
+				if changeEvent.OperationType == "delete" {
+					if !strings.HasPrefix(changeEvent.DocumentKey.ID, tenant+":") {
+						continue
+					}
+				} else {
+					if changeEvent.FullDocument == nil || changeEvent.FullDocument.TenantID != tenant {
+						continue
+					}
+				}
+			}
+
 			// Client-side filtering for collection (double check)
 			if collectionName != "" && changeEvent.OperationType != "delete" {
 				if changeEvent.FullDocument == nil || changeEvent.FullDocument.Collection != collectionName {
@@ -299,8 +335,20 @@ func (m *documentStore) Watch(ctx context.Context, collectionName string, resume
 				}
 			}
 
+			// If tenant arg is empty, try to get it from document
+			eventTenant := tenant
+			if eventTenant == "" {
+				if changeEvent.FullDocument != nil {
+					eventTenant = changeEvent.FullDocument.TenantID
+				} else if strings.Contains(changeEvent.DocumentKey.ID, ":") {
+					parts := strings.SplitN(changeEvent.DocumentKey.ID, ":", 2)
+					eventTenant = parts[0]
+				}
+			}
+
 			evt := types.Event{
 				Id:          changeEvent.DocumentKey.ID,
+				TenantID:    eventTenant,
 				ResumeToken: changeEvent.ID,
 				// Timestamp: ... (ClusterTime is complex, let's use current time or parse it if needed)
 				Timestamp: time.Now().UnixNano(),
@@ -347,20 +395,18 @@ func (m *documentStore) Watch(ctx context.Context, collectionName string, resume
 func (s *documentStore) EnsureIndexes(ctx context.Context) error {
 	coll := s.getCollection("")
 
-	indexes := []string{"collection_hash"}
-	for _, field := range indexes {
-		_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-			Keys:    bson.D{{Key: field, Value: 1}},
-			Options: options.Index().SetUnique(false),
-		})
-		if err != nil {
-			return err
-		}
+	// (tenant_id, collection_hash)
+	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "tenant_id", Value: 1}, {Key: "collection_hash", Value: 1}},
+		Options: options.Index().SetUnique(false),
+	})
+	if err != nil {
+		return err
 	}
 
 	// Revocation TTL index (wait, revocation is separate now. But soft delete uses sys_expires_at)
 	// "sys_expires_at" is used for soft delete retention.
-	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "sys_expires_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
 	})

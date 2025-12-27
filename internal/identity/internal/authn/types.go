@@ -11,6 +11,7 @@ type (
 	Claims         = identtypes.Claims
 	TokenPair      = identtypes.TokenPair
 	LoginRequest   = identtypes.LoginRequest
+	SignupRequest  = identtypes.SignupRequest
 	RefreshRequest = identtypes.RefreshRequest
 )
 
@@ -20,6 +21,7 @@ const (
 	ContextKeyUsername = identtypes.ContextKeyUsername
 	ContextKeyRoles    = identtypes.ContextKeyRoles
 	ContextKeyClaims   = identtypes.ContextKeyClaims
+	ContextKeyTenant   = identtypes.ContextKeyTenant
 )
 
 // Keep storage alias for store interfaces.

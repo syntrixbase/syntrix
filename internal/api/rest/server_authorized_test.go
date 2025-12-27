@@ -36,7 +36,7 @@ func TestAuthorized_EvaluateError(t *testing.T) {
 	authzSvc := new(MockAuthzService)
 	s := &Handler{engine: engine, authz: authzSvc}
 
-	engine.On("GetDocument", mock.Anything, "col/doc").Return(nil, model.ErrNotFound)
+	engine.On("GetDocument", mock.Anything, "default", "col/doc").Return(nil, model.ErrNotFound)
 	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, errors.New("eval error"))
 
 	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
@@ -58,7 +58,7 @@ func TestAuthorized_Denied(t *testing.T) {
 	authzSvc := new(MockAuthzService)
 	s := &Handler{engine: engine, authz: authzSvc}
 
-	engine.On("GetDocument", mock.Anything, "col/doc").Return(nil, model.ErrNotFound)
+	engine.On("GetDocument", mock.Anything, "default", "col/doc").Return(nil, model.ErrNotFound)
 	authzSvc.On("Evaluate", mock.Anything, "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, nil)
 
 	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
@@ -78,7 +78,7 @@ func TestAuthorized_AllowedWithExistingAndNewData(t *testing.T) {
 	s := &Handler{engine: engine, authz: authzSvc}
 
 	existing := model.Document{"id": "123", "field": "old", "version": 1, "collection": "c"}
-	engine.On("GetDocument", mock.Anything, "col/doc").Return(existing, nil)
+	engine.On("GetDocument", mock.Anything, "default", "col/doc").Return(existing, nil)
 
 	authzSvc.On("Evaluate", mock.Anything, "col/doc", "update", mock.MatchedBy(func(req identity.AuthzRequest) bool {
 		if req.Auth.UID != "user-1" {

@@ -16,23 +16,25 @@ import (
 
 type fakeStorage struct{}
 
-func (f *fakeStorage) Get(ctx context.Context, path string) (*storage.Document, error) {
+func (f *fakeStorage) Get(ctx context.Context, tenant string, path string) (*storage.Document, error) {
 	return nil, nil
 }
-func (f *fakeStorage) Create(ctx context.Context, doc *storage.Document) error { return nil }
-func (f *fakeStorage) Update(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeStorage) Create(ctx context.Context, tenant string, doc *storage.Document) error {
 	return nil
 }
-func (f *fakeStorage) Patch(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeStorage) Update(ctx context.Context, tenant string, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeStorage) Delete(ctx context.Context, path string, pred model.Filters) error {
+func (f *fakeStorage) Patch(ctx context.Context, tenant string, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeStorage) Query(ctx context.Context, q model.Query) ([]*storage.Document, error) {
+func (f *fakeStorage) Delete(ctx context.Context, tenant string, path string, pred model.Filters) error {
+	return nil
+}
+func (f *fakeStorage) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.Document, error) {
 	return nil, nil
 }
-func (f *fakeStorage) Watch(ctx context.Context, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+func (f *fakeStorage) Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	ch := make(chan storage.Event, 1)
 	ch <- storage.Event{Id: collection + "/1", Type: storage.EventCreate}
 	close(ch)

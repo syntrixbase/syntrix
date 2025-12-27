@@ -35,7 +35,7 @@ func (s *TriggerService) LoadTriggers(triggers []*Trigger) {
 func (s *TriggerService) Watch(ctx context.Context, backend storage.DocumentStore) error {
 	// 1. Load Checkpoint
 	var resumeToken interface{}
-	checkpointDoc, err := backend.Get(ctx, "sys/checkpoints/trigger_evaluator")
+	checkpointDoc, err := backend.Get(ctx, "default", "sys/checkpoints/trigger_evaluator")
 	if err == nil && checkpointDoc != nil {
 		if token, ok := checkpointDoc.Data["token"]; ok {
 			resumeToken = token
@@ -48,7 +48,7 @@ func (s *TriggerService) Watch(ctx context.Context, backend storage.DocumentStor
 	}
 
 	// 2. Start Watch with Resume Token
-	stream, err := backend.Watch(ctx, "", resumeToken, storage.WatchOptions{IncludeBefore: true})
+	stream, err := backend.Watch(ctx, "default", "", resumeToken, storage.WatchOptions{IncludeBefore: true})
 	if err != nil {
 		return err
 	}
@@ -72,18 +72,18 @@ func (s *TriggerService) Watch(ctx context.Context, backend storage.DocumentStor
 			// Optimization: In high throughput, we should batch this or do it asynchronously.
 			// For now, we do it synchronously to ensure at-least-once delivery.
 			if evt.ResumeToken != nil {
-				err := backend.Update(ctx, "sys/checkpoints/trigger_evaluator", map[string]interface{}{
-					"token":      evt.ResumeToken,
+				err := backend.Update(ctx, "default", "sys/checkpoints/trigger_evaluator", map[string]interface{}{
+					"token":     evt.ResumeToken,
 					"updatedAt": time.Now().Unix(),
 				}, model.Filters{})
 				if err != nil {
 					// If it doesn't exist, create it
 					if err == model.ErrNotFound {
-						backend.Create(ctx, &storage.Document{
+						backend.Create(ctx, "default", &storage.Document{
 							Id:         "sys/checkpoints/trigger_evaluator",
 							Collection: "sys",
 							Data: map[string]interface{}{
-								"token":      evt.ResumeToken,
+								"token":     evt.ResumeToken,
 								"updatedAt": time.Now().Unix(),
 							},
 						})

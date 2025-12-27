@@ -17,20 +17,21 @@ func TestMongoBackend_SoftDelete(t *testing.T) {
 
 	ctx := context.Background()
 	docPath := "users/softdelete"
+	tenant := "default"
 
 	// 1. Create
-	doc := types.NewDocument(docPath, "users", map[string]interface{}{
+	doc := types.NewDocument(tenant, docPath, "users", map[string]interface{}{
 		"name": "To Be Deleted",
 	})
-	err := backend.Create(ctx, doc)
+	err := backend.Create(ctx, tenant, doc)
 	require.NoError(t, err)
 
 	// 2. Soft Delete
-	err = backend.Delete(ctx, docPath, nil)
+	err = backend.Delete(ctx, tenant, docPath, nil)
 	require.NoError(t, err)
 
 	// 3. Verify Get returns NotFound
-	_, err = backend.Get(ctx, docPath)
+	_, err = backend.Get(ctx, tenant, docPath)
 	assert.ErrorIs(t, err, model.ErrNotFound)
 
 	// 4. Verify Query excludes deleted by default
@@ -38,27 +39,27 @@ func TestMongoBackend_SoftDelete(t *testing.T) {
 		Collection: "users",
 		Filters:    model.Filters{},
 	}
-	docs, err := backend.Query(ctx, q)
+	docs, err := backend.Query(ctx, tenant, q)
 	require.NoError(t, err)
 	assert.Empty(t, docs)
 
 	// 5. Verify Query includes deleted when requested
 	q.ShowDeleted = true
-	docs, err = backend.Query(ctx, q)
+	docs, err = backend.Query(ctx, tenant, q)
 	require.NoError(t, err)
 	assert.Len(t, docs, 1)
 	assert.True(t, docs[0].Deleted)
 	assert.Empty(t, docs[0].Data) // Data should be cleared
 
 	// 6. Re-create (Revive)
-	newDoc := types.NewDocument(docPath, "users", map[string]interface{}{
+	newDoc := types.NewDocument(tenant, docPath, "users", map[string]interface{}{
 		"name": "Revived",
 	})
-	err = backend.Create(ctx, newDoc)
+	err = backend.Create(ctx, tenant, newDoc)
 	require.NoError(t, err)
 
 	// 7. Verify Get returns new doc
-	fetchedDoc, err := backend.Get(ctx, docPath)
+	fetchedDoc, err := backend.Get(ctx, tenant, docPath)
 	require.NoError(t, err)
 	assert.Equal(t, "Revived", fetchedDoc.Data["name"])
 	assert.False(t, fetchedDoc.Deleted)

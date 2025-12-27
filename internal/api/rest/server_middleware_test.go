@@ -35,7 +35,7 @@ func TestServeHTTP_CORSHeadersOnGET(t *testing.T) {
 }
 
 func TestProtected_NoAuth(t *testing.T) {
-	server := &Handler{}
+	server := &Handler{auth: new(MockAuthService)}
 
 	handler := server.protected(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
@@ -69,7 +69,7 @@ func TestProtected_WithAuth(t *testing.T) {
 }
 
 func TestMaybeProtected_NoAuth(t *testing.T) {
-	server := &Handler{}
+	server := &Handler{auth: new(MockAuthService)}
 
 	handler := server.maybeProtected(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)

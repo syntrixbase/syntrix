@@ -10,7 +10,7 @@ import (
 )
 
 func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
-	var req identity.LoginRequest
+	var req identity.SignupRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
@@ -18,6 +18,10 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignUp(r.Context(), req)
 	if err != nil {
+		if errors.Is(err, identity.ErrTenantRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -37,6 +41,10 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if errors.Is(err, identity.ErrInvalidCredentials) || errors.Is(err, identity.ErrAccountDisabled) || errors.Is(err, identity.ErrAccountLocked) {
 			http.Error(w, err.Error(), http.StatusUnauthorized)
+			return
+		}
+		if errors.Is(err, identity.ErrTenantRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)

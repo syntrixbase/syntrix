@@ -16,6 +16,7 @@ func TestMongoBackend_Query(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
+	tenant := "default"
 
 	// Seed data
 	users := []map[string]interface{}{
@@ -25,8 +26,8 @@ func TestMongoBackend_Query(t *testing.T) {
 	}
 
 	for _, u := range users {
-		doc := types.NewDocument("users/"+u["name"].(string), "users", u)
-		err := backend.Create(ctx, doc)
+		doc := types.NewDocument(tenant, "users/"+u["name"].(string), "users", u)
+		err := backend.Create(ctx, tenant, doc)
 		require.NoError(t, err)
 	}
 
@@ -37,7 +38,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "age", Op: ">", Value: 28},
 		},
 	}
-	docs, err := backend.Query(ctx, q1)
+	docs, err := backend.Query(ctx, tenant, q1)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2) // Alice (30), Charlie (35)
 
@@ -49,7 +50,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "active", Op: "==", Value: true},
 		},
 	}
-	docs, err = backend.Query(ctx, q2)
+	docs, err = backend.Query(ctx, tenant, q2)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2) // Alice, Bob
 
@@ -60,7 +61,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "age", Direction: "desc"},
 		},
 	}
-	docs, err = backend.Query(ctx, q3)
+	docs, err = backend.Query(ctx, tenant, q3)
 	require.NoError(t, err)
 	assert.Len(t, docs, 3)
 	assert.Equal(t, "Charlie", docs[0].Data["name"])
@@ -75,14 +76,14 @@ func TestMongoBackend_Query(t *testing.T) {
 		},
 		Limit: 2,
 	}
-	docs, err = backend.Query(ctx, q4)
+	docs, err = backend.Query(ctx, tenant, q4)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2)
 	assert.Equal(t, "Bob", docs[0].Data["name"])
 	assert.Equal(t, "Alice", docs[1].Data["name"])
 
 	// Test 5: Field mapping (version and custom) with multi-filter and IN
-	docs, err = backend.Query(ctx, model.Query{
+	docs, err = backend.Query(ctx, tenant, model.Query{
 		Collection: "users",
 		Filters: []model.Filter{
 			{Field: "version", Op: ">=", Value: int64(1)},

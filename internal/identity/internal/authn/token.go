@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/codetrek/syntrix/internal/config"
+	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -107,11 +108,18 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 	now := time.Now()
 	jti := uuid.New().String()
 
+	tenantID := user.TenantID
+	if tenantID == "" {
+		tenantID = model.DefaultTenantID
+	}
+
 	// Access Token
 	accessClaims := Claims{
 		Username: user.Username,
 		Roles:    user.Roles,
 		Disabled: user.Disabled,
+		TenantID: tenantID,
+		UserID:   user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
@@ -132,6 +140,8 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 	// Refresh Token
 	refreshClaims := Claims{
 		Username: user.Username,
+		TenantID: tenantID,
+		UserID:   user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
@@ -160,6 +170,8 @@ func (s *TokenService) GenerateSystemToken(serviceName string) (string, error) {
 
 	claims := Claims{
 		Username: "system:" + serviceName,
+		TenantID: model.DefaultTenantID,
+		UserID:   "system:" + serviceName,
 		Roles:    []string{"system", "service:" + serviceName},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "system:" + serviceName,
@@ -187,6 +199,9 @@ func (s *TokenService) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
+		if claims.TenantID == "" {
+			return nil, errors.New("missing tenant ID in token claims")
+		}
 		return claims, nil
 	}
 
