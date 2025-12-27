@@ -100,7 +100,7 @@ jobs:
                     split($1, parts, ":")
                     file = parts[1]
                     line = parts[2]
-                    printf "::error file=%s,line=%s::Function %s has coverage %s (< %s%%)\n", file, line, $2, $3, threshold_func
+                    printf "::error file=%s,line=%s::[%s] Function %s has coverage %s (< %s%%)\n", file, line, file, $2, $3, threshold_func
                     failed = 1
                 }
             }
