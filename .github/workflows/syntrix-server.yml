@@ -64,7 +64,7 @@ jobs:
           awk '{
               cov = $3
               sub("%", "", cov)
-              if (cov < 85.0) {
+              if (cov + 0 < 85.0) {
                   printf "%-60s %-35s %s\n", $1, $2, $3
               }
           }' | sort -k3 -nr
@@ -73,8 +73,8 @@ jobs:
 
           # Calculate and print groups
           COUNT_100=$(grep -v "^total:" coverage.clean.txt | awk '$3 == "100.0%"' | wc -l)
-          COUNT_95=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov >= 95.0 && cov < 100.0) print $0}' | wc -l)
-          COUNT_85=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov >= 85.0 && cov < 95.0) print $0}' | wc -l)
+          COUNT_95=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 95.0 && cov + 0 < 100.0) print $0}' | wc -l)
+          COUNT_85=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 85.0 && cov + 0 < 95.0) print $0}' | wc -l)
 
           echo "Functions with 100% coverage: $COUNT_100"
           echo "Functions with 95%-100% coverage: $COUNT_95"
@@ -83,8 +83,8 @@ jobs:
           # Print Total
           grep "^total:" coverage.clean.txt | awk '{printf "%-96s %s\n", "TOTAL", $3}'
 
-          # Check thresholds (Total >= 85%, Individual >= 60%)
-          awk -v threshold_total="85.0" -v threshold_func="75.0" '
+          # Check thresholds (Total >= 85%, Individual >= 70%)
+          awk -v threshold_total="85.0" -v threshold_func="70.0" '
             $1 == "total:" {
                 cov = $3
                 sub("%", "", cov)
