@@ -79,11 +79,11 @@ if [ "$MODE" == "func" ]; then
     echo "Functions with 95%-100% coverage: $COUNT_95_100"
     echo "Functions with 85%-95% coverage: $COUNT_85_95"
 
-    # Check for < 60% coverage
-    LOW_COVERAGE=$(echo "$FUNC_DATA" | grep -v "^total:" | awk '{cov=$3; sub("%", "", cov); if (cov < 60.0) printf "%-60s %-35s %s\n", $1, $2, $3}')
+    # Check for < 70% coverage
+    LOW_COVERAGE=$(echo "$FUNC_DATA" | grep -v "^total:" | awk '{cov=$3; sub("%", "", cov); if (cov + 0 < 70.0) printf "%-60s %-35s %s\n", $1, $2, $3}')
 
     if [ ! -z "$LOW_COVERAGE" ]; then
-        echo -e "\nCRITICAL: Functions with < 60% coverage:"
+        echo -e "\nCRITICAL: Functions with < 70% coverage:"
         echo "---------------------------------------------------------------------------------------------------------"
         echo "$LOW_COVERAGE"
         echo "---------------------------------------------------------------------------------------------------------"

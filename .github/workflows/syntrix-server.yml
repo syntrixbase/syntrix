@@ -56,16 +56,21 @@ jobs:
           sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt > coverage.clean.txt
 
           echo -e "\nFunction coverage details (excluding >= 85%):"
-          printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+          printf "%-70s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
           echo "---------------------------------------------------------------------------------------------------------"
 
           # Print functions with < 85% coverage, sorted
+          # Mark functions < 70% as error directly in the list
           grep -v "^total:" coverage.clean.txt | \
-          awk '{
+          awk -v threshold="70.0" '{
               cov = $3
               sub("%", "", cov)
               if (cov + 0 < 85.0) {
-                  printf "%-60s %-35s %s\n", $1, $2, $3
+                  if (cov + 0 < threshold + 0) {
+                      printf "::error::%-70s %-35s %s (CRITICAL < 70%%)\n", $1, $2, $3
+                  } else {
+                      printf "%-70s %-35s %s\n", $1, $2, $3
+                  }
               }
           }' | sort -k3 -nr
 
