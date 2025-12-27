@@ -50,30 +50,48 @@ if [ $EXIT_CODE -ne 0 ]; then
     exit $EXIT_CODE
 fi
 
-if [ "$MODE" == "func" ]; then
-    echo -e "\nFunction coverage details (excluding 100%):"
-    printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+echo -e "\nFunction coverage details (excluding >= 85%):"
+printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+echo "---------------------------------------------------------------------------------------------------------"
+
+FUNC_DATA=$(go tool cover -func="$COVERPROFILE" | sed 's/github.com\/codetrek\/syntrix\///g')
+
+go tool cover -html=$COVERPROFILE -o test_coverage.html
+
+# Print functions with < 85% coverage
+echo "$FUNC_DATA" | \
+    grep -v "^total:" | \
+    awk '{
+        cov = $3;
+        sub("%", "", cov);
+        if (cov + 0 < 85.0) {
+            printf "%-60s %-35s %s\n", $1, $2, $3
+        }
+    }' | \
+    sort -k3 -nr
+
+echo "---------------------------------------------------------------------------------------------------------"
+
+COUNT_100=$(echo "$FUNC_DATA" | awk '$3 == "100.0%"' | wc -l)
+COUNT_95_100=$(echo "$FUNC_DATA" | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 95.0 && cov + 0 < 100.0) print $0}' | wc -l)
+COUNT_85_95=$(echo "$FUNC_DATA" | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 85.0 && cov + 0 < 95.0) print $0}' | wc -l)
+COUNT_LE_85=$(echo "$FUNC_DATA" | awk '{cov=$3; sub("%", "", cov); if (cov + 0 < 85.0) print $0}' | wc -l)
+
+echo "Functions with 100% coverage: $COUNT_100"
+echo "Functions with 95%-100% coverage: $COUNT_95_100"
+echo "Functions with 85%-95% coverage: $COUNT_85_95"
+echo "Functions with <85% coverage: $COUNT_LE_85"
+
+# Check for < 70% coverage
+LOW_COVERAGE=$(echo "$FUNC_DATA" | grep -v "^total:" | awk '{cov=$3; sub("%", "", cov); if (cov + 0 < 70.0) printf "%-60s %-35s %s\n", $1, $2, $3}')
+
+if [ ! -z "$LOW_COVERAGE" ]; then
+    echo -e "\nCRITICAL: Functions with < 70% coverage:"
     echo "---------------------------------------------------------------------------------------------------------"
-
-    FUNC_DATA=$(go tool cover -func="$COVERPROFILE" | sed 's/github.com\/codetrek\/syntrix\///g')
-
-    echo "$FUNC_DATA" | \
-        grep -v "^total:" | \
-        awk '$3 != "100.0%" {printf "%-60s %-35s %s\n", $1, $2, $3}' | \
-        sort -k3 -nr
-
+    echo "$LOW_COVERAGE"
     echo "---------------------------------------------------------------------------------------------------------"
-
-    COUNT=$(echo "$FUNC_DATA" | awk '$3 == "100.0%"' | wc -l)
-    echo "Functions with 100% coverage: $COUNT"
-
-    echo "$FUNC_DATA" | \
-        grep "^total:" | \
-        awk '{printf "%-96s %s\n", "TOTAL", $3}'
-else
-    echo -e "\nCoverage summary:"
-    go tool cover -func="$COVERPROFILE" | tail -n 1 | awk '{printf "%-10s %-15s %s\n", $1, $2, $3}'
-
-    go tool cover -html=$COVERPROFILE -o test_coverage.html
-    echo -e "\nTo view HTML report: go tool cover -html=$COVERPROFILE"
 fi
+
+echo "$FUNC_DATA" | \
+    grep "^total:" | \
+    awk '{printf "%-96s %s\n", "TOTAL", $3}'
