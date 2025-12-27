@@ -166,6 +166,38 @@ func TestHub_Broadcast_WithFilter(t *testing.T) {
 	}
 }
 
+func TestHub_Broadcast_TenantFiltering(t *testing.T) {
+	hubCtx, hubCancel := context.WithCancel(context.Background())
+	defer hubCancel()
+
+	hub := NewHub()
+	go hub.Run(hubCtx)
+
+	clientT1 := &Client{hub: hub, send: make(chan BaseMessage, 5), subscriptions: map[string]Subscription{"s": {IncludeData: false}}, tenant: "t1", allowAllTenants: false}
+	clientT2 := &Client{hub: hub, send: make(chan BaseMessage, 5), subscriptions: map[string]Subscription{"s": {IncludeData: false}}, tenant: "t2", allowAllTenants: false}
+
+	hub.Register(clientT1)
+	hub.Register(clientT2)
+
+	time.Sleep(20 * time.Millisecond)
+
+	hub.Broadcast(storage.Event{TenantID: "t1", Type: storage.EventCreate, Id: "users/1"})
+
+	select {
+	case <-clientT1.send:
+		// ok
+	case <-time.After(200 * time.Millisecond):
+		t.Fatal("t1 client did not receive event")
+	}
+
+	select {
+	case msg := <-clientT2.send:
+		t.Fatalf("t2 client should not receive event, got %v", msg)
+	case <-time.After(50 * time.Millisecond):
+		// ok
+	}
+}
+
 func TestHub_Broadcast_WaitsForSlowClient(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()

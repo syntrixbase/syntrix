@@ -17,7 +17,12 @@ func (h *Handler) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := h.engine.GetDocument(r.Context(), path)
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	doc, err := h.engine.GetDocument(r.Context(), tenant, path)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
@@ -56,7 +61,12 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 	path := collection + "/" + data.GetID()
 
-	if err := h.engine.CreateDocument(r.Context(), data); err != nil {
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.engine.CreateDocument(r.Context(), tenant, data); err != nil {
 		if errors.Is(err, model.ErrExists) {
 			http.Error(w, "Document already exists", http.StatusConflict)
 		} else {
@@ -65,7 +75,7 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	doc, err := h.engine.GetDocument(r.Context(), path)
+	doc, err := h.engine.GetDocument(r.Context(), tenant, path)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -110,7 +120,12 @@ func (h *Handler) handleReplaceDocument(w http.ResponseWriter, r *http.Request) 
 	data.Doc.SetID(docID)
 	data.Doc.SetCollection(collection)
 
-	doc, err := h.engine.ReplaceDocument(r.Context(), data.Doc, data.IfMatch)
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	doc, err := h.engine.ReplaceDocument(r.Context(), tenant, data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, model.ErrPreconditionFailed) {
 			http.Error(w, "Version conflict", http.StatusPreconditionFailed)
@@ -162,7 +177,12 @@ func (h *Handler) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 
 	data.Doc.SetID(docID)
 	data.Doc.SetCollection(collection)
-	doc, err := h.engine.PatchDocument(r.Context(), data.Doc, data.IfMatch)
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	doc, err := h.engine.PatchDocument(r.Context(), tenant, data.Doc, data.IfMatch)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
@@ -198,7 +218,12 @@ func (h *Handler) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := h.engine.DeleteDocument(r.Context(), path, data.IfMatch); err != nil {
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	if err := h.engine.DeleteDocument(r.Context(), tenant, path, data.IfMatch); err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
 			return

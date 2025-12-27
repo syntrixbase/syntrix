@@ -80,6 +80,8 @@ func TestRealtime_FullFlow(t *testing.T) {
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
+	token := env.GetToken(t, "realtime-user", "user")
+
 	// Convert http URL to ws URL
 	wsURL := "ws" + strings.TrimPrefix(env.RealtimeURL, "http") + "/realtime/ws"
 
@@ -93,7 +95,7 @@ func TestRealtime_FullFlow(t *testing.T) {
 		ID:   "auth-1",
 		Type: TypeAuth,
 		Payload: mustMarshal(AuthPayload{
-			Token: "dummy-token",
+			Token: token,
 		}),
 	}
 	err = ws.WriteJSON(authMsg)
@@ -138,7 +140,12 @@ func TestRealtime_FullFlow(t *testing.T) {
 		"msg": "hello realtime",
 	}
 	body, _ := json.Marshal(docData)
-	resp, err := http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -187,7 +194,12 @@ func TestRealtime_FullFlow(t *testing.T) {
 		"msg": "should not receive",
 	}
 	body2, _ := json.Marshal(map[string]interface{}{"data": docData2})
-	resp, err = http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(body2))
+	req2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
+	require.NoError(t, err)
+	req2.Header.Set("Authorization", "Bearer "+token)
+	req2.Header.Set("Content-Type", "application/json")
+
+	resp, err = http.DefaultClient.Do(req2)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -202,12 +214,16 @@ func TestRealtime_SSE(t *testing.T) {
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
+	token := env.GetToken(t, "realtime-sse-user", "user")
+
 	collectionName := "sse_test_col"
 	sseURL := fmt.Sprintf("%s/realtime/sse?collection=%s", env.RealtimeURL, collectionName)
 
 	req, err := http.NewRequest("GET", sseURL, nil)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Origin", env.RealtimeURL)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)
@@ -237,7 +253,12 @@ func TestRealtime_SSE(t *testing.T) {
 		"msg": "hello sse",
 	}
 	body, _ := json.Marshal(docData)
-	apiResp, err := http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(body))
+	postReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	require.NoError(t, err)
+	postReq.Header.Set("Authorization", "Bearer "+token)
+	postReq.Header.Set("Content-Type", "application/json")
+
+	apiResp, err := http.DefaultClient.Do(postReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, apiResp.StatusCode)
 	apiResp.Body.Close()
@@ -282,6 +303,8 @@ func TestRealtime_Stream(t *testing.T) {
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
+	token := env.GetToken(t, "realtime-stream-user", "user")
+
 	collectionName := "stream_test_col"
 	wsURL := "ws" + strings.TrimPrefix(env.RealtimeURL, "http") + "/realtime/ws"
 
@@ -290,7 +313,11 @@ func TestRealtime_Stream(t *testing.T) {
 		"msg": "existing doc",
 	}
 	body, _ := json.Marshal(docData)
-	resp, err := http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(body))
+	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	require.NoError(t, err)
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(createReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -299,6 +326,19 @@ func TestRealtime_Stream(t *testing.T) {
 	ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	require.NoError(t, err, "Failed to connect to websocket")
 	defer ws.Close()
+
+	authMsg := BaseMessage{
+		ID:   "auth-stream",
+		Type: TypeAuth,
+		Payload: mustMarshal(AuthPayload{
+			Token: token,
+		}),
+	}
+	require.NoError(t, ws.WriteJSON(authMsg))
+
+	var authAck BaseMessage
+	require.NoError(t, ws.ReadJSON(&authAck))
+	assert.Equal(t, TypeAuthAck, authAck.Type)
 
 	// 2. Send Subscribe Request with Snapshot
 	streamID := "stream-1"
@@ -340,7 +380,11 @@ func TestRealtime_Stream(t *testing.T) {
 		"msg": "new doc",
 	}
 	body2, _ := json.Marshal(docData2)
-	resp2, err := http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(body2))
+	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
+	require.NoError(t, err)
+	createReq2.Header.Set("Authorization", "Bearer "+token)
+	createReq2.Header.Set("Content-Type", "application/json")
+	resp2, err := http.DefaultClient.Do(createReq2)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp2.StatusCode)
 	resp2.Body.Close()
@@ -378,6 +422,8 @@ func TestRealtime_Filtering(t *testing.T) {
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
+	token := env.GetToken(t, "realtime-filter-user", "user")
+
 	// Convert http URL to ws URL
 	wsURL := "ws" + strings.TrimPrefix(env.RealtimeURL, "http") + "/realtime/ws"
 
@@ -390,9 +436,7 @@ func TestRealtime_Filtering(t *testing.T) {
 	authMsg := BaseMessage{
 		ID:   "auth-1",
 		Type: TypeAuth,
-		Payload: mustMarshal(AuthPayload{
-			Token: "dummy-token",
-		}),
+		Payload: mustMarshal(AuthPayload{Token: token}),
 	}
 	err = ws.WriteJSON(authMsg)
 	require.NoError(t, err)
@@ -434,7 +478,11 @@ func TestRealtime_Filtering(t *testing.T) {
 		"age":  18,
 	}
 	bodyNoMatch, _ := json.Marshal(docNoMatch)
-	resp, err := http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(bodyNoMatch))
+	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyNoMatch))
+	require.NoError(t, err)
+	createReq.Header.Set("Authorization", "Bearer "+token)
+	createReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(createReq)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
@@ -467,7 +515,7 @@ func TestRealtime_Filtering(t *testing.T) {
 	authMsg2 := BaseMessage{
 		Type:    TypeAuth,
 		ID:      "auth-2",
-		Payload: mustMarshal(map[string]string{"token": "dummy-token"}),
+		Payload: mustMarshal(map[string]string{"token": token}),
 	}
 	err = ws.WriteJSON(authMsg2)
 	require.NoError(t, err)
@@ -499,7 +547,11 @@ func TestRealtime_Filtering(t *testing.T) {
 		"age":  25,
 	}
 	bodyMatch, _ := json.Marshal(docMatch)
-	resp, err = http.Post(fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), "application/json", bytes.NewBuffer(bodyMatch))
+	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyMatch))
+	require.NoError(t, err)
+	createReq2.Header.Set("Authorization", "Bearer "+token)
+	createReq2.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(createReq2)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()

@@ -63,6 +63,14 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.RLock()
 			for client := range h.clients {
 				client.mu.Lock()
+				msgTenant := determineEventTenant(message)
+				if !client.allowAllTenants {
+					if client.tenant == "" || msgTenant == "" || msgTenant != client.tenant {
+						client.mu.Unlock()
+						continue
+					}
+				}
+
 				for subID, sub := range client.subscriptions {
 					// Determine collection from event
 					eventCollection := ""
@@ -122,6 +130,19 @@ func (h *Hub) Run(ctx context.Context) {
 			h.mu.RUnlock()
 		}
 	}
+}
+
+func determineEventTenant(evt storage.Event) string {
+    if evt.TenantID != "" {
+        return evt.TenantID
+    }
+    if evt.Document != nil && evt.Document.TenantID != "" {
+        return evt.Document.TenantID
+    }
+    if evt.Before != nil && evt.Before.TenantID != "" {
+        return evt.Before.TenantID
+    }
+    return ""
 }
 
 func (h *Hub) Broadcast(event storage.Event) {

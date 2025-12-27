@@ -208,6 +208,7 @@ func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
 
 	// Login
 	loginBody := map[string]string{
+		"tenant":   "default",
 		"username": uid,
 		"password": "password",
 	}
@@ -236,7 +237,7 @@ func (e *ServiceEnv) createUserInDB(t *testing.T, username, role string) {
 	coll := client.Database(e.DBName).Collection("users")
 
 	// Check if exists
-	count, err := coll.CountDocuments(ctx, bson.M{"username": username})
+	count, err := coll.CountDocuments(ctx, bson.M{"username": username, "tenant_id": "default"})
 	require.NoError(t, err)
 	if count > 0 {
 		return
@@ -248,6 +249,7 @@ func (e *ServiceEnv) createUserInDB(t *testing.T, username, role string) {
 
 	_, err = coll.InsertOne(ctx, bson.M{
 		"_id":           uuid.New().String(),
+		"tenant_id":     "default",
 		"username":      username,
 		"password_hash": string(hash),
 		"password_algo": "bcrypt",

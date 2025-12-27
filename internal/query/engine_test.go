@@ -19,11 +19,11 @@ func TestEngine_GetDocument(t *testing.T) {
 	ctx := context.Background()
 
 	storedDoc := &storage.Document{Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 2, UpdatedAt: 5, CreatedAt: 4}
-	mockStorage.On("Get", ctx, "test/1").Return(storedDoc, nil)
+	mockStorage.On("Get", ctx, "default", "test/1").Return(storedDoc, nil)
 
 	expectedDoc := model.Document{"foo": "bar", "id": "1", "collection": "test", "version": int64(2), "updatedAt": int64(5), "createdAt": int64(4)}
 
-	doc, err := engine.GetDocument(ctx, "test/1")
+	doc, err := engine.GetDocument(ctx, "default", "test/1")
 	assert.NoError(t, err)
 	assert.Equal(t, expectedDoc, doc)
 	mockStorage.AssertExpectations(t)
@@ -42,7 +42,7 @@ func TestEngine_CreateDocument(t *testing.T) {
 		"updatedAt":  int64(1234),
 		"createdAt":  int64(5678),
 	}
-	mockStorage.On("Create", ctx, mock.MatchedBy(func(d *storage.Document) bool {
+	mockStorage.On("Create", ctx, "default", mock.MatchedBy(func(d *storage.Document) bool {
 		_, hasVersion := d.Data["version"]
 		_, hasUpdated := d.Data["updatedAt"]
 		_, hasCreated := d.Data["createdAt"]
@@ -51,7 +51,7 @@ func TestEngine_CreateDocument(t *testing.T) {
 		return d.Fullpath == "test/1" && d.Collection == "test" && d.Data["foo"] == "bar" && !hasVersion && !hasUpdated && !hasCreated && !hasCollection
 	})).Return(nil)
 
-	err := engine.CreateDocument(ctx, doc)
+	err := engine.CreateDocument(ctx, "default", doc)
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
@@ -62,9 +62,11 @@ func TestEngine_CreateDocument_StorageError(t *testing.T) {
 	ctx := context.Background()
 
 	doc := model.Document{"id": "1", "collection": "test", "foo": "bar"}
-	mockStorage.On("Create", ctx, mock.AnythingOfType("*types.Document")).Return(assert.AnError)
+	mockStorage.On("Create", ctx, "default", mock.MatchedBy(func(d *storage.Document) bool {
+		return d.Fullpath == "test/1" && d.Collection == "test" && d.Data["foo"] == "bar"
+	})).Return(assert.AnError)
 
-	err := engine.CreateDocument(ctx, doc)
+	err := engine.CreateDocument(ctx, "default", doc)
 	assert.Error(t, err)
 	mockStorage.AssertExpectations(t)
 }
@@ -74,12 +76,12 @@ func TestEngine_CreateDocument_InvalidInputs(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil doc", func(t *testing.T) {
-		err := engine.CreateDocument(ctx, nil)
+		err := engine.CreateDocument(ctx, "default", nil)
 		assert.Error(t, err)
 	})
 
 	t.Run("missing collection", func(t *testing.T) {
-		err := engine.CreateDocument(ctx, model.Document{"id": "1"})
+		err := engine.CreateDocument(ctx, "default", model.Document{"id": "1"})
 		assert.Error(t, err)
 	})
 }
@@ -96,8 +98,8 @@ func TestEngine_ReplaceDocument_Create(t *testing.T) {
 	data.SetCollection(collection)
 
 	// Simulate Not Found -> Create
-	mockStorage.On("Get", ctx, path).Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", ctx, mock.MatchedBy(func(d *storage.Document) bool {
+	mockStorage.On("Get", ctx, "default", path).Return(nil, model.ErrNotFound)
+	mockStorage.On("Create", ctx, "default", mock.MatchedBy(func(d *storage.Document) bool {
 		_, hasVersion := d.Data["version"]
 		_, hasUpdated := d.Data["updatedAt"]
 		_, hasCreated := d.Data["createdAt"]
@@ -106,7 +108,7 @@ func TestEngine_ReplaceDocument_Create(t *testing.T) {
 		return d.Fullpath == path && d.Collection == collection && d.Data["foo"] == "bar" && !hasVersion && !hasUpdated && !hasCreated && !hasCollection
 	})).Return(nil)
 
-	doc, err := engine.ReplaceDocument(ctx, data, model.Filters{})
+	doc, err := engine.ReplaceDocument(ctx, "default", data, model.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, "1", doc.GetID())
 	assert.Equal(t, collection, doc.GetCollection())
@@ -125,10 +127,12 @@ func TestEngine_ReplaceDocument_CreateError(t *testing.T) {
 	data.SetID("1")
 	data.SetCollection(collection)
 
-	mockStorage.On("Get", ctx, path).Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", ctx, mock.AnythingOfType("*types.Document")).Return(assert.AnError)
+	mockStorage.On("Get", ctx, "default", path).Return(nil, model.ErrNotFound)
+	mockStorage.On("Create", ctx, "default", mock.MatchedBy(func(d *storage.Document) bool {
+		return d.Fullpath == "test/1" && d.Collection == "test" && d.Data["foo"] == "bar"
+	})).Return(assert.AnError)
 
-	doc, err := engine.ReplaceDocument(ctx, data, model.Filters{})
+	doc, err := engine.ReplaceDocument(ctx, "default", data, model.Filters{})
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	mockStorage.AssertExpectations(t)
@@ -147,12 +151,12 @@ func TestEngine_ReplaceDocument_Update(t *testing.T) {
 	existingDoc := &storage.Document{Id: path, Version: 1, Data: map[string]interface{}{"foo": "old"}}
 
 	// Simulate Found -> Update -> Get
-	mockStorage.On("Get", ctx, path).Return(existingDoc, nil).Once()
+	mockStorage.On("Get", ctx, "default", path).Return(existingDoc, nil).Once()
 	expectedUpdate := map[string]interface{}{"foo": "new", "id": "1"}
-	mockStorage.On("Update", ctx, path, expectedUpdate, model.Filters{}).Return(nil)
-	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: expectedUpdate}, nil).Once()
+	mockStorage.On("Update", ctx, "default", path, expectedUpdate, model.Filters{}).Return(nil)
+	mockStorage.On("Get", ctx, "default", path).Return(&storage.Document{Id: path, Version: 2, Data: expectedUpdate}, nil).Once()
 
-	doc, err := engine.ReplaceDocument(ctx, data, model.Filters{})
+	doc, err := engine.ReplaceDocument(ctx, "default", data, model.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, "new", doc["foo"])
 	assert.Equal(t, int64(2), doc["version"])
@@ -170,10 +174,10 @@ func TestEngine_ReplaceDocument_UpdateError(t *testing.T) {
 	data.SetID("1")
 	data.SetCollection(collection)
 
-	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 1, Data: map[string]interface{}{"foo": "old"}}, nil).Once()
-	mockStorage.On("Update", ctx, path, map[string]interface{}(data), model.Filters{}).Return(assert.AnError)
+	mockStorage.On("Get", ctx, "default", path).Return(&storage.Document{Id: path, Version: 1, Data: map[string]interface{}{"foo": "old"}}, nil).Once()
+	mockStorage.On("Update", ctx, "default", path, map[string]interface{}(data), model.Filters{}).Return(assert.AnError)
 
-	doc, err := engine.ReplaceDocument(ctx, data, model.Filters{})
+	doc, err := engine.ReplaceDocument(ctx, "default", data, model.Filters{})
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	mockStorage.AssertExpectations(t)
@@ -184,19 +188,19 @@ func TestEngine_ReplaceDocument_InvalidInputs(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil doc", func(t *testing.T) {
-		res, err := engine.ReplaceDocument(ctx, nil, nil)
+		res, err := engine.ReplaceDocument(ctx, "default", nil, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
 
 	t.Run("missing collection", func(t *testing.T) {
-		res, err := engine.ReplaceDocument(ctx, model.Document{"id": "1"}, nil)
+		res, err := engine.ReplaceDocument(ctx, "default", model.Document{"id": "1"}, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
 
 	t.Run("missing id", func(t *testing.T) {
-		res, err := engine.ReplaceDocument(ctx, model.Document{"collection": "c"}, nil)
+		res, err := engine.ReplaceDocument(ctx, "default", model.Document{"collection": "c"}, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
@@ -215,12 +219,12 @@ func TestEngine_PatchDocument(t *testing.T) {
 	patchFields := map[string]interface{}{"bar": "baz"}
 
 	// Expect Patch call with user fields only (system fields stripped)
-	mockStorage.On("Patch", ctx, path, patchFields, model.Filters{}).Return(nil).Once()
+	mockStorage.On("Patch", ctx, "default", path, patchFields, model.Filters{}).Return(nil).Once()
 
 	expectedMergedData := map[string]interface{}{"foo": "old", "bar": "baz"}
-	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: expectedMergedData}, nil).Once()
+	mockStorage.On("Get", ctx, "default", path).Return(&storage.Document{Id: path, Version: 2, Data: expectedMergedData}, nil).Once()
 
-	doc, err := engine.PatchDocument(ctx, patchData, model.Filters{})
+	doc, err := engine.PatchDocument(ctx, "default", patchData, model.Filters{})
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMergedData["foo"], doc["foo"])
 	assert.Equal(t, expectedMergedData["bar"], doc["bar"])
@@ -237,9 +241,9 @@ func TestEngine_PatchDocument_Error(t *testing.T) {
 	patchData.SetID("1")
 	patchData.SetCollection("test")
 
-	mockStorage.On("Patch", ctx, path, map[string]interface{}{"bar": "baz"}, model.Filters{}).Return(assert.AnError).Once()
+	mockStorage.On("Patch", ctx, "default", path, map[string]interface{}{"bar": "baz"}, model.Filters{}).Return(assert.AnError).Once()
 
-	doc, err := engine.PatchDocument(ctx, patchData, model.Filters{})
+	doc, err := engine.PatchDocument(ctx, "default", patchData, model.Filters{})
 	assert.Error(t, err)
 	assert.Nil(t, doc)
 	mockStorage.AssertExpectations(t)
@@ -250,19 +254,19 @@ func TestEngine_PatchDocument_InvalidInputs(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("nil doc", func(t *testing.T) {
-		res, err := engine.PatchDocument(ctx, nil, nil)
+		res, err := engine.PatchDocument(ctx, "default", nil, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
 
 	t.Run("missing collection", func(t *testing.T) {
-		res, err := engine.PatchDocument(ctx, model.Document{"id": "1"}, nil)
+		res, err := engine.PatchDocument(ctx, "default", model.Document{"id": "1"}, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
 
 	t.Run("missing id", func(t *testing.T) {
-		res, err := engine.PatchDocument(ctx, model.Document{"collection": "c"}, nil)
+		res, err := engine.PatchDocument(ctx, "default", model.Document{"collection": "c"}, nil)
 		assert.Error(t, err)
 		assert.Nil(t, res)
 	})
@@ -285,11 +289,11 @@ func TestEngine_ReplaceDocument_IfMatch(t *testing.T) {
 	}
 
 	// Simulate Found -> Update -> Get
-	mockStorage.On("Get", ctx, path).Return(existingDoc, nil).Once()
-	mockStorage.On("Update", ctx, path, map[string]interface{}(data), filters).Return(nil)
-	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: data}, nil).Once()
+	mockStorage.On("Get", ctx, "default", path).Return(existingDoc, nil).Once()
+	mockStorage.On("Update", ctx, "default", path, map[string]interface{}(data), filters).Return(nil)
+	mockStorage.On("Get", ctx, "default", path).Return(&storage.Document{Id: path, Version: 2, Data: data}, nil).Once()
 
-	doc, err := engine.ReplaceDocument(ctx, data, filters)
+	doc, err := engine.ReplaceDocument(ctx, "default", data, filters)
 	assert.NoError(t, err)
 	assert.Equal(t, "new", doc["foo"])
 	assert.Equal(t, int64(2), doc["version"])
@@ -312,12 +316,12 @@ func TestEngine_PatchDocument_IfMatch(t *testing.T) {
 
 	// Expect Patch call with filters
 	patchFields := map[string]interface{}{"bar": "baz"}
-	mockStorage.On("Patch", ctx, path, patchFields, filters).Return(nil).Once()
+	mockStorage.On("Patch", ctx, "default", path, patchFields, filters).Return(nil).Once()
 
 	expectedMergedData := map[string]interface{}{"foo": "old", "bar": "baz"}
-	mockStorage.On("Get", ctx, path).Return(&storage.Document{Id: path, Version: 2, Data: expectedMergedData}, nil).Once()
+	mockStorage.On("Get", ctx, "default", path).Return(&storage.Document{Id: path, Version: 2, Data: expectedMergedData}, nil).Once()
 
-	doc, err := engine.PatchDocument(ctx, patchData, filters)
+	doc, err := engine.PatchDocument(ctx, "default", patchData, filters)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedMergedData["foo"], doc["foo"])
 	assert.Equal(t, expectedMergedData["bar"], doc["bar"])
@@ -340,11 +344,11 @@ func TestEngine_Pull(t *testing.T) {
 		{Id: "test/2", UpdatedAt: 102},
 	}
 
-	mockStorage.On("Query", ctx, mock.MatchedBy(func(q model.Query) bool {
+	mockStorage.On("Query", ctx, "default", mock.MatchedBy(func(q model.Query) bool {
 		return q.Collection == "test" && q.Limit == 10 && q.Filters[0].Value == int64(100)
 	})).Return(expectedDocs, nil)
 
-	resp, err := engine.Pull(ctx, req)
+	resp, err := engine.Pull(ctx, "default", req)
 	assert.NoError(t, err)
 	assert.Equal(t, expectedDocs, resp.Documents)
 	assert.Equal(t, int64(102), resp.Checkpoint)
@@ -366,10 +370,10 @@ func TestEngine_Push(t *testing.T) {
 
 	// Simulate Get -> Update (Success)
 	existingDoc := &storage.Document{Id: "test/1", Version: 1}
-	mockStorage.On("Get", ctx, "test/1").Return(existingDoc, nil)
-	mockStorage.On("Update", ctx, "test/1", doc.Data, model.Filters{}).Return(nil)
+	mockStorage.On("Get", ctx, "default", "test/1").Return(existingDoc, nil)
+	mockStorage.On("Update", ctx, "default", "test/1", doc.Data, model.Filters{}).Return(nil)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	assert.Empty(t, resp.Conflicts)
 	mockStorage.AssertExpectations(t)
@@ -383,10 +387,10 @@ func TestEngine_Push_CreateWhenNotFound(t *testing.T) {
 	doc := &storage.Document{Id: "test/2", Fullpath: "test/2", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 0}
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc}}}
 
-	mockStorage.On("Get", ctx, "test/2").Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", ctx, doc).Return(nil)
+	mockStorage.On("Get", ctx, "default", "test/2").Return(nil, model.ErrNotFound)
+	mockStorage.On("Create", ctx, "default", doc).Return(nil)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	assert.Empty(t, resp.Conflicts)
 	mockStorage.AssertExpectations(t)
@@ -400,10 +404,10 @@ func TestEngine_Push_CreateConflictOnInsert(t *testing.T) {
 	doc := &storage.Document{Id: "test/3", Fullpath: "test/3", Collection: "test", Data: map[string]interface{}{"x": 1}}
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc}}}
 
-	mockStorage.On("Get", ctx, "test/3").Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", ctx, doc).Return(assert.AnError)
+	mockStorage.On("Get", ctx, "default", "test/3").Return(nil, model.ErrNotFound)
+	mockStorage.On("Create", ctx, "default", doc).Return(assert.AnError)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	if assert.Len(t, resp.Conflicts, 1) {
 		assert.Equal(t, doc, resp.Conflicts[0])
@@ -421,9 +425,9 @@ func TestEngine_Push_VersionConflictOnUpdate(t *testing.T) {
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc, BaseVersion: &base}}}
 
 	existing := &storage.Document{Id: "test/4", Version: 2}
-	mockStorage.On("Get", ctx, "test/4").Return(existing, nil)
+	mockStorage.On("Get", ctx, "default", "test/4").Return(existing, nil)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	if assert.Len(t, resp.Conflicts, 1) {
 		assert.Equal(t, existing, resp.Conflicts[0])
@@ -441,11 +445,11 @@ func TestEngine_Push_DeleteConflict(t *testing.T) {
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc, BaseVersion: &base}}}
 
 	existing := &storage.Document{Id: "test/5", Version: 1}
-	mockStorage.On("Get", ctx, "test/5").Return(existing, nil)
-	mockStorage.On("Delete", ctx, "test/5", model.Filters{{Field: "version", Op: "==", Value: base}}).Return(model.ErrPreconditionFailed)
-	mockStorage.On("Get", ctx, "test/5").Return(&storage.Document{Id: "test/5", Version: 2}, nil)
+	mockStorage.On("Get", ctx, "default", "test/5").Return(existing, nil)
+	mockStorage.On("Delete", ctx, "default", "test/5", model.Filters{{Field: "version", Op: "==", Value: base}}).Return(model.ErrPreconditionFailed)
+	mockStorage.On("Get", ctx, "default", "test/5").Return(&storage.Document{Id: "test/5", Version: 2}, nil)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	if assert.Len(t, resp.Conflicts, 1) {
 		assert.Equal(t, existing, resp.Conflicts[0])
@@ -461,10 +465,10 @@ func TestEngine_Push_DeleteNotFoundAllowed(t *testing.T) {
 	doc := &storage.Document{Id: "test/6", Fullpath: "test/6", Collection: "test", Deleted: true}
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc}}}
 
-	mockStorage.On("Get", ctx, "test/6").Return(&storage.Document{Id: "test/6", Version: 1}, nil)
-	mockStorage.On("Delete", ctx, "test/6", model.Filters{}).Return(model.ErrNotFound)
+	mockStorage.On("Get", ctx, "default", "test/6").Return(&storage.Document{Id: "test/6", Version: 1}, nil)
+	mockStorage.On("Delete", ctx, "default", "test/6", model.Filters{}).Return(model.ErrNotFound)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.NoError(t, err)
 	assert.Empty(t, resp.Conflicts)
 	mockStorage.AssertExpectations(t)
@@ -478,10 +482,10 @@ func TestEngine_Push_UpdateGenericError(t *testing.T) {
 	doc := &storage.Document{Id: "test/7", Fullpath: "test/7", Collection: "test", Data: map[string]interface{}{"a": 1}}
 	req := storage.ReplicationPushRequest{Collection: "test", Changes: []storage.ReplicationPushChange{{Doc: doc}}}
 
-	mockStorage.On("Get", ctx, "test/7").Return(&storage.Document{Id: "test/7", Version: 1}, nil)
-	mockStorage.On("Update", ctx, "test/7", doc.Data, model.Filters{}).Return(assert.AnError)
+	mockStorage.On("Get", ctx, "default", "test/7").Return(&storage.Document{Id: "test/7", Version: 1}, nil)
+	mockStorage.On("Update", ctx, "default", "test/7", doc.Data, model.Filters{}).Return(assert.AnError)
 
-	resp, err := engine.Push(ctx, req)
+	resp, err := engine.Push(ctx, "default", req)
 	assert.Error(t, err)
 	assert.Nil(t, resp)
 	mockStorage.AssertExpectations(t)
@@ -495,9 +499,9 @@ func TestEngine_DeleteDocument(t *testing.T) {
 	path := "test/1"
 
 	t.Run("success", func(t *testing.T) {
-		mockStorage.On("Delete", ctx, path, model.Filters(nil)).Return(nil).Once()
+		mockStorage.On("Delete", ctx, "default", path, model.Filters(nil)).Return(nil).Once()
 
-		err := engine.DeleteDocument(ctx, path, nil)
+		err := engine.DeleteDocument(ctx, "default", path, nil)
 		assert.NoError(t, err)
 		mockStorage.AssertExpectations(t)
 	})
@@ -505,9 +509,9 @@ func TestEngine_DeleteDocument(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Delete", ctx, path, model.Filters(nil)).Return(model.ErrNotFound).Once()
+		mockStorage.On("Delete", ctx, "default", path, model.Filters(nil)).Return(model.ErrNotFound).Once()
 
-		err := engine.DeleteDocument(ctx, path, nil)
+		err := engine.DeleteDocument(ctx, "default", path, nil)
 		assert.ErrorIs(t, err, model.ErrNotFound)
 		mockStorage.AssertExpectations(t)
 	})
@@ -523,9 +527,9 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 		{Fullpath: "c/1", Collection: "c", Data: map[string]interface{}{"foo": "bar"}, Version: 2, UpdatedAt: 10, CreatedAt: 5},
 	}
 
-	mockStorage.On("Query", ctx, q).Return(stored, nil)
+	mockStorage.On("Query", ctx, "default", q).Return(stored, nil)
 
-	res, err := engine.ExecuteQuery(ctx, q)
+	res, err := engine.ExecuteQuery(ctx, "default", q)
 	assert.NoError(t, err)
 	assert.Equal(t, model.Document{"foo": "bar", "id": "1", "collection": "c", "version": int64(2), "updatedAt": int64(10), "createdAt": int64(5)}, res[0])
 	mockStorage.AssertExpectations(t)
@@ -537,9 +541,9 @@ func TestEngine_ExecuteQuery_Error(t *testing.T) {
 	ctx := context.Background()
 
 	q := model.Query{Collection: "c"}
-	mockStorage.On("Query", ctx, q).Return(nil, assert.AnError)
+	mockStorage.On("Query", ctx, "default", q).Return(nil, assert.AnError)
 
-	res, err := engine.ExecuteQuery(ctx, q)
+	res, err := engine.ExecuteQuery(ctx, "default", q)
 	assert.Error(t, err)
 	assert.Nil(t, res)
 	mockStorage.AssertExpectations(t)
@@ -553,7 +557,7 @@ func TestEngine_WatchCollection_StatusError(t *testing.T) {
 
 	engine := &Engine{client: server.Client(), cspURL: server.URL}
 
-	_, err := engine.WatchCollection(context.Background(), "users")
+	_, err := engine.WatchCollection(context.Background(), "default", "users")
 	assert.Error(t, err)
 }
 
@@ -566,7 +570,7 @@ func TestEngine_WatchCollection_BadJSON(t *testing.T) {
 
 	engine := &Engine{client: server.Client(), cspURL: server.URL}
 
-	ch, err := engine.WatchCollection(context.Background(), "users")
+	ch, err := engine.WatchCollection(context.Background(), "default", "users")
 	assert.NoError(t, err)
 
 	_, ok := <-ch
@@ -582,7 +586,7 @@ func TestEngine_WatchCollection_Success(t *testing.T) {
 
 	engine := &Engine{client: server.Client(), cspURL: server.URL}
 
-	ch, err := engine.WatchCollection(context.Background(), "users")
+	ch, err := engine.WatchCollection(context.Background(), "default", "users")
 	assert.NoError(t, err)
 
 	evt, ok := <-ch

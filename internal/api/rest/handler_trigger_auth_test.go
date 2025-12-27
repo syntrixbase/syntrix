@@ -23,46 +23,46 @@ type MockAuthStorage struct {
 	mock.Mock
 }
 
-func (m *MockAuthStorage) CreateUser(ctx context.Context, user *storage.User) error {
-	return m.Called(ctx, user).Error(0)
+func (m *MockAuthStorage) CreateUser(ctx context.Context, tenant string, user *storage.User) error {
+	return m.Called(ctx, tenant, user).Error(0)
 }
-func (m *MockAuthStorage) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
-	args := m.Called(ctx, username)
+func (m *MockAuthStorage) GetUserByUsername(ctx context.Context, tenant string, username string) (*storage.User, error) {
+	args := m.Called(ctx, tenant, username)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
-func (m *MockAuthStorage) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
-	args := m.Called(ctx, id)
+func (m *MockAuthStorage) GetUserByID(ctx context.Context, tenant string, id string) (*storage.User, error) {
+	args := m.Called(ctx, tenant, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
-func (m *MockAuthStorage) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	return m.Called(ctx, id, lastLogin, attempts, lockoutUntil).Error(0)
+func (m *MockAuthStorage) UpdateUserLoginStats(ctx context.Context, tenant string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	return m.Called(ctx, tenant, id, lastLogin, attempts, lockoutUntil).Error(0)
 }
-func (m *MockAuthStorage) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
-	return m.Called(ctx, jti, expiresAt).Error(0)
+func (m *MockAuthStorage) RevokeToken(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+	return m.Called(ctx, tenant, jti, expiresAt).Error(0)
 }
-func (m *MockAuthStorage) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
-	return m.Called(ctx, jti, expiresAt).Error(0)
+func (m *MockAuthStorage) RevokeTokenImmediate(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+	return m.Called(ctx, tenant, jti, expiresAt).Error(0)
 }
-func (m *MockAuthStorage) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
-	args := m.Called(ctx, jti, gracePeriod)
+func (m *MockAuthStorage) IsRevoked(ctx context.Context, tenant string, jti string, gracePeriod time.Duration) (bool, error) {
+	args := m.Called(ctx, tenant, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
-func (m *MockAuthStorage) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
-	args := m.Called(ctx, limit, offset)
+func (m *MockAuthStorage) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*storage.User, error) {
+	args := m.Called(ctx, tenant, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*storage.User), args.Error(1)
 }
 
-func (m *MockAuthStorage) UpdateUser(ctx context.Context, user *storage.User) error {
-	return m.Called(ctx, user).Error(0)
+func (m *MockAuthStorage) UpdateUser(ctx context.Context, tenant string, user *storage.User) error {
+	return m.Called(ctx, tenant, user).Error(0)
 }
 func (m *MockAuthStorage) EnsureIndexes(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
@@ -95,10 +95,10 @@ func TestTriggerAuth(t *testing.T) {
 	// Actually, for this test, we just need A valid token.
 	// Let's use SignUp with mocked storage.
 
-	mockStorage.On("GetUserByUsername", mock.Anything, "user1").Return(nil, identity.ErrUserNotFound)
-	mockStorage.On("CreateUser", mock.Anything, mock.Anything).Return(nil)
+	mockStorage.On("GetUserByUsername", mock.Anything, "default", "user1").Return(nil, identity.ErrUserNotFound)
+	mockStorage.On("CreateUser", mock.Anything, "default", mock.Anything).Return(nil)
 
-	userToken, err := authService.SignUp(context.Background(), identity.LoginRequest{Username: "user1", Password: "password12345"})
+	userToken, err := authService.SignUp(context.Background(), identity.SignupRequest{TenantID: "default", Username: "user1", Password: "password12345"})
 	if err != nil {
 		t.Fatalf("Failed to sign up: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestTriggerAuth(t *testing.T) {
 
 	t.Run("Accept System Token", func(t *testing.T) {
 		// Mock Engine call because auth should pass
-		mockEngine.On("GetDocument", mock.Anything, "test/doc").Return(model.Document{"id": "doc1", "collection": "test", "version": int64(1)}, nil).Once()
+		mockEngine.On("GetDocument", mock.Anything, "default", "test/doc").Return(model.Document{"id": "doc1", "collection": "test", "version": int64(1)}, nil).Once()
 
 		reqBody := `{"paths": ["test/doc"]}`
 		req := httptest.NewRequest("POST", "/trigger/v1/get", bytes.NewBufferString(reqBody))

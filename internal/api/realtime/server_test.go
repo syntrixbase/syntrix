@@ -12,7 +12,7 @@ import (
 
 func TestNewServer(t *testing.T) {
 	mockQS := new(MockQueryService)
-	server := NewServer(mockQS, "docs")
+	server := NewServer(mockQS, "docs", nil, Config{})
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.hub)
 	assert.Equal(t, "docs", server.dataCollection)
@@ -20,7 +20,7 @@ func TestNewServer(t *testing.T) {
 
 func TestServer_HandleWS(t *testing.T) {
 	mockQS := new(MockQueryService)
-	server := NewServer(mockQS, "docs")
+	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
@@ -44,7 +44,7 @@ func TestServer_HandleWS(t *testing.T) {
 
 func TestServer_HandleSSE(t *testing.T) {
 	mockQS := new(MockQueryService)
-	server := NewServer(mockQS, "docs")
+	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())

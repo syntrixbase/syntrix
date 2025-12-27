@@ -31,6 +31,8 @@ func TestReplication_FullFlow(t *testing.T) {
 	req, err := http.NewRequest("GET", sseURL, nil)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Origin", env.RealtimeURL)
 
 	client := &http.Client{}
 	resp, err := client.Do(req)

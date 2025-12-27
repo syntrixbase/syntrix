@@ -2,11 +2,13 @@ package mongo
 
 import (
 	"context"
+	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
 
 	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/zeebo/blake3"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -25,12 +27,13 @@ func NewUserStore(db *mongo.Database, collectionName string) types.UserStore {
 	}
 }
 
-func (s *userStore) CreateUser(ctx context.Context, user *types.User) error {
+func (s *userStore) CreateUser(ctx context.Context, tenant string, user *types.User) error {
 	// Ensure username is lowercase
 	user.Username = strings.ToLower(user.Username)
+	user.TenantID = tenant
 
 	// Check if user exists
-	filter := bson.M{"username": user.Username}
+	filter := bson.M{"tenant_id": tenant, "username": user.Username}
 	count, err := s.coll.CountDocuments(ctx, filter)
 	if err != nil {
 		return err
@@ -39,13 +42,22 @@ func (s *userStore) CreateUser(ctx context.Context, user *types.User) error {
 		return types.ErrUserExists
 	}
 
+	// Generate ID if empty
+	if user.ID == "" {
+		// Use tenant:hash(username)
+		hash := blake3.Sum256([]byte(user.Username))
+		user.ID = tenant + ":" + hex.EncodeToString(hash[:16])
+	} else if !strings.HasPrefix(user.ID, tenant+":") {
+		user.ID = tenant + ":" + user.ID
+	}
+
 	_, err = s.coll.InsertOne(ctx, user)
 	return err
 }
 
-func (s *userStore) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
+func (s *userStore) GetUserByUsername(ctx context.Context, tenant string, username string) (*types.User, error) {
 	username = strings.ToLower(username)
-	filter := bson.M{"username": username}
+	filter := bson.M{"tenant_id": tenant, "username": username}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -58,8 +70,8 @@ func (s *userStore) GetUserByUsername(ctx context.Context, username string) (*ty
 	return &user, nil
 }
 
-func (s *userStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
-	filter := bson.M{"_id": id}
+func (s *userStore) GetUserByID(ctx context.Context, tenant string, id string) (*types.User, error) {
+	filter := bson.M{"_id": id, "tenant_id": tenant}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -72,8 +84,8 @@ func (s *userStore) GetUserByID(ctx context.Context, id string) (*types.User, er
 	return &user, nil
 }
 
-func (s *userStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	filter := bson.M{"_id": id}
+func (s *userStore) UpdateUserLoginStats(ctx context.Context, tenant string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	filter := bson.M{"_id": id, "tenant_id": tenant}
 	update := bson.M{
 		"$set": bson.M{
 			"last_login_at":  lastLogin,
@@ -85,9 +97,9 @@ func (s *userStore) UpdateUserLoginStats(ctx context.Context, id string, lastLog
 	return err
 }
 
-func (s *userStore) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
+func (s *userStore) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*types.User, error) {
 	opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(offset))
-	cursor, err := s.coll.Find(ctx, bson.M{}, opts)
+	cursor, err := s.coll.Find(ctx, bson.M{"tenant_id": tenant}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -100,13 +112,13 @@ func (s *userStore) ListUsers(ctx context.Context, limit int, offset int) ([]*ty
 	return users, nil
 }
 
-func (s *userStore) UpdateUser(ctx context.Context, user *types.User) error {
-	filter := bson.M{"_id": user.ID}
+func (s *userStore) UpdateUser(ctx context.Context, tenant string, user *types.User) error {
+	filter := bson.M{"_id": user.ID, "tenant_id": tenant}
 	update := bson.M{
 		"$set": bson.M{
-			"roles":      user.Roles,
-			"disabled":   user.Disabled,
-			"updatedAt":  time.Now(),
+			"roles":     user.Roles,
+			"disabled":  user.Disabled,
+			"updatedAt": time.Now(),
 		},
 	}
 	_, err := s.coll.UpdateOne(ctx, filter, update)
@@ -114,9 +126,9 @@ func (s *userStore) UpdateUser(ctx context.Context, user *types.User) error {
 }
 
 func (s *userStore) EnsureIndexes(ctx context.Context) error {
-	// User username unique index
+	// User username unique index per tenant
 	_, err := s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "username", Value: 1}},
+		Keys:    bson.D{{Key: "tenant_id", Value: 1}, {Key: "username", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	return err

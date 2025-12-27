@@ -21,11 +21,32 @@ type Handler struct {
 }
 
 func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *Handler {
+	if auth == nil {
+		panic("AuthN service cannot be nil")
+	}
+
 	return &Handler{
 		engine: engine,
 		auth:   auth,
 		authz:  authz,
 	}
+}
+
+func (h *Handler) getTenantId(r *http.Request) (string, error) {
+	if tenant, ok := r.Context().Value(ContextKeyTenant).(string); ok && tenant != "" {
+		return tenant, nil
+	}
+
+	return "", identity.ErrTenantRequired
+}
+
+func (h *Handler) tenantOrError(w http.ResponseWriter, r *http.Request) (string, bool) {
+	tenant, err := h.getTenantId(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnauthorized)
+		return "", false
+	}
+	return tenant, true
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -68,18 +89,12 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 }
 
 func (h *Handler) protected(handler http.HandlerFunc) http.HandlerFunc {
-	if h.auth == nil {
-		return handler
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.auth.Middleware(handler).ServeHTTP(w, r)
 	}
 }
 
 func (h *Handler) maybeProtected(handler http.HandlerFunc) http.HandlerFunc {
-	if h.auth == nil {
-		return handler
-	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.auth.MiddlewareOptional(handler).ServeHTTP(w, r)
 	}
@@ -116,7 +131,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		// Fetch Existing Resource if needed
 		var existingRes *identity.Resource
 		if action != "create" {
-			doc, err := h.engine.GetDocument(r.Context(), path)
+			doc, err := h.engine.GetDocument(r.Context(), "default", path)
 			if err == nil {
 				data := model.Document{}
 				for k, v := range doc {

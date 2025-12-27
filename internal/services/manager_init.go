@@ -134,7 +134,12 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 	}
 
 	// Always initialize realtime server as part of gateway
-	m.rtServer = realtime.NewServer(queryService, m.cfg.Storage.Topology.Document.DataCollection)
+	rtCfg := realtime.Config{
+		AllowedOrigins: m.cfg.Gateway.Realtime.AllowedOrigins,
+		AllowDevOrigin: m.cfg.Gateway.Realtime.AllowDevOrigin,
+		EnableAuth:     m.cfg.Gateway.Realtime.EnableAuth,
+	}
+	m.rtServer = realtime.NewServer(queryService, m.cfg.Storage.Topology.Document.DataCollection, m.authService, rtCfg)
 
 	apiServer := api.NewServer(queryService, m.authService, authzEngine, m.rtServer)
 	m.servers = append(m.servers, &http.Server{

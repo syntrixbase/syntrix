@@ -180,7 +180,7 @@ match:
 				Auth: Auth{UID: "user1"},
 			},
 			mockSetup: func(m *MockQueryService) {
-				m.On("GetDocument", mock.Anything, "users/user1").Return(model.Document{
+				m.On("GetDocument", mock.Anything, "default", "users/user1").Return(model.Document{
 					"id":         "user1",
 					"collection": "users",
 					"role":       "admin",
@@ -197,7 +197,7 @@ match:
 				Auth: Auth{UID: "user2"},
 			},
 			mockSetup: func(m *MockQueryService) {
-				m.On("GetDocument", mock.Anything, "users/user2").Return(model.Document{
+				m.On("GetDocument", mock.Anything, "default", "users/user2").Return(model.Document{
 					"id":         "user2",
 					"collection": "users",
 					"role":       "user",

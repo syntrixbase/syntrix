@@ -14,6 +14,7 @@ var (
 	ErrAccountDisabled    = authn.ErrAccountDisabled
 	ErrAccountLocked      = authn.ErrAccountLocked
 	ErrInvalidToken       = authn.ErrInvalidToken
+	ErrTenantRequired     = authn.ErrTenantRequired
 	ErrUserNotFound       = authn.ErrUserNotFound
 	ErrUserExists         = authn.ErrUserExists
 )

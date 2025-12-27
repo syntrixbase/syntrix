@@ -40,8 +40,8 @@ func NewSingleDocumentRouter(store types.DocumentStore) types.DocumentRouter {
 	return &SingleDocumentRouter{store: store}
 }
 
-func (r *SingleDocumentRouter) Select(_ types.OpKind) types.DocumentStore {
-	return r.store
+func (r *SingleDocumentRouter) Select(tenant string, op types.OpKind) (types.DocumentStore, error) {
+	return r.store, nil
 }
 
 // SingleUserRouter routes all operations to a single UserStore
@@ -53,8 +53,8 @@ func NewSingleUserRouter(store types.UserStore) types.UserRouter {
 	return &SingleUserRouter{store: store}
 }
 
-func (r *SingleUserRouter) Select(_ types.OpKind) types.UserStore {
-	return r.store
+func (r *SingleUserRouter) Select(tenant string, op types.OpKind) (types.UserStore, error) {
+	return r.store, nil
 }
 
 // SingleRevocationRouter routes all operations to a single TokenRevocationStore
@@ -66,6 +66,6 @@ func NewSingleRevocationRouter(store types.TokenRevocationStore) types.Revocatio
 	return &SingleRevocationRouter{store: store}
 }
 
-func (r *SingleRevocationRouter) Select(_ types.OpKind) types.TokenRevocationStore {
-	return r.store
+func (r *SingleRevocationRouter) Select(tenant string, op types.OpKind) (types.TokenRevocationStore, error) {
+	return r.store, nil
 }

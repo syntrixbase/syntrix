@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"github.com/codetrek/syntrix/internal/identity/types"
 	"github.com/codetrek/syntrix/pkg/model"
 )
 
@@ -35,10 +36,14 @@ type ReplicaPullResponse struct {
 }
 
 type UpdateDocumentRequest struct {
-	Doc     model.Document  `json:"doc"`
-	IfMatch model.Filters `json:"ifMatch,omitempty"`
+	Doc     model.Document `json:"doc"`
+	IfMatch model.Filters  `json:"ifMatch,omitempty"`
 }
 
 type DeleteDocumentRequest struct {
 	IfMatch model.Filters `json:"ifMatch,omitempty"`
 }
+
+var (
+	ContextKeyTenant = types.ContextKeyTenant
+)

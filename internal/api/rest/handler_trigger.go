@@ -40,9 +40,14 @@ func (h *Handler) handleTriggerGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
 	docs := make([]map[string]interface{}, 0, len(req.Paths))
 	for _, path := range req.Paths {
-		doc, err := h.engine.GetDocument(r.Context(), path)
+		doc, err := h.engine.GetDocument(r.Context(), tenantID, path)
 		if err != nil {
 			if err == model.ErrNotFound {
 				continue // Skip not found documents? Or return null? Docs say "documents" list, implying found ones.
@@ -70,6 +75,11 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenantID, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
 	for _, op := range req.Writes {
 		collection, id, err := splitPath(op.Path)
 		if err != nil {
@@ -85,7 +95,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			doc.SetCollection(collection)
 			doc.SetID(id)
-			err = h.engine.CreateDocument(r.Context(), doc)
+			err = h.engine.CreateDocument(r.Context(), tenantID, doc)
 		case "update":
 			patchDoc := model.Document(op.Data)
 			if patchDoc == nil {
@@ -93,7 +103,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			patchDoc.SetCollection(collection)
 			patchDoc.SetID(id)
-			_, err = h.engine.PatchDocument(r.Context(), patchDoc, op.IfMatch)
+			_, err = h.engine.PatchDocument(r.Context(), tenantID, patchDoc, op.IfMatch)
 		case "replace":
 			replaceDoc := model.Document(op.Data)
 			if replaceDoc == nil {
@@ -101,9 +111,9 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			replaceDoc.SetCollection(collection)
 			replaceDoc.SetID(id)
-			_, err = h.engine.ReplaceDocument(r.Context(), replaceDoc, op.IfMatch)
+			_, err = h.engine.ReplaceDocument(r.Context(), tenantID, replaceDoc, op.IfMatch)
 		case "delete":
-			err = h.engine.DeleteDocument(r.Context(), op.Path, op.IfMatch)
+			err = h.engine.DeleteDocument(r.Context(), tenantID, op.Path, op.IfMatch)
 		default:
 			http.Error(w, "invalid write type", http.StatusBadRequest)
 			return

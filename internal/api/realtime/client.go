@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/codetrek/syntrix/internal/query"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/pkg/model"
@@ -76,6 +78,8 @@ func safeCheckOrigin(r *http.Request) bool {
 type Client struct {
 	hub          *Hub
 	queryService query.Service
+	auth         identity.AuthN
+	cfg          Config
 
 	// The websocket connection.
 	conn *websocket.Conn
@@ -86,6 +90,10 @@ type Client struct {
 	// Subscriptions
 	subscriptions map[string]Subscription
 	mu            sync.Mutex
+
+	tenant          string
+	authenticated   bool
+	allowAllTenants bool
 }
 
 type Subscription struct {
@@ -134,9 +142,12 @@ func (c *Client) handleMessage(msg BaseMessage) {
 	log.Printf("[Info][WS] Received message type=%s id=%s", msg.Type, msg.ID)
 	switch msg.Type {
 	case TypeAuth:
-		// TODO: Implement auth
-		c.send <- BaseMessage{ID: msg.ID, Type: TypeAuthAck}
+		c.handleAuth(msg)
 	case TypeSubscribe:
+		if !c.authenticated {
+			c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "auth required"})}
+			return
+		}
 		var payload SubscribePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			log.Printf("[Error][WS] unmarshalling subscribe payload: %v", err)
@@ -179,7 +190,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			resp, err := c.queryService.Pull(ctx, req)
+			resp, err := c.queryService.Pull(ctx, c.tenant, req)
 			if err != nil {
 				log.Printf("[Error][WS] Snapshot pull failed: %v", err)
 				return
@@ -202,6 +213,10 @@ func (c *Client) handleMessage(msg BaseMessage) {
 			}
 		}
 	case TypeUnsubscribe:
+		if !c.authenticated {
+			c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "auth required"})}
+			return
+		}
 		var payload UnsubscribePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 			log.Printf("[Warning][WS] unmarshalling unsubscribe payload: %v", err)
@@ -213,6 +228,31 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		log.Printf("[Info][WS] Unsubscribed id=%s", payload.ID)
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeUnsubscribeAck}
 	}
+}
+
+func (c *Client) handleAuth(msg BaseMessage) {
+	if c.auth == nil {
+		c.authenticated = true
+		c.send <- BaseMessage{ID: msg.ID, Type: TypeAuthAck}
+		return
+	}
+
+	var payload AuthPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "invalid_auth", Message: "invalid payload"})}
+		return
+	}
+
+	claims, err := c.auth.ValidateToken(payload.Token)
+	if err != nil || claims == nil || claims.TenantID == "" {
+		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "invalid token"})}
+		return
+	}
+
+	c.tenant = claims.TenantID
+	c.allowAllTenants = hasSystemRoleFromClaims(claims)
+	c.authenticated = true
+	c.send <- BaseMessage{ID: msg.ID, Type: TypeAuthAck}
 }
 
 // writePump pumps messages from the hub to the websocket connection.
@@ -249,8 +289,116 @@ func (c *Client) writePump() {
 	}
 }
 
+func tenantFromContext(ctx context.Context) (string, bool) {
+	if ctx == nil {
+		return "", false
+	}
+	tenant, _ := ctx.Value(identity.ContextKeyTenant).(string)
+	if tenant == "" {
+		if claims, ok := ctx.Value(identity.ContextKeyClaims).(*identity.Claims); ok && claims != nil {
+			tenant = claims.TenantID
+		}
+	}
+	allowAll := hasSystemRole(ctx)
+	return tenant, allowAll
+}
+
+func tenantFromContextMust(ctx context.Context, w http.ResponseWriter) string {
+	tenant, _ := tenantFromContext(ctx)
+	if tenant == "" {
+		http.Error(w, "tenant required", http.StatusUnauthorized)
+	}
+	return tenant
+}
+
+func hasSystemRole(ctx context.Context) bool {
+	if ctx == nil {
+		return false
+	}
+	if roles, ok := ctx.Value(identity.ContextKeyRoles).([]string); ok {
+		for _, r := range roles {
+			if strings.EqualFold(r, "system") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func hasSystemRoleFromClaims(claims *identity.Claims) bool {
+	if claims == nil {
+		return false
+	}
+	for _, r := range claims.Roles {
+		if strings.EqualFold(r, "system") {
+			return true
+		}
+	}
+	return false
+}
+
+func tokenFromQuery(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	q := r.URL.Query()
+	if v := q.Get("access_token"); v != "" {
+		return v
+	}
+	if v := q.Get("token"); v != "" {
+		return v
+	}
+	return ""
+}
+
+func hasCredentials(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	return r.Header.Get("Authorization") != ""
+}
+
+func checkAllowedOrigin(origin string, reqHost string, cfg Config, credentialed bool) error {
+	if origin == "" {
+		if credentialed && !cfg.AllowDevOrigin {
+			return errors.New("origin required when using credentials")
+		}
+		return nil
+	}
+
+	parsed, err := url.Parse(origin)
+	if err != nil {
+		return errors.New("origin not allowed")
+	}
+
+	// Allow same host origin
+	originHost := strings.Split(parsed.Host, ":")[0]
+	reqHostPart := strings.Split(reqHost, ":")[0]
+	if strings.EqualFold(originHost, reqHostPart) {
+		return nil
+	}
+
+	if cfg.AllowDevOrigin {
+		if originHost == "localhost" || originHost == "127.0.0.1" {
+			return nil
+		}
+	}
+
+	trimmedOrigin := strings.TrimRight(origin, "/")
+	for _, allowed := range cfg.AllowedOrigins {
+		if allowed == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimRight(allowed, "/"), trimmedOrigin) {
+			return nil
+		}
+	}
+
+	return errors.New("origin not allowed")
+}
+
 // ServeReplicationStream handles websocket requests from the peer.
-func ServeWs(hub *Hub, qs query.Service, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(r.Context())
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -258,7 +406,22 @@ func ServeWs(hub *Hub, qs query.Service, w http.ResponseWriter, r *http.Request)
 		log.Println(err)
 		return
 	}
-	client := &Client{hub: hub, queryService: qs, conn: conn, send: make(chan BaseMessage, 256), subscriptions: make(map[string]Subscription)}
+
+	tenant, allowAll := tenantFromContext(r.Context())
+
+	client := &Client{
+		hub:             hub,
+		queryService:    qs,
+		auth:            auth,
+		cfg:             cfg,
+		conn:            conn,
+		send:            make(chan BaseMessage, 256),
+		subscriptions:   make(map[string]Subscription),
+		tenant:          tenant,
+		authenticated:   !cfg.EnableAuth || tenant != "",
+		allowAllTenants: allowAll || !cfg.EnableAuth,
+	}
+
 	if !client.hub.Register(client) {
 		conn.Close()
 		return
@@ -271,8 +434,19 @@ func ServeWs(hub *Hub, qs query.Service, w http.ResponseWriter, r *http.Request)
 }
 
 // ServeSSE handles Server-Sent Events requests.
-func ServeSSE(hub *Hub, qs query.Service, w http.ResponseWriter, r *http.Request) {
+func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+
+	if tokenFromQuery(r) != "" {
+		http.Error(w, "Query token not allowed", http.StatusUnauthorized)
+		return
+	}
+
+	origin := r.Header.Get("Origin")
+	if err := checkAllowedOrigin(origin, r.Host, cfg, hasCredentials(r)); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -283,15 +457,36 @@ func ServeSSE(hub *Hub, qs query.Service, w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+	if origin != "" {
+		w.Header().Set("Access-Control-Allow-Origin", origin)
+	}
+	w.Header().Set("Access-Control-Allow-Credentials", "true")
+	w.Header().Add("Vary", "Origin")
 
 	// Create client without websocket connection
+	tenant := ""
+	allowAll := false
+	if cfg.EnableAuth {
+		tenant, allowAll = tenantFromContext(ctx)
+		if tenant == "" {
+			http.Error(w, "tenant required", http.StatusUnauthorized)
+			return
+		}
+	} else {
+		tenant, allowAll = tenantFromContext(ctx)
+	}
+
 	client := &Client{
-		hub:           hub,
-		queryService:  qs,
-		conn:          nil,
-		send:          make(chan BaseMessage, 256),
-		subscriptions: make(map[string]Subscription),
+		hub:             hub,
+		queryService:    qs,
+		auth:            auth,
+		cfg:             cfg,
+		conn:            nil,
+		send:            make(chan BaseMessage, 256),
+		subscriptions:   make(map[string]Subscription),
+		tenant:          tenant,
+		authenticated:   !cfg.EnableAuth || tenant != "",
+		allowAllTenants: allowAll || !cfg.EnableAuth,
 	}
 
 	// Handle initial subscription from query params

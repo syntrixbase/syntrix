@@ -7,6 +7,7 @@ type (
 	Claims         = types.Claims
 	TokenPair      = types.TokenPair
 	LoginRequest   = types.LoginRequest
+	SignupRequest  = types.SignupRequest
 	RefreshRequest = types.RefreshRequest
 	RuleSet        = types.RuleSet
 	MatchBlock     = types.MatchBlock
@@ -22,4 +23,5 @@ const (
 	ContextKeyUsername = types.ContextKeyUsername
 	ContextKeyRoles    = types.ContextKeyRoles
 	ContextKeyClaims   = types.ContextKeyClaims
+	ContextKeyTenant   = types.ContextKeyTenant
 )

@@ -80,10 +80,17 @@ func TestIntegration_ForceQueryClient_API(t *testing.T) {
 	env := setupServiceEnvWithOptions(t, "", []func(*config.Config){cfgMod}, []func(*services.Options){optsMod})
 	defer env.Cancel()
 
+	token := env.GetToken(t, "force-user", "user")
+
 	// Perform create through API; should hit stubbed query service via query.NewClient
 	body := map[string]interface{}{"msg": "hello"}
 	b, _ := json.Marshal(body)
-	resp, err := http.Post(env.APIURL+"/api/v1/forced", "application/json", bytes.NewBuffer(b))
+	req, err := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/forced", bytes.NewBuffer(b))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()

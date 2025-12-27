@@ -18,31 +18,31 @@ import (
 
 type mockQueryForClient struct{}
 
-func (m *mockQueryForClient) GetDocument(ctx context.Context, path string) (model.Document, error) {
+func (m *mockQueryForClient) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryForClient) CreateDocument(ctx context.Context, doc model.Document) error {
+func (m *mockQueryForClient) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
 	return nil
 }
-func (m *mockQueryForClient) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryForClient) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryForClient) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryForClient) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryForClient) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
+func (m *mockQueryForClient) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
 	return nil
 }
-func (m *mockQueryForClient) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
+func (m *mockQueryForClient) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryForClient) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
+func (m *mockQueryForClient) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
 	return nil, nil
 }
-func (m *mockQueryForClient) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (m *mockQueryForClient) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return &storage.ReplicationPullResponse{Documents: []*storage.Document{{Fullpath: "users/1", Collection: "users", Data: map[string]interface{}{"foo": "bar"}}}}, nil
 }
-func (m *mockQueryForClient) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (m *mockQueryForClient) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 
@@ -99,7 +99,7 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := &mockQueryForClient{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, w, r)
+		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 
@@ -128,7 +128,7 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := &mockQueryForClient{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, w, r)
+		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 
@@ -263,7 +263,7 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 
 	qs := &mockQueryForClient{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, w, r)
+		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 

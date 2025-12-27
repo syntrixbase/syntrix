@@ -46,7 +46,7 @@ func (m *MockAdminAuthService) SignIn(ctx context.Context, req identity.LoginReq
 	return args.Get(0).(*identity.TokenPair), args.Error(1)
 }
 
-func (m *MockAdminAuthService) SignUp(ctx context.Context, req identity.LoginRequest) (*identity.TokenPair, error) {
+func (m *MockAdminAuthService) SignUp(ctx context.Context, req identity.SignupRequest) (*identity.TokenPair, error) {
 	args := m.Called(ctx, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
