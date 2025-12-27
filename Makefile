@@ -53,7 +53,7 @@ run-cli: build
 	@$(CLI_BIN)
 
 test:
-	@echo "Running tests..."
+	@echo Running tests...
 	@go test ./... -count=1
 
 ifeq ($(OS),Windows_NT)
@@ -65,11 +65,11 @@ else
 endif
 
 coverage:
-	@echo "Running tests with coverage..."
+	@echo Running tests with coverage...
 	@$(COVERAGE_CMD)
 
 func-coverage:
-	@echo "Running tests with function coverage..."
+	@echo Running tests with function coverage...
 	@$(FUNC_COVERAGE_CMD)
 
 clean:
