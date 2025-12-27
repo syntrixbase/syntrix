@@ -27,8 +27,13 @@ func TestSplitDocumentRouter(t *testing.T) {
 	replica := &mockDocStore{id: "replica"}
 	router := NewSplitDocumentRouter(primary, replica)
 
-	assert.Equal(t, replica, router.Select(types.OpRead))
-	assert.Equal(t, primary, router.Select(types.OpWrite))
+	s, err := router.Select("default", types.OpRead)
+	assert.NoError(t, err)
+	assert.Equal(t, replica, s)
+
+	s, err = router.Select("default", types.OpWrite)
+	assert.NoError(t, err)
+	assert.Equal(t, primary, s)
 }
 
 func TestSplitUserRouter(t *testing.T) {
@@ -36,8 +41,13 @@ func TestSplitUserRouter(t *testing.T) {
 	replica := &mockUserStore{id: "replica"}
 	router := NewSplitUserRouter(primary, replica)
 
-	assert.Equal(t, replica, router.Select(types.OpRead))
-	assert.Equal(t, primary, router.Select(types.OpWrite))
+	s, err := router.Select("default", types.OpRead)
+	assert.NoError(t, err)
+	assert.Equal(t, replica, s)
+
+	s, err = router.Select("default", types.OpWrite)
+	assert.NoError(t, err)
+	assert.Equal(t, primary, s)
 }
 
 func TestSplitRevocationRouter(t *testing.T) {
@@ -45,6 +55,11 @@ func TestSplitRevocationRouter(t *testing.T) {
 	replica := &mockRevStore{id: "replica"}
 	router := NewSplitRevocationRouter(primary, replica)
 
-	assert.Equal(t, replica, router.Select(types.OpRead))
-	assert.Equal(t, primary, router.Select(types.OpWrite))
+	s, err := router.Select("default", types.OpRead)
+	assert.NoError(t, err)
+	assert.Equal(t, replica, s)
+
+	s, err = router.Select("default", types.OpWrite)
+	assert.NoError(t, err)
+	assert.Equal(t, primary, s)
 }

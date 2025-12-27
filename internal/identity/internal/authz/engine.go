@@ -303,7 +303,7 @@ func (l *authzLib) exists(arg ref.Val) ref.Val {
 	}
 	internalPath := stripDatabasePrefix(string(path))
 
-	_, err := l.query.GetDocument(context.Background(), internalPath)
+	_, err := l.query.GetDocument(context.Background(), "default", internalPath)
 	if err == model.ErrNotFound {
 		return types.Bool(false)
 	}
@@ -320,7 +320,7 @@ func (l *authzLib) get(arg ref.Val) ref.Val {
 	}
 	internalPath := stripDatabasePrefix(string(path))
 
-	doc, err := l.query.GetDocument(context.Background(), internalPath)
+	doc, err := l.query.GetDocument(context.Background(), "default", internalPath)
 	if err != nil {
 		return types.NewErr("error in get: %v", err)
 	}

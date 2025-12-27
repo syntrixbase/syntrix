@@ -13,3 +13,5 @@ Index of task planning documents for Syntrix.
 - [003.2025-12-25-storage-decoupling.md](003.2025-12-25-storage-decoupling.md) — Storage Abstraction & Provider Plan. Status: Completed.
 - [004.2025-12-25-storage-architecture-implementation.md](004.2025-12-25-storage-architecture-implementation.md) — Storage Architecture Implementation. Status: Completed.
 - [005.2025-12-25-identity-alignment.md](005.2025-12-25-identity-alignment.md) — Identity Alignment (AuthN/AuthZ). Status: In Progress.
+- [006.2025-12-26-multi-tenant-storage-plan.md](006.2025-12-26-multi-tenant-storage-plan.md) — Multi-Tenant Storage Implementation Plan. Status: Planned.
+- [007.2025-12-26-realtime-auth-plan.md](007.2025-12-26-realtime-auth-plan.md) — Realtime Auth (WS/SSE). Status: In Progress.

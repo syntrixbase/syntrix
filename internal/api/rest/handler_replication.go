@@ -47,9 +47,14 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
 	log.Printf("[Info][Pull] collection: %s, checkpoint: %d, limit: %d", req.Collection, req.Checkpoint, req.Limit)
 
-	resp, err := h.engine.Pull(r.Context(), req)
+	resp, err := h.engine.Pull(r.Context(), tenant, req)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -92,6 +97,11 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
 	// Convert flattened changes to storage.ReplicationPushRequest
 	var changes []storage.ReplicationPushChange
 	for _, change := range reqBody.Changes {
@@ -123,7 +133,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 
 		id := collection + "/" + docID
-		doc := storage.NewDocument(id, collection, docData)
+		doc := storage.NewDocument(tenant, id, collection, docData)
 		doc.Version = version
 
 		if change.Action == "delete" {
@@ -153,7 +163,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[Info][Push] collection: %s, changes: %d", collection, len(changes))
-	resp, err := h.engine.Push(r.Context(), pushReq)
+	resp, err := h.engine.Push(r.Context(), tenant, pushReq)
 	if err != nil {
 		log.Println("[Error][Push] error during push:", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)

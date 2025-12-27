@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -15,6 +16,14 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+type mockRoundTripper struct {
+	fn func(*http.Request) (*http.Response, error)
+}
+
+func (m *mockRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.fn(req)
+}
 
 func setupTestServer() (*Server, *MockStorageBackend) {
 	mockStorage := new(MockStorageBackend)
@@ -30,9 +39,9 @@ func TestServer_GetDocument(t *testing.T) {
 
 	path := "test/1"
 	doc := &storage.Document{Fullpath: path, Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1, UpdatedAt: 2, CreatedAt: 1}
-	mockStorage.On("Get", mock.Anything, path).Return(doc, nil)
+	mockStorage.On("Get", mock.Anything, "default", path).Return(doc, nil)
 
-	reqBody, _ := json.Marshal(map[string]string{"path": path})
+	reqBody, _ := json.Marshal(map[string]string{"path": path, "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/document/get", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -51,9 +60,9 @@ func TestServer_CreateDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
 	doc := model.Document{"id": "1", "collection": "test", "foo": "bar"}
-	mockStorage.On("Create", mock.Anything, mock.AnythingOfType("*types.Document")).Return(nil)
+	mockStorage.On("Create", mock.Anything, "default", mock.AnythingOfType("*types.Document")).Return(nil)
 
-	reqBody, _ := json.Marshal(doc)
+	reqBody, _ := json.Marshal(map[string]interface{}{"data": doc, "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/document/create", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -74,15 +83,18 @@ func TestServer_WatchCollection_InvalidBody(t *testing.T) {
 }
 
 func TestServer_WatchCollection_WatchError(t *testing.T) {
-	server, mockStorage := setupTestServer()
+	server, _ := setupTestServer()
 
-	// Watch returns channel and error.
-	// We need to mock Watch to return error.
-	// Note: Watch returns <-chan Event, error
-	var ch <-chan storage.Event
-	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(ch, assert.AnError)
+	// Mock HTTP Client to return error
+	server.engine.SetHTTPClient(&http.Client{
+		Transport: &mockRoundTripper{
+			fn: func(req *http.Request) (*http.Response, error) {
+				return nil, assert.AnError
+			},
+		},
+	})
 
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
 	w := httptest.NewRecorder()
 
@@ -98,7 +110,7 @@ type NonFlusherWriter struct {
 func TestServer_WatchCollection_NoFlusher(t *testing.T) {
 	server, _ := setupTestServer()
 
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
 	w := httptest.NewRecorder()
 
@@ -110,17 +122,29 @@ func TestServer_WatchCollection_NoFlusher(t *testing.T) {
 }
 
 func TestServer_WatchCollection_Success(t *testing.T) {
-	server, mockStorage := setupTestServer()
+	server, _ := setupTestServer()
 
-	ch := make(chan storage.Event, 1)
-	ch <- storage.Event{Type: storage.EventCreate, Id: "1"}
-	close(ch)
+	// Mock HTTP Client to return success stream
+	server.engine.SetHTTPClient(&http.Client{
+		Transport: &mockRoundTripper{
+			fn: func(req *http.Request) (*http.Response, error) {
+				// Return a pipe so we can write events
+				pr, pw := io.Pipe()
+				go func() {
+					enc := json.NewEncoder(pw)
+					enc.Encode(storage.Event{Type: storage.EventCreate, Id: "1"})
+					pw.Close()
+				}()
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       pr,
+					Header:     make(http.Header),
+				}, nil
+			},
+		},
+	})
 
-	// Cast to read-only channel
-	readCh := (<-chan storage.Event)(ch)
-	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(readCh, nil)
-
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
 	w := httptest.NewRecorder()
 
@@ -143,9 +167,9 @@ func TestServer_CreateDocument_Errors(t *testing.T) {
 	t.Run("create error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Create", mock.Anything, mock.AnythingOfType("*types.Document")).Return(assert.AnError)
+		mockStorage.On("Create", mock.Anything, "default", mock.AnythingOfType("*types.Document")).Return(assert.AnError)
 
-		reqBody, _ := json.Marshal(model.Document{"id": "1", "collection": "test"})
+		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/create", bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -159,9 +183,9 @@ func TestServer_DeleteDocument(t *testing.T) {
 	server, mockStorage := setupTestServer()
 
 	path := "test/1"
-	mockStorage.On("Delete", mock.Anything, path, model.Filters(nil)).Return(nil)
+	mockStorage.On("Delete", mock.Anything, "default", path, model.Filters(nil)).Return(nil)
 
-	reqBody, _ := json.Marshal(map[string]string{"path": path})
+	reqBody, _ := json.Marshal(map[string]string{"path": path, "tenant": "default"})
 	req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -186,9 +210,9 @@ func TestServer_DeleteDocument_Errors(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Delete", mock.Anything, "test/1", model.Filters(nil)).Return(model.ErrNotFound)
+		mockStorage.On("Delete", mock.Anything, "default", "test/1", model.Filters(nil)).Return(model.ErrNotFound)
 
-		reqBody, _ := json.Marshal(map[string]string{"path": "test/1"})
+		reqBody, _ := json.Marshal(map[string]string{"path": "test/1", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -200,9 +224,9 @@ func TestServer_DeleteDocument_Errors(t *testing.T) {
 	t.Run("delete error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Delete", mock.Anything, "test/1", model.Filters(nil)).Return(assert.AnError)
+		mockStorage.On("Delete", mock.Anything, "default", "test/1", model.Filters(nil)).Return(assert.AnError)
 
-		reqBody, _ := json.Marshal(map[string]string{"path": "test/1"})
+		reqBody, _ := json.Marshal(map[string]string{"path": "test/1", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -215,9 +239,9 @@ func TestServer_DeleteDocument_Errors(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
 		pred := model.Filters{{Field: "version", Op: "==", Value: float64(1)}}
-		mockStorage.On("Delete", mock.Anything, "test/1", pred).Return(model.ErrPreconditionFailed)
+		mockStorage.On("Delete", mock.Anything, "default", "test/1", pred).Return(model.ErrPreconditionFailed)
 
-		reqBody, _ := json.Marshal(map[string]interface{}{"path": "test/1", "pred": pred})
+		reqBody, _ := json.Marshal(map[string]interface{}{"path": "test/1", "pred": pred, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
@@ -241,9 +265,9 @@ func TestServer_GetDocument_Errors(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Get", mock.Anything, "missing").Return(nil, model.ErrNotFound)
+		mockStorage.On("Get", mock.Anything, "default", "missing").Return(nil, model.ErrNotFound)
 
-		reqBody, _ := json.Marshal(map[string]string{"path": "missing"})
+		reqBody, _ := json.Marshal(map[string]string{"path": "missing", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/get", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -254,9 +278,9 @@ func TestServer_GetDocument_Errors(t *testing.T) {
 	t.Run("storage error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Get", mock.Anything, "err").Return(nil, assert.AnError)
+		mockStorage.On("Get", mock.Anything, "default", "err").Return(nil, assert.AnError)
 
-		reqBody, _ := json.Marshal(map[string]string{"path": "err"})
+		reqBody, _ := json.Marshal(map[string]string{"path": "err", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/get", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -279,10 +303,10 @@ func TestServer_ReplaceDocument_Errors(t *testing.T) {
 	t.Run("engine error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Get", mock.Anything, "test/1").Return(nil, model.ErrNotFound)
-		mockStorage.On("Create", mock.Anything, mock.AnythingOfType("*types.Document")).Return(assert.AnError)
+		mockStorage.On("Get", mock.Anything, "default", "test/1").Return(nil, model.ErrNotFound)
+		mockStorage.On("Create", mock.Anything, "default", mock.AnythingOfType("*types.Document")).Return(assert.AnError)
 
-		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}})
+		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/replace", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -305,9 +329,9 @@ func TestServer_PatchDocument_Errors(t *testing.T) {
 	t.Run("not found", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Patch", mock.Anything, "test/1", mock.Anything, model.Filters(nil)).Return(model.ErrNotFound)
+		mockStorage.On("Patch", mock.Anything, "default", "test/1", mock.Anything, model.Filters(nil)).Return(model.ErrNotFound)
 
-		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}})
+		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/patch", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -318,9 +342,9 @@ func TestServer_PatchDocument_Errors(t *testing.T) {
 	t.Run("engine error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Patch", mock.Anything, "test/1", mock.Anything, model.Filters(nil)).Return(assert.AnError)
+		mockStorage.On("Patch", mock.Anything, "default", "test/1", mock.Anything, model.Filters(nil)).Return(assert.AnError)
 
-		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}})
+		reqBody, _ := json.Marshal(map[string]interface{}{"data": model.Document{"id": "1", "collection": "test"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/document/patch", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -343,9 +367,9 @@ func TestServer_ExecuteQuery_Errors(t *testing.T) {
 	t.Run("engine error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Query", mock.Anything, mock.Anything).Return(nil, assert.AnError)
+		mockStorage.On("Query", mock.Anything, "default", mock.Anything).Return(nil, assert.AnError)
 
-		reqBody, _ := json.Marshal(model.Query{Collection: "c"})
+		reqBody, _ := json.Marshal(map[string]interface{}{"query": model.Query{Collection: "c"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/query/execute", bytes.NewBuffer(reqBody))
 		w := httptest.NewRecorder()
 
@@ -362,7 +386,7 @@ func (n *noFlusher) Write(b []byte) (int, error) { return n.rec.Write(b) }
 func (n *noFlusher) WriteHeader(status int)      { n.rec.WriteHeader(status) }
 
 func TestServer_WatchCollection_Errors(t *testing.T) {
-	server, mockStorage := setupTestServer()
+	server, _ := setupTestServer()
 
 	t.Run("bad json", func(t *testing.T) {
 		req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer([]byte("{bad")))
@@ -373,7 +397,7 @@ func TestServer_WatchCollection_Errors(t *testing.T) {
 	})
 
 	t.Run("no flusher", func(t *testing.T) {
-		body, _ := json.Marshal(map[string]string{"collection": "c"})
+		body, _ := json.Marshal(map[string]string{"collection": "c", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(body))
 		w := &noFlusher{rec: httptest.NewRecorder()}
 
@@ -382,11 +406,16 @@ func TestServer_WatchCollection_Errors(t *testing.T) {
 	})
 
 	t.Run("watch error", func(t *testing.T) {
-		mockStorage.ExpectedCalls = nil
-		mockStorage.Calls = nil
-		mockStorage.On("Watch", mock.Anything, "c", nil, storage.WatchOptions{}).Return(nil, assert.AnError)
+		// Mock HTTP Client to return error
+		server.engine.SetHTTPClient(&http.Client{
+			Transport: &mockRoundTripper{
+				fn: func(req *http.Request) (*http.Response, error) {
+					return nil, assert.AnError
+				},
+			},
+		})
 
-		body, _ := json.Marshal(map[string]string{"collection": "c"})
+		body, _ := json.Marshal(map[string]string{"collection": "c", "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 
@@ -408,9 +437,9 @@ func TestServer_PullPush_Errors(t *testing.T) {
 	t.Run("pull error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Query", mock.Anything, mock.Anything).Return(nil, assert.AnError)
+		mockStorage.On("Query", mock.Anything, "default", mock.Anything).Return(nil, assert.AnError)
 
-		body, _ := json.Marshal(storage.ReplicationPullRequest{Collection: "c"})
+		body, _ := json.Marshal(map[string]interface{}{"request": storage.ReplicationPullRequest{Collection: "c"}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/replication/v1/pull", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 		server.ServeHTTP(w, req)
@@ -427,10 +456,10 @@ func TestServer_PullPush_Errors(t *testing.T) {
 	t.Run("push error", func(t *testing.T) {
 		mockStorage.ExpectedCalls = nil
 		mockStorage.Calls = nil
-		mockStorage.On("Update", mock.Anything, mock.Anything, mock.Anything, model.Filters{}).Return(assert.AnError)
-		mockStorage.On("Get", mock.Anything, mock.Anything).Return(&storage.Document{Id: "c/1", Version: 1}, nil)
+		mockStorage.On("Update", mock.Anything, "default", mock.Anything, mock.Anything, model.Filters{}).Return(assert.AnError)
+		mockStorage.On("Get", mock.Anything, "default", mock.Anything).Return(&storage.Document{Id: "c/1", Version: 1}, nil)
 
-		body, _ := json.Marshal(storage.ReplicationPushRequest{Collection: "c", Changes: []storage.ReplicationPushChange{{Doc: &storage.Document{Id: "c/1", Fullpath: "c/1", Data: map[string]interface{}{}}}}})
+		body, _ := json.Marshal(map[string]interface{}{"request": storage.ReplicationPushRequest{Collection: "c", Changes: []storage.ReplicationPushChange{{Doc: &storage.Document{Id: "c/1", Fullpath: "c/1", Data: map[string]interface{}{}}}}}, "tenant": "default"})
 		req := httptest.NewRequest("POST", "/internal/replication/v1/push", bytes.NewBuffer(body))
 		w := httptest.NewRecorder()
 		server.ServeHTTP(w, req)
@@ -443,9 +472,9 @@ func TestServer_WatchCollection_ContextCancel(t *testing.T) {
 
 	ch := make(chan storage.Event)
 	readCh := (<-chan storage.Event)(ch)
-	mockStorage.On("Watch", mock.Anything, "test", mock.Anything, mock.Anything).Return(readCh, nil)
+	mockStorage.On("Watch", mock.Anything, "default", "test", mock.Anything, mock.Anything).Return(readCh, nil)
 
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test"})
+	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
 	ctx, cancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody)).WithContext(ctx)
 	w := httptest.NewRecorder()

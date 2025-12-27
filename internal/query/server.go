@@ -15,6 +15,13 @@ type Server struct {
 	mux    *http.ServeMux
 }
 
+func tenantOrDefault(t string) string {
+	if t == "" {
+		return model.DefaultTenantID
+	}
+	return t
+}
+
 // NewServer creates a new Query Server.
 func NewServer(engine *Engine) *Server {
 	s := &Server{
@@ -52,14 +59,17 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path string `json:"path"`
+		Path   string `json:"path"`
+		Tenant string `json:"tenant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.GetDocument(r.Context(), req.Path)
+	tenant := tenantOrDefault(req.Tenant)
+
+	doc, err := s.engine.GetDocument(r.Context(), tenant, req.Path)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
@@ -74,13 +84,18 @@ func (s *Server) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
-	var doc model.Document
-	if err := json.NewDecoder(r.Body).Decode(&doc); err != nil {
+	var req struct {
+		Data   model.Document `json:"data"`
+		Tenant string         `json:"tenant"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.engine.CreateDocument(r.Context(), doc); err != nil {
+	tenant := tenantOrDefault(req.Tenant)
+
+	if err := s.engine.CreateDocument(r.Context(), tenant, req.Data); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -90,15 +105,18 @@ func (s *Server) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Data model.Document  `json:"data"`
-		Pred model.Filters `json:"pred"`
+		Data   model.Document `json:"data"`
+		Pred   model.Filters  `json:"pred"`
+		Tenant string         `json:"tenant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.ReplaceDocument(r.Context(), req.Data, req.Pred)
+	tenant := tenantOrDefault(req.Tenant)
+
+	doc, err := s.engine.ReplaceDocument(r.Context(), tenant, req.Data, req.Pred)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -110,15 +128,18 @@ func (s *Server) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Data model.Document  `json:"data"`
-		Pred model.Filters `json:"pred"`
+		Data   model.Document `json:"data"`
+		Pred   model.Filters  `json:"pred"`
+		Tenant string         `json:"tenant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	doc, err := s.engine.PatchDocument(r.Context(), req.Data, req.Pred)
+	tenant := tenantOrDefault(req.Tenant)
+
+	doc, err := s.engine.PatchDocument(r.Context(), tenant, req.Data, req.Pred)
 	if err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
@@ -134,15 +155,18 @@ func (s *Server) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Path string          `json:"path"`
-		Pred model.Filters `json:"pred"`
+		Path   string        `json:"path"`
+		Pred   model.Filters `json:"pred"`
+		Tenant string        `json:"tenant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	if err := s.engine.DeleteDocument(r.Context(), req.Path, req.Pred); err != nil {
+	tenant := tenantOrDefault(req.Tenant)
+
+	if err := s.engine.DeleteDocument(r.Context(), tenant, req.Path, req.Pred); err != nil {
 		if errors.Is(err, model.ErrNotFound) {
 			http.Error(w, "Document not found", http.StatusNotFound)
 			return
@@ -159,13 +183,18 @@ func (s *Server) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExecuteQuery(w http.ResponseWriter, r *http.Request) {
-	var q model.Query
-	if err := json.NewDecoder(r.Body).Decode(&q); err != nil {
+	var req struct {
+		Query  model.Query `json:"query"`
+		Tenant string      `json:"tenant"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	docs, err := s.engine.ExecuteQuery(r.Context(), q)
+	tenant := tenantOrDefault(req.Tenant)
+
+	docs, err := s.engine.ExecuteQuery(r.Context(), tenant, req.Query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -178,6 +207,7 @@ func (s *Server) handleExecuteQuery(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleWatchCollection(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Collection string `json:"collection"`
+		Tenant     string `json:"tenant"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
@@ -199,7 +229,9 @@ func (s *Server) handleWatchCollection(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	// Start watching
-	stream, err := s.engine.WatchCollection(r.Context(), req.Collection)
+	tenant := tenantOrDefault(req.Tenant)
+
+	stream, err := s.engine.WatchCollection(r.Context(), tenant, req.Collection)
 	if err != nil {
 		// Headers already sent, can't send error status now.
 		// Maybe send a special error event or just close connection.
@@ -225,13 +257,18 @@ func (s *Server) handleWatchCollection(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
-	var req storage.ReplicationPullRequest
+	var req struct {
+		Request storage.ReplicationPullRequest `json:"request"`
+		Tenant  string                         `json:"tenant"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	resp, err := s.engine.Pull(r.Context(), req)
+	tenant := tenantOrDefault(req.Tenant)
+
+	resp, err := s.engine.Pull(r.Context(), tenant, req.Request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -242,13 +279,18 @@ func (s *Server) handlePull(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handlePush(w http.ResponseWriter, r *http.Request) {
-	var req storage.ReplicationPushRequest
+	var req struct {
+		Request storage.ReplicationPushRequest `json:"request"`
+		Tenant  string                         `json:"tenant"`
+	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
-	resp, err := s.engine.Push(r.Context(), req)
+	tenant := tenantOrDefault(req.Tenant)
+
+	resp, err := s.engine.Push(r.Context(), tenant, req.Request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

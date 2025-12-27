@@ -22,7 +22,7 @@ func TestHandleQuery(t *testing.T) {
 		{"id": "msg-2", "collection": "rooms/room-1/messages", "name": "Bob", "version": int64(1)},
 	}
 
-	mockService.On("ExecuteQuery", mock.Anything, mock.AnythingOfType("model.Query")).Return(docs, nil)
+	mockService.On("ExecuteQuery", mock.Anything, "default", mock.AnythingOfType("model.Query")).Return(docs, nil)
 
 	query := model.Query{
 		Collection: "rooms/room-1/messages",
@@ -75,7 +75,7 @@ func TestHandleQuery_EngineError(t *testing.T) {
 	server := createTestServer(mockService, nil, nil)
 
 	q := model.Query{Collection: "rooms"}
-	mockService.On("ExecuteQuery", mock.Anything, q).Return(nil, assert.AnError)
+	mockService.On("ExecuteQuery", mock.Anything, "default", q).Return(nil, assert.AnError)
 
 	body, _ := json.Marshal(q)
 	req := httptest.NewRequest("POST", "/api/v1/query", bytes.NewReader(body))

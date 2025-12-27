@@ -1,10 +1,23 @@
 package types
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+func TestCalculateTenantID(t *testing.T) {
+	id1 := CalculateTenantID("tenant1", "/path/to/doc1")
+	id2 := CalculateTenantID("tenant1", "/path/to/doc1")
+	id3 := CalculateTenantID("tenant2", "/path/to/doc1")
+	id4 := CalculateTenantID("tenant1", "/path/to/doc2")
+
+	assert.Equal(t, id1, id2)
+	assert.NotEqual(t, id1, id3)
+	assert.NotEqual(t, id1, id4)
+	assert.True(t, strings.HasPrefix(id1, "tenant1:"))
+}
 
 func TestCalculateID(t *testing.T) {
 	id1 := CalculateID("/path/to/doc1")
@@ -30,13 +43,14 @@ func TestNewDocument(t *testing.T) {
 	data := map[string]interface{}{
 		"key": "value",
 	}
-	doc := NewDocument("/users/123", "users", data)
+	doc := NewDocument("tenant1", "/users/123", "users", data)
 
+	assert.Equal(t, "tenant1", doc.TenantID)
 	assert.Equal(t, "/users/123", doc.Fullpath)
 	assert.Equal(t, "users", doc.Collection)
 	assert.Equal(t, data, doc.Data)
 	assert.NotEmpty(t, doc.Id)
-	assert.Equal(t, CalculateID("/users/123"), doc.Id)
+	assert.Equal(t, CalculateTenantID("tenant1", "/users/123"), doc.Id)
 	assert.Equal(t, CalculateCollectionHash("users"), doc.CollectionHash)
 	assert.NotZero(t, doc.CreatedAt)
 	assert.NotZero(t, doc.UpdatedAt)

@@ -51,31 +51,31 @@ type mockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *mockDocumentStore) Get(ctx context.Context, path string) (*types.Document, error) {
-	args := m.Called(ctx, path)
+func (m *mockDocumentStore) Get(ctx context.Context, tenant, path string) (*types.Document, error) {
+	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*types.Document), args.Error(1)
 }
-func (m *mockDocumentStore) Create(ctx context.Context, doc *types.Document) error {
-	return m.Called(ctx, doc).Error(0)
+func (m *mockDocumentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+	return m.Called(ctx, tenant, doc).Error(0)
 }
-func (m *mockDocumentStore) Update(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
-	return m.Called(ctx, path, data, pred).Error(0)
+func (m *mockDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
+	return m.Called(ctx, tenant, path, data, pred).Error(0)
 }
-func (m *mockDocumentStore) Patch(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
-	return m.Called(ctx, path, data, pred).Error(0)
+func (m *mockDocumentStore) Patch(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
+	return m.Called(ctx, tenant, path, data, pred).Error(0)
 }
-func (m *mockDocumentStore) Delete(ctx context.Context, path string, pred model.Filters) error {
-	return m.Called(ctx, path, pred).Error(0)
+func (m *mockDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
+	return m.Called(ctx, tenant, path, pred).Error(0)
 }
-func (m *mockDocumentStore) Query(ctx context.Context, q model.Query) ([]*types.Document, error) {
-	args := m.Called(ctx, q)
+func (m *mockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+	args := m.Called(ctx, tenant, q)
 	return args.Get(0).([]*types.Document), args.Error(1)
 }
-func (m *mockDocumentStore) Watch(ctx context.Context, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
-	args := m.Called(ctx, collection, resumeToken, opts)
+func (m *mockDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
+	args := m.Called(ctx, tenant, collection, resumeToken, opts)
 	return args.Get(0).(<-chan types.Event), args.Error(1)
 }
 func (m *mockDocumentStore) Close(ctx context.Context) error {
@@ -86,22 +86,22 @@ type mockUserStore struct {
 	mock.Mock
 }
 
-func (m *mockUserStore) CreateUser(ctx context.Context, user *types.User) error {
+func (m *mockUserStore) CreateUser(ctx context.Context, tenant string, user *types.User) error {
 	return nil
 }
-func (m *mockUserStore) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
+func (m *mockUserStore) GetUserByUsername(ctx context.Context, tenant, username string) (*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
+func (m *mockUserStore) GetUserByID(ctx context.Context, tenant, id string) (*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
+func (m *mockUserStore) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) UpdateUser(ctx context.Context, user *types.User) error {
+func (m *mockUserStore) UpdateUser(ctx context.Context, tenant string, user *types.User) error {
 	return nil
 }
-func (m *mockUserStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+func (m *mockUserStore) UpdateUserLoginStats(ctx context.Context, tenant, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
 func (m *mockUserStore) EnsureIndexes(ctx context.Context) error {
@@ -115,13 +115,13 @@ type mockRevocationStore struct {
 	mock.Mock
 }
 
-func (m *mockRevocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+func (m *mockRevocationStore) RevokeToken(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (m *mockRevocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+func (m *mockRevocationStore) RevokeTokenImmediate(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (m *mockRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+func (m *mockRevocationStore) IsRevoked(ctx context.Context, tenant, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
 func (m *mockRevocationStore) EnsureIndexes(ctx context.Context) error {
@@ -170,7 +170,7 @@ func TestManager_Init_RouterWiring(t *testing.T) {
 	// For now, just checking not nil is a basic check.
 	// To be more rigorous, we could call a method and see if it hits the mock.
 
-	mockDocStore.On("Get", mock.Anything, "test").Return(&types.Document{}, nil)
-	_, _ = mgr.docStore.Get(context.Background(), "test")
-	mockDocStore.AssertCalled(t, "Get", mock.Anything, "test")
+	mockDocStore.On("Get", mock.Anything, "default", "test").Return(&types.Document{}, nil)
+	_, _ = mgr.docStore.Get(context.Background(), "default", "test")
+	mockDocStore.AssertCalled(t, "Get", mock.Anything, "default", "test")
 }

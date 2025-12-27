@@ -19,7 +19,12 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	docs, err := h.engine.ExecuteQuery(r.Context(), q)
+	tenant, ok := h.tenantOrError(w, r)
+	if !ok {
+		return
+	}
+
+	docs, err := h.engine.ExecuteQuery(r.Context(), tenant, q)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

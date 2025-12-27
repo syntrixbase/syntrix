@@ -17,9 +17,10 @@ func TestMongoBackend_Watch(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	tenant := "default"
 
 	// Start Watching
-	stream, err := backend.Watch(ctx, "users", nil, types.WatchOptions{})
+	stream, err := backend.Watch(ctx, tenant, "users", nil, types.WatchOptions{})
 	if err != nil {
 		t.Skipf("Skipping Watch test (likely no replica set): %v", err)
 		return
@@ -30,8 +31,8 @@ func TestMongoBackend_Watch(t *testing.T) {
 		time.Sleep(100 * time.Millisecond) // Wait for watch to establish
 
 		// Create
-		doc := types.NewDocument("users/watcher", "users", map[string]interface{}{"msg": "hello"})
-		backend.Create(context.Background(), doc)
+		doc := types.NewDocument(tenant, "users/watcher", "users", map[string]interface{}{"msg": "hello"})
+		backend.Create(context.Background(), tenant, doc)
 
 		time.Sleep(50 * time.Millisecond)
 
@@ -39,14 +40,14 @@ func TestMongoBackend_Watch(t *testing.T) {
 			{Field: "version", Op: "==", Value: doc.Version},
 		}
 		// Update
-		if err := backend.Update(context.Background(), "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
+		if err := backend.Update(context.Background(), tenant, "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
 			t.Logf("Update failed: %v", err)
 		}
 
 		time.Sleep(50 * time.Millisecond)
 
 		// Delete
-		if err := backend.Delete(context.Background(), "users/watcher", nil); err != nil {
+		if err := backend.Delete(context.Background(), tenant, "users/watcher", nil); err != nil {
 			t.Logf("Delete failed: %v", err)
 		}
 	}()
@@ -75,8 +76,9 @@ func TestMongoBackend_Watch_Recreate(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	tenant := "default"
 
-	stream, err := backend.Watch(ctx, "users", nil, types.WatchOptions{})
+	stream, err := backend.Watch(ctx, tenant, "users", nil, types.WatchOptions{})
 	if err != nil {
 		t.Skipf("Skipping Watch recreate test (likely no replica set): %v", err)
 		return
@@ -84,14 +86,14 @@ func TestMongoBackend_Watch_Recreate(t *testing.T) {
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		doc := types.NewDocument("users/recreate", "users", map[string]interface{}{"msg": "v1"})
-		_ = backend.Create(context.Background(), doc)
+		doc := types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v1"})
+		_ = backend.Create(context.Background(), tenant, doc)
 
 		time.Sleep(50 * time.Millisecond)
-		_ = backend.Delete(context.Background(), "users/recreate", nil)
+		_ = backend.Delete(context.Background(), tenant, "users/recreate", nil)
 
 		time.Sleep(50 * time.Millisecond)
-		_ = backend.Create(context.Background(), types.NewDocument("users/recreate", "users", map[string]interface{}{"msg": "v2"}))
+		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v2"}))
 	}()
 
 	expected := []types.EventType{types.EventCreate, types.EventDelete, types.EventCreate}
@@ -119,8 +121,9 @@ func TestMongoBackend_Watch_Recreate_WithBefore(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	tenant := "default"
 
-	stream, err := backend.Watch(ctx, "users", nil, types.WatchOptions{IncludeBefore: true})
+	stream, err := backend.Watch(ctx, tenant, "users", nil, types.WatchOptions{IncludeBefore: true})
 	if err != nil {
 		t.Skipf("Skipping Watch recreate (before) test (likely no replica set): %v", err)
 		return
@@ -128,14 +131,14 @@ func TestMongoBackend_Watch_Recreate_WithBefore(t *testing.T) {
 
 	go func() {
 		time.Sleep(100 * time.Millisecond)
-		doc := types.NewDocument("users/recreate-before", "users", map[string]interface{}{"msg": "v1"})
-		_ = backend.Create(context.Background(), doc)
+		doc := types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v1"})
+		_ = backend.Create(context.Background(), tenant, doc)
 
 		time.Sleep(50 * time.Millisecond)
-		_ = backend.Delete(context.Background(), "users/recreate-before", nil)
+		_ = backend.Delete(context.Background(), tenant, "users/recreate-before", nil)
 
 		time.Sleep(50 * time.Millisecond)
-		_ = backend.Create(context.Background(), types.NewDocument("users/recreate-before", "users", map[string]interface{}{"msg": "v2"}))
+		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v2"}))
 	}()
 
 	expected := []types.EventType{types.EventCreate, types.EventDelete, types.EventCreate}

@@ -24,9 +24,11 @@ func NewRevocationStore(db *mongo.Database, collectionName string) types.TokenRe
 	}
 }
 
-func (s *revocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+func (s *revocationStore) RevokeToken(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+	id := tenant + ":" + jti
 	doc := types.RevokedToken{
-		JTI:       jti,
+		JTI:       id,
+		TenantID:  tenant,
 		ExpiresAt: expiresAt,
 		RevokedAt: time.Now(),
 	}
@@ -37,10 +39,12 @@ func (s *revocationStore) RevokeToken(ctx context.Context, jti string, expiresAt
 	return err
 }
 
-func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
 	// Set RevokedAt to the past to bypass grace period
+	id := tenant + ":" + jti
 	doc := types.RevokedToken{
-		JTI:       jti,
+		JTI:       id,
+		TenantID:  tenant,
 		ExpiresAt: expiresAt,
 		RevokedAt: time.Now().Add(-24 * time.Hour),
 	}
@@ -51,8 +55,9 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, jti string, 
 	return err
 }
 
-func (s *revocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
-	filter := bson.M{"_id": jti}
+func (s *revocationStore) IsRevoked(ctx context.Context, tenant string, jti string, gracePeriod time.Duration) (bool, error) {
+	id := tenant + ":" + jti
+	filter := bson.M{"_id": id, "tenant_id": tenant}
 	var doc types.RevokedToken
 	err := s.coll.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
@@ -76,10 +81,19 @@ func (s *revocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod
 }
 
 func (s *revocationStore) EnsureIndexes(ctx context.Context) error {
-	// Revocation TTL index
+	// Revocation TTL index (Global cleanup)
 	_, err := s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "expires_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Per-tenant expiration query index
+	_, err = s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "tenant_id", Value: 1}, {Key: "expires_at", Value: 1}},
+		Options: options.Index().SetUnique(false),
 	})
 	return err
 }

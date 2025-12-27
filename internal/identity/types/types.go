@@ -17,6 +17,7 @@ const (
 	ContextKeyUsername ContextKey = "username"
 	ContextKeyRoles    ContextKey = "roles"
 	ContextKeyClaims   ContextKey = "claims"
+	ContextKeyTenant   ContextKey = "tenant"
 )
 
 // Claims represents JWT claims returned by token validation.
@@ -24,6 +25,8 @@ type Claims struct {
 	Username string   `json:"username"`
 	Roles    []string `json:"roles,omitempty"`
 	Disabled bool     `json:"disabled"`
+	TenantID string   `json:"tid"`
+	UserID   string   `json:"oid"`
 	jwt.RegisteredClaims
 }
 
@@ -34,8 +37,16 @@ type TokenPair struct {
 	ExpiresIn    int    `json:"expires_in"`
 }
 
+// SignupRequest represents the signup payload.
+type SignupRequest struct {
+	TenantID string `json:"tenant,omitempty"`
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
 // LoginRequest represents the login payload.
 type LoginRequest struct {
+	TenantID string `json:"tenant,omitempty"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }

@@ -20,8 +20,8 @@ type MockQueryService struct {
 	query.Service
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (model.Document, error) {
-	args := m.Called(ctx, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -71,7 +71,7 @@ func TestNewServer_WithRealtime(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	rt := realtime.NewServer(mockQuery, "docs")
+	rt := realtime.NewServer(mockQuery, "docs", mockAuth, realtime.Config{EnableAuth: true})
 
 	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
 	assert.NotNil(t, server)
@@ -101,7 +101,7 @@ func TestServer_ServeHTTP(t *testing.T) {
 		// Assuming /api/v1/health exists.
 
 		// Mock GetDocument to return ErrNotFound so authorized middleware continues
-		mockQuery.On("GetDocument", mock.Anything, "health").Return(nil, model.ErrNotFound)
+		mockQuery.On("GetDocument", mock.Anything, "default", "health").Return(nil, model.ErrNotFound)
 
 		// Mock Evaluate to return true
 		mockAuthz.On("Evaluate", mock.Anything, "health", "read", mock.Anything, mock.Anything).Return(true, nil)

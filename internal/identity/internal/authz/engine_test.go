@@ -19,8 +19,8 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, path string) (model.Document, error) {
-	args := m.Called(ctx, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -35,35 +35,35 @@ func (m *MockQueryService) QueryDocuments(ctx context.Context, parent string, fi
 	return nil, nil
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, doc model.Document) error {
+func (m *MockQueryService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
 	return nil
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *MockQueryService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
+func (m *MockQueryService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
 	return nil
 }
 
-func (m *MockQueryService) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
+func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
+func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
 
-func (m *MockQueryService) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 
@@ -156,14 +156,14 @@ match:
 		Auth: Auth{UID: "adminUser"},
 		Time: time.Now(),
 	}
-	mockQuery.On("GetDocument", mock.Anything, "admins/adminUser").Return(model.Document{"id": "adminUser"}, nil)
+	mockQuery.On("GetDocument", mock.Anything, "default", "admins/adminUser").Return(model.Document{"id": "adminUser"}, nil)
 
 	allowed, err = engine.Evaluate(context.Background(), "/admin/config", "write", reqAdmin, nil)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
 	// Test Case 8: Custom Function 'exists' (Admin Check - Fail)
-	mockQuery.On("GetDocument", mock.Anything, "admins/stranger").Return(nil, model.ErrNotFound)
+	mockQuery.On("GetDocument", mock.Anything, "default", "admins/stranger").Return(nil, model.ErrNotFound)
 
 	allowed, err = engine.Evaluate(context.Background(), "/admin/config", "write", reqNonMember, nil)
 	assert.NoError(t, err)

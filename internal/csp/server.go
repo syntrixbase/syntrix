@@ -38,6 +38,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	var req struct {
+		TenantID   string `json:"tenant"`
 		Collection string `json:"collection"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -62,7 +63,8 @@ func (s *Server) handleWatch(w http.ResponseWriter, r *http.Request) {
 	flusher.Flush()
 
 	// Start watching via Storage Backend (Mongo)
-	stream, err := s.storage.Watch(r.Context(), req.Collection, nil, storage.WatchOptions{})
+	// TODO: Extract tenant from request or context
+	stream, err := s.storage.Watch(r.Context(), req.TenantID, req.Collection, nil, storage.WatchOptions{})
 	if err != nil {
 		// Headers already sent, can't send error status now.
 		log.Println("[Error][Watch] failed to start watch:", err)

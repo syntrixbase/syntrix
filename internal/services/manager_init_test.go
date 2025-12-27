@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -112,6 +113,7 @@ func TestManager_InitAPIServer_WithRules(t *testing.T) {
 	cfg.Identity.AuthZ.RulesFile = rulesPath
 
 	mgr := NewManager(cfg, Options{})
+	mgr.authService = &stubAuthN{}
 	querySvc := &stubQueryService{}
 
 	err := mgr.initAPIServer(querySvc)
@@ -126,6 +128,7 @@ func TestManager_InitAPIServer_NoRules(t *testing.T) {
 	cfg.Identity.AuthZ.RulesFile = ""
 
 	mgr := NewManager(cfg, Options{})
+	mgr.authService = &stubAuthN{}
 	querySvc := &stubQueryService{}
 
 	err := mgr.initAPIServer(querySvc)
@@ -139,6 +142,7 @@ func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 	cfg.Gateway.Port = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{})
+	mgr.authService = &stubAuthN{}
 
 	err := mgr.initAPIServer(&stubQueryService{})
 	assert.NoError(t, err)
@@ -272,23 +276,25 @@ type fakeDocumentStore struct {
 	retention time.Duration
 }
 
-func (f *fakeDocumentStore) Get(ctx context.Context, path string) (*storage.Document, error) {
+func (f *fakeDocumentStore) Get(ctx context.Context, tenant, path string) (*storage.Document, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Create(ctx context.Context, doc *storage.Document) error { return nil }
-func (f *fakeDocumentStore) Update(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc *storage.Document) error {
 	return nil
 }
-func (f *fakeDocumentStore) Patch(ctx context.Context, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Delete(ctx context.Context, path string, pred model.Filters) error {
+func (f *fakeDocumentStore) Patch(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Query(ctx context.Context, q model.Query) ([]*storage.Document, error) {
+func (f *fakeDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
+	return nil
+}
+func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.Document, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Watch(ctx context.Context, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+func (f *fakeDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	return nil, nil
 }
 func (f *fakeDocumentStore) Close(ctx context.Context) error { return nil }
@@ -298,27 +304,31 @@ type fakeAuthStore struct {
 	ensureCalled bool
 }
 
-func (f *fakeAuthStore) CreateUser(ctx context.Context, user *storage.User) error { return nil }
-func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
+func (f *fakeAuthStore) CreateUser(ctx context.Context, tenant string, user *storage.User) error {
+	return nil
+}
+func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, tenant, username string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
+func (f *fakeAuthStore) GetUserByID(ctx context.Context, tenant, id string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+func (f *fakeAuthStore) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*storage.User, error) {
 	return nil, nil
 }
-func (f *fakeAuthStore) UpdateUser(ctx context.Context, user *storage.User) error { return nil }
-func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+func (f *fakeAuthStore) UpdateUser(ctx context.Context, tenant string, user *storage.User) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, tenant, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) RevokeToken(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
+	return nil
+}
+func (f *fakeAuthStore) IsRevoked(ctx context.Context, tenant, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
 func (f *fakeAuthStore) EnsureIndexes(ctx context.Context) error {
@@ -345,39 +355,39 @@ func (f *fakeAuthProvider) Close(ctx context.Context) error           { return n
 
 type stubQueryService struct{}
 
-func (s *stubQueryService) GetDocument(context.Context, string) (model.Document, error) {
+func (s *stubQueryService) GetDocument(context.Context, string, string) (model.Document, error) {
 	return model.Document{}, nil
 }
 
-func (s *stubQueryService) CreateDocument(context.Context, model.Document) error {
+func (s *stubQueryService) CreateDocument(context.Context, string, model.Document) error {
 	return nil
 }
 
-func (s *stubQueryService) ReplaceDocument(context.Context, model.Document, model.Filters) (model.Document, error) {
+func (s *stubQueryService) ReplaceDocument(context.Context, string, model.Document, model.Filters) (model.Document, error) {
 	return model.Document{}, nil
 }
 
-func (s *stubQueryService) PatchDocument(context.Context, model.Document, model.Filters) (model.Document, error) {
+func (s *stubQueryService) PatchDocument(context.Context, string, model.Document, model.Filters) (model.Document, error) {
 	return model.Document{}, nil
 }
 
-func (s *stubQueryService) DeleteDocument(context.Context, string, model.Filters) error {
+func (s *stubQueryService) DeleteDocument(context.Context, string, string, model.Filters) error {
 	return nil
 }
 
-func (s *stubQueryService) ExecuteQuery(context.Context, model.Query) ([]model.Document, error) {
+func (s *stubQueryService) ExecuteQuery(context.Context, string, model.Query) ([]model.Document, error) {
 	return nil, nil
 }
 
-func (s *stubQueryService) WatchCollection(context.Context, string) (<-chan storage.Event, error) {
+func (s *stubQueryService) WatchCollection(context.Context, string, string) (<-chan storage.Event, error) {
 	return nil, nil
 }
 
-func (s *stubQueryService) Pull(context.Context, storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (s *stubQueryService) Pull(context.Context, string, storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
 
-func (s *stubQueryService) Push(context.Context, storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (s *stubQueryService) Push(context.Context, string, storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 
@@ -391,3 +401,26 @@ func (f *fakeStorageFactory) Document() storage.DocumentStore          { return 
 func (f *fakeStorageFactory) User() storage.UserStore                  { return f.usrStore }
 func (f *fakeStorageFactory) Revocation() storage.TokenRevocationStore { return f.revStore }
 func (f *fakeStorageFactory) Close() error                             { return nil }
+
+type stubAuthN struct{}
+
+func (s *stubAuthN) Middleware(next http.Handler) http.Handler         { return next }
+func (s *stubAuthN) MiddlewareOptional(next http.Handler) http.Handler { return next }
+func (s *stubAuthN) SignIn(ctx context.Context, req identity.LoginRequest) (*identity.TokenPair, error) {
+	return nil, nil
+}
+func (s *stubAuthN) SignUp(ctx context.Context, req identity.SignupRequest) (*identity.TokenPair, error) {
+	return nil, nil
+}
+func (s *stubAuthN) Refresh(ctx context.Context, req identity.RefreshRequest) (*identity.TokenPair, error) {
+	return nil, nil
+}
+func (s *stubAuthN) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+	return nil, nil
+}
+func (s *stubAuthN) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+	return nil
+}
+func (s *stubAuthN) Logout(ctx context.Context, refreshToken string) error { return nil }
+func (s *stubAuthN) GenerateSystemToken(serviceName string) (string, error) { return "", nil }
+func (s *stubAuthN) ValidateToken(tokenString string) (*identity.Claims, error) { return nil, nil }

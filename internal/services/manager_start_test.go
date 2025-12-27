@@ -53,7 +53,7 @@ func TestManager_Start_RealtimeBackground_Failure(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunAPI: true})
 	stub := &rtQueryStub{failAlways: true}
-	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection)
+	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection, nil, realtime.Config{})
 
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
@@ -69,7 +69,7 @@ func TestManager_Start_RealtimeBackground_Success(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunAPI: true})
 	stub := &rtQueryStub{}
-	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection)
+	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection, nil, realtime.Config{})
 
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
@@ -84,7 +84,7 @@ func TestManager_Start_RealtimeBackground_RetryThenSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunAPI: true})
 	stub := &rtQueryStub{failFirst: true}
-	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection)
+	mgr.rtServer = realtime.NewServer(stub, cfg.Storage.Topology.Document.DataCollection, nil, realtime.Config{})
 
 	bgCtx, bgCancel := context.WithCancel(context.Background())
 	defer bgCancel()
@@ -99,21 +99,21 @@ type storageBackendStub struct {
 	watchCalls atomic.Int32
 }
 
-func (s *storageBackendStub) Get(context.Context, string) (*storage.Document, error) {
+func (s *storageBackendStub) Get(context.Context, string, string) (*storage.Document, error) {
 	return nil, model.ErrNotFound
 }
-func (s *storageBackendStub) Create(context.Context, *storage.Document) error { return nil }
-func (s *storageBackendStub) Update(context.Context, string, map[string]interface{}, model.Filters) error {
+func (s *storageBackendStub) Create(context.Context, string, *storage.Document) error { return nil }
+func (s *storageBackendStub) Update(context.Context, string, string, map[string]interface{}, model.Filters) error {
 	return nil
 }
-func (s *storageBackendStub) Patch(context.Context, string, map[string]interface{}, model.Filters) error {
+func (s *storageBackendStub) Patch(context.Context, string, string, map[string]interface{}, model.Filters) error {
 	return nil
 }
-func (s *storageBackendStub) Delete(context.Context, string, model.Filters) error { return nil }
-func (s *storageBackendStub) Query(context.Context, model.Query) ([]*storage.Document, error) {
+func (s *storageBackendStub) Delete(context.Context, string, string, model.Filters) error { return nil }
+func (s *storageBackendStub) Query(context.Context, string, model.Query) ([]*storage.Document, error) {
 	return nil, nil
 }
-func (s *storageBackendStub) Watch(context.Context, string, interface{}, storage.WatchOptions) (<-chan storage.Event, error) {
+func (s *storageBackendStub) Watch(context.Context, string, string, interface{}, storage.WatchOptions) (<-chan storage.Event, error) {
 	s.watchCalls.Add(1)
 	ch := make(chan storage.Event)
 	close(ch)
@@ -171,23 +171,23 @@ type rtQueryStub struct {
 	failAlways bool
 }
 
-func (s *rtQueryStub) GetDocument(context.Context, string) (model.Document, error) {
+func (s *rtQueryStub) GetDocument(context.Context, string, string) (model.Document, error) {
 	return model.Document{}, nil
 }
-func (s *rtQueryStub) CreateDocument(context.Context, model.Document) error { return nil }
-func (s *rtQueryStub) ReplaceDocument(context.Context, model.Document, model.Filters) (model.Document, error) {
+func (s *rtQueryStub) CreateDocument(context.Context, string, model.Document) error { return nil }
+func (s *rtQueryStub) ReplaceDocument(context.Context, string, model.Document, model.Filters) (model.Document, error) {
 	return model.Document{}, nil
 }
-func (s *rtQueryStub) PatchDocument(context.Context, model.Document, model.Filters) (model.Document, error) {
+func (s *rtQueryStub) PatchDocument(context.Context, string, model.Document, model.Filters) (model.Document, error) {
 	return model.Document{}, nil
 }
-func (s *rtQueryStub) DeleteDocument(context.Context, string, model.Filters) error {
+func (s *rtQueryStub) DeleteDocument(context.Context, string, string, model.Filters) error {
 	return nil
 }
-func (s *rtQueryStub) ExecuteQuery(context.Context, model.Query) ([]model.Document, error) {
+func (s *rtQueryStub) ExecuteQuery(context.Context, string, model.Query) ([]model.Document, error) {
 	return nil, nil
 }
-func (s *rtQueryStub) WatchCollection(context.Context, string) (<-chan storage.Event, error) {
+func (s *rtQueryStub) WatchCollection(context.Context, string, string) (<-chan storage.Event, error) {
 	if s.failAlways {
 		s.calls.Add(1)
 		return nil, errors.New("watch fail")
@@ -200,10 +200,10 @@ func (s *rtQueryStub) WatchCollection(context.Context, string) (<-chan storage.E
 	close(ch)
 	return ch, nil
 }
-func (s *rtQueryStub) Pull(context.Context, storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (s *rtQueryStub) Pull(context.Context, string, storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
-func (s *rtQueryStub) Push(context.Context, storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (s *rtQueryStub) Push(context.Context, string, storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 

@@ -13,31 +13,31 @@ import (
 
 type mockQueryWatchError struct{}
 
-func (m *mockQueryWatchError) GetDocument(ctx context.Context, path string) (model.Document, error) {
+func (m *mockQueryWatchError) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchError) CreateDocument(ctx context.Context, doc model.Document) error {
+func (m *mockQueryWatchError) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
 	return nil
 }
-func (m *mockQueryWatchError) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryWatchError) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchError) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryWatchError) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchError) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
+func (m *mockQueryWatchError) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
 	return nil
 }
-func (m *mockQueryWatchError) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
+func (m *mockQueryWatchError) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchError) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
+func (m *mockQueryWatchError) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
 	return nil, assert.AnError
 }
-func (m *mockQueryWatchError) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (m *mockQueryWatchError) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchError) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (m *mockQueryWatchError) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 
@@ -45,36 +45,36 @@ type mockQueryWatchStream struct {
 	stream chan storage.Event
 }
 
-func (m *mockQueryWatchStream) GetDocument(ctx context.Context, path string) (model.Document, error) {
+func (m *mockQueryWatchStream) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchStream) CreateDocument(ctx context.Context, doc model.Document) error {
+func (m *mockQueryWatchStream) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
 	return nil
 }
-func (m *mockQueryWatchStream) ReplaceDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryWatchStream) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchStream) PatchDocument(ctx context.Context, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *mockQueryWatchStream) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchStream) DeleteDocument(ctx context.Context, path string, pred model.Filters) error {
+func (m *mockQueryWatchStream) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
 	return nil
 }
-func (m *mockQueryWatchStream) ExecuteQuery(ctx context.Context, q model.Query) ([]model.Document, error) {
+func (m *mockQueryWatchStream) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchStream) WatchCollection(ctx context.Context, collection string) (<-chan storage.Event, error) {
+func (m *mockQueryWatchStream) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
 	return m.stream, nil
 }
-func (m *mockQueryWatchStream) Pull(ctx context.Context, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (m *mockQueryWatchStream) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
-func (m *mockQueryWatchStream) Push(ctx context.Context, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (m *mockQueryWatchStream) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 
 func TestServer_StartBackgroundTasks_WatchError(t *testing.T) {
-	srv := NewServer(&mockQueryWatchError{}, "")
+	srv := NewServer(&mockQueryWatchError{}, "", nil, Config{EnableAuth: false})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -86,7 +86,7 @@ func TestServer_StartBackgroundTasks_WatchError(t *testing.T) {
 func TestServer_StartBackgroundTasks_Broadcast(t *testing.T) {
 	stream := make(chan storage.Event, 1)
 	qs := &mockQueryWatchStream{stream: stream}
-	srv := NewServer(qs, "")
+	srv := NewServer(qs, "", nil, Config{EnableAuth: false})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -96,10 +96,11 @@ func TestServer_StartBackgroundTasks_Broadcast(t *testing.T) {
 
 	// Register a client with a subscription to capture broadcast
 	client := &Client{
-		hub:           srv.hub,
-		queryService:  qs,
-		send:          make(chan BaseMessage, 1),
-		subscriptions: map[string]Subscription{"sub": {Query: model.Query{}, IncludeData: true}},
+		hub:             srv.hub,
+		queryService:    qs,
+		send:            make(chan BaseMessage, 1),
+		subscriptions:   map[string]Subscription{"sub": {Query: model.Query{}, IncludeData: true}},
+		allowAllTenants: true,
 	}
 	srv.hub.Register(client)
 

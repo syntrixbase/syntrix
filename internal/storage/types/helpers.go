@@ -8,7 +8,16 @@ import (
 	"github.com/zeebo/blake3"
 )
 
+// CalculateTenantID calculates the tenant-aware document ID
+// Format: tenant_id:hash(fullpath)
+func CalculateTenantID(tenant, fullpath string) string {
+	hash := blake3.Sum256([]byte(fullpath))
+	hashStr := hex.EncodeToString(hash[:16])
+	return tenant + ":" + hashStr
+}
+
 // CalculateID calculates the document ID (hash) from the full path
+// Deprecated: Use CalculateTenantID instead
 func CalculateID(fullpath string) string {
 	hash := blake3.Sum256([]byte(fullpath))
 	return hex.EncodeToString(hash[:16])
@@ -22,20 +31,21 @@ func CalculateCollectionHash(collection string) string {
 }
 
 // NewDocument creates a new document instance with initialized metadata
-func NewDocument(fullpath string, collection string, data map[string]interface{}) *Document {
+func NewDocument(tenant string, fullpath string, collection string, data map[string]interface{}) *Document {
 	// Calculate Parent from collection path
 	parent := ""
 	if idx := strings.LastIndex(collection, "/"); idx != -1 {
 		parent = collection[:idx]
 	}
 
-	id := CalculateID(fullpath)
+	id := CalculateTenantID(tenant, fullpath)
 	collectionHash := CalculateCollectionHash(collection)
 
 	now := time.Now().UnixMilli()
 
 	return &Document{
 		Id:             id,
+		TenantID:       tenant,
 		Fullpath:       fullpath,
 		Collection:     collection,
 		CollectionHash: collectionHash,
