@@ -1,0 +1,117 @@
+name: Syntrix Server CI
+
+on:
+  pull_request:
+    branches: [ "main", "master" ]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'Makefile'
+      - 'cmd/**'
+      - 'internal/**'
+      - 'pkg/**'
+      - 'config/**'
+      - 'tests/**'
+      - '.github/workflows/syntrix-server.yml'
+
+jobs:
+  syntrix-server:
+    name: Syntrix Server (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start Services
+        run: |
+          docker compose -f .devcontainer/docker-compose.yml up -d mongodb nats mongo-init
+          echo "Waiting for services to initialize..."
+          timeout 60s bash -c 'until docker exec syntrix_mongodb mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done'
+          docker compose -f .devcontainer/docker-compose.yml ps
+          docker compose -f .devcontainer/docker-compose.yml logs mongo-init
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Verify Go version
+        run: go version
+
+      - name: Build
+        run: make build
+
+      - name: Test and Coverage
+        run: |
+          # Run tests with coverage, excluding cmd/ directory
+          go test -coverprofile=coverage.out $(go list ./... | grep -v "/cmd/")
+
+          # Generate function report
+          go tool cover -func=coverage.out > coverage.txt
+
+          # Clean up package names for processing
+          sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt > coverage.clean.txt
+
+          echo -e "\nFunction coverage details (excluding >= 85%):"
+          printf "%-70s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
+          echo "---------------------------------------------------------------------------------------------------------"
+
+          threshold_func=70.0
+          threshold_total=85.0
+
+          # Print functions with < 85% coverage, sorted
+          # Mark functions < 70% as error directly in the list
+          grep -v "^total:" coverage.clean.txt | \
+          awk -v threshold="$threshold_func" -v threshold_total="$threshold_total" '{
+              cov = $3
+              sub("%", "", cov)
+              if (cov + 0 < threshold_total + 0) {
+                  if (cov + 0 < threshold + 0) {
+                      split($1, parts, ":")
+                      file = parts[1]
+                      line = parts[2]
+                      printf "::error file=%s,line=%s::%-70s %-35s %s (CRITICAL < %s%%)\n", file, line, $1, $2, $3, threshold
+                  } else {
+                      printf "%-70s %-35s %s\n", $1, $2, $3
+                  }
+              }
+          }' | sort -k3 -nr
+
+          echo "---------------------------------------------------------------------------------------------------------"
+
+          # Calculate and print groups
+          COUNT_100=$(grep -v "^total:" coverage.clean.txt | awk '$3 == "100.0%"' | wc -l)
+          COUNT_95=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 95.0 && cov + 0 < 100.0) print $0}' | wc -l)
+          COUNT_85=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 85.0 && cov + 0 < 95.0) print $0}' | wc -l)
+
+          echo "Functions with 100% coverage: $COUNT_100"
+          echo "Functions with 95%-100% coverage: $COUNT_95"
+          echo "Functions with 85%-95% coverage: $COUNT_85"
+
+          # Print Total
+          grep "^total:" coverage.clean.txt | awk '{printf "%-96s %s\n", "TOTAL", $3}'
+
+          # Check thresholds (Total >= 85%, Individual >= 70%)
+          awk -v threshold_total="$threshold_total" -v threshold_func="$threshold_func" '
+            $1 == "total:" {
+                cov = $3
+                sub("%", "", cov)
+                if (cov + 0 < threshold_total + 0) {
+                    print "::error::Total coverage " cov "% is below the required " threshold_total "%"
+                    failed = 1
+                }
+            }
+            $1 != "total:" {
+                cov = $3
+                sub("%", "", cov)
+                if (cov + 0 < threshold_func + 0) {
+                    failed = 1
+                }
+            }
+            END {
+                if (failed) exit 1
+            }
+          ' coverage.clean.txt
