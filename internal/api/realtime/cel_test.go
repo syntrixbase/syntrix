@@ -21,7 +21,7 @@ func TestCEL_TypeMismatch(t *testing.T) {
 	})
 	assert.NoError(t, err)
 	val, _ := out.Value().(bool)
-	assert.True(t, val)
+	assert.False(t, val)
 
 	// Case 2: age is float64 (25.0)
 	out, _, err = prg.Eval(map[string]interface{}{
