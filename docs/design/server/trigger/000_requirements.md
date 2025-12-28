@@ -37,6 +37,23 @@
 - Subject-length guard details: use NATS subject max of 1024 bytes; if `triggers.<tenant>.<collection>.<encodedDocKey>` exceeds this, replace `encodedDocKey` with `sha256(<encodedDocKey>)` hex truncated to 32 chars; always carry the original decoded docKey in the payload.
 - Hash fallback flagging: when subject hashing occurs, set a boolean marker in payload/metrics (e.g., `subjectHashed=true`) to aid debugging and collision investigations.
 
+## Known Issues (Dec 2025 review)
+
+- Replication pull gap: current query engine uses `updatedAt > checkpoint`, so multiple docs with identical `updatedAt` can cause later docs to be skipped. The pull filter should be inclusive on the sort keys (e.g., `updatedAt >= checkpoint` with a secondary key such as `id`) to guarantee complete replication.
+- Push input validation: when neither `Fullpath` nor `id` is present in an incoming change, the query engine will operate on an empty path. Validation must reject such requests before calling storage to avoid undefined writes or conflicts.
+- Watch cancellation/timeout: `WatchCollection` relies on the default `http.Client` (no timeout) and does not break out of the decode loop on context cancellation, so long-lived half-open connections can leak goroutines. Add client timeouts and context-aware read loops.
+- Delete conflict masking: in replication push delete flow, `ErrNotFound` is treated as success even when a `BaseVersion` was supplied, so version conflicts on already-deleted docs are hidden. Should surface conflict (return latest) when delete preconditions fail.
+- Watch error observability: JSON decode errors in `WatchCollection` only log and then close the channel without signaling an error, so consumers cannot distinguish graceful completion from stream corruption; this can drop events silently. Should propagate errors to callers.
+- Loader error signaling gap: `TriggerEngine.LoadTriggers` currently returns no error, yet tenant/collection/docKey validation is required to fail fast. Without an error channel, invalid triggers can be skipped silently. Why: callers cannot know load outcome, leading to partial activation and hard-to-debug misses.
+- Hash-guard partitioning ambiguity: subject hashing replaces the docKey segment for long subjects, but consumer partitioning/idem-potency keys must use the decoded docKey from payload, not the hashed subject segment. Why: hashing alters routing keys; if partitioning uses the hashed segment, different docs can collide, affecting ordering and dedupe.
+- Hash observability gap: requirements mention `subjectHashed=true`, but metrics/alerts for hash-path traffic are not mandated. Why: without counters/percentiles for hashed subjects (publish/consume/retry) and collision logging, hash-triggered routing issues are invisible.
+- Checkpoint reset risk: "start from now" on missing checkpoint skips historical events by default. Why: accidental checkpoint loss would silently drop backlog; safer default is explicit opt-in or audit + metric when starting from now.
+- Hash collision handling TBD (low priority): when subject hashing is used and hashed segment collides with an in-flight key, the handling path (queue, serialize, or fail) and alert thresholds are not defined. Why: even very low-probability collisions need a diagnosable handling path.
+- Hash branch retry/alert tuning TBD (low priority): hash path is higher-risk but does not specify stricter retry caps/timeouts or alert windows. Why: without differentiated SLOs, hash-path anomalies may be detected late.
+- "Start from now" audit/RBAC TBD (low priority): the audit sink (log/metric/table) and who can authorize this action are not specified. Why: without authorization and audit, skipping historical events is not traceable.
+- LoadTriggers error migration guidance TBD (low priority): interface now returns error but caller migration steps (startup fail-fast, health/exit semantics) are not documented. Why: without migration guidance, callers may ignore errors or fail to exit when validation fails.
+- Secret/token failure observability TBD (low priority): minimal metrics/log fields (tenant, secret ref, error class) for fetch/mint failures are not mandated. Why: lacking labeled metrics slows incident diagnosis.
+
 ## Open Questions
 
 - Multi-tenant isolation: decided to keep a single `TRIGGERS` stream with subject prefixing (`triggers.<tenant>.>`) for routing; revisit only if quotas/retention require per-tenant streams.

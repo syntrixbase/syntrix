@@ -23,9 +23,20 @@
 3) TaskPublisher pushes tasks to NATS `triggers.<tenant>.<collection>.<docKey>` (tenant prefix enforces isolation on routing).
 4) TaskConsumer pulls from the single `TRIGGERS` stream filtered by `triggers.>`, partitions by collection+docKey, dispatches to DeliveryWorker.
 5) DeliveryWorker POSTs to target URL with headers, signature, and optional system token.
-6) Checkpoint updated after each processed event using tenant-scoped keys to maintain per-tenant resume tokens (at-least-once semantics).
+6) Checkpoint updated after each processed event using tenant-scoped keys to maintain per-tenant resume tokens (at-least-once semantics). If checkpoint is missing, default behavior must be explicitly chosen (e.g., opt-in "start from now" with audit/metric) to avoid silent backlog loss.
 7) Watch scope: default watch all collections within a tenant; optionally restrict via include/exclude collection prefixes in config to reduce noise.
 8) Checkpoint keys: `sys/checkpoints/trigger_evaluator/<tenant>`; if collection filtering is enabled, append the collection key to isolate per-collection progress.
+
+Partitioning and hashing notes
+
+- Partition/ordering and idempotency keys must use the decoded docKey from payload, never the hashed subject segment used to enforce NATS length. Reason: hash fallback can map different docKeys to the same subject fragment; using payload docKey preserves correct ordering and dedupe semantics.
+- When subject hashing is triggered, record metrics/counters (publish, consume, retry) with `subjectHashed=true` and log collisions if the hashed subject collides with an existing in-flight key. Reason: hash path is rare and operationally risky; observability is needed to detect routing/ordering anomalies.
+- Hash collision handling (low priority): define how the consumer reacts to a detected hash collision (e.g., serialize under a single partition, surface alert, and fail tasks) and the alert threshold. Reason: even low-probability collisions need a deterministic response to avoid silent misrouting.
+- Hash branch retry/alert tuning (low priority): consider stricter retry caps/timeouts and faster alerting for hash-path traffic since it is exceptional. Reason: hash path risk profile differs; early detection reduces blast radius.
+
+Recovery/audit notes (low priority)
+
+- "Start from now" must be an explicit, authorized action; log audit records (tenant, actor, reason) and emit a metric when invoked. Reason: skipping backlog is operationally risky and must be traceable.
 
 ## ASCII Module Diagram
 

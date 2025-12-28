@@ -17,3 +17,4 @@ Index of task planning documents for Syntrix.
 - [007.2025-12-26-realtime-auth-plan.md](007.2025-12-26-realtime-auth-plan.md) — Realtime Auth (WS/SSE). Status: In Progress.
 - [008.2025-12-27-sdk-auth-realtime-review.md](008.2025-12-27-sdk-auth-realtime-review.md) — SDK WS/SSE Auth + Multi-Tenant Review. Status: In Progress.
 - [009.2025-12-27-unit-test-optimization.md](009.2025-12-27-unit-test-optimization.md) — Unit Test Suite Optimization. Status: Completed.
+- [010.2025-12-28-trigger-engine-refactor.md](010.2025-12-28-trigger-engine-refactor.md) — Trigger Engine Refactor & Factory Wiring. Status: Planned.

@@ -23,8 +23,10 @@
 
 ```go
 // TriggerEngine is what services use.
+// LoadTriggers MUST validate tenant/collection/docKey and return an error on any invalid trigger;
+// callers should treat errors as startup-blocking to avoid partial activation.
 type TriggerEngine interface {
-    LoadTriggers(triggers []*Trigger)
+    LoadTriggers(triggers []*Trigger) error
     Start(ctx context.Context) error
     Close() error
 }
@@ -43,6 +45,16 @@ type TriggerFactory interface {
 - TaskConsumer: `Start(ctx) error` with worker partitioning; owns stream/consumer lifecycle.
 - DeliveryWorker: `ProcessTask(ctx, *DeliveryTask) error` HTTP caller with auth + signing.
 - Evaluator: existing CEL evaluator reused as is but injected.
+
+Partitioning and hashing contracts
+
+- Consumer partition key and idempotency key use payload `DocKey` (decoded), not the hashed subject fragment. Why: hash fallback alters the subject segment to fit length limits; using the hashed fragment can co-locate distinct docs and break ordering/dedupe guarantees.
+- When subject hashing occurs, publisher sets `subjectHashed=true` in payload/metrics; consumer surfaces metrics for hash-path traffic and logs any detected collision. Why: hash path is exceptional and needs visibility for diagnosis.
+- Hash collision handling (low priority): on detected collision, define consumer behavior (e.g., serialize, flag, and fail fast) and emit alerts. Why: deterministic handling prevents silent ordering/dedup errors.
+
+Migration note (low priority)
+
+- Callers of `LoadTriggers` must handle the returned error and fail startup/mark unhealthy on validation failures; do not ignore errors. Why: silent skips lead to partial trigger activation without visibility.
 
 ## Package Layout
 
