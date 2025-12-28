@@ -54,8 +54,12 @@ jobs:
           set -o pipefail
           failed=0
           # Run tests with coverage, excluding cmd/ directory
-          go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v "/cmd/") | tee test_output.txt
+          go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | grep -v "/cmd/") | \
+            tee test_output.txt
 
+          echo
+          echo -e "\nPackage coverage details:"
+          echo "---------------------------------------------------------------------------------------------------------"
           cat test_output.txt | \
             sed 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' | \
             awk -v threshold="$threshold_package" '
@@ -79,6 +83,7 @@ jobs:
           # Clean up package names for processing
           sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt > coverage.clean.txt
 
+          echo
           echo -e "\nFunction coverage details (excluding >= ${threshold_print}%):"
           printf "%-70s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
           echo "---------------------------------------------------------------------------------------------------------"
