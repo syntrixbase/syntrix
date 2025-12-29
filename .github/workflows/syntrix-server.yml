@@ -48,15 +48,15 @@ jobs:
         run: |
           echo "Waiting for services to initialize..."
           # Wait for docker compose to finish (if it's still running) or check logs if failed
-          # We can't easily wait for the background process pid from a previous step, 
+          # We can't easily wait for the background process pid from a previous step,
           # so we rely on the containers appearing.
-          
+
           # Wait for mongodb container to be running
           timeout 60s bash -c 'until docker ps | grep syntrix_mongodb; do sleep 1; done'
-          
+
           # Wait for actual readiness
           timeout 60s bash -c 'until docker exec syntrix_mongodb mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done'
-          
+
           docker compose -f .devcontainer/docker-compose.yml ps
           if [ -f docker-compose.log ]; then
             echo "--- Docker Compose Log ---"

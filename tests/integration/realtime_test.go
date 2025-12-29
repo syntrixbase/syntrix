@@ -353,7 +353,6 @@ func TestRealtime_Stream(t *testing.T) {
 	assert.True(t, receivedEvent, "Should receive Event for new document")
 }
 
-
 func TestRealtime_Filtering(t *testing.T) {
 	t.Parallel()
 	env := setupServiceEnv(t, "")
@@ -371,8 +370,8 @@ func TestRealtime_Filtering(t *testing.T) {
 
 	// 1. Authenticate
 	authMsg := BaseMessage{
-		ID:   "auth-1",
-		Type: TypeAuth,
+		ID:      "auth-1",
+		Type:    TypeAuth,
 		Payload: mustMarshal(AuthPayload{Token: token}),
 	}
 	err = ws.WriteJSON(authMsg)
