@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/codetrek/syntrix/internal/trigger/internal/worker"
@@ -28,6 +29,12 @@ type natsConsumer struct {
 	workerChans    []chan jetstream.Msg
 	wg             sync.WaitGroup
 	metrics        types.Metrics
+
+	// Shutdown coordination
+	closing         atomic.Bool  // Marks closing state
+	inFlightCount   atomic.Int32 // Count of messages currently in dispatch()
+	drainTimeout    time.Duration
+	shutdownTimeout time.Duration
 }
 
 // ConsumerOption configures the consumer.
@@ -38,6 +45,26 @@ func WithChannelBufferSize(size int) ConsumerOption {
 	return func(c *natsConsumer) {
 		if size > 0 {
 			c.channelBufSize = size
+		}
+	}
+}
+
+// WithDrainTimeout sets the drain timeout for graceful shutdown.
+// This is the maximum time to wait for in-flight dispatch() calls to complete.
+func WithDrainTimeout(d time.Duration) ConsumerOption {
+	return func(c *natsConsumer) {
+		if d > 0 {
+			c.drainTimeout = d
+		}
+	}
+}
+
+// WithShutdownTimeout sets the overall shutdown timeout.
+// This is the maximum time to wait for workers to finish processing.
+func WithShutdownTimeout(d time.Duration) ConsumerOption {
+	return func(c *natsConsumer) {
+		if d > 0 {
+			c.shutdownTimeout = d
 		}
 	}
 }
@@ -66,12 +93,14 @@ func NewTaskConsumerFromJS(js jetstream.JetStream, w worker.DeliveryWorker, numW
 	}
 
 	c := &natsConsumer{
-		js:             js,
-		worker:         w,
-		stream:         "TRIGGERS",
-		numWorkers:     numWorkers,
-		channelBufSize: DefaultChannelBufferSize,
-		metrics:        metrics,
+		js:              js,
+		worker:          w,
+		stream:          "TRIGGERS",
+		numWorkers:      numWorkers,
+		channelBufSize:  DefaultChannelBufferSize,
+		metrics:         metrics,
+		drainTimeout:    types.DefaultDrainTimeout,
+		shutdownTimeout: types.DefaultShutdownTimeout,
 	}
 
 	for _, opt := range opts {
@@ -124,17 +153,75 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 
 	<-ctx.Done()
 
-	log.Println("Stopping Trigger Consumer...")
+	// Phase 1: Stop accepting new messages
+	log.Println("[Info] Stopping Trigger Consumer...")
+	c.closing.Store(true)
 	cc.Stop()
 
+	// Phase 2: Wait for in-flight dispatches to complete
+	drainCtx, drainCancel := context.WithTimeout(context.Background(), c.drainTimeout)
+	defer drainCancel()
+	c.waitForDrain(drainCtx)
+
+	// Phase 3: Close worker channels
 	for _, ch := range c.workerChans {
 		close(ch)
 	}
-	c.wg.Wait()
+
+	// Phase 4: Wait for workers with timeout
+	done := make(chan struct{})
+	go func() {
+		c.wg.Wait()
+		close(done)
+	}()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), c.shutdownTimeout)
+	defer shutdownCancel()
+
+	select {
+	case <-done:
+		log.Println("[Info] All workers stopped gracefully")
+	case <-shutdownCtx.Done():
+		log.Printf("[Warn] Shutdown timeout exceeded, some workers may still be running")
+	}
+
 	return nil
 }
 
+// waitForDrain waits for all in-flight dispatch() calls to complete.
+func (c *natsConsumer) waitForDrain(ctx context.Context) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			remaining := c.inFlightCount.Load()
+			if remaining > 0 {
+				log.Printf("[Warn] Drain timeout, %d messages still in-flight", remaining)
+			}
+			return
+		case <-ticker.C:
+			if c.inFlightCount.Load() == 0 {
+				log.Println("[Info] All in-flight messages drained")
+				return
+			}
+		}
+	}
+}
+
 func (c *natsConsumer) dispatch(msg jetstream.Msg) {
+	// Track in-flight count for graceful shutdown
+	c.inFlightCount.Add(1)
+	defer c.inFlightCount.Add(-1)
+
+	// Check if consumer is closing - NAK message for redelivery
+	if c.closing.Load() {
+		log.Printf("[Warn] Consumer is closing, NAK message for redelivery")
+		msg.Nak()
+		return
+	}
+
 	var task types.DeliveryTask
 	if err := json.Unmarshal(msg.Data(), &task); err != nil {
 		log.Printf("[Error] Invalid payload in dispatch: %v", err)

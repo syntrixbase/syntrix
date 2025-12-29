@@ -1,0 +1,135 @@
+# Consumer Graceful Shutdown
+
+## Overview
+
+This document describes the graceful shutdown mechanism for the trigger consumer to ensure message safety and prevent resource leaks.
+
+## Architecture
+
+```
+                          ┌──────────────────────────────────────────┐
+                          │            Consumer Shutdown             │
+                          └──────────────────────────────────────────┘
+                                           │
+                                           ▼
+                          ┌──────────────────────────────────────────┐
+                          │   Phase 1: Stop Accepting New Messages   │
+                          │   - cc.Stop() (NATS consumer stop)       │
+                          │   - Set c.closing = true                 │
+                          └──────────────────────────────────────────┘
+                                           │
+                                           ▼
+                          ┌──────────────────────────────────────────┐
+                          │   Phase 2: Drain Period                  │
+                          │   - Wait for in-flight dispatch() calls  │
+                          │   - Use atomic counter for tracking      │
+                          │   - Max wait: drainTimeout (default 5s)  │
+                          └──────────────────────────────────────────┘
+                                           │
+                                           ▼
+                          ┌──────────────────────────────────────────┐
+                          │   Phase 3: Close Worker Channels         │
+                          │   - Close all workerChans                │
+                          │   - Workers drain remaining messages     │
+                          └──────────────────────────────────────────┘
+                                           │
+                                           ▼
+                          ┌──────────────────────────────────────────┐
+                          │   Phase 4: Wait for Workers              │
+                          │   - c.wg.Wait() with timeout             │
+                          │   - Max wait: shutdownTimeout (10s)      │
+                          │   - Log if timeout exceeded              │
+                          └──────────────────────────────────────────┘
+```
+
+## Sequence Diagram
+
+```
+    Context        Consumer         NATS           Dispatch        Workers
+       │               │              │               │               │
+       │──cancel()────>│              │               │               │
+       │               │              │               │               │
+       │               │──Stop()─────>│               │               │
+       │               │              │               │               │
+       │               │──closing=true│               │               │
+       │               │              │               │               │
+       │               │              │   ┌───────────┴───────────┐   │
+       │               │              │   │ In-flight dispatch()  │   │
+       │               │              │   │ checks closing flag   │   │
+       │               │              │   │ NAKs if true          │   │
+       │               │              │   └───────────┬───────────┘   │
+       │               │              │               │               │
+       │               │──waitForDrain()─────────────>│               │
+       │               │              │               │               │
+       │               │<─────────────(inFlightCount==0)              │
+       │               │              │               │               │
+       │               │──close(workerChans)─────────────────────────>│
+       │               │              │               │               │
+       │               │              │               │   ┌───────────┴───────────┐
+       │               │              │               │   │ Workers drain queued  │
+       │               │              │               │   │ messages from channels│
+       │               │              │               │   └───────────┬───────────┘
+       │               │              │               │               │
+       │               │──wg.Wait() (with timeout)───────────────────>│
+       │               │              │               │               │
+       │               │<─────────────────────────────────────────────│
+       │               │              │               │               │
+```
+
+## Data Structures
+
+### Consumer Fields
+
+```go
+type natsConsumer struct {
+    // ... existing fields ...
+    
+    // Shutdown coordination
+    closing         atomic.Bool      // Marks closing state
+    inFlightCount   atomic.Int32     // Count of messages currently in dispatch()
+    drainTimeout    time.Duration    // Drain phase timeout (default: 5s)
+    shutdownTimeout time.Duration    // Overall shutdown timeout (default: 10s)
+}
+```
+
+### Configuration Options
+
+```go
+// WithDrainTimeout sets the drain timeout for graceful shutdown.
+func WithDrainTimeout(d time.Duration) ConsumerOption
+
+// WithShutdownTimeout sets the overall shutdown timeout.
+func WithShutdownTimeout(d time.Duration) ConsumerOption
+```
+
+## Default Values
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `drainTimeout` | 5s | Max wait for in-flight dispatch() calls |
+| `shutdownTimeout` | 10s | Max wait for workers to finish |
+
+## Edge Cases
+
+| Scenario | Handling |
+|----------|----------|
+| `dispatch()` receives close signal | NAK message → NATS redelivers to other consumers |
+| Worker processing when ctx cancelled | Worker continues current message to completion |
+| Drain timeout exceeded | Log warning, continue to Phase 3 |
+| Worker timeout exceeded | Log warning, return (don't force terminate) |
+
+## Observability
+
+| Event | Log Level | Description |
+|-------|-----------|-------------|
+| Consumer closing started | Info | Shutdown flow started |
+| Message NAK during shutdown | Warn | New message rejected during close |
+| Drain timeout | Warn | Drain phase timeout with remaining count |
+| Drain complete | Info | All in-flight messages processed |
+| Workers stopped | Info | All workers exited normally |
+| Shutdown timeout | Warn | Overall timeout with active worker count |
+
+## Implementation Reference
+
+See: `internal/trigger/internal/pubsub/consumer.go`
+Task: `tasks/011.2025-12-29-consumer-graceful-shutdown.md`
