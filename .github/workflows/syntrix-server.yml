@@ -39,6 +39,10 @@ jobs:
       - name: Verify Go version
         run: go version
 
+      - name: Check Formatting
+        run: |
+          .github/workflows/scripts/check-fmt.sh
+
       - name: Build
         run: make build
 
