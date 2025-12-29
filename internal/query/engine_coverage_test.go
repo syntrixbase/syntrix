@@ -340,9 +340,13 @@ func TestWatchCollection_RequestError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := NewEngine(mockStorage, "http://invalid-url")
 
-	// This should fail creating request or doing request
-	// Since we use http.NewRequestWithContext, invalid URL might not fail immediately if it's just scheme/host
-	// But client.Do will fail
+	// Use MockTransport to simulate connection error immediately
+	mockTransport := &MockTransport{
+		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
+			return nil, errors.New("connection refused")
+		},
+	}
+	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
 
 	_, err := engine.WatchCollection(context.Background(), "default", "col")
 	assert.Error(t, err)

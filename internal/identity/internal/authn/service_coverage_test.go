@@ -258,9 +258,9 @@ func TestRefresh_Coverage(t *testing.T) {
 }
 
 func TestNewAuthService_Coverage(t *testing.T) {
-	// Case 1: Invalid private key path
+	// Case 1: Invalid private key path - use /dev/null as parent to ensure directory creation fails
 	cfg := config.AuthNConfig{
-		PrivateKeyFile: "/invalid/path/to/key.pem",
+		PrivateKeyFile: "/dev/null/key.pem",
 	}
 	svc, err := NewAuthService(cfg, nil, nil)
 	assert.Error(t, err)
