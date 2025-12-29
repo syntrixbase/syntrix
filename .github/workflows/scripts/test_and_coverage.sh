@@ -14,11 +14,11 @@ go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | \
 
 sed -i 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' test_output.txt
 
-echo
-echo -e "\nPackage coverage details:"
 echo "---------------------------------------------------------------------------------------------------------"
+echo -e "\nPackage coverage details:"
+echo "-------------------------------"
 cat test_output.txt | \
-  grep "^ok" | grep -vE "^ok\stests/" | \
+  grep "^ok" | grep -vE "^ok\s+tests/" | \
   awk -v threshold="$threshold_package" '
     $1 != "?" {
       cov = $5;
@@ -40,7 +40,7 @@ go tool cover -func=coverage.out > coverage.txt
 # Clean up package names for processing
 sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt > coverage.clean.txt
 
-echo
+echo "---------------------------------------------------------------------------------------------------------"
 echo -e "\nFunction coverage details (excluding >= ${threshold_print}%):"
 printf "%-70s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
 echo "---------------------------------------------------------------------------------------------------------"
@@ -83,12 +83,13 @@ COUNT_100=$(grep -v "^total:" coverage.clean.txt | awk '$3 == "100.0%"' | wc -l)
 COUNT_95=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 95.0 && cov + 0 < 100.0) print $0}' | wc -l)
 COUNT_85=$(grep -v "^total:" coverage.clean.txt | awk '{cov=$3; sub("%", "", cov); if (cov + 0 >= 85.0 && cov + 0 < 95.0) print $0}' | wc -l)
 
+echo "Statistics:"
 echo "Functions with 100% coverage: $COUNT_100"
 echo "Functions with 95%-100% coverage: $COUNT_95"
 echo "Functions with 85%-95% coverage: $COUNT_85"
 
-# Check thresholds (Total >= 90%, Individual >= 80%)
-awk -v threshold_total="$threshold_total" -v threshold_func="$threshold_func" -v failed="$failed" '
+# Check should fail the script if any function is below function threshold
+awk -v threshold_func="$threshold_func" -v failed="$failed" '
   BEGIN {
     failed = failed  + 0
   }
