@@ -293,3 +293,218 @@ func TestWithChannelBufferSize_Default(t *testing.T) {
 	nc := c.(*natsConsumer)
 	assert.Equal(t, 100, nc.channelBufSize) // Default value
 }
+
+func TestNewTaskConsumerFromJS_DefaultNumWorkers(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	// Test with numWorkers = 0, should default to 16
+	c, err := NewTaskConsumerFromJS(js, mockWorker, 0, nil)
+	assert.NoError(t, err)
+
+	nc := c.(*natsConsumer)
+	assert.Equal(t, 16, nc.numWorkers) // Default value
+
+	// Test with numWorkers = -1, should also default to 16
+	c2, err := NewTaskConsumerFromJS(js, mockWorker, -1, nil)
+	assert.NoError(t, err)
+
+	nc2 := c2.(*natsConsumer)
+	assert.Equal(t, 16, nc2.numWorkers) // Default value
+}
+
+func TestWithDrainTimeout(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil, WithDrainTimeout(10*time.Second))
+	assert.NoError(t, err)
+
+	nc := c.(*natsConsumer)
+	assert.Equal(t, 10*time.Second, nc.drainTimeout)
+}
+
+func TestWithDrainTimeout_Default(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	assert.NoError(t, err)
+
+	nc := c.(*natsConsumer)
+	assert.Equal(t, 5*time.Second, nc.drainTimeout) // Default value
+}
+
+func TestWithShutdownTimeout(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil, WithShutdownTimeout(20*time.Second))
+	assert.NoError(t, err)
+
+	nc := c.(*natsConsumer)
+	assert.Equal(t, 20*time.Second, nc.shutdownTimeout)
+}
+
+func TestWithShutdownTimeout_Default(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	assert.NoError(t, err)
+
+	nc := c.(*natsConsumer)
+	assert.Equal(t, 10*time.Second, nc.shutdownTimeout) // Default value
+}
+
+func TestConsumer_GracefulShutdown_DrainComplete(t *testing.T) {
+	// Test that all messages are processed during graceful shutdown
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+	stream := new(MockStream)
+	consumer := new(MockConsumer)
+
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil,
+		WithDrainTimeout(100*time.Millisecond),
+		WithShutdownTimeout(200*time.Millisecond),
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	processedCount := 0
+
+	// Expectations
+	js.On("CreateOrUpdateStream", ctx, mock.Anything).Return(stream, nil)
+	js.On("CreateOrUpdateConsumer", ctx, mock.Anything, mock.Anything).Return(consumer, nil)
+
+	consumeCtx := new(MockConsumeContext)
+	consumer.On("Consume", mock.Anything).Return(consumeCtx, nil).Run(func(args mock.Arguments) {
+		handler := args.Get(0).(jetstream.MessageHandler)
+
+		// Send multiple messages then cancel
+		go func() {
+			for i := 0; i < 3; i++ {
+				msg := new(MockMsg)
+				task := trigger.DeliveryTask{TriggerID: "t" + string(rune('1'+i))}
+				taskBytes, _ := json.Marshal(task)
+				msg.On("Data").Return(taskBytes)
+				msg.On("Ack").Return(nil)
+				handler(msg)
+			}
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+		}()
+	})
+	consumeCtx.On("Stop").Return()
+
+	mockWorker.On("ProcessTask", mock.Anything, mock.Anything).Return(nil).Run(func(args mock.Arguments) {
+		processedCount++
+	})
+
+	err := c.Start(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, processedCount, "All messages should be processed")
+}
+
+func TestConsumer_GracefulShutdown_MessageNakOnClose(t *testing.T) {
+	// Test that messages received during closing are NAK'd
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	consumer := nc.(*natsConsumer)
+
+	// Set closing state
+	consumer.closing.Store(true)
+
+	// Create a mock message
+	msg := new(MockMsg)
+	task := trigger.DeliveryTask{TriggerID: "t1"}
+	taskBytes, _ := json.Marshal(task)
+	msg.On("Data").Return(taskBytes)
+	msg.On("Nak").Return(nil)
+
+	// Call dispatch directly
+	consumer.dispatch(msg)
+
+	// Verify NAK was called
+	msg.AssertCalled(t, "Nak")
+	// Worker should NOT be called
+	mockWorker.AssertNotCalled(t, "ProcessTask")
+}
+
+func TestConsumer_InFlightCount(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	consumer := nc.(*natsConsumer)
+
+	// Initialize worker channels
+	consumer.workerChans = make([]chan jetstream.Msg, 1)
+	consumer.workerChans[0] = make(chan jetstream.Msg, 10)
+
+	assert.Equal(t, int32(0), consumer.inFlightCount.Load())
+
+	// Start dispatch in a goroutine
+	done := make(chan struct{})
+	msg := new(MockMsg)
+	task := trigger.DeliveryTask{TriggerID: "t1", Collection: "col1", DocKey: "doc1"}
+	taskBytes, _ := json.Marshal(task)
+	msg.On("Data").Return(taskBytes)
+
+	go func() {
+		consumer.dispatch(msg)
+		close(done)
+	}()
+
+	// Wait for dispatch to complete
+	<-done
+
+	// After dispatch completes, in-flight count should be back to 0
+	assert.Equal(t, int32(0), consumer.inFlightCount.Load())
+
+	// Drain the channel
+	<-consumer.workerChans[0]
+}
+
+func TestConsumer_WaitForDrain(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	consumer := nc.(*natsConsumer)
+
+	// Test immediate drain (no in-flight messages)
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	start := time.Now()
+	consumer.waitForDrain(ctx)
+	elapsed := time.Since(start)
+
+	// Should return quickly (< 200ms)
+	assert.Less(t, elapsed, 200*time.Millisecond, "waitForDrain should return quickly when no in-flight messages")
+}
+
+func TestConsumer_WaitForDrain_Timeout(t *testing.T) {
+	js := new(MockJetStream)
+	mockWorker := new(MockWorker)
+
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	consumer := nc.(*natsConsumer)
+
+	// Simulate in-flight messages
+	consumer.inFlightCount.Store(5)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	consumer.waitForDrain(ctx)
+	elapsed := time.Since(start)
+
+	// Should timeout after ~200ms
+	assert.GreaterOrEqual(t, elapsed, 200*time.Millisecond, "waitForDrain should timeout")
+	assert.Less(t, elapsed, 300*time.Millisecond, "waitForDrain should not exceed timeout by much")
+}
