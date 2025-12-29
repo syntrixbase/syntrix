@@ -22,3 +22,5 @@ Index of task planning documents for Syntrix.
 - [012.2025-12-29-rest-api-hardening.md](012.2025-12-29-rest-api-hardening.md) — REST API Security Hardening & Code Quality. Status: Completed.
 - [013.2025-12-29-test-coverage-improvements.md](013.2025-12-29-test-coverage-improvements.md) — Test Coverage Improvements. Status: Completed.
 - [014.2025-12-26-query-surface-encapsulation.md](014.2025-12-26-query-surface-encapsulation.md) — Query Surface Encapsulation & HTTP Adapter Refactor. Status: In Progress.
+- [015.2025-12-29-index-layer-implementation.md](015.2025-12-29-index-layer-implementation.md) — Index Layer Implementation (Data/Index/Query). Status: Planned. Depends on: 014.
+- [016.2025-12-29-change-stream-puller.md](016.2025-12-29-change-stream-puller.md) — Change Stream Puller (fan-out, checkpoints, JetStream). Status: Planned. Depends on: 015.
