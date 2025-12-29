@@ -39,6 +39,8 @@ type DeliveryTask struct {
 }
 
 func TestTriggerIntegration(t *testing.T) {
+	t.Parallel()
+
 	// 1. Setup Dependencies (Mongo & NATS)
 	natsURL := os.Getenv("NATS_URL")
 	if natsURL == "" {
@@ -52,9 +54,12 @@ func TestTriggerIntegration(t *testing.T) {
 	}
 	defer nc.Close()
 
+	// Generate unique stream name
+	streamName := fmt.Sprintf("TRIGGERS_%d", time.Now().UnixNano())
+
 	js, _ := jetstream.New(nc)
 	ctx := context.Background()
-	_ = js.DeleteStream(ctx, "TRIGGERS") // Ensure clean state
+	_ = js.DeleteStream(ctx, streamName) // Ensure clean state
 
 	// 2. Setup Mock Webhook Server
 	var webhookReceived sync.WaitGroup
@@ -97,6 +102,7 @@ func TestTriggerIntegration(t *testing.T) {
 		cfg.Trigger.RulesFile = rulesFile
 		cfg.Trigger.WorkerCount = 4
 		cfg.Trigger.NatsURL = natsURL
+		cfg.Trigger.StreamName = streamName
 	})
 	defer env.Cancel()
 

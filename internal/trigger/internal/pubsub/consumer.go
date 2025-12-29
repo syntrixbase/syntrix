@@ -70,7 +70,7 @@ func WithShutdownTimeout(d time.Duration) ConsumerOption {
 }
 
 // NewTaskConsumer creates a new TaskConsumer.
-func NewTaskConsumer(nc *nats.Conn, w worker.DeliveryWorker, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
+func NewTaskConsumer(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 	if nc == nil {
 		return nil, fmt.Errorf("nats connection cannot be nil")
 	}
@@ -80,22 +80,25 @@ func NewTaskConsumer(nc *nats.Conn, w worker.DeliveryWorker, numWorkers int, met
 		return nil, err
 	}
 
-	return NewTaskConsumerFromJS(js, w, numWorkers, metrics, opts...)
+	return NewTaskConsumerFromJS(js, w, streamName, numWorkers, metrics, opts...)
 }
 
 // NewTaskConsumerFromJS creates a new TaskConsumer using an existing JetStream context.
-func NewTaskConsumerFromJS(js jetstream.JetStream, w worker.DeliveryWorker, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
+func NewTaskConsumerFromJS(js jetstream.JetStream, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 	if numWorkers <= 0 {
 		numWorkers = 16
 	}
 	if metrics == nil {
 		metrics = &types.NoopMetrics{}
 	}
+	if streamName == "" {
+		streamName = "TRIGGERS"
+	}
 
 	c := &natsConsumer{
 		js:              js,
 		worker:          w,
-		stream:          "TRIGGERS",
+		stream:          streamName,
 		numWorkers:      numWorkers,
 		channelBufSize:  DefaultChannelBufferSize,
 		metrics:         metrics,
@@ -115,7 +118,7 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 	// Ensure Stream exists
 	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     c.stream,
-		Subjects: []string{"triggers.>"},
+		Subjects: []string{fmt.Sprintf("%s.>", c.stream)},
 		Storage:  jetstream.MemoryStorage,
 	})
 	if err != nil {
@@ -126,7 +129,7 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 	consumer, err := c.js.CreateOrUpdateConsumer(ctx, c.stream, jetstream.ConsumerConfig{
 		Durable:       "TriggerDeliveryWorker",
 		AckPolicy:     jetstream.AckExplicitPolicy,
-		FilterSubject: "triggers.>",
+		FilterSubject: fmt.Sprintf("%s.>", c.stream),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create consumer: %w", err)

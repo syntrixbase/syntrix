@@ -10,6 +10,7 @@ import (
 )
 
 func TestVerifyArgon2id_Coverage(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		password    string
@@ -101,6 +102,7 @@ func TestVerifyArgon2id_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			valid, err := VerifyPassword(tt.password, tt.hash, tt.algo)
 			if tt.expectError {
 				assert.Error(t, err)
@@ -116,6 +118,7 @@ func TestVerifyArgon2id_Coverage(t *testing.T) {
 }
 
 func TestVerifyBcrypt_InvalidHash(t *testing.T) {
+	t.Parallel()
 	// Pass a string that is not a valid bcrypt hash
 	valid, err := VerifyPassword("password", "invalid-bcrypt-hash", AlgoBcrypt)
 	assert.False(t, valid)

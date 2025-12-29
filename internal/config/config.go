@@ -55,6 +55,7 @@ type TriggerConfig struct {
 	NatsURL     string `yaml:"nats_url"`
 	RulesFile   string `yaml:"rules_file"`
 	WorkerCount int    `yaml:"worker_count"`
+	StreamName  string `yaml:"stream_name"`
 }
 
 type StorageConfig struct {

@@ -13,6 +13,7 @@ import (
 )
 
 func TestLoadTriggers(t *testing.T) {
+	t.Parallel()
 	e := &defaultTriggerEngine{}
 
 	validTrigger := &trigger.Trigger{
@@ -33,6 +34,7 @@ func TestLoadTriggers(t *testing.T) {
 }
 
 func TestStart(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
@@ -105,11 +107,13 @@ func TestStart(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
+	t.Parallel()
 	e := &defaultTriggerEngine{}
 	assert.NoError(t, e.Close())
 }
 
 func TestStart_WatchError(t *testing.T) {
+	t.Parallel()
 	mockWatcher := new(MockWatcher)
 	e := &defaultTriggerEngine{
 		watcher: mockWatcher,
@@ -124,6 +128,7 @@ func TestStart_WatchError(t *testing.T) {
 }
 
 func TestStart_EvaluateError(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
@@ -186,6 +191,7 @@ func TestStart_EvaluateError(t *testing.T) {
 }
 
 func TestStart_NilDocumentAndBefore(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 
@@ -229,6 +235,7 @@ func TestStart_NilDocumentAndBefore(t *testing.T) {
 }
 
 func TestStart_PublishError(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
@@ -280,6 +287,7 @@ func TestStart_PublishError(t *testing.T) {
 }
 
 func TestStart_SaveCheckpointError(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
@@ -332,6 +340,7 @@ func TestStart_SaveCheckpointError(t *testing.T) {
 }
 
 func TestStart_BeforeOnlyEvent(t *testing.T) {
+	t.Parallel()
 	mockEvaluator := new(MockEvaluator)
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
@@ -387,6 +396,7 @@ func TestStart_BeforeOnlyEvent(t *testing.T) {
 }
 
 func TestClose_WithWatcherError(t *testing.T) {
+	t.Parallel()
 	mockWatcher := new(MockWatcher)
 	mockWatcher.On("Close").Return(assert.AnError)
 
@@ -400,6 +410,7 @@ func TestClose_WithWatcherError(t *testing.T) {
 }
 
 func TestClose_WithPublisherError(t *testing.T) {
+	t.Parallel()
 	mockPublisher := new(MockPublisher)
 	mockPublisher.On("Close").Return(assert.AnError)
 
@@ -413,6 +424,7 @@ func TestClose_WithPublisherError(t *testing.T) {
 }
 
 func TestClose_WithBothErrors(t *testing.T) {
+	t.Parallel()
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
 	mockWatcher.On("Close").Return(assert.AnError)
@@ -430,6 +442,7 @@ func TestClose_WithBothErrors(t *testing.T) {
 }
 
 func TestClose_Success(t *testing.T) {
+	t.Parallel()
 	mockWatcher := new(MockWatcher)
 	mockPublisher := new(MockPublisher)
 	mockWatcher.On("Close").Return(nil)

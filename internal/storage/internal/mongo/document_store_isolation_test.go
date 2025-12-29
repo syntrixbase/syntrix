@@ -71,6 +71,7 @@ func TestDocumentStore_TenantIsolation(t *testing.T) {
 }
 
 func TestDocumentStore_TenantIDGeneration(t *testing.T) {
+	t.Parallel()
 	tenant := "mytenant"
 	path := "some/path"
 

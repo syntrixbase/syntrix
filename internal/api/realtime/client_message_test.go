@@ -127,8 +127,17 @@ func TestClientHandleMessage_SubscribeSnapshot(t *testing.T) {
 	c.handleMessage(BaseMessage{Type: TypeSubscribe, ID: "sub", Payload: b})
 
 	// Expect SubscribeAck then Snapshot
-	msg1 := <-c.send
-	msg2 := <-c.send
+	var msg1, msg2 BaseMessage
+	select {
+	case msg1 = <-c.send:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for subscribe ack")
+	}
+	select {
+	case msg2 = <-c.send:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for snapshot")
+	}
 	assert.Equal(t, TypeSubscribeAck, msg1.Type)
 	assert.Equal(t, TypeSnapshot, msg2.Type)
 }
@@ -208,8 +217,12 @@ func TestHandleMessage_SubscribeCompileError(t *testing.T) {
 
 	c.handleMessage(BaseMessage{Type: TypeSubscribe, ID: "sub-err", Payload: b})
 
-	msg := <-c.send
-	assert.Equal(t, TypeError, msg.Type)
+	select {
+	case msg := <-c.send:
+		assert.Equal(t, TypeError, msg.Type)
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for error message")
+	}
 }
 
 func TestHandleMessage_SubscribeBadJSON(t *testing.T) {
@@ -243,7 +256,12 @@ func TestWritePump_StopsOnChannelClose(t *testing.T) {
 	assert.NoError(t, err)
 	defer conn.Close()
 
-	c := <-clientCh
+	var c *Client
+	select {
+	case c = <-clientCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for client connection")
+	}
 
 	// Send one message through writePump
 	c.send <- BaseMessage{Type: TypeAuthAck, ID: "x"}
@@ -313,7 +331,12 @@ func TestWritePump_SendsPing(t *testing.T) {
 	}
 
 	// Cleanup writePump goroutine
-	c := <-clientCh
+	var c *Client
+	select {
+	case c = <-clientCh:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("timeout waiting for client connection")
+	}
 	close(c.send)
 }
 

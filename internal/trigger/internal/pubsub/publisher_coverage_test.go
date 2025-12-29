@@ -30,7 +30,7 @@ func TestNewTaskPublisher_Coverage(t *testing.T) {
 	defer func() { jetStreamNew = originalJetStreamNew }()
 
 	// Case 1: Nil connection
-	pub, err := NewTaskPublisher(nil, nil)
+	pub, err := NewTaskPublisher(nil, "TRIGGERS", nil)
 	assert.Error(t, err)
 	assert.Nil(t, pub)
 	assert.Contains(t, err.Error(), "nats connection cannot be nil")
@@ -39,7 +39,7 @@ func TestNewTaskPublisher_Coverage(t *testing.T) {
 	jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
 		return nil, errors.New("mock js error")
 	}
-	pub, err = NewTaskPublisher(&nats.Conn{}, nil)
+	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
 	assert.Error(t, err)
 	assert.Nil(t, pub)
 	assert.Contains(t, err.Error(), "mock js error")
@@ -52,7 +52,7 @@ func TestNewTaskPublisher_Coverage(t *testing.T) {
 		return mockJS, nil
 	}
 
-	pub, err = NewTaskPublisher(&nats.Conn{}, nil)
+	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
 	assert.Error(t, err)
 	assert.Nil(t, pub)
 	assert.Contains(t, err.Error(), "failed to ensure stream")
@@ -66,7 +66,7 @@ func TestNewTaskPublisher_Coverage(t *testing.T) {
 		return mockJS2, nil
 	}
 
-	pub, err = NewTaskPublisher(&nats.Conn{}, nil)
+	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, pub)
 }

@@ -18,6 +18,7 @@ import (
 )
 
 func TestManager_AuthServiceGetter(t *testing.T) {
+	t.Parallel()
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{})
 
@@ -25,6 +26,7 @@ func TestManager_AuthServiceGetter(t *testing.T) {
 }
 
 func TestNewManager_DefaultListenHost(t *testing.T) {
+	t.Parallel()
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{})
 
@@ -32,6 +34,7 @@ func TestNewManager_DefaultListenHost(t *testing.T) {
 }
 
 func TestManager_Init_StorageError(t *testing.T) {
+	t.Parallel()
 	cfg := config.LoadConfig()
 	if backend, ok := cfg.Storage.Backends["default_mongo"]; ok {
 		backend.Mongo.URI = "mongodb://invalid-host:1"

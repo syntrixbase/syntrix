@@ -31,7 +31,7 @@ func (m *MockJetStream) Publish(ctx context.Context, subject string, data []byte
 
 func TestNatsPublisher_Publish(t *testing.T) {
 	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, nil)
+	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	task := &trigger.DeliveryTask{
 		Tenant:     "acme",
@@ -40,7 +40,7 @@ func TestNatsPublisher_Publish(t *testing.T) {
 		TriggerID:  "t1",
 	}
 
-	expectedSubject := "triggers.acme.users.dXNlci0x" // base64url("user-1")
+	expectedSubject := "TRIGGERS.acme.users.dXNlci0x" // base64url("user-1")
 	expectedData, _ := json.Marshal(task)
 
 	mockJS.On("Publish", mock.Anything, expectedSubject, expectedData, mock.Anything).Return(&jetstream.PubAck{}, nil)
@@ -52,7 +52,7 @@ func TestNatsPublisher_Publish(t *testing.T) {
 }
 func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
 	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, nil)
+	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	// Create a long DocKey to force hashing
 	longDocKey := strings.Repeat("a", 1000)
@@ -66,13 +66,13 @@ func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
 	}
 
 	// Calculate expected subject
-	originalSubject := fmt.Sprintf("triggers.%s.%s.%s", task.Tenant, task.Collection, encodedDocKey)
+	originalSubject := fmt.Sprintf("TRIGGERS.%s.%s.%s", task.Tenant, task.Collection, encodedDocKey)
 	// Verify it is indeed long enough
 	assert.True(t, len(originalSubject) > 1024)
 
 	hash := sha256.Sum256([]byte(originalSubject))
 	hashStr := hex.EncodeToString(hash[:16])
-	expectedSubject := fmt.Sprintf("triggers.hashed.%s", hashStr)
+	expectedSubject := fmt.Sprintf("TRIGGERS.hashed.%s", hashStr)
 
 	// The task passed to Publish will be modified (SubjectHashed = true)
 	// So we need to match the data argument with SubjectHashed = true
@@ -90,7 +90,7 @@ func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
 }
 func TestNatsPublisher_Publish_Error(t *testing.T) {
 	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, nil)
+	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	task := &trigger.DeliveryTask{
 		Tenant:     "acme",
@@ -109,7 +109,7 @@ func TestNatsPublisher_Publish_Error(t *testing.T) {
 
 func TestNatsPublisher_Close(t *testing.T) {
 	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, nil)
+	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	// Close should be a no-op and return nil
 	err := publisher.Close()

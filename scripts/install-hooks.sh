@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+cd $(dirname $0)/../
+
 # Get the git directory (usually .git)
 GIT_DIR=$(git rev-parse --git-dir)
 HOOKS_DIR="$GIT_DIR/hooks"

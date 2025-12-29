@@ -15,8 +15,8 @@ import (
 
 var (
 	newTaskPublisher = pubsub.NewTaskPublisher
-	newTaskConsumer  = func(nc *nats.Conn, w worker.DeliveryWorker, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
-		return pubsub.NewTaskConsumer(nc, w, numWorkers, metrics, opts...)
+	newTaskConsumer  = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+		return pubsub.NewTaskConsumer(nc, w, streamName, numWorkers, metrics, opts...)
 	}
 )
 
@@ -51,6 +51,15 @@ func WithSecretProvider(s worker.SecretProvider) FactoryOption {
 	}
 }
 
+// WithStreamName sets the NATS stream name for the factory.
+func WithStreamName(name string) FactoryOption {
+	return func(f *defaultTriggerFactory) {
+		if name != "" {
+			f.streamName = name
+		}
+	}
+}
+
 // defaultTriggerFactory implements TriggerFactory.
 type defaultTriggerFactory struct {
 	store        storage.DocumentStore
@@ -60,16 +69,18 @@ type defaultTriggerFactory struct {
 	startFromNow bool
 	metrics      types.Metrics
 	secrets      worker.SecretProvider
+	streamName   string
 }
 
 // NewFactory creates a new TriggerFactory.
 func NewFactory(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN, opts ...FactoryOption) (TriggerFactory, error) {
 	f := &defaultTriggerFactory{
-		store:   store,
-		nats:    nats,
-		auth:    auth,
-		tenant:  "default",
-		metrics: &types.NoopMetrics{},
+		store:      store,
+		nats:       nats,
+		auth:       auth,
+		tenant:     "default",
+		metrics:    &types.NoopMetrics{},
+		streamName: "TRIGGERS",
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -90,7 +101,7 @@ func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
 
 	var pub pubsub.TaskPublisher
 	if f.nats != nil {
-		p, err := newTaskPublisher(f.nats, f.metrics)
+		p, err := newTaskPublisher(f.nats, f.streamName, f.metrics)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create publisher: %w", err)
 		}
@@ -112,7 +123,7 @@ func (f *defaultTriggerFactory) Consumer(numWorkers int) (TaskConsumer, error) {
 
 	w := worker.NewDeliveryWorker(f.auth, f.secrets, worker.HTTPClientOptions{}, f.metrics)
 
-	return newTaskConsumer(f.nats, w, numWorkers, f.metrics)
+	return newTaskConsumer(f.nats, w, f.streamName, numWorkers, f.metrics)
 }
 
 // Close releases resources held by the factory.

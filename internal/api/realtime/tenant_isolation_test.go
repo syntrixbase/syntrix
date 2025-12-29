@@ -57,7 +57,7 @@ func TestHub_TenantIsolation(t *testing.T) {
 	hub.Register(clientC)
 
 	// Wait for registration
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 1. Broadcast event for Tenant A
 	// The ID format "tenant:id" is used by determineEventTenant to extract tenant
@@ -156,7 +156,7 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 	}
 	hub.Register(sysClient)
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// Broadcast event for Tenant A
 	evtA := storage.Event{

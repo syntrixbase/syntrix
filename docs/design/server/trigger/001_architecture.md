@@ -12,16 +12,16 @@
 - Adapters (internal):
   - DocumentWatcher: wraps storage watch + checkpoint persistence.
   - Evaluator: CEL-based filter, cached programs.
-  - TaskPublisher: NATS JetStream publisher, subject policy unchanged.
-  - TaskConsumer: JetStream consumer + worker pool with partitioning by doc key.
+  - TaskPublisher: NATS JetStream publisher, supports dynamic stream naming for isolation.
+  - TaskConsumer: JetStream consumer + worker pool, dynamically filters subjects based on stream name.
   - DeliveryWorker: HTTP caller with auth token + signature helper.
 
 ## Data Flow
 
 1) DocumentWatcher reads a tenant-scoped resume token from storage, opens the tenant watch stream, emits events.
 2) TriggerEngine invokes Evaluator per event, builds DeliveryTask when matched.
-3) TaskPublisher pushes tasks to NATS `triggers.<tenant>.<collection>.<docKey>` (tenant prefix enforces isolation on routing).
-4) TaskConsumer pulls from the single `TRIGGERS` stream filtered by `triggers.>`, partitions by collection+docKey, dispatches to DeliveryWorker.
+3) TaskPublisher pushes tasks to NATS `<stream_name>.<tenant>.<collection>.<docKey>` (stream name is configurable, default `TRIGGERS`).
+4) TaskConsumer pulls from the configured stream filtered by `<stream_name>.>`, partitions by collection+docKey, dispatches to DeliveryWorker.
 5) DeliveryWorker POSTs to target URL with headers, signature, and optional system token.
 6) Checkpoint updated after each processed event using tenant-scoped keys to maintain per-tenant resume tokens (at-least-once semantics). If checkpoint is missing, default behavior must be explicitly chosen (e.g., opt-in "start from now" with audit/metric) to avoid silent backlog loss.
 7) Watch scope: default watch all collections within a tenant; optionally restrict via include/exclude collection prefixes in config to reduce noise.
@@ -48,7 +48,7 @@ Recovery/audit notes (low priority)
                                                                   |
                                                                   v
                                                         +-----------------+
-                                                        | TaskPublisher   | -> NATS JetStream (TRIGGERS)
+                                                        | TaskPublisher   | -> NATS JetStream (Configurable Stream)
                                                         +-----------------+
                                                                   |
                                                                   v
@@ -69,7 +69,7 @@ Recovery/audit notes (low priority)
 
 ## Compatibility Notes
 
-- Keep current subject scheme (`triggers.<tenant>.>` on a shared `TRIGGERS` stream) and retry/backoff math; future changes go through config gates.
+- Subject scheme is `<stream_name>.<tenant>.>` (default stream is `TRIGGERS`). This allows stream isolation for testing or multi-tenant sharding.
 - docKey inserted into subjects must use a subject-safe encoding (no `.` `*` `>` wildcards); publisher/consumer must apply the same encoding/decoding path.
 - CEL condition semantics remain identical; collection matching still supports glob via `path.Match`.
 - Single-stream assumption: monitor per-tenant traffic and retention; if quotas or noisy-neighbor risk are observed, pivot to per-tenant streams via config.

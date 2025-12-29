@@ -12,6 +12,7 @@ import (
 )
 
 func TestListUsers_Coverage(t *testing.T) {
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
@@ -51,6 +52,7 @@ func TestListUsers_Coverage(t *testing.T) {
 }
 
 func TestUpdateUser_Coverage(t *testing.T) {
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
@@ -93,7 +95,7 @@ func TestTenantFromContext_Coverage(t *testing.T) {
 	// This function is private, but we can test it via public methods like ListUsers
 	// We already covered "Missing Tenant" (nil value) in TestListUsers_Coverage.
 	// Let's cover "Invalid Type" or "Empty String" if possible.
-
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),

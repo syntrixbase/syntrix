@@ -19,7 +19,7 @@ func TestHub_Register_Closed(t *testing.T) {
 		if hub.Done() != nil {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	// Cancel context to stop hub
@@ -52,7 +52,7 @@ func TestHub_Unregister_Closed(t *testing.T) {
 		if hub.Done() != nil {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	// Cancel context to stop hub
@@ -84,7 +84,7 @@ func TestHub_Broadcast_Closed(t *testing.T) {
 		if hub.Done() != nil {
 			break
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 
 	// Cancel context to stop hub

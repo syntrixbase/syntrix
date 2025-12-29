@@ -11,6 +11,7 @@ import (
 )
 
 func TestTokenFromQueryParam_TableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		url      string
@@ -24,7 +25,9 @@ func TestTokenFromQueryParam_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			var req *http.Request
 			if tt.url != "" {
 				req = httptest.NewRequest("GET", tt.url, nil)
@@ -35,12 +38,13 @@ func TestTokenFromQueryParam_TableDriven(t *testing.T) {
 }
 
 func TestServer_HandleWS_TableDriven(t *testing.T) {
+	t.Parallel()
 	mockQS := new(MockQueryService)
 	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
-	defer cancelHub()
+	t.Cleanup(cancelHub)
 	go server.hub.Run(ctxHub)
 
 	tests := []struct {
@@ -63,7 +67,9 @@ func TestServer_HandleWS_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			req := httptest.NewRequest("GET", tt.url, nil)
 			w := httptest.NewRecorder()
 
@@ -78,12 +84,13 @@ func TestServer_HandleWS_TableDriven(t *testing.T) {
 }
 
 func TestServer_HandleSSE_TableDriven(t *testing.T) {
+	t.Parallel()
 	mockQS := new(MockQueryService)
 	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
-	defer cancelHub()
+	t.Cleanup(cancelHub)
 	go server.hub.Run(ctxHub)
 
 	tests := []struct {
@@ -104,7 +111,9 @@ func TestServer_HandleSSE_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
 			req := httptest.NewRequest("GET", "/sse", nil).WithContext(ctx)
 			for k, v := range tt.headers {
@@ -114,7 +123,7 @@ func TestServer_HandleSSE_TableDriven(t *testing.T) {
 
 			// Cancel context shortly to unblock HandleSSE
 			go func() {
-				time.Sleep(10 * time.Millisecond)
+				time.Sleep(5 * time.Millisecond)
 				cancel()
 			}()
 

@@ -15,6 +15,7 @@ import (
 )
 
 func TestSignUp_Coverage(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		req         SignupRequest
@@ -112,6 +113,7 @@ func TestSignUp_Coverage(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			cfg := config.AuthNConfig{
 				PrivateKeyFile:  getTestKeyPath(t),
@@ -145,6 +147,7 @@ func TestSignUp_Coverage(t *testing.T) {
 }
 
 func TestRefresh_Coverage(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
 		AccessTokenTTL:  15 * time.Minute,
@@ -233,6 +236,8 @@ func TestRefresh_Coverage(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			mockStorage := new(MockStorage)
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
@@ -274,6 +279,7 @@ func TestNewAuthService_Coverage(t *testing.T) {
 }
 
 func TestAuthService_Logout_Coverage(t *testing.T) {
+	t.Parallel()
 	// Setup service with valid key (generate one)
 	tmpDir := t.TempDir()
 	keyFile := filepath.Join(tmpDir, "test.pem")

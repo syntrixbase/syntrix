@@ -4,6 +4,8 @@
 #   html: (default) Generate HTML report and print summary.
 #   func: Print function-level coverage details.
 
+cd $(dirname $0)/../
+
 set -euo pipefail
 
 MODE=${1:-html}

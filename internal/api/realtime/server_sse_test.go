@@ -57,7 +57,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 	}()
 
 	// Wait for registration and send a broadcast
-	time.Sleep(20 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	hub.Broadcast(storage.Event{
 		Type:     storage.EventCreate,
 		Id:       "users/1",
@@ -70,7 +70,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 		},
 	})
 
-	time.Sleep(30 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	cancel()
 
 	select {
@@ -208,7 +208,7 @@ func TestServeSSE_CookieIgnored(t *testing.T) {
 	w := httptest.NewRecorder()
 
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		reqCancel()
 	}()
 

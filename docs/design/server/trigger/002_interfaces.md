@@ -5,7 +5,7 @@
 - Why: give callers a tiny, stable API and hide transport/storage/HTTP details.
 - How: expose only factory + engine interfaces; everything else lives in internal adapters.
 
-**Tenant awareness:** `Trigger` and `DeliveryTask` require `Tenant`; publishing and consuming route via `triggers.<tenant>.>` and checkpoints are per-tenant keys.
+**Tenant awareness:** `Trigger` and `DeliveryTask` require `Tenant`; publishing and consuming route via `<stream_name>.<tenant>.>` (default `triggers`) and checkpoints are per-tenant keys.
 
 ### Tenant trust and safety constraints
 

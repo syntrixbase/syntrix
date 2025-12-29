@@ -55,6 +55,7 @@ func (m *MockAuthService) ValidateToken(tokenString string) (*identity.Claims, e
 }
 
 func TestClientHandleMessage_TableDriven(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name            string
 		msg             BaseMessage
@@ -174,7 +175,9 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			hub := NewHub()
 			qs := new(MockQueryService)
 			// Default mock behavior for Pull if not specified

@@ -99,3 +99,14 @@ func TestManager_Shutdown_ServerShutdownError(t *testing.T) {
 	// Should not panic
 	mgr.Shutdown(ctx)
 }
+
+func TestManager_Shutdown_Timeout(t *testing.T) {
+	mgr := &Manager{}
+	mgr.wg.Add(1) // Simulate a running task that never finishes
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+
+	// Should timeout and log "Timeout waiting for background tasks."
+	mgr.Shutdown(ctx)
+}

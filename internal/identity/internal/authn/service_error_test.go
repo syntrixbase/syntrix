@@ -14,6 +14,7 @@ import (
 )
 
 func TestValidateToken_ErrorPaths(t *testing.T) {
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
@@ -24,11 +25,13 @@ func TestValidateToken_ErrorPaths(t *testing.T) {
 	authService := svc.(*AuthService)
 
 	t.Run("Invalid Token Format", func(t *testing.T) {
+		t.Parallel()
 		_, err := authService.ValidateToken("invalid-token-string")
 		assert.Error(t, err)
 	})
 
 	t.Run("Token Signed with Wrong Method", func(t *testing.T) {
+		t.Parallel()
 		// Create a token signed with HMAC instead of RSA
 		token := jwt.New(jwt.SigningMethodHS256)
 		tokenString, err := token.SignedString([]byte("secret"))
@@ -41,6 +44,8 @@ func TestValidateToken_ErrorPaths(t *testing.T) {
 }
 
 func TestSignIn_ErrorPaths(t *testing.T) {
+	t.Parallel()
+
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
@@ -49,6 +54,7 @@ func TestSignIn_ErrorPaths(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("VerifyPassword Error", func(t *testing.T) {
+		t.Parallel()
 		// Setup user with invalid hash format
 		user := &User{
 			ID:           "u1",
@@ -69,6 +75,7 @@ func TestSignIn_ErrorPaths(t *testing.T) {
 }
 
 func TestRefresh_ErrorPaths_Extended(t *testing.T) {
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),
@@ -90,6 +97,7 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 	}
 
 	t.Run("RevokeToken Error", func(t *testing.T) {
+		t.Parallel()
 		token := getRefreshToken()
 
 		// Mock successful checks but failed revocation

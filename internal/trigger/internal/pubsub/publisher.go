@@ -18,9 +18,10 @@ import (
 type natsPublisher struct {
 	js      jetstream.JetStream
 	metrics types.Metrics
+	prefix  string
 }
 
-func NewTaskPublisher(nc *nats.Conn, metrics types.Metrics) (TaskPublisher, error) {
+func NewTaskPublisher(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error) {
 	if nc == nil {
 		return nil, fmt.Errorf("nats connection cannot be nil")
 	}
@@ -30,19 +31,21 @@ func NewTaskPublisher(nc *nats.Conn, metrics types.Metrics) (TaskPublisher, erro
 	}
 
 	// Ensure stream exists
-	if err := EnsureStream(js); err != nil {
+	if err := EnsureStream(js, streamName); err != nil {
 		return nil, fmt.Errorf("failed to ensure stream: %w", err)
 	}
 
-	return NewTaskPublisherFromJS(js, metrics), nil
+	return NewTaskPublisherFromJS(js, streamName, metrics), nil
 }
 
-func EnsureStream(js jetstream.JetStream) error {
+func EnsureStream(js jetstream.JetStream, streamName string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	streamName := "TRIGGERS"
-	subjects := []string{"triggers.>"}
+	if streamName == "" {
+		streamName = "TRIGGERS"
+	}
+	subjects := []string{fmt.Sprintf("%s.>", streamName)}
 
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     streamName,
@@ -52,20 +55,23 @@ func EnsureStream(js jetstream.JetStream) error {
 	return err
 }
 
-func NewTaskPublisherFromJS(js jetstream.JetStream, metrics types.Metrics) TaskPublisher {
+func NewTaskPublisherFromJS(js jetstream.JetStream, streamName string, metrics types.Metrics) TaskPublisher {
 	if metrics == nil {
 		metrics = &types.NoopMetrics{}
 	}
-	return &natsPublisher{js: js, metrics: metrics}
+	if streamName == "" {
+		streamName = "TRIGGERS"
+	}
+	return &natsPublisher{js: js, metrics: metrics, prefix: streamName}
 }
 
 func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) error {
 	start := time.Now()
-	// Subject format: triggers.<tenant>.<collection>.<docKey>
+	// Subject format: <streamName>.<tenant>.<collection>.<docKey>
 	// DocKey is base64url encoded to ensure safety.
 	encodedDocKey := base64.URLEncoding.EncodeToString([]byte(task.DocKey))
 
-	subject := fmt.Sprintf("triggers.%s.%s.%s", task.Tenant, task.Collection, encodedDocKey)
+	subject := fmt.Sprintf("%s.%s.%s.%s", p.prefix, task.Tenant, task.Collection, encodedDocKey)
 
 	// NATS subject length limit is usually 64KB, but for performance and practical reasons,
 	// we might want to limit it. The requirement says "if length > 1024".
@@ -73,7 +79,7 @@ func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) e
 		hash := sha256.Sum256([]byte(subject))
 		// Truncate to 32 chars (16 bytes hex)
 		hashStr := hex.EncodeToString(hash[:16])
-		subject = fmt.Sprintf("triggers.hashed.%s", hashStr)
+		subject = fmt.Sprintf("%s.hashed.%s", p.prefix, hashStr)
 		task.SubjectHashed = true
 	}
 
@@ -83,7 +89,7 @@ func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) e
 		return err
 	}
 
-	_, err = p.js.Publish(ctx, subject, data, jetstream.WithExpectStream("TRIGGERS"), jetstream.WithRetryAttempts(3))
+	_, err = p.js.Publish(ctx, subject, data, jetstream.WithExpectStream(p.prefix), jetstream.WithRetryAttempts(3))
 	if err != nil {
 		p.metrics.IncPublishFailure(task.Tenant, task.Collection, err.Error())
 		return err

@@ -8,6 +8,7 @@ import (
 )
 
 func TestNewFactory_Coverage(t *testing.T) {
+	t.Parallel()
 	// Case 1: No options
 	f, err := NewFactory(nil, nil, nil)
 	assert.NoError(t, err)

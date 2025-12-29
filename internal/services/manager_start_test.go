@@ -49,6 +49,66 @@ func TestManager_Start_Shutdown_WithServer(t *testing.T) {
 	assert.GreaterOrEqual(t, calls.Load(), int32(1))
 }
 
+type MockQueryService struct {
+	mock.Mock
+}
+
+func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	return nil, nil
+}
+func (m *MockQueryService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+	return nil
+}
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	return nil, nil
+}
+func (m *MockQueryService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	return nil, nil
+}
+func (m *MockQueryService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+	return nil
+}
+func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+	return nil, nil
+}
+func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
+	args := m.Called(ctx, tenant, collection)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(<-chan storage.Event), args.Error(1)
+}
+func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+	return nil, nil
+}
+func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+	return nil, nil
+}
+
+func TestManager_Start_RealtimeRetry(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	mockQuery := new(MockQueryService)
+	mockQuery.On("WatchCollection", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("watch failed"))
+
+	mgr.rtServer = realtime.NewServer(mockQuery, "", nil, realtime.Config{})
+
+	bgCtx, bgCancel := context.WithCancel(context.Background())
+
+	mgr.Start(bgCtx)
+
+	// Let it retry a few times
+	time.Sleep(150 * time.Millisecond)
+
+	bgCancel()
+
+	// Wait a bit for shutdown
+	time.Sleep(50 * time.Millisecond)
+
+	mockQuery.AssertExpectations(t)
+}
+
 func TestManager_Start_RealtimeBackground_Failure(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunAPI: true})

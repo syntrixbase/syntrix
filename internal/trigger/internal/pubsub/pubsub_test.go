@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewTaskConsumer_NilConn(t *testing.T) {
-	_, err := NewTaskConsumer(nil, nil, 1, &types.NoopMetrics{})
+	_, err := NewTaskConsumer(nil, nil, "TRIGGERS", 1, &types.NoopMetrics{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nats connection cannot be nil")
 }
@@ -28,13 +28,13 @@ func TestNewTaskConsumer_Success(t *testing.T) {
 	// Note: passing an empty struct might cause issues if code accesses fields, but NewTaskConsumer only checks for nil.
 	// Wait, NewTaskConsumerFromJS might use it? No, it uses JS interface.
 
-	c, err := NewTaskConsumer(&nats.Conn{}, nil, 1, &types.NoopMetrics{})
+	c, err := NewTaskConsumer(&nats.Conn{}, nil, "TRIGGERS", 1, &types.NoopMetrics{})
 	assert.NoError(t, err)
 	assert.NotNil(t, c)
 }
 
 func TestNewTaskPublisher_NilConn(t *testing.T) {
-	_, err := NewTaskPublisher(nil, &types.NoopMetrics{})
+	_, err := NewTaskPublisher(nil, "TRIGGERS", &types.NoopMetrics{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "nats connection cannot be nil")
 }
@@ -49,7 +49,7 @@ func TestNewTaskPublisher_Success(t *testing.T) {
 	// EnsureStream will be called
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 
-	p, err := NewTaskPublisher(&nats.Conn{}, &types.NoopMetrics{})
+	p, err := NewTaskPublisher(&nats.Conn{}, "TRIGGERS", &types.NoopMetrics{})
 	assert.NoError(t, err)
 	assert.NotNil(t, p)
 }
@@ -59,10 +59,10 @@ func TestEnsureStream(t *testing.T) {
 
 	// Expect CreateOrUpdateStream to be called
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.MatchedBy(func(cfg jetstream.StreamConfig) bool {
-		return cfg.Name == "TRIGGERS" && len(cfg.Subjects) > 0 && cfg.Subjects[0] == "triggers.>"
+		return cfg.Name == "TRIGGERS" && len(cfg.Subjects) > 0 && cfg.Subjects[0] == "TRIGGERS.>"
 	})).Return(nil, nil)
 
-	err := EnsureStream(mockJS)
+	err := EnsureStream(mockJS, "TRIGGERS")
 	assert.NoError(t, err)
 	mockJS.AssertExpectations(t)
 }
