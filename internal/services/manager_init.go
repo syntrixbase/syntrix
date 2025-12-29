@@ -23,8 +23,10 @@ import (
 
 // natsConnector allows test injection to avoid real network.
 var natsConnector = nats.Connect
-var triggerFactoryFactory = func(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN) (engine.TriggerFactory, error) {
-	return engine.NewFactory(store, nats, auth, engine.WithStartFromNow(true))
+var triggerFactoryFactory = func(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN, opts ...engine.FactoryOption) (engine.TriggerFactory, error) {
+	// Default options
+	defaultOpts := []engine.FactoryOption{engine.WithStartFromNow(true)}
+	return engine.NewFactory(store, nats, auth, append(defaultOpts, opts...)...)
 }
 var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 	return storage.NewFactory(ctx, cfg)
@@ -180,7 +182,7 @@ func (m *Manager) initTriggerServices() error {
 	}
 	m.natsConn = nc
 
-	factory, err := triggerFactoryFactory(m.docStore, nc, m.authService)
+	factory, err := triggerFactoryFactory(m.docStore, nc, m.authService, engine.WithStreamName(m.cfg.Trigger.StreamName))
 	if err != nil {
 		return fmt.Errorf("failed to create trigger factory: %w", err)
 	}

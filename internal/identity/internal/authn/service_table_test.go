@@ -14,6 +14,7 @@ import (
 )
 
 func TestSignUp_TableDriven(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		req         SignupRequest
@@ -39,7 +40,9 @@ func TestSignUp_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			cfg := config.AuthNConfig{
 				PrivateKeyFile:  getTestKeyPath(t),
@@ -72,6 +75,7 @@ func TestSignUp_TableDriven(t *testing.T) {
 }
 
 func TestSignIn_TableDriven(t *testing.T) {
+	t.Parallel()
 	type testCase struct {
 		name        string
 		req         LoginRequest
@@ -208,7 +212,9 @@ func TestSignIn_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			cfg := config.AuthNConfig{
 				PrivateKeyFile:  getTestKeyPath(t),
@@ -242,6 +248,7 @@ func TestSignIn_TableDriven(t *testing.T) {
 }
 
 func TestRefresh_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),
 		AccessTokenTTL:  15 * time.Minute,
@@ -288,7 +295,9 @@ func TestRefresh_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
@@ -316,6 +325,7 @@ func TestRefresh_TableDriven(t *testing.T) {
 }
 
 func TestLogout_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),
 		AccessTokenTTL:  15 * time.Minute,
@@ -347,7 +357,9 @@ func TestLogout_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
@@ -370,6 +382,7 @@ func TestLogout_TableDriven(t *testing.T) {
 }
 
 func TestMiddleware_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),
 		AccessTokenTTL:  15 * time.Minute,
@@ -414,7 +427,9 @@ func TestMiddleware_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			// Mock IsRevoked for Middleware check
 			// Note: Middleware calls ValidateToken which checks signature.
@@ -448,6 +463,7 @@ func TestMiddleware_TableDriven(t *testing.T) {
 }
 
 func TestListUsers_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
 	}
@@ -469,7 +485,9 @@ func TestListUsers_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockStorage)
@@ -492,6 +510,7 @@ func TestListUsers_TableDriven(t *testing.T) {
 }
 
 func TestUpdateUser_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: getTestKeyPath(t),
 	}
@@ -520,7 +539,9 @@ func TestUpdateUser_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			if tt.mockSetup != nil {
 				tt.mockSetup(mockStorage)
@@ -542,6 +563,7 @@ func TestUpdateUser_TableDriven(t *testing.T) {
 }
 
 func TestMiddlewareOptional_TableDriven(t *testing.T) {
+	t.Parallel()
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),
 		AccessTokenTTL:  15 * time.Minute,
@@ -594,7 +616,9 @@ func TestMiddlewareOptional_TableDriven(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockStorage := new(MockStorage)
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)

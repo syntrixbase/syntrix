@@ -14,6 +14,7 @@ import (
 )
 
 func TestTokenService_ErrorPaths(t *testing.T) {
+	t.Parallel()
 	t.Run("NewTokenService_InvalidKeyPath", func(t *testing.T) {
 		// Use a path that cannot be written to (e.g., under a file treated as dir)
 		tmpDir := t.TempDir()

@@ -59,7 +59,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 
 	// 1. Test "in" - Match
 	hub.Broadcast(storage.Event{

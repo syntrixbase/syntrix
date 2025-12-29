@@ -60,7 +60,7 @@ func TestManager_InitTriggerServices_Success_WithHooks(t *testing.T) {
 	natsConnector = func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil }
 
 	mockFactory := new(MockFactory)
-	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN) (engine.TriggerFactory, error) {
+	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN, ...engine.FactoryOption) (engine.TriggerFactory, error) {
 		return mockFactory, nil
 	}
 
@@ -92,7 +92,7 @@ func TestManager_InitTriggerServices_WorkerOnly(t *testing.T) {
 	natsConnector = func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil }
 
 	mockFactory := new(MockFactory)
-	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN) (engine.TriggerFactory, error) {
+	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN, ...engine.FactoryOption) (engine.TriggerFactory, error) {
 		return mockFactory, nil
 	}
 
@@ -126,7 +126,7 @@ func TestManager_InitTriggerServices_EvaluatorOnly_WithRules(t *testing.T) {
 	natsConnector = func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil }
 
 	mockFactory := new(MockFactory)
-	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN) (engine.TriggerFactory, error) {
+	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN, ...engine.FactoryOption) (engine.TriggerFactory, error) {
 		return mockFactory, nil
 	}
 
@@ -154,7 +154,7 @@ func TestManager_InitTriggerServices_ConsumerError(t *testing.T) {
 	natsConnector = func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil }
 
 	mockFactory := new(MockFactory)
-	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN) (engine.TriggerFactory, error) {
+	triggerFactoryFactory = func(storage.DocumentStore, *nats.Conn, identity.AuthN, ...engine.FactoryOption) (engine.TriggerFactory, error) {
 		return mockFactory, nil
 	}
 

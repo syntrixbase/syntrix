@@ -110,7 +110,7 @@ func TestServeSSE_SendChannelClosed(t *testing.T) {
 	}()
 
 	// Wait for connection to be established
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(10 * time.Millisecond)
 
 	// Cancel the hub context. This triggers hub.shutdownClients(), which closes client.send channels.
 	cancel()

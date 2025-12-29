@@ -14,6 +14,7 @@ import (
 )
 
 func TestHub_Broadcast_TableDriven(t *testing.T) {
+	t.Parallel()
 	type clientSetup struct {
 		id              string
 		tenant          string
@@ -169,7 +170,9 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 	}
 
 	for _, tc := range tests {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			hubCtx, hubCancel := context.WithCancel(context.Background())
 			defer hubCancel()
 
@@ -199,11 +202,14 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 
 				if cs.slowReader {
 					go func(client *Client) {
-						time.Sleep(10 * time.Millisecond)
+						time.Sleep(5 * time.Millisecond)
 						// Drain buffer
 						for {
 							select {
-							case <-client.send:
+							case _, ok := <-client.send:
+								if !ok {
+									return
+								}
 							default:
 								return
 							}
@@ -213,7 +219,7 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 			}
 
 			// Wait for registration
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(15 * time.Millisecond)
 
 			hub.Broadcast(tc.event)
 
@@ -247,7 +253,9 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 }
 
 func TestHub_Lifecycle_TableDriven(t *testing.T) {
+	t.Parallel()
 	t.Run("Graceful Shutdown", func(t *testing.T) {
+		t.Parallel()
 		hubCtx, hubCancel := context.WithCancel(context.Background())
 		hub := NewHub()
 		done := make(chan struct{})

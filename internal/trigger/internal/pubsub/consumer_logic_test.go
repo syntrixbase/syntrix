@@ -37,6 +37,7 @@ func TestConsumer_Dispatch_InvalidPayload(t *testing.T) {
 
 // TestConsumer_Worker_RetryLogic verifies the retry logic in workerLoop.
 func TestConsumer_Worker_RetryLogic(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name           string
 		processErr     error
@@ -99,10 +100,12 @@ func TestConsumer_Worker_RetryLogic(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			mockWorker := new(MockWorker)
 			c := &natsConsumer{
 				worker:      mockWorker,
 				numWorkers:  1,
+				stream:      tt.name,
 				workerChans: []chan jetstream.Msg{make(chan jetstream.Msg, 1)},
 				metrics:     &types.NoopMetrics{},
 			}
@@ -155,6 +158,7 @@ func TestConsumer_Worker_RetryLogic(t *testing.T) {
 
 // TestNewTaskConsumer_JetStreamError verifies error handling when JetStream creation fails.
 func TestNewTaskConsumer_JetStreamError(t *testing.T) {
+	t.Parallel()
 	// Temporarily replace jetStreamNew with a failing function
 	restore := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
 		return nil, errors.New("jetstream connection failed")
@@ -164,7 +168,7 @@ func TestNewTaskConsumer_JetStreamError(t *testing.T) {
 	// Use a nil connection (which will be caught by the nil check first)
 	// But we also need a non-nil connection to test the JetStream error path
 	mockWorker := new(MockWorker)
-	_, err := NewTaskConsumer(nil, mockWorker, 1, nil)
+	_, err := NewTaskConsumer(nil, mockWorker, "TestNewTaskConsumer_JetStreamError", 1, nil)
 	assert.ErrorContains(t, err, "nats connection cannot be nil")
 }
 

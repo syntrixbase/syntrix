@@ -16,6 +16,7 @@ func init() {
 }
 
 func TestHashPassword(t *testing.T) {
+	t.Parallel()
 	password := "mysecretpassword"
 	hash, algo, err := HashPassword(password)
 	require.NoError(t, err)
@@ -25,6 +26,7 @@ func TestHashPassword(t *testing.T) {
 }
 
 func TestVerifyPassword_Argon2id(t *testing.T) {
+	t.Parallel()
 	password := "mysecretpassword"
 	hash, algo, err := HashPassword(password)
 	require.NoError(t, err)
@@ -41,6 +43,7 @@ func TestVerifyPassword_Argon2id(t *testing.T) {
 }
 
 func TestVerifyPassword_Bcrypt(t *testing.T) {
+	t.Parallel()
 	password := "mysecretpassword"
 	// Manually create a bcrypt hash
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -59,6 +62,7 @@ func TestVerifyPassword_Bcrypt(t *testing.T) {
 }
 
 func TestVerifyPassword_UnknownAlgo(t *testing.T) {
+	t.Parallel()
 	valid, err := VerifyPassword("pass", "hash", "unknown")
 	assert.Error(t, err)
 	assert.False(t, valid)

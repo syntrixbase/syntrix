@@ -28,13 +28,11 @@ func TestMongoBackend_Watch(t *testing.T) {
 
 	// Perform Operations
 	go func() {
-		time.Sleep(100 * time.Millisecond) // Wait for watch to establish
+		time.Sleep(10 * time.Millisecond) // Wait for watch to establish
 
 		// Create
 		doc := types.NewDocument(tenant, "users/watcher", "users", map[string]interface{}{"msg": "hello"})
 		backend.Create(context.Background(), tenant, doc)
-
-		time.Sleep(50 * time.Millisecond)
 
 		filters := model.Filters{
 			{Field: "version", Op: "==", Value: doc.Version},
@@ -43,8 +41,6 @@ func TestMongoBackend_Watch(t *testing.T) {
 		if err := backend.Update(context.Background(), tenant, "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
 			t.Logf("Update failed: %v", err)
 		}
-
-		time.Sleep(50 * time.Millisecond)
 
 		// Delete
 		if err := backend.Delete(context.Background(), tenant, "users/watcher", nil); err != nil {
@@ -85,14 +81,12 @@ func TestMongoBackend_Watch_Recreate(t *testing.T) {
 	}
 
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		doc := types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v1"})
 		_ = backend.Create(context.Background(), tenant, doc)
 
-		time.Sleep(50 * time.Millisecond)
 		_ = backend.Delete(context.Background(), tenant, "users/recreate", nil)
 
-		time.Sleep(50 * time.Millisecond)
 		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v2"}))
 	}()
 
@@ -130,14 +124,12 @@ func TestMongoBackend_Watch_Recreate_WithBefore(t *testing.T) {
 	}
 
 	go func() {
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		doc := types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v1"})
 		_ = backend.Create(context.Background(), tenant, doc)
 
-		time.Sleep(50 * time.Millisecond)
 		_ = backend.Delete(context.Background(), tenant, "users/recreate-before", nil)
 
-		time.Sleep(50 * time.Millisecond)
 		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v2"}))
 	}()
 

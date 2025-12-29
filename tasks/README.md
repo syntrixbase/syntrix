@@ -14,9 +14,10 @@ Index of task planning documents for Syntrix.
 - [004.2025-12-25-storage-architecture-implementation.md](004.2025-12-25-storage-architecture-implementation.md) — Storage Architecture Implementation. Status: Completed.
 - [005.2025-12-25-identity-alignment.md](005.2025-12-25-identity-alignment.md) — Identity Alignment (AuthN/AuthZ). Status: Completed.
 - [006.2025-12-26-multi-tenant-storage-plan.md](006.2025-12-26-multi-tenant-storage-plan.md) — Multi-Tenant Storage Implementation Plan. Status: Completed.
-- [007.2025-12-26-realtime-auth-plan.md](007.2025-12-26-realtime-auth-plan.md) — Realtime Auth (WS/SSE). Status: In Progress.
-- [008.2025-12-27-sdk-auth-realtime-review.md](008.2025-12-27-sdk-auth-realtime-review.md) — SDK WS/SSE Auth + Multi-Tenant Review. Status: In Progress.
+- [007.2025-12-26-realtime-auth-plan.md](007.2025-12-26-realtime-auth-plan.md) — Realtime Auth (WS/SSE). Status: Completed.
+- [008.2025-12-27-sdk-auth-realtime-review.md](008.2025-12-27-sdk-auth-realtime-review.md) — SDK WS/SSE Auth + Multi-Tenant Review. Status: Completed.
 - [009.2025-12-27-unit-test-optimization.md](009.2025-12-27-unit-test-optimization.md) — Unit Test Suite Optimization. Status: Completed.
-- [010.2025-12-28-trigger-engine-refactor.md](010.2025-12-28-trigger-engine-refactor.md) — Trigger Engine Refactor & Factory Wiring. Status: Planned.
+- [010.2025-12-28-trigger-engine-refactor.md](010.2025-12-28-trigger-engine-refactor.md) — Trigger Engine Refactor & Factory Wiring. Status: Completed.
 - [011.2025-12-29-consumer-graceful-shutdown.md](011.2025-12-29-consumer-graceful-shutdown.md) — Consumer Graceful Shutdown. Status: Complete.
-- [012.2025-12-29-rest-api-hardening.md](012.2025-12-29-rest-api-hardening.md) — REST API Security Hardening & Code Quality. Status: In Progress.
+- [012.2025-12-29-rest-api-hardening.md](012.2025-12-29-rest-api-hardening.md) — REST API Security Hardening & Code Quality. Status: Completed.
+- [013.2025-12-29-test-coverage-improvements.md](013.2025-12-29-test-coverage-improvements.md) — Test Coverage Improvements. Status: Completed.

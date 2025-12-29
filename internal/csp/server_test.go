@@ -94,3 +94,50 @@ func TestServerHandleWatch_Stream(t *testing.T) {
 	// Body should contain one encoded event
 	assert.Contains(t, w.Body.String(), "users/1")
 }
+
+type errorStorage struct {
+	fakeStorage
+}
+
+func (f *errorStorage) Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+	return nil, assert.AnError
+}
+
+func TestServerHandleWatch_WatchError(t *testing.T) {
+	srv := NewServer(&errorStorage{})
+	body := map[string]string{"collection": "users"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/watch", bytes.NewReader(b))
+	w := httptest.NewRecorder()
+
+	srv.ServeHTTP(w, req)
+
+	// Headers are flushed before Watch, so status is 200.
+	// But body should be empty as Watch failed.
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Empty(t, w.Body.String())
+}
+
+type blockingStorage struct {
+	fakeStorage
+}
+
+func (f *blockingStorage) Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+	return make(chan storage.Event), nil
+}
+
+func TestServerHandleWatch_ContextCancel(t *testing.T) {
+	srv := NewServer(&blockingStorage{})
+	body := map[string]string{"collection": "users"}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/internal/v1/watch", bytes.NewReader(b))
+	ctx, cancel := context.WithCancel(req.Context())
+	req = req.WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	// Cancel immediately to trigger context done path
+	cancel()
+	srv.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}

@@ -10,6 +10,7 @@ import (
 )
 
 func TestValidateToken(t *testing.T) {
+	t.Parallel()
 	mockStorage := new(MockStorage)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile:  getTestKeyPath(t),

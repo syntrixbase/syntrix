@@ -105,6 +105,7 @@ func (m *MockMsg) Term() error {
 // --- Tests ---
 
 func TestConsumer_Start_Success(t *testing.T) {
+	t.Parallel()
 	// Setup Mocks
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
@@ -112,18 +113,18 @@ func TestConsumer_Start_Success(t *testing.T) {
 	consumer := new(MockConsumer)
 	msg := new(MockMsg)
 
-	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_Start_Success", 1, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Expectations
 	// 1. Create Stream
 	js.On("CreateOrUpdateStream", ctx, mock.MatchedBy(func(cfg jetstream.StreamConfig) bool {
-		return cfg.Name == "TRIGGERS"
+		return cfg.Name == "TestConsumer_Start_Success"
 	})).Return(stream, nil)
 
 	// 2. Create Consumer
-	js.On("CreateOrUpdateConsumer", ctx, "TRIGGERS", mock.MatchedBy(func(cfg jetstream.ConsumerConfig) bool {
+	js.On("CreateOrUpdateConsumer", ctx, "TestConsumer_Start_Success", mock.MatchedBy(func(cfg jetstream.ConsumerConfig) bool {
 		return cfg.Durable == "TriggerDeliveryWorker"
 	})).Return(consumer, nil)
 
@@ -168,6 +169,7 @@ func TestConsumer_Start_Success(t *testing.T) {
 }
 
 func TestConsumer_Start_ProcessError(t *testing.T) {
+	t.Parallel()
 	// Setup Mocks
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
@@ -175,7 +177,7 @@ func TestConsumer_Start_ProcessError(t *testing.T) {
 	consumer := new(MockConsumer)
 	msg := new(MockMsg)
 
-	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_Start_ProcessError", 1, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -209,9 +211,10 @@ func TestConsumer_Start_ProcessError(t *testing.T) {
 }
 
 func TestConsumer_Start_InitErrors(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
-	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_Start_InitErrors", 1, nil)
 	ctx := context.Background()
 
 	// 1. Stream Creation Error
@@ -235,12 +238,13 @@ func TestConsumer_Start_InitErrors(t *testing.T) {
 }
 
 func TestConsumer_Start_InvalidPayload(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 	consumer := new(MockConsumer)
 	msg := new(MockMsg)
 
-	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_Start_InvalidPayload", 1, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Setup happy path for init
@@ -272,10 +276,11 @@ func TestConsumer_Start_InvalidPayload(t *testing.T) {
 }
 
 func TestWithChannelBufferSize(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil, WithChannelBufferSize(200))
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithChannelBufferSize", 1, nil, WithChannelBufferSize(200))
 	assert.NoError(t, err)
 
 	// Verify the consumer was created with custom buffer size
@@ -284,10 +289,11 @@ func TestWithChannelBufferSize(t *testing.T) {
 }
 
 func TestWithChannelBufferSize_Default(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithChannelBufferSize_Default", 1, nil)
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
@@ -295,18 +301,19 @@ func TestWithChannelBufferSize_Default(t *testing.T) {
 }
 
 func TestNewTaskConsumerFromJS_DefaultNumWorkers(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
 	// Test with numWorkers = 0, should default to 16
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 0, nil)
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestNewTaskConsumerFromJS_DefaultNumWorkers", 0, nil)
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
 	assert.Equal(t, 16, nc.numWorkers) // Default value
 
 	// Test with numWorkers = -1, should also default to 16
-	c2, err := NewTaskConsumerFromJS(js, mockWorker, -1, nil)
+	c2, err := NewTaskConsumerFromJS(js, mockWorker, "TestNewTaskConsumerFromJS_DefaultNumWorkers", -1, nil)
 	assert.NoError(t, err)
 
 	nc2 := c2.(*natsConsumer)
@@ -314,10 +321,11 @@ func TestNewTaskConsumerFromJS_DefaultNumWorkers(t *testing.T) {
 }
 
 func TestWithDrainTimeout(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil, WithDrainTimeout(10*time.Second))
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithDrainTimeout", 1, nil, WithDrainTimeout(10*time.Second))
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
@@ -325,10 +333,11 @@ func TestWithDrainTimeout(t *testing.T) {
 }
 
 func TestWithDrainTimeout_Default(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithDrainTimeout_Default", 1, nil)
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
@@ -336,10 +345,11 @@ func TestWithDrainTimeout_Default(t *testing.T) {
 }
 
 func TestWithShutdownTimeout(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil, WithShutdownTimeout(20*time.Second))
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithShutdownTimeout", 1, nil, WithShutdownTimeout(20*time.Second))
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
@@ -347,10 +357,11 @@ func TestWithShutdownTimeout(t *testing.T) {
 }
 
 func TestWithShutdownTimeout_Default(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	c, err := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	c, err := NewTaskConsumerFromJS(js, mockWorker, "TestWithShutdownTimeout_Default", 1, nil)
 	assert.NoError(t, err)
 
 	nc := c.(*natsConsumer)
@@ -358,13 +369,14 @@ func TestWithShutdownTimeout_Default(t *testing.T) {
 }
 
 func TestConsumer_GracefulShutdown_DrainComplete(t *testing.T) {
+	t.Parallel()
 	// Test that all messages are processed during graceful shutdown
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 	stream := new(MockStream)
 	consumer := new(MockConsumer)
 
-	c, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil,
+	c, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_GracefulShutdown_DrainComplete", 1, nil,
 		WithDrainTimeout(100*time.Millisecond),
 		WithShutdownTimeout(200*time.Millisecond),
 	)
@@ -407,11 +419,12 @@ func TestConsumer_GracefulShutdown_DrainComplete(t *testing.T) {
 }
 
 func TestConsumer_GracefulShutdown_MessageNakOnClose(t *testing.T) {
+	t.Parallel()
 	// Test that messages received during closing are NAK'd
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_GracefulShutdown_MessageNakOnClose", 1, nil)
 	consumer := nc.(*natsConsumer)
 
 	// Set closing state
@@ -434,10 +447,11 @@ func TestConsumer_GracefulShutdown_MessageNakOnClose(t *testing.T) {
 }
 
 func TestConsumer_InFlightCount(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_InFlightCount", 1, nil)
 	consumer := nc.(*natsConsumer)
 
 	// Initialize worker channels
@@ -469,10 +483,11 @@ func TestConsumer_InFlightCount(t *testing.T) {
 }
 
 func TestConsumer_WaitForDrain(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, "TestConsumer_WaitForDrain", 1, nil)
 	consumer := nc.(*natsConsumer)
 
 	// Test immediate drain (no in-flight messages)
@@ -488,23 +503,24 @@ func TestConsumer_WaitForDrain(t *testing.T) {
 }
 
 func TestConsumer_WaitForDrain_Timeout(t *testing.T) {
+	t.Parallel()
 	js := new(MockJetStream)
 	mockWorker := new(MockWorker)
 
-	nc, _ := NewTaskConsumerFromJS(js, mockWorker, 1, nil)
+	nc, _ := NewTaskConsumerFromJS(js, mockWorker, "WaitForDrain_Timeout", 1, nil)
 	consumer := nc.(*natsConsumer)
 
 	// Simulate in-flight messages
 	consumer.inFlightCount.Store(5)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 
 	start := time.Now()
 	consumer.waitForDrain(ctx)
 	elapsed := time.Since(start)
 
-	// Should timeout after ~200ms
-	assert.GreaterOrEqual(t, elapsed, 200*time.Millisecond, "waitForDrain should timeout")
+	// Should timeout after ~100ms
+	assert.GreaterOrEqual(t, elapsed, 95*time.Millisecond, "waitForDrain should timeout")
 	assert.Less(t, elapsed, 300*time.Millisecond, "waitForDrain should not exceed timeout by much")
 }

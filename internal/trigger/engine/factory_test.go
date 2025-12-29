@@ -23,12 +23,14 @@ func (m *MockTaskConsumer) Start(ctx context.Context) error {
 }
 
 func TestNewFactory(t *testing.T) {
+	t.Parallel()
 	f, err := NewFactory(nil, nil, nil)
 	assert.NoError(t, err)
 	assert.NotNil(t, f)
 }
 
 func TestFactoryOptions(t *testing.T) {
+	t.Parallel()
 	f := &defaultTriggerFactory{}
 
 	WithTenant("tenant1")(f)
@@ -45,9 +47,14 @@ func TestFactoryOptions(t *testing.T) {
 	// We need a mock SecretProvider or nil
 	WithSecretProvider(nil)(f)
 	assert.Nil(t, f.secrets)
+
+	// WithStreamName
+	WithStreamName("test-stream")(f)
+	assert.Equal(t, "test-stream", f.streamName)
 }
 
 func TestFactory_Engine_Success(t *testing.T) {
+	t.Parallel()
 	// If nats is nil, Engine() should succeed (with nil publisher)
 	f, err := NewFactory(nil, nil, nil)
 	assert.NoError(t, err)
@@ -62,7 +69,7 @@ func TestFactory_Engine_WithNATS(t *testing.T) {
 	defer func() { newTaskPublisher = originalNewTaskPublisher }()
 
 	mockPub := new(MockPublisher)
-	newTaskPublisher = func(nc *nats.Conn, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
 		return mockPub, nil
 	}
 
@@ -79,6 +86,7 @@ func TestFactory_Engine_WithNATS(t *testing.T) {
 }
 
 func TestFactory_Consumer_Fail(t *testing.T) {
+	t.Parallel()
 	// If nats is nil, Consumer() should fail because NewTaskConsumer fails
 	f, err := NewFactory(nil, nil, nil)
 	assert.NoError(t, err)
@@ -93,7 +101,7 @@ func TestFactory_Consumer_Success(t *testing.T) {
 	defer func() { newTaskConsumer = originalNewTaskConsumer }()
 
 	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, w worker.DeliveryWorker, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
 		return mockConsumer, nil
 	}
 
