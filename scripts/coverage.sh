@@ -19,8 +19,8 @@ EXCLUDE_REGEX="${DEFAULT_EXCLUDE}${EXTRA_EXCLUDE:+|${EXTRA_EXCLUDE}}"
 PKGS=$(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
 
 threshold_func=80.0
-threshold_print=85.0
 threshold_package=85.0
+threshold_print=90.0
 threshold_total=90.0
 
 echo "Excluding packages matching: ${EXCLUDE_REGEX}"
@@ -34,9 +34,11 @@ go test ${PKGS} -covermode=atomic -coverprofile="$COVERPROFILE" > "$TMP_OUTPUT" 
 EXIT_CODE=$?
 set -e
 
+sed -i 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' "$TMP_OUTPUT"
+
 # Process and sort 'ok' lines (coverage data)
 grep "^ok" "$TMP_OUTPUT" | \
-    sed 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' | \
+    grep -vE "^ok\s+tests/" | \
     awk -v threshold_package="$threshold_package" '{
         cov = $5;
         sub("%", "", cov);
@@ -51,7 +53,6 @@ grep "^ok" "$TMP_OUTPUT" | \
 
 # Process and print other lines (skipped, failures, etc.)
 grep -v "^ok" "$TMP_OUTPUT" | \
-    sed 's/github.com\/codetrek\/syntrix\///g' | \
     awk '{
         if ($1 == "?") {
              printf "%-3s %-40s %s %s %s\n", $1, $2, $3, $4, $5
