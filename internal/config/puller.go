@@ -123,7 +123,7 @@ func DefaultPullerConfig() PullerConfig {
 			},
 		},
 		Checkpoint: CheckpointConfig{
-			Backend:    "mongodb",
+			Backend:    "pebble",
 			Interval:   1 * time.Second,
 			EventCount: 1000,
 		},
@@ -176,8 +176,8 @@ func (c *PullerConfig) Validate() error {
 		}
 	}
 
-	if c.Checkpoint.Backend != "mongodb" && c.Checkpoint.Backend != "etcd" {
-		return fmt.Errorf("puller.checkpoint.backend must be 'mongodb' or 'etcd', got %q", c.Checkpoint.Backend)
+	if c.Checkpoint.Backend != "pebble" {
+		return fmt.Errorf("puller.checkpoint.backend must be 'pebble', got %q", c.Checkpoint.Backend)
 	}
 
 	if c.Checkpoint.Interval <= 0 {

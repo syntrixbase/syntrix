@@ -254,7 +254,8 @@ func TestBuildWatchPipeline_IncludeTakesPrecedence(t *testing.T) {
 
 func TestPuller_AddBackend(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 
 	backendCfg := config.PullerBackendConfig{
 		IncludeCollections: []string{"users"},
@@ -279,7 +280,8 @@ func TestPuller_AddBackend(t *testing.T) {
 
 func TestPuller_StartStop(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 
 	backendCfg := config.PullerBackendConfig{
 		IncludeCollections: []string{"users"},

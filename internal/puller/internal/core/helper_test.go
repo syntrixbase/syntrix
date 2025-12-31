@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -55,6 +56,14 @@ type TestEnv struct {
 	Client *mongo.Client
 	DBName string
 	DB     *mongo.Database
+}
+
+func newTestConfig(t *testing.T) config.PullerConfig {
+	t.Helper()
+
+	cfg := config.DefaultPullerConfig()
+	cfg.Buffer.Path = t.TempDir()
+	return cfg
 }
 
 func setupTestEnv(t *testing.T) *TestEnv {

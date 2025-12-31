@@ -8,40 +8,18 @@ import (
 
 	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/checkpoint"
+	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
-type mockCheckpointStore struct {
-	fail bool
-}
-
-func (m *mockCheckpointStore) Save(ctx context.Context, token bson.Raw) error {
-	if m.fail {
-		return fmt.Errorf("mock save error")
-	}
-	return nil
-}
-
-func (m *mockCheckpointStore) Load(ctx context.Context) (bson.Raw, error) {
-	return nil, nil
-}
-
-func (m *mockCheckpointStore) Delete(ctx context.Context) error {
-	return nil
-}
-
 func TestPuller_WatchAndCheckpoint(t *testing.T) {
 	env := setupTestEnv(t)
 
 	// Configure puller with checkpoint settings
-	cfg := config.PullerConfig{
-		Checkpoint: config.CheckpointConfig{
-			Interval: 100 * time.Millisecond,
-		},
-	}
+	cfg := newTestConfig(t)
+	cfg.Checkpoint.Interval = 100 * time.Millisecond
 
 	p := New(cfg, nil)
 
@@ -99,19 +77,25 @@ func TestPuller_WatchAndCheckpoint(t *testing.T) {
 	}
 
 	// Verify checkpoint exists
-	ckptColl := env.DB.Collection("_puller_checkpoints")
-	count, err := ckptColl.CountDocuments(ctx, bson.M{"_id": "backend1"})
+	checkpointBuf, err := buffer.NewForBackend(cfg.Buffer.Path, "backend1", nil)
 	if err != nil {
-		t.Fatalf("CountDocuments failed: %v", err)
+		t.Fatalf("NewForBackend failed: %v", err)
 	}
-	if count != 1 {
-		t.Errorf("Expected 1 checkpoint, got %d", count)
+	defer checkpointBuf.Close()
+
+	ckpt, err := checkpointBuf.LoadCheckpoint()
+	if err != nil {
+		t.Fatalf("LoadCheckpoint failed: %v", err)
+	}
+	if ckpt == nil {
+		t.Fatal("Expected checkpoint to be saved")
 	}
 }
 
 func TestPuller_BackendNames_NonEmpty(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 
 	backendCfg := config.PullerBackendConfig{
 		IncludeCollections: []string{"users"},
@@ -129,17 +113,10 @@ func TestPuller_BackendNames_NonEmpty(t *testing.T) {
 func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	env := setupTestEnv(t)
 
-	// 1. Create a dummy checkpoint
-	ckptColl := env.DB.Collection("_puller_checkpoints")
-	// We need a valid resume token. This is hard to forge without a real event.
-	// So we will run a short session to generate one, then stop, then start again.
-
-	cfg := config.PullerConfig{
-		Checkpoint: config.CheckpointConfig{
-			Interval:   10 * time.Millisecond,
-			EventCount: 1,
-		},
-	}
+	// We need a valid resume token. Run a short session to generate one.
+	cfg := newTestConfig(t)
+	cfg.Checkpoint.Interval = 10 * time.Millisecond
+	cfg.Checkpoint.EventCount = 1
 	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
@@ -159,14 +136,24 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	p.Stop(ctx)
 
 	// Verify checkpoint exists
-	count, _ := ckptColl.CountDocuments(ctx, bson.M{"_id": "backend1"})
-	if count == 0 {
+	checkpointBuf, err := buffer.NewForBackend(cfg.Buffer.Path, "backend1", nil)
+	if err != nil {
+		t.Fatalf("NewForBackend failed: %v", err)
+	}
+	ckpt, err := checkpointBuf.LoadCheckpoint()
+	_ = checkpointBuf.Close()
+	if err != nil {
+		t.Fatalf("LoadCheckpoint failed: %v", err)
+	}
+	if ckpt == nil {
 		t.Fatal("Failed to create initial checkpoint")
 	}
 
 	// 2. Start new puller instance, it should resume
 	p2 := New(cfg, nil)
-	_ = p2.AddBackend("backend1", env.Client, env.DBName, backendCfg)
+	if err := p2.AddBackend("backend1", env.Client, env.DBName, backendCfg); err != nil {
+		t.Fatalf("AddBackend failed: %v", err)
+	}
 
 	// We can't easily verify "resuming" without mocking logger or checking internal state.
 	// But running it ensures the code path is executed.
@@ -174,7 +161,7 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	defer cancel2()
 
 	_, _ = p2.Subscribe(ctx2, "c1", "")
-	err := p2.Start(ctx2)
+	err = p2.Start(ctx2)
 	if err != nil {
 		t.Fatalf("Failed to restart puller: %v", err)
 	}
@@ -183,27 +170,28 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	p2.Stop(ctx2)
 }
 
-func TestPuller_SaveCheckpoint_Error(t *testing.T) {
+func TestPuller_SaveCheckpointOnShutdown_Error(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
-	// Inject mock checkpoint store
-	var mockStore checkpoint.Store = &mockCheckpointStore{fail: true}
-	p.backends["backend1"].checkpoint = mockStore
+	// Close buffer to force SaveCheckpoint error
+	_ = p.backends["backend1"].buffer.Close()
 
 	// Record a token so there is something to save
 	token := bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00} // Minimal valid bson document
 	p.backends["backend1"].tracker.RecordEvent(token)
 
-	// Call saveCheckpoint
-	p.saveCheckpoint(context.Background(), p.backends["backend1"], p.logger)
+	// Should not panic
+	p.saveCheckpointOnShutdown(p.backends["backend1"], p.logger)
 }
 
 func TestPuller_EventHandlerError(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
@@ -253,7 +241,8 @@ func TestPuller_ChangeStreamError_Reconnect(t *testing.T) {
 		}
 	}()
 
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", client, dbName, backendCfg)
 
@@ -276,24 +265,15 @@ func TestPuller_ChangeStreamError_Reconnect(t *testing.T) {
 	_ = p.Stop(stopCtx)
 }
 
-type mockLoadErrorStore struct {
-	checkpoint.Store
-}
-
-func (m *mockLoadErrorStore) Load(ctx context.Context) (bson.Raw, error) {
-	return nil, fmt.Errorf("mock load error")
-}
-func (m *mockLoadErrorStore) Save(ctx context.Context, token bson.Raw) error { return nil }
-func (m *mockLoadErrorStore) Delete(ctx context.Context) error               { return nil }
-
 func TestPuller_WatchChangeStream_LoadError(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
-	// Inject mock checkpoint store that fails Load
-	p.backends["backend1"].checkpoint = &mockLoadErrorStore{}
+	// Close buffer to force LoadCheckpoint error
+	_ = p.backends["backend1"].buffer.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -310,7 +290,8 @@ func TestPuller_WatchChangeStream_LoadError(t *testing.T) {
 
 func TestPuller_WatchChangeStream_WatchError(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
@@ -335,7 +316,8 @@ func TestPuller_WatchChangeStream_WatchError(t *testing.T) {
 
 func TestPuller_WatchChangeStream_Invalidate(t *testing.T) {
 	env := setupTestEnv(t)
-	p := New(config.PullerConfig{}, nil)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
 	backendCfg := config.PullerBackendConfig{IncludeCollections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 

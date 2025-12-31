@@ -20,8 +20,8 @@ func TestDefaultPullerConfig(t *testing.T) {
 		t.Errorf("Backends = %v, want single 'default_mongo'", cfg.Backends)
 	}
 
-	if cfg.Checkpoint.Backend != "mongodb" {
-		t.Errorf("Checkpoint.Backend = %q, want %q", cfg.Checkpoint.Backend, "mongodb")
+	if cfg.Checkpoint.Backend != "pebble" {
+		t.Errorf("Checkpoint.Backend = %q, want %q", cfg.Checkpoint.Backend, "pebble")
 	}
 
 	if cfg.Checkpoint.Interval != time.Second {
@@ -110,11 +110,11 @@ func TestPullerConfig_Validate(t *testing.T) {
 			name:    "invalid checkpoint backend",
 			modify:  func(c *PullerConfig) { c.Checkpoint.Backend = "invalid" },
 			wantErr: true,
-			errMsg:  "mongodb' or 'etcd",
+			errMsg:  "pebble",
 		},
 		{
-			name:    "etcd checkpoint backend is valid",
-			modify:  func(c *PullerConfig) { c.Checkpoint.Backend = "etcd" },
+			name:    "pebble checkpoint backend is valid",
+			modify:  func(c *PullerConfig) { c.Checkpoint.Backend = "pebble" },
 			wantErr: false,
 		},
 		{

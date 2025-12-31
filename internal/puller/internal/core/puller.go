@@ -10,6 +10,7 @@ import (
 
 	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
 	"github.com/codetrek/syntrix/internal/puller/internal/checkpoint"
 	"github.com/codetrek/syntrix/internal/puller/internal/normalizer"
 	"go.mongodb.org/mongo-driver/bson"
@@ -28,8 +29,8 @@ type Backend struct {
 	db         *mongo.Database
 	config     config.PullerBackendConfig
 	normalizer *normalizer.Normalizer
-	checkpoint checkpoint.Store
 	tracker    *checkpoint.Tracker
+	buffer     *buffer.Buffer
 
 	// eventChan receives normalized events from the change stream
 	eventChan chan *events.NormalizedEvent
@@ -75,8 +76,12 @@ func (p *Puller) AddBackend(name string, client *mongo.Client, dbName string, cf
 		return fmt.Errorf("backend %q already exists", name)
 	}
 
+	logger := p.logger.With("backend", name)
 	db := client.Database(dbName)
-	ckpt := checkpoint.NewMongoStore(db, name)
+	buf, err := buffer.NewForBackend(p.cfg.Buffer.Path, name, logger)
+	if err != nil {
+		return fmt.Errorf("failed to create buffer: %w", err)
+	}
 
 	policy := checkpoint.Policy{
 		Interval:   p.cfg.Checkpoint.Interval,
@@ -90,8 +95,8 @@ func (p *Puller) AddBackend(name string, client *mongo.Client, dbName string, cf
 		db:         db,
 		config:     cfg,
 		normalizer: normalizer.New(nil),
-		checkpoint: ckpt,
 		tracker:    checkpoint.NewTracker(policy),
+		buffer:     buf,
 		eventChan:  make(chan *events.NormalizedEvent, 1000),
 	}
 
@@ -143,6 +148,7 @@ func (p *Puller) Stop(ctx context.Context) error {
 // runBackend runs the change stream consumer for a single backend.
 func (p *Puller) runBackend(ctx context.Context, name string, backend *Backend) {
 	defer p.wg.Done()
+	defer backend.buffer.Close()
 
 	logger := p.logger.With("backend", name)
 	logger.Info("starting backend")
@@ -151,7 +157,7 @@ func (p *Puller) runBackend(ctx context.Context, name string, backend *Backend) 
 		select {
 		case <-ctx.Done():
 			// Save final checkpoint before exit
-			p.saveCheckpoint(context.Background(), backend, logger)
+			p.saveCheckpointOnShutdown(backend, logger)
 			logger.Info("backend stopped")
 			return
 		default:
@@ -161,7 +167,7 @@ func (p *Puller) runBackend(ctx context.Context, name string, backend *Backend) 
 		if err != nil {
 			if ctx.Err() != nil {
 				// Context cancelled, normal shutdown
-				p.saveCheckpoint(context.Background(), backend, logger)
+				p.saveCheckpointOnShutdown(backend, logger)
 				return
 			}
 			logger.Error("change stream error, reconnecting", "error", err)
@@ -173,7 +179,7 @@ func (p *Puller) runBackend(ctx context.Context, name string, backend *Backend) 
 // watchChangeStream watches the MongoDB change stream for a backend.
 func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger *slog.Logger) error {
 	// Load resume token if exists
-	resumeToken, err := backend.checkpoint.Load(ctx)
+	resumeToken, err := backend.buffer.LoadCheckpoint()
 	if err != nil {
 		logger.Warn("failed to load checkpoint", "error", err)
 		// Continue without resume token
@@ -217,17 +223,21 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 			continue
 		}
 
-		// Handle event
+		shouldCheckpoint := backend.tracker.RecordEvent(raw.ResumeToken)
+		if err := backend.buffer.WriteWithCheckpoint(evt, raw.ResumeToken, shouldCheckpoint); err != nil {
+			logger.Error("failed to write event to buffer", "error", err)
+			continue
+		}
+		if shouldCheckpoint {
+			backend.tracker.MarkCheckpointed()
+		}
+
+		// Handle event after it is persisted
 		if p.eventHandler != nil {
 			if err := p.eventHandler(ctx, backend.name, evt); err != nil {
 				logger.Error("failed to handle event", "error", err)
 				// Continue processing other events
 			}
-		}
-
-		// Track checkpoint
-		if backend.tracker.RecordEvent(raw.ResumeToken) {
-			p.saveCheckpoint(ctx, backend, logger)
 		}
 	}
 
@@ -238,20 +248,20 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 	return nil
 }
 
-// saveCheckpoint saves the current checkpoint for a backend.
-func (p *Puller) saveCheckpoint(ctx context.Context, backend *Backend, logger *slog.Logger) {
-	token := backend.tracker.LastToken()
-	if token == nil {
+// saveCheckpointOnShutdown saves the current checkpoint for a backend on shutdown.
+func (p *Puller) saveCheckpointOnShutdown(backend *Backend, logger *slog.Logger) {
+	if !backend.tracker.ShouldCheckpointOnShutdown() {
 		return
 	}
 
-	if err := backend.checkpoint.Save(ctx, token); err != nil {
+	token := backend.tracker.LastToken()
+	if err := backend.buffer.SaveCheckpoint(token); err != nil {
 		logger.Error("failed to save checkpoint", "error", err)
 		return
 	}
 
 	backend.tracker.MarkCheckpointed()
-	logger.Debug("checkpoint saved")
+	logger.Debug("checkpoint saved on shutdown")
 }
 
 // buildWatchPipeline builds the MongoDB aggregation pipeline for collection filtering.

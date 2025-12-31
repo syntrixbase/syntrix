@@ -2,6 +2,7 @@
 package buffer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -11,19 +12,32 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/codetrek/syntrix/internal/events"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 // Buffer stores events in PebbleDB for durability and replay.
 type Buffer struct {
-	db     *pebble.DB
-	path   string
-	logger *slog.Logger
+	db       *pebble.DB
+	path     string
+	logger   *slog.Logger
+	newBatch func() pebbleBatch
 
 	// mu protects writes
 	mu sync.RWMutex
 
 	// closed indicates if the buffer is closed
 	closed bool
+}
+
+const checkpointKey = "!checkpoint/resume_token"
+
+var checkpointKeyBytes = []byte(checkpointKey)
+
+type pebbleBatch interface {
+	Set(key, value []byte, opts *pebble.WriteOptions) error
+	Delete(key []byte, opts *pebble.WriteOptions) error
+	Commit(opts *pebble.WriteOptions) error
+	Close() error
 }
 
 // Options configures the event buffer.
@@ -69,6 +83,9 @@ func New(opts Options) (*Buffer, error) {
 		db:     db,
 		path:   opts.Path,
 		logger: logger,
+		newBatch: func() pebbleBatch {
+			return db.NewBatch()
+		},
 	}, nil
 }
 
@@ -83,6 +100,11 @@ func NewForBackend(basePath, backendName string, logger *slog.Logger) (*Buffer, 
 
 // Write stores an event in the buffer.
 func (b *Buffer) Write(evt *events.NormalizedEvent) error {
+	return b.WriteWithCheckpoint(evt, nil, false)
+}
+
+// WriteWithCheckpoint stores an event and optionally updates the checkpoint in the same batch.
+func (b *Buffer) WriteWithCheckpoint(evt *events.NormalizedEvent, token bson.Raw, saveCheckpoint bool) error {
 	b.mu.RLock()
 	if b.closed {
 		b.mu.RUnlock()
@@ -99,7 +121,20 @@ func (b *Buffer) Write(evt *events.NormalizedEvent) error {
 		return fmt.Errorf("failed to marshal event: %w", err)
 	}
 
-	if err := b.db.Set(key, value, pebble.Sync); err != nil {
+	if err := b.applyBatch(func(batch pebbleBatch) error {
+		if err := batch.Set(key, value, pebble.Sync); err != nil {
+			return fmt.Errorf("failed to batch write event: %w", err)
+		}
+		if saveCheckpoint {
+			if token == nil {
+				return fmt.Errorf("checkpoint token is nil")
+			}
+			if err := batch.Set(checkpointKeyBytes, token, pebble.Sync); err != nil {
+				return fmt.Errorf("failed to batch write checkpoint: %w", err)
+			}
+		}
+		return nil
+	}); err != nil {
 		return fmt.Errorf("failed to write event: %w", err)
 	}
 
@@ -163,29 +198,35 @@ func (i *bufferIterator) Next() bool {
 		return false
 	}
 
-	var valid bool
-	if i.first {
-		valid = i.iter.First()
-		i.first = false
-	} else {
-		valid = i.iter.Next()
+	for {
+		var valid bool
+		if i.first {
+			valid = i.iter.First()
+			i.first = false
+		} else {
+			valid = i.iter.Next()
+		}
+
+		if !valid {
+			return false
+		}
+
+		if isCheckpointKey(i.iter.Key()) {
+			continue
+		}
+
+		i.key = string(i.iter.Key())
+		value := i.iter.Value()
+
+		var evt events.NormalizedEvent
+		if err := json.Unmarshal(value, &evt); err != nil {
+			i.err = fmt.Errorf("failed to unmarshal event: %w", err)
+			return false
+		}
+
+		i.evt = &evt
+		return true
 	}
-
-	if !valid {
-		return false
-	}
-
-	i.key = string(i.iter.Key())
-	value := i.iter.Value()
-
-	var evt events.NormalizedEvent
-	if err := json.Unmarshal(value, &evt); err != nil {
-		i.err = fmt.Errorf("failed to unmarshal event: %w", err)
-		return false
-	}
-
-	i.evt = &evt
-	return true
 }
 
 func (i *bufferIterator) Event() *events.NormalizedEvent {
@@ -248,7 +289,10 @@ func (b *Buffer) Head() (string, error) {
 	}
 	defer iter.Close()
 
-	if iter.Last() {
+	for iter.Last(); iter.Valid(); iter.Prev() {
+		if isCheckpointKey(iter.Key()) {
+			continue
+		}
 		return string(iter.Key()), nil
 	}
 	return "", nil // Empty buffer
@@ -263,7 +307,12 @@ func (b *Buffer) Delete(key string) error {
 	}
 	b.mu.RUnlock()
 
-	if err := b.db.Delete([]byte(key), pebble.Sync); err != nil {
+	if err := b.applyBatch(func(batch pebbleBatch) error {
+		if err := batch.Delete([]byte(key), pebble.Sync); err != nil {
+			return fmt.Errorf("failed to batch delete: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return fmt.Errorf("failed to delete event: %w", err)
 	}
 	return nil
@@ -288,11 +337,14 @@ func (b *Buffer) DeleteBefore(beforeKey string) (int, error) {
 	}
 	defer iter.Close()
 
-	batch := b.db.NewBatch()
+	batch := b.newBatch()
 	defer batch.Close()
 
 	for iter.First(); iter.Valid(); iter.Next() {
-		if err := batch.Delete(iter.Key(), nil); err != nil {
+		if isCheckpointKey(iter.Key()) {
+			continue
+		}
+		if err := batch.Delete(iter.Key(), pebble.Sync); err != nil {
 			return 0, fmt.Errorf("failed to batch delete: %w", err)
 		}
 		count++
@@ -324,6 +376,9 @@ func (b *Buffer) Count() (int, error) {
 	defer iter.Close()
 
 	for iter.First(); iter.Valid(); iter.Next() {
+		if isCheckpointKey(iter.Key()) {
+			continue
+		}
 		count++
 	}
 
@@ -352,6 +407,9 @@ func (b *Buffer) CountAfter(afterKey string) (int, error) {
 	defer iter.Close()
 
 	for iter.First(); iter.Valid(); iter.Next() {
+		if isCheckpointKey(iter.Key()) {
+			continue
+		}
 		count++
 	}
 
@@ -379,4 +437,70 @@ func (b *Buffer) Close() error {
 // Path returns the buffer storage path.
 func (b *Buffer) Path() string {
 	return b.path
+}
+
+// LoadCheckpoint returns the last saved checkpoint token.
+func (b *Buffer) LoadCheckpoint() (bson.Raw, error) {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return nil, fmt.Errorf("buffer is closed")
+	}
+	b.mu.RUnlock()
+
+	value, closer, err := b.db.Get(checkpointKeyBytes)
+	if err != nil {
+		if err == pebble.ErrNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to read checkpoint: %w", err)
+	}
+	defer closer.Close()
+
+	copied := append([]byte(nil), value...)
+	return bson.Raw(copied), nil
+}
+
+// SaveCheckpoint writes the checkpoint token without an accompanying event.
+func (b *Buffer) SaveCheckpoint(token bson.Raw) error {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return fmt.Errorf("buffer is closed")
+	}
+	b.mu.RUnlock()
+
+	if token == nil {
+		return nil
+	}
+
+	if err := b.applyBatch(func(batch pebbleBatch) error {
+		if err := batch.Set(checkpointKeyBytes, token, pebble.Sync); err != nil {
+			return fmt.Errorf("failed to batch write checkpoint: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to save checkpoint: %w", err)
+	}
+
+	return nil
+}
+
+func (b *Buffer) applyBatch(apply func(batch pebbleBatch) error) error {
+	batch := b.newBatch()
+	defer batch.Close()
+
+	if err := apply(batch); err != nil {
+		return err
+	}
+
+	if err := batch.Commit(pebble.Sync); err != nil {
+		return fmt.Errorf("failed to commit batch: %w", err)
+	}
+
+	return nil
+}
+
+func isCheckpointKey(key []byte) bool {
+	return bytes.Equal(key, checkpointKeyBytes)
 }

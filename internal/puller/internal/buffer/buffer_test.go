@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/codetrek/syntrix/internal/events"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.mongodb.org/mongo-driver/bson"
 )
 
 func TestBuffer_NewAndClose(t *testing.T) {
@@ -654,4 +657,200 @@ func TestIterator_Key(t *testing.T) {
 	if key != evt.BufferKey() {
 		t.Errorf("Key() = %s, want %s", key, evt.BufferKey())
 	}
+}
+
+func TestBuffer_WriteWithCheckpoint(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	evt := &events.NormalizedEvent{
+		EventID:    "evt-1",
+		Collection: "testcoll",
+		DocumentID: "doc-1",
+		Type:       events.OperationInsert,
+		ClusterTime: events.ClusterTime{
+			T: 1234567890,
+			I: 1,
+		},
+	}
+	token := bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00}
+
+	err = buf.WriteWithCheckpoint(evt, token, true)
+	require.NoError(t, err)
+
+	readEvt, err := buf.Read(evt.BufferKey())
+	require.NoError(t, err)
+	require.NotNil(t, readEvt)
+
+	ckpt, err := buf.LoadCheckpoint()
+	require.NoError(t, err)
+	assert.Equal(t, token, ckpt)
+
+	count, err := buf.Count()
+	require.NoError(t, err)
+	assert.Equal(t, 1, count)
+
+	head, err := buf.Head()
+	require.NoError(t, err)
+	assert.Equal(t, evt.BufferKey(), head)
+
+	iter, err := buf.ScanFrom("")
+	require.NoError(t, err)
+	defer iter.Close()
+
+	iterCount := 0
+	for iter.Next() {
+		iterCount++
+	}
+	require.NoError(t, iter.Err())
+	assert.Equal(t, 1, iterCount)
+}
+
+func TestBuffer_WriteWithCheckpoint_NilToken(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	evt := &events.NormalizedEvent{
+		EventID:    "evt-1",
+		Collection: "testcoll",
+		DocumentID: "doc-1",
+		Type:       events.OperationInsert,
+		ClusterTime: events.ClusterTime{
+			T: 1234567890,
+			I: 1,
+		},
+	}
+
+	err = buf.WriteWithCheckpoint(evt, nil, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkpoint token is nil")
+}
+
+func TestBuffer_SaveCheckpoint_NoEvents(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	token := bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00}
+	require.NoError(t, buf.SaveCheckpoint(token))
+
+	head, err := buf.Head()
+	require.NoError(t, err)
+	assert.Equal(t, "", head)
+
+	count, err := buf.Count()
+	require.NoError(t, err)
+	assert.Equal(t, 0, count)
+
+	ckpt, err := buf.LoadCheckpoint()
+	require.NoError(t, err)
+	assert.Equal(t, token, ckpt)
+}
+
+func TestBuffer_SaveCheckpoint_Closed(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	require.NoError(t, buf.Close())
+
+	err = buf.SaveCheckpoint(bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "buffer is closed")
+}
+
+func TestBuffer_SaveCheckpoint_NilToken(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	require.NoError(t, buf.SaveCheckpoint(nil))
+
+	ckpt, err := buf.LoadCheckpoint()
+	require.NoError(t, err)
+	assert.Nil(t, ckpt)
+}
+
+func TestBuffer_LoadCheckpoint_NotFound(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	ckpt, err := buf.LoadCheckpoint()
+	require.NoError(t, err)
+	assert.Nil(t, ckpt)
+}
+
+func TestBuffer_LoadCheckpoint_Closed(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	require.NoError(t, buf.Close())
+
+	_, err = buf.LoadCheckpoint()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "buffer is closed")
+}
+
+func TestBuffer_DeleteBefore_SkipsCheckpoint(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	buf, err := New(Options{Path: dir})
+	require.NoError(t, err)
+	defer buf.Close()
+
+	token := bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00}
+	require.NoError(t, buf.SaveCheckpoint(token))
+
+	evt1 := &events.NormalizedEvent{
+		EventID:    "evt-1",
+		Collection: "testcoll",
+		DocumentID: "doc-1",
+		Type:       events.OperationInsert,
+		ClusterTime: events.ClusterTime{
+			T: 1000,
+			I: 1,
+		},
+	}
+	evt2 := &events.NormalizedEvent{
+		EventID:    "evt-2",
+		Collection: "testcoll",
+		DocumentID: "doc-2",
+		Type:       events.OperationInsert,
+		ClusterTime: events.ClusterTime{
+			T: 1001,
+			I: 1,
+		},
+	}
+	require.NoError(t, buf.Write(evt1))
+	require.NoError(t, buf.Write(evt2))
+
+	deleted, err := buf.DeleteBefore(evt2.BufferKey())
+	require.NoError(t, err)
+	assert.Equal(t, 1, deleted)
+
+	ckpt, err := buf.LoadCheckpoint()
+	require.NoError(t, err)
+	assert.Equal(t, token, ckpt)
 }
