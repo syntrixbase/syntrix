@@ -1,12 +1,8 @@
 package core
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"net/http"
 	"testing"
 	"time"
 
@@ -15,6 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// newTestEngine creates an engine for tests that don't use WatchCollection
+func newTestEngine(store storage.DocumentStore) *Engine {
+	return New(store, new(MockCSPService))
+}
 
 func TestEngine_ExecuteQuery(t *testing.T) {
 	type testCase struct {
@@ -90,7 +91,7 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 			if tc.mockSetup != nil {
 				tc.mockSetup(mockStorage)
 			}
-			engine := New(mockStorage, "http://mock-csp")
+			engine := newTestEngine(mockStorage)
 			ctx := context.Background()
 
 			docs, err := engine.ExecuteQuery(ctx, "default", tc.query)
@@ -230,7 +231,7 @@ func TestEngine_Push_Coverage(t *testing.T) {
 			if tc.mockSetup != nil {
 				tc.mockSetup(mockStorage)
 			}
-			engine := New(mockStorage, "http://mock-csp")
+			engine := newTestEngine(mockStorage)
 			ctx := context.Background()
 
 			resp, err := engine.Push(ctx, "default", tc.req)
@@ -278,7 +279,7 @@ func TestExtractIDFromFullpath_Valid(t *testing.T) {
 
 func TestReplaceDocument_StorageError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
@@ -292,7 +293,7 @@ func TestReplaceDocument_StorageError(t *testing.T) {
 
 func TestReplaceDocument_CreateError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
@@ -308,7 +309,7 @@ func TestReplaceDocument_CreateError(t *testing.T) {
 
 func TestReplaceDocument_UpdateError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
@@ -324,7 +325,7 @@ func TestReplaceDocument_UpdateError(t *testing.T) {
 
 func TestReplaceDocument_GetAfterUpdateError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
@@ -340,45 +341,27 @@ func TestReplaceDocument_GetAfterUpdateError(t *testing.T) {
 	assert.Contains(t, err.Error(), "get error")
 }
 
-func TestWatchCollection_RequestError(t *testing.T) {
+func TestWatchCollection_EmptyCollection(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://invalid-url")
+	mockCSP := new(MockCSPService)
+	engine := New(mockStorage, mockCSP)
 
-	// Use MockTransport to simulate connection error immediately
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			return nil, errors.New("connection refused")
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
+	eventCh := make(chan storage.Event)
+	close(eventCh)
 
-	_, err := engine.WatchCollection(context.Background(), "default", "col")
-	assert.Error(t, err)
-}
+	// Watch with empty collection (watch all)
+	mockCSP.On("Watch", mock.Anything, "default", "", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
 
-func TestWatchCollection_BadStatus(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://mock-csp")
-
-	// Mock HTTP Client
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusInternalServerError,
-				Body:       http.NoBody,
-			}, nil
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
-
-	_, err := engine.WatchCollection(context.Background(), "default", "col")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "csp watch failed")
+	ch, err := engine.WatchCollection(context.Background(), "default", "")
+	assert.NoError(t, err)
+	assert.NotNil(t, ch)
+	<-ch
+	mockCSP.AssertExpectations(t)
 }
 
 func TestPull_QueryEmpty(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	mockStorage.On("Query", mock.Anything, "default", mock.Anything).Return(nil, nil)
 
@@ -396,7 +379,7 @@ func TestPull_QueryEmpty(t *testing.T) {
 
 func TestPush_DeleteNotFound(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -419,9 +402,51 @@ func TestPush_DeleteNotFound(t *testing.T) {
 	assert.Empty(t, resp.Conflicts)
 }
 
+// TestPush_DeleteNotFoundThenGetSuccess tests Push delete when Delete returns NotFound
+// but subsequent Get finds a document (race condition - someone recreated it)
+func TestPush_DeleteNotFoundThenGetSuccess(t *testing.T) {
+	mockStorage := new(MockStorageBackend)
+	engine := newTestEngine(mockStorage)
+
+	req := storage.ReplicationPushRequest{
+		Collection: "col",
+		Changes: []storage.ReplicationPushChange{
+			{
+				Doc: &storage.Document{
+					Fullpath: "col/doc1",
+					Deleted:  true,
+				},
+			},
+		},
+	}
+
+	// First Get returns existing doc
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+		Fullpath: "col/doc1",
+		Version:  1,
+	}, nil).Once()
+
+	// Delete fails with NotFound (doc was deleted between Get and Delete)
+	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", mock.Anything).Return(model.ErrNotFound)
+
+	// Get after NotFound finds a doc (someone recreated it - race condition)
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+		Fullpath: "col/doc1",
+		Version:  2,
+		Data:     map[string]interface{}{"recreated": true},
+	}, nil).Once()
+
+	resp, err := engine.Push(context.Background(), "default", req)
+	assert.NoError(t, err)
+	// The recreated doc should be in conflicts
+	assert.Len(t, resp.Conflicts, 1)
+	assert.Equal(t, int64(2), resp.Conflicts[0].Version)
+	mockStorage.AssertExpectations(t)
+}
+
 func TestPush_UpdateConflict(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	baseVer := int64(1)
 	req := storage.ReplicationPushRequest{
@@ -452,7 +477,7 @@ func TestPush_UpdateConflict(t *testing.T) {
 
 func TestPush_UpdatePreconditionFailed(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	baseVer := int64(1)
 	req := storage.ReplicationPushRequest{
@@ -492,7 +517,7 @@ func TestPush_UpdatePreconditionFailed(t *testing.T) {
 // TestPush_EmptyFullpathWithIDInData tests Push when Fullpath is empty but ID is in Data
 func TestPush_EmptyFullpathWithIDInData(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -521,7 +546,7 @@ func TestPush_EmptyFullpathWithIDInData(t *testing.T) {
 // TestPush_CreateConflict tests Push when Create fails (document already exists race)
 func TestPush_CreateConflict(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -549,7 +574,7 @@ func TestPush_CreateConflict(t *testing.T) {
 // TestPush_DeletePreconditionFailed tests Push delete with version mismatch
 func TestPush_DeletePreconditionFailed(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	baseVer := int64(1)
 	req := storage.ReplicationPushRequest{
@@ -590,7 +615,7 @@ func TestPush_DeletePreconditionFailed(t *testing.T) {
 // TestPush_DeleteStorageError tests Push delete with storage error
 func TestPush_DeleteStorageError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -622,7 +647,7 @@ func TestPush_DeleteStorageError(t *testing.T) {
 // TestPush_UpdateStorageError tests Push update with storage error
 func TestPush_UpdateStorageError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -654,7 +679,7 @@ func TestPush_UpdateStorageError(t *testing.T) {
 // TestPush_GetStorageError tests Push when Get returns unexpected error
 func TestPush_GetStorageError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
@@ -677,22 +702,13 @@ func TestPush_GetStorageError(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
-// MockTransport for HTTP Client
-type MockTransport struct {
-	RoundTripFunc func(req *http.Request) (*http.Response, error)
-}
-
-func (m *MockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	return m.RoundTripFunc(req)
-}
-
 // ==================================================
 // DeleteDocument Tests
 // ==================================================
 
 func TestDeleteDocument_Success(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", model.Filters(nil)).Return(nil)
 
@@ -703,7 +719,7 @@ func TestDeleteDocument_Success(t *testing.T) {
 
 func TestDeleteDocument_WithPredicate(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	pred := model.Filters{{Field: "version", Op: "==", Value: int64(1)}}
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", pred).Return(nil)
@@ -715,7 +731,7 @@ func TestDeleteDocument_WithPredicate(t *testing.T) {
 
 func TestDeleteDocument_NotFound(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", model.Filters(nil)).Return(model.ErrNotFound)
 
@@ -726,7 +742,7 @@ func TestDeleteDocument_NotFound(t *testing.T) {
 
 func TestDeleteDocument_PreconditionFailed(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	pred := model.Filters{{Field: "version", Op: "==", Value: int64(1)}}
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", pred).Return(model.ErrPreconditionFailed)
@@ -738,7 +754,7 @@ func TestDeleteDocument_PreconditionFailed(t *testing.T) {
 
 func TestDeleteDocument_StorageError(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	storageErr := errors.New("storage error")
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", model.Filters(nil)).Return(storageErr)
@@ -755,31 +771,16 @@ func TestDeleteDocument_StorageError(t *testing.T) {
 
 func TestWatchCollection_Success(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://mock-csp")
+	mockCSP := new(MockCSPService)
+	engine := New(mockStorage, mockCSP)
 
-	// Pre-encode events to a buffer - use Id field since Fullpath has json:"-"
-	var buf bytes.Buffer
-	events := []storage.Event{
-		{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}},
-		{Type: storage.EventUpdate, Document: &storage.Document{Id: "doc2", Collection: "col"}},
-	}
-	for _, evt := range events {
-		json.NewEncoder(&buf).Encode(evt)
-	}
-	bodyData := buf.Bytes()
+	// Create event channel
+	eventCh := make(chan storage.Event, 2)
+	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}}
+	eventCh <- storage.Event{Type: storage.EventUpdate, Document: &storage.Document{Id: "doc2", Collection: "col"}}
+	close(eventCh)
 
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			assert.Equal(t, "POST", req.Method)
-			assert.Contains(t, req.URL.Path, "/internal/v1/watch")
-			// Use a fresh buffer with the pre-encoded data
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewReader(bodyData)),
-			}, nil
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
+	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
 
 	ch, err := engine.WatchCollection(context.Background(), "default", "col")
 	assert.NoError(t, err)
@@ -796,49 +797,24 @@ func TestWatchCollection_Success(t *testing.T) {
 	assert.Equal(t, "col", received[0].Document.Collection)
 	assert.Equal(t, "doc2", received[1].Document.Id)
 	assert.Equal(t, "col", received[1].Document.Collection)
+	mockCSP.AssertExpectations(t)
 }
 
 func TestWatchCollection_ContextCancel(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://mock-csp")
+	mockCSP := new(MockCSPService)
+	engine := New(mockStorage, mockCSP)
 
-	// Use a channel to track when the pipe should send data
-	sendData := make(chan struct{})
-	pipeCloseRequested := make(chan struct{})
-	pr, pw := io.Pipe()
+	// Create a channel that won't close immediately
+	eventCh := make(chan storage.Event, 1)
+	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}}
 
-	// Close pipe when test signals
-	go func() {
-		<-pipeCloseRequested
-		pw.Close()
-	}()
-
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       pr,
-			}, nil
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
+	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	ch, err := engine.WatchCollection(ctx, "default", "col")
 	assert.NoError(t, err)
 	assert.NotNil(t, ch)
-
-	// Start sending data in goroutine - use Id field since Fullpath has json:"-"
-	go func() {
-		// Wait for signal or timeout
-		select {
-		case <-sendData:
-			evt := storage.Event{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}}
-			json.NewEncoder(pw).Encode(evt)
-		case <-time.After(time.Second):
-		}
-	}()
-	close(sendData)
 
 	// Read the event
 	select {
@@ -848,9 +824,9 @@ func TestWatchCollection_ContextCancel(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	// Cancel context and close pipe to unblock decoder
+	// Cancel context
 	cancel()
-	close(pipeCloseRequested)
+	close(eventCh)
 
 	// Channel should eventually close
 	select {
@@ -859,34 +835,21 @@ func TestWatchCollection_ContextCancel(t *testing.T) {
 	case <-time.After(time.Second):
 		// This is acceptable - context cancel doesn't close read immediately
 	}
+	mockCSP.AssertExpectations(t)
 }
 
-func TestWatchCollection_DecodeError(t *testing.T) {
+func TestWatchCollection_Error(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://mock-csp")
+	mockCSP := new(MockCSPService)
+	engine := New(mockStorage, mockCSP)
 
-	// Create response with invalid JSON
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString("invalid json\n")),
-			}, nil
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
+	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return(nil, errors.New("watch error"))
 
 	ch, err := engine.WatchCollection(context.Background(), "default", "col")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-
-	// Channel should close after decode error
-	select {
-	case _, ok := <-ch:
-		assert.False(t, ok, "channel should close on decode error")
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for channel close")
-	}
+	assert.Error(t, err)
+	assert.Nil(t, ch)
+	assert.Contains(t, err.Error(), "watch error")
+	mockCSP.AssertExpectations(t)
 }
 
 // ==================================================
@@ -895,7 +858,7 @@ func TestWatchCollection_DecodeError(t *testing.T) {
 
 func TestGetDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	doc := &storage.Document{
 		Fullpath:   "col/doc1",
@@ -913,7 +876,7 @@ func TestGetDocument_CustomTenant(t *testing.T) {
 
 func TestCreateDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	mockStorage.On("Create", mock.Anything, "custom-tenant", mock.Anything).Return(nil)
 
@@ -925,7 +888,7 @@ func TestCreateDocument_CustomTenant(t *testing.T) {
 
 func TestReplaceDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	// ReplaceDocument calls Get first to check if doc exists
 	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.Document{
@@ -950,7 +913,7 @@ func TestReplaceDocument_CustomTenant(t *testing.T) {
 
 func TestPatchDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	// PatchDocument calls Patch then Get
 	mockStorage.On("Patch", mock.Anything, "custom-tenant", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
@@ -967,9 +930,27 @@ func TestPatchDocument_CustomTenant(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
+// TestPatchDocument_GetAfterPatchError tests PatchDocument when Get fails after Patch
+func TestPatchDocument_GetAfterPatchError(t *testing.T) {
+	mockStorage := new(MockStorageBackend)
+	engine := newTestEngine(mockStorage)
+
+	doc := model.Document{"collection": "col", "id": "doc1", "foo": "bar"}
+
+	// Patch succeeds
+	mockStorage.On("Patch", mock.Anything, "default", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
+	// Get after patch returns error
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(nil, errors.New("get error"))
+
+	_, err := engine.PatchDocument(context.Background(), "default", doc, nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "get error")
+	mockStorage.AssertExpectations(t)
+}
+
 func TestDeleteDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	mockStorage.On("Delete", mock.Anything, "custom-tenant", "col/doc1", model.Filters(nil)).Return(nil)
 
@@ -980,7 +961,7 @@ func TestDeleteDocument_CustomTenant(t *testing.T) {
 
 func TestExecuteQuery_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	storedDocs := []*storage.Document{
 		{
@@ -1001,33 +982,25 @@ func TestExecuteQuery_CustomTenant(t *testing.T) {
 
 func TestWatchCollection_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "http://mock-csp")
+	mockCSP := new(MockCSPService)
+	engine := New(mockStorage, mockCSP)
 
-	mockTransport := &MockTransport{
-		RoundTripFunc: func(req *http.Request) (*http.Response, error) {
-			// Verify tenant is passed in request body
-			var body map[string]string
-			json.NewDecoder(req.Body).Decode(&body)
-			assert.Equal(t, "custom-tenant", body["tenant"])
-			assert.Equal(t, "col", body["collection"])
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBuffer(nil)),
-			}, nil
-		},
-	}
-	engine.SetHTTPClient(&http.Client{Transport: mockTransport})
+	eventCh := make(chan storage.Event)
+	close(eventCh)
+
+	mockCSP.On("Watch", mock.Anything, "custom-tenant", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
 
 	ch, err := engine.WatchCollection(context.Background(), "custom-tenant", "col")
 	assert.NoError(t, err)
 	assert.NotNil(t, ch)
-	// Wait for channel to close (empty body)
+	// Wait for channel to close
 	<-ch
+	mockCSP.AssertExpectations(t)
 }
 
 func TestPull_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	storedDocs := []*storage.Document{
 		{
@@ -1053,7 +1026,7 @@ func TestPull_CustomTenant(t *testing.T) {
 
 func TestPush_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage, "")
+	engine := newTestEngine(mockStorage)
 
 	req := storage.ReplicationPushRequest{
 		Collection: "col",
