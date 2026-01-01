@@ -76,6 +76,9 @@ type LocalService interface {
 
 	// SetEventHandler sets the event handler for processing events.
 	SetEventHandler(handler func(ctx context.Context, backendName string, event *events.NormalizedEvent) error)
+
+	// Replay returns an iterator that replays events from the given progress marker.
+	Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error)
 }
 
 // NewService creates a new local Puller service (in-process).

@@ -31,30 +31,6 @@ run: build
 	@echo "Running $(APP_NAME)..."
 	@$(APP_BIN) --all
 
-run-query: build
-	@echo "Running $(APP_NAME)..."
-	@$(APP_BIN) --query
-
-run-csp: build
-	@echo "Running $(APP_NAME)..."
-	@$(APP_BIN) --csp
-
-run-api: build
-	@echo "Running $(APP_NAME)..."
-	@$(APP_BIN) --api
-
-run-trigger-evaluator: build
-	@echo "Running $(APP_NAME)..."
-	@$(APP_BIN) --trigger-evaluator
-
-run-trigger-worker: build
-	@echo "Running $(APP_NAME)..."
-	@$(APP_BIN) --trigger-worker
-
-run-cli: build
-	@echo "Running $(CLI_APP_NAME)..."
-	@$(CLI_BIN)
-
 test:
 	@echo Running tests...
 	@go test ./... -count=1

@@ -110,6 +110,7 @@ type NormalizedEvent struct {
 	ClusterTime ClusterTime `json:"clusterTime"`
 	TxnNumber   *int64      `json:"txnNumber,omitempty"`
 	Timestamp   int64       `json:"timestamp"` // Unix milliseconds
+	Backend     string      `json:"backend,omitempty"`
 }
 
 // NewNormalizedEvent creates a new NormalizedEvent with the current timestamp.
@@ -192,4 +193,19 @@ func uintToString(v uint32) string {
 		v /= 10
 	}
 	return string(buf[i:])
+}
+
+// Iterator provides ordered iteration over events.
+type Iterator interface {
+	// Next advances to the next event. Returns false when done.
+	Next() bool
+
+	// Event returns the current event.
+	Event() *NormalizedEvent
+
+	// Err returns any error encountered during iteration.
+	Err() error
+
+	// Close releases the iterator resources.
+	Close() error
 }
