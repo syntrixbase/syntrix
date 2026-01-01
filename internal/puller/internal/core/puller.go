@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
 	"github.com/codetrek/syntrix/internal/puller/internal/flowcontrol"
 	"github.com/codetrek/syntrix/internal/puller/internal/metrics"
@@ -63,6 +63,9 @@ type Puller struct {
 	// It can be replaced for testing purposes.
 	watchFunc func(ctx context.Context, backend *Backend, logger *slog.Logger) error
 
+	// openStream allows tests to inject a custom change stream implementation.
+	openStream func(ctx context.Context, db *mongo.Database, pipeline mongo.Pipeline, opts *options.ChangeStreamOptions) (changeStream, error)
+
 	// retryDelay is the time to wait before retrying after an error.
 	retryDelay time.Duration
 
@@ -87,7 +90,20 @@ func New(cfg config.PullerConfig, logger *slog.Logger) *Puller {
 		backpressurePauseDelay:    1 * time.Second,
 	}
 	p.watchFunc = p.watchChangeStream
+	p.openStream = openMongoChangeStream
 	return p
+}
+
+// changeStream defines the subset of mongo.ChangeStream used by the puller.
+type changeStream interface {
+	Next(context.Context) bool
+	Decode(any) error
+	Err() error
+	Close(context.Context) error
+}
+
+func openMongoChangeStream(ctx context.Context, db *mongo.Database, pipeline mongo.Pipeline, opts *options.ChangeStreamOptions) (changeStream, error) {
+	return db.Watch(ctx, pipeline, opts)
 }
 
 // SetRetryDelay sets the retry delay for testing purposes.
@@ -299,7 +315,7 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 	}
 
 	// Start watching at database level
-	stream, err := backend.db.Watch(ctx, pipeline, opts)
+	stream, err := p.openStream(ctx, backend.db, pipeline, opts)
 	if err != nil {
 		return fmt.Errorf("failed to open change stream: %w", err)
 	}

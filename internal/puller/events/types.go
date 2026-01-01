@@ -3,9 +3,6 @@
 package events
 
 import (
-	"encoding/json"
-	"time"
-
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
@@ -111,53 +108,6 @@ type NormalizedEvent struct {
 	TxnNumber   *int64      `json:"txnNumber,omitempty"`
 	Timestamp   int64       `json:"timestamp"` // Unix milliseconds
 	Backend     string      `json:"backend,omitempty"`
-}
-
-// NewNormalizedEvent creates a new NormalizedEvent with the current timestamp.
-func NewNormalizedEvent(
-	eventID, tenantID, collection, documentID string,
-	opType OperationType,
-	clusterTime ClusterTime,
-) *NormalizedEvent {
-	return &NormalizedEvent{
-		EventID:     eventID,
-		TenantID:    tenantID,
-		Collection:  collection,
-		DocumentID:  documentID,
-		Type:        opType,
-		ClusterTime: clusterTime,
-		Timestamp:   time.Now().UnixMilli(),
-	}
-}
-
-// WithFullDocument sets the full document and returns the event for chaining.
-func (e *NormalizedEvent) WithFullDocument(doc map[string]any) *NormalizedEvent {
-	e.FullDocument = doc
-	return e
-}
-
-// WithUpdateDescription sets the update description and returns the event for chaining.
-func (e *NormalizedEvent) WithUpdateDescription(desc *UpdateDescription) *NormalizedEvent {
-	e.UpdateDesc = desc
-	return e
-}
-
-// WithTxnNumber sets the transaction number and returns the event for chaining.
-func (e *NormalizedEvent) WithTxnNumber(txn int64) *NormalizedEvent {
-	e.TxnNumber = &txn
-	return e
-}
-
-// MarshalJSON implements json.Marshaler.
-func (e *NormalizedEvent) MarshalJSON() ([]byte, error) {
-	type Alias NormalizedEvent
-	return json.Marshal((*Alias)(e))
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-func (e *NormalizedEvent) UnmarshalJSON(data []byte) error {
-	type Alias NormalizedEvent
-	return json.Unmarshal(data, (*Alias)(e))
 }
 
 // BufferKey generates the PebbleDB key for this event.

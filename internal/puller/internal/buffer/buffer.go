@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -498,11 +498,20 @@ func (b *Buffer) Close() error {
 	close(b.writeCh)
 	b.batcherWG.Wait()
 
-	if err := b.db.Close(); err != nil {
-		return fmt.Errorf("failed to close pebble database: %w", err)
+	var closeErr error
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				closeErr = fmt.Errorf("%v", r)
+			}
+		}()
+		closeErr = b.db.Close()
+	}()
+
+	if closeErr != nil {
+		return fmt.Errorf("failed to close pebble database: %w", closeErr)
 	}
 
-	b.logger.Info("event buffer closed")
 	return nil
 }
 

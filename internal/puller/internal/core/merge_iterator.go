@@ -3,7 +3,7 @@ package core
 import (
 	"container/heap"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 )
 
 // MergeIterator merges multiple event iterators into a single ordered stream.

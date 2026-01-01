@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 )
 
 // GapThreshold is the default time gap that triggers a gap detection alert.

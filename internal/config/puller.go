@@ -120,7 +120,7 @@ func DefaultPullerConfig() PullerConfig {
 			},
 		},
 		Buffer: BufferConfig{
-			Path:          "/var/lib/puller/events",
+			Path:          "data/puller/events",
 			MaxSize:       "10GiB",
 			BatchSize:     100,
 			BatchInterval: 100 * time.Millisecond,
@@ -142,7 +142,7 @@ func DefaultPullerConfig() PullerConfig {
 			Path: "/metrics",
 		},
 		Health: HealthConfig{
-			Port: 8080,
+			Port: 8081,
 			Path: "/health",
 		},
 	}

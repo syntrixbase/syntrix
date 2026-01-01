@@ -3,7 +3,7 @@ package buffer
 import (
 	"sort"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 )
 
 // Coalescer merges events for the same document during catch-up.

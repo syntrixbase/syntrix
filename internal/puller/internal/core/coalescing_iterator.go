@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
 )
 

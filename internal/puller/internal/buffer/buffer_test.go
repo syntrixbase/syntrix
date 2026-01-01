@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.mongodb.org/mongo-driver/bson"
@@ -33,6 +33,46 @@ func TestBuffer_NewAndClose(t *testing.T) {
 	if err := buf.Close(); err != nil {
 		t.Errorf("Close() error = %v", err)
 	}
+}
+
+func TestBuffer_Close_MultipleTimes(t *testing.T) {
+	t.Parallel()
+	buf, err := New(Options{Path: t.TempDir()})
+	require.NoError(t, err)
+
+	assert.NoError(t, buf.Close())
+	assert.NoError(t, buf.Close())
+}
+
+func TestBuffer_Close_DBError(t *testing.T) {
+	t.Parallel()
+	buf, err := New(Options{Path: t.TempDir()})
+	require.NoError(t, err)
+
+	// Close the underlying DB early to force the error branch in Buffer.Close.
+	require.NoError(t, buf.db.Close())
+
+	err = buf.Close()
+	assert.Error(t, err)
+}
+
+func TestBuffer_Close_PanicHandled(t *testing.T) {
+	t.Parallel()
+	buf, err := New(Options{Path: t.TempDir()})
+	require.NoError(t, err)
+
+	// Corrupt the db pointer to trigger panic inside Close and ensure we recover.
+	buf.db = nil
+
+	err = buf.Close()
+	assert.Error(t, err)
+}
+
+func TestBufferIterator_Close_NilIter(t *testing.T) {
+	t.Parallel()
+	it := &bufferIterator{}
+
+	assert.NoError(t, it.Close())
 }
 
 func TestBuffer_WriteAndRead(t *testing.T) {

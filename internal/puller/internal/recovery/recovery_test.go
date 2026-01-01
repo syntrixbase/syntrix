@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 )
 
 func TestGapDetector_FirstEvent(t *testing.T) {

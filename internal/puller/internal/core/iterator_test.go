@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
 )
 

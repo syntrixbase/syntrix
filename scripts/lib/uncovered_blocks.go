@@ -10,6 +10,7 @@ import (
 )
 
 const MAX_GAP_LINES = 20
+const CRITICAL_EFFECTIVE_LINES = 4
 
 var maxOutputBlocks = 40
 
@@ -91,17 +92,23 @@ func (fc *FileCache) AnalyzeBlock(b *MergedBlock) {
 			continue
 		}
 		line := strings.TrimSpace(lines[i-1])
-		if line == "" || strings.HasPrefix(line, "//") {
+		if isLineIgnorable(line) {
 			continue
 		}
 		effectiveLines = append(effectiveLines, line)
 	}
+
+	b.EffectiveLines = len(effectiveLines)
 
 	hasLog := false
 	hasError := false
 	hasLogic := false
 
 	for _, line := range effectiveLines {
+		if isLogic(line) {
+			hasLogic = true
+			continue
+		}
 		if isLog(line) {
 			hasLog = true
 			continue
@@ -111,14 +118,14 @@ func (fc *FileCache) AnalyzeBlock(b *MergedBlock) {
 			continue
 		}
 		// Ignore closing braces/parens for logic detection
-		if line == "}" || line == "){" || line == ")" || line == "]" || line == "}," {
+		if isLineIgnorable(line) {
 			continue
 		}
 		hasLogic = true
 	}
 
 	if hasLogic {
-		if len(effectiveLines) > 5 {
+		if len(effectiveLines) >= CRITICAL_EFFECTIVE_LINES {
 			b.Level = "CRITICAL"
 			b.FixAction = "\033[31mRequired\033[0m"
 		} else {
@@ -133,6 +140,14 @@ func (fc *FileCache) AnalyzeBlock(b *MergedBlock) {
 	} else {
 		b.Level = "LOW"
 	}
+}
+
+func isLineIgnorable(line string) bool {
+	line = strings.TrimSpace(line)
+	if line == "" || strings.HasPrefix(line, "//") || line == "}" || line == "){" || line == ")" || line == "]" || line == "}," {
+		return true
+	}
+	return false
 }
 
 func isLog(line string) bool {
@@ -151,15 +166,41 @@ func isLog(line string) bool {
 	return false
 }
 
+func isLogic(line string) bool {
+	logicKeywords := []string{
+		"if", "for", "switch", "case", "return", "break", "continue", "goto",
+		"func", "defer", "select", "chan", "map", "struct", "interface",
+	}
+	for _, kw := range logicKeywords {
+		if strings.Contains(line, kw) {
+			return true
+		}
+	}
+	return false
+}
+
 func isError(line string) bool {
-	if strings.Contains(line, "err != nil") {
-		return true
+	patterns := [][]string{
+		{"if", "err", "!="},
+		{"return", "err"},
+		{"http.Error"},
+		{"fmt.Errorf"},
+		{"errors.New"},
+		{"writeError"},
 	}
-	if strings.HasPrefix(line, "return") && strings.Contains(line, "err") {
-		return true
+	for _, pattern := range patterns {
+		if matchesPattern(line, pattern) {
+			return true
+		}
 	}
-	if strings.Contains(line, "if") && strings.Contains(line, "err :=") {
-		return true
+	return false
+}
+
+func matchesPattern(line string, pattern []string) bool {
+	for _, p := range pattern {
+		if strings.Contains(line, p) {
+			return true
+		}
 	}
 	return false
 }
@@ -174,14 +215,15 @@ type Block struct {
 }
 
 type MergedBlock struct {
-	File      string
-	StartLine int
-	StartCol  int
-	EndLine   int
-	EndCol    int
-	NumLines  int
-	Level     string
-	FixAction string
+	File           string
+	StartLine      int
+	StartCol       int
+	EndLine        int
+	EndCol         int
+	NumLines       int
+	EffectiveLines int
+	Level          string
+	FixAction      string
 }
 
 func (b *MergedBlock) ShouldPrint() bool {
@@ -190,13 +232,13 @@ func (b *MergedBlock) ShouldPrint() bool {
 
 func (b *MergedBlock) Print(locWidth int) {
 	if b.ShouldPrint() {
-		rangeStr := fmt.Sprintf("%s:(%d,%d)-(%d,%d)", b.File, b.StartLine, b.StartCol, b.EndLine, b.EndCol)
+		rangeStr := fmt.Sprintf("%s:%d:%d-%d:%d", b.File, b.StartLine, b.StartCol, b.EndLine, b.EndCol)
 		linesStr := fmt.Sprintf("%d", b.NumLines)
 
 		if os.Getenv("CI") == "true" && b.Level == "CRITICAL" {
 			fmt.Printf("::error file=%s,line=%d::", b.File, b.StartLine)
 		}
-		fmt.Printf("%-*s %-6s %-10s %s\n", locWidth, rangeStr, linesStr, b.Level, b.FixAction)
+		fmt.Printf("%-*s %-6s %-6d %-10s %s\n", locWidth, rangeStr, linesStr, b.EffectiveLines, b.Level, b.FixAction)
 	}
 }
 
@@ -269,6 +311,9 @@ func main() {
 		if w1 != w2 {
 			return w1 > w2
 		}
+		if merged[i].EffectiveLines != merged[j].EffectiveLines {
+			return merged[i].EffectiveLines > merged[j].EffectiveLines
+		}
 		return merged[i].NumLines > merged[j].NumLines
 	})
 
@@ -278,7 +323,7 @@ func main() {
 		if !b.ShouldPrint() {
 			continue
 		}
-		loc := fmt.Sprintf("%s:(%d,%d)-(%d,%d)", b.File, b.StartLine, b.StartCol, b.EndLine, b.EndCol)
+		loc := fmt.Sprintf("%s:%d:%d-%d:%d", b.File, b.StartLine, b.StartCol, b.EndLine, b.EndCol)
 		if len(loc) > maxLocWidth {
 			maxLocWidth = len(loc)
 		}
@@ -385,11 +430,7 @@ func mergeBlocks(blocks []Block) []MergedBlock {
 		if b.Count > 0 {
 			if current != nil {
 				// Finish current block
-				lines := current.EndLine - current.StartLine
-				if lines == 0 {
-					lines = 1
-				}
-				current.NumLines = lines
+				current.NumLines = current.EndLine - current.StartLine + 1
 				result = append(result, *current)
 				current = nil
 			}
@@ -431,11 +472,7 @@ func mergeBlocks(blocks []Block) []MergedBlock {
 				current.EndCol = b.EndCol
 			} else {
 				// Cannot merge, save current and start new
-				lines := current.EndLine - current.StartLine
-				if lines == 0 {
-					lines = 1
-				}
-				current.NumLines = lines
+				current.NumLines = current.EndLine - current.StartLine + 1
 				result = append(result, *current)
 
 				current = &MergedBlock{
@@ -450,11 +487,7 @@ func mergeBlocks(blocks []Block) []MergedBlock {
 	}
 
 	if current != nil {
-		lines := current.EndLine - current.StartLine
-		if lines == 0 {
-			lines = 1
-		}
-		current.NumLines = lines
+		current.NumLines = current.EndLine - current.StartLine + 1
 		result = append(result, *current)
 	}
 
@@ -491,6 +524,6 @@ Details:`)
 	}
 	separator := strings.Repeat("-", locWidth+30)
 	fmt.Println(separator)
-	fmt.Printf("%-*s %-6s %-10s %s\n", locWidth, "LOCATION", "LINES", "STATUS", "ACTION")
+	fmt.Printf("%-*s %-6s %-6s %-10s %s\n", locWidth, "LOCATION", "LINES", "EFFECT", "STATUS", "FIX ACTION")
 	fmt.Println(separator)
 }

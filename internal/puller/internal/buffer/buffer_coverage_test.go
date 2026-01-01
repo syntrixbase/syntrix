@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/codetrek/syntrix/internal/events"
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

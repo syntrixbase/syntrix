@@ -130,4 +130,4 @@ echo ""
 echo "---------------------------------------------------------------------------------------------------------"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-go run "$SCRIPT_DIR/lib/uncovered_blocks.go" "$COVERPROFILE" "false" 20
+go run "$SCRIPT_DIR/lib/uncovered_blocks.go" "$COVERPROFILE" "false" 10
