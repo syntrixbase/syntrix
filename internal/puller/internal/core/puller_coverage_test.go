@@ -46,6 +46,9 @@ func TestPuller_WatchAndCheckpoint(t *testing.T) {
 		t.Fatalf("Start failed: %v", err)
 	}
 
+	// Wait for change stream to be established
+	time.Sleep(500 * time.Millisecond)
+
 	// Insert a document to trigger an event
 	coll := env.DB.Collection("users")
 	_, err = coll.InsertOne(ctx, bson.M{"username": "testuser", "email": "test@example.com"})
@@ -124,6 +127,9 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	_, _ = p.Subscribe(ctx, "c1", "")
 	_ = p.Start(ctx)
 
+	// Wait for change stream to be established
+	time.Sleep(100 * time.Millisecond)
+
 	// Generate event
 	coll := env.DB.Collection("users")
 	_, _ = coll.InsertOne(ctx, bson.M{"a": 1})
@@ -182,6 +188,9 @@ func TestPuller_EventHandlerError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	_ = p.Start(ctx)
+
+	// Wait for change stream to be established
+	time.Sleep(100 * time.Millisecond)
 
 	// Generate event
 	coll := env.DB.Collection("users")
