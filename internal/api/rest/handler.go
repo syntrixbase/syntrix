@@ -8,14 +8,13 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"runtime/debug"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 
 	"github.com/codetrek/syntrix/internal/engine"
 	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/codetrek/syntrix/internal/server"
 	"github.com/codetrek/syntrix/pkg/model"
 )
 
@@ -23,7 +22,6 @@ import (
 type contextKey string
 
 const (
-	contextKeyRequestID  contextKey = "request_id"
 	contextKeyParsedBody contextKey = "parsed_body"
 )
 
@@ -116,27 +114,6 @@ func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	}
 }
 
-// withRequestID adds a unique request ID to the context and response headers
-func withRequestID(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		requestID := r.Header.Get("X-Request-ID")
-		if requestID == "" {
-			requestID = uuid.New().String()
-		}
-		w.Header().Set("X-Request-ID", requestID)
-		ctx := context.WithValue(r.Context(), contextKeyRequestID, requestID)
-		next(w, r.WithContext(ctx))
-	}
-}
-
-// getRequestID retrieves the request ID from the context
-func getRequestID(ctx context.Context) string {
-	if id, ok := ctx.Value(contextKeyRequestID).(string); ok {
-		return id
-	}
-	return ""
-}
-
 // logRequest logs request information using structured logging
 func logRequest(r *http.Request, status int, duration time.Duration) {
 	slog.Info("HTTP request",
@@ -144,7 +121,7 @@ func logRequest(r *http.Request, status int, duration time.Duration) {
 		"path", r.URL.Path,
 		"status", status,
 		"duration_ms", duration.Milliseconds(),
-		"request_id", getRequestID(r.Context()),
+		"request_id", server.GetRequestID(r.Context()),
 	)
 }
 
@@ -154,29 +131,6 @@ func maxBodySize(next http.HandlerFunc, maxBytes int64) http.HandlerFunc {
 		if r.Body != nil {
 			r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 		}
-		next(w, r)
-	}
-}
-
-// withRecover wraps a handler with panic recovery
-// It catches any panics, logs the stack trace, and returns a 500 error
-func withRecover(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer func() {
-			if err := recover(); err != nil {
-				// Log the panic with stack trace and request ID
-				slog.Error("Panic recovered",
-					"method", r.Method,
-					"path", r.URL.Path,
-					"error", err,
-					"stack", string(debug.Stack()),
-					"request_id", getRequestID(r.Context()),
-				)
-
-				// Return a generic error to the client
-				writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Internal server error")
-			}
-		}()
 		next(w, r)
 	}
 }
@@ -210,42 +164,42 @@ func (h *Handler) tenantOrError(w http.ResponseWriter, r *http.Request) (string,
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Document Operations (with body size limit for write operations)
-	// All routes wrapped with request ID, panic recovery and default timeout
-	mux.HandleFunc("GET /api/v1/{path...}", withRequestID(withRecover(withTimeout(h.maybeProtected(h.authorized(h.handleGetDocument, "read")), DefaultRequestTimeout))))
-	mux.HandleFunc("POST /api/v1/{path...}", withRequestID(withRecover(withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleCreateDocument, "create")), DefaultMaxBodySize), DefaultRequestTimeout))))
-	mux.HandleFunc("PUT /api/v1/{path...}", withRequestID(withRecover(withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))))
-	mux.HandleFunc("PATCH /api/v1/{path...}", withRequestID(withRecover(withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handlePatchDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))))
-	mux.HandleFunc("DELETE /api/v1/{path...}", withRequestID(withRecover(withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete")), DefaultMaxBodySize), DefaultRequestTimeout))))
+	// Note: Request ID and panic recovery are handled by the unified server middleware
+	mux.HandleFunc("GET /api/v1/{path...}", withTimeout(h.maybeProtected(h.authorized(h.handleGetDocument, "read")), DefaultRequestTimeout))
+	mux.HandleFunc("POST /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleCreateDocument, "create")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PUT /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PATCH /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handlePatchDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("DELETE /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete")), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Query Operations
-	mux.HandleFunc("POST /api/v1/query", withRequestID(withRecover(withTimeout(maxBodySize(h.protected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))))
+	mux.HandleFunc("POST /api/v1/query", withTimeout(maxBodySize(h.protected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Replication Operations (use longer timeout for potentially large data transfers)
-	mux.HandleFunc("GET /replication/v1/pull", withRequestID(withRecover(withTimeout(h.protected(h.handlePull), LongRequestTimeout))))
-	mux.HandleFunc("POST /replication/v1/push", withRequestID(withRecover(withTimeout(maxBodySize(h.protected(h.handlePush), LargeMaxBodySize), LongRequestTimeout))))
+	mux.HandleFunc("GET /replication/v1/pull", withTimeout(h.protected(h.handlePull), LongRequestTimeout))
+	mux.HandleFunc("POST /replication/v1/push", withTimeout(maxBodySize(h.protected(h.handlePush), LargeMaxBodySize), LongRequestTimeout))
 
 	// Trigger Internal Operations
-	mux.HandleFunc("POST /trigger/v1/get", withRequestID(withRecover(withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerGet), DefaultMaxBodySize), DefaultRequestTimeout))))
-	mux.HandleFunc("POST /trigger/v1/query", withRequestID(withRecover(withTimeout(maxBodySize(h.triggerProtected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))))
-	mux.HandleFunc("POST /trigger/v1/write", withRequestID(withRecover(withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerWrite), DefaultMaxBodySize), DefaultRequestTimeout))))
+	mux.HandleFunc("POST /trigger/v1/get", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerGet), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/query", withTimeout(maxBodySize(h.triggerProtected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/write", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerWrite), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Auth Operations
 	if h.auth != nil {
-		mux.HandleFunc("POST /auth/v1/signup", withRequestID(withRecover(withTimeout(maxBodySize(h.handleSignUp, DefaultMaxBodySize), DefaultRequestTimeout))))
-		mux.HandleFunc("POST /auth/v1/login", withRequestID(withRecover(withTimeout(maxBodySize(h.handleLogin, DefaultMaxBodySize), DefaultRequestTimeout))))
-		mux.HandleFunc("POST /auth/v1/refresh", withRequestID(withRecover(withTimeout(maxBodySize(h.handleRefresh, DefaultMaxBodySize), DefaultRequestTimeout))))
-		mux.HandleFunc("POST /auth/v1/logout", withRequestID(withRecover(withTimeout(maxBodySize(h.handleLogout, DefaultMaxBodySize), DefaultRequestTimeout))))
+		mux.HandleFunc("POST /auth/v1/signup", withTimeout(maxBodySize(h.handleSignUp, DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("POST /auth/v1/login", withTimeout(maxBodySize(h.handleLogin, DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("POST /auth/v1/refresh", withTimeout(maxBodySize(h.handleRefresh, DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("POST /auth/v1/logout", withTimeout(maxBodySize(h.handleLogout, DefaultMaxBodySize), DefaultRequestTimeout))
 
 		// Admin Operations (use longer timeout)
-		mux.HandleFunc("GET /admin/users", withRequestID(withRecover(withTimeout(h.adminOnly(h.handleAdminListUsers), LongRequestTimeout))))
-		mux.HandleFunc("PATCH /admin/users/{id}", withRequestID(withRecover(withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateUser), DefaultMaxBodySize), DefaultRequestTimeout))))
-		mux.HandleFunc("GET /admin/rules", withRequestID(withRecover(withTimeout(h.adminOnly(h.handleAdminGetRules), DefaultRequestTimeout))))
-		mux.HandleFunc("POST /admin/rules/push", withRequestID(withRecover(withTimeout(maxBodySize(h.adminOnly(h.handleAdminPushRules), LargeMaxBodySize), LongRequestTimeout))))
-		mux.HandleFunc("GET /admin/health", withRequestID(withRecover(withTimeout(h.adminOnly(h.handleAdminHealth), DefaultRequestTimeout))))
+		mux.HandleFunc("GET /admin/users", withTimeout(h.adminOnly(h.handleAdminListUsers), LongRequestTimeout))
+		mux.HandleFunc("PATCH /admin/users/{id}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateUser), DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("GET /admin/rules", withTimeout(h.adminOnly(h.handleAdminGetRules), DefaultRequestTimeout))
+		mux.HandleFunc("POST /admin/rules/push", withTimeout(maxBodySize(h.adminOnly(h.handleAdminPushRules), LargeMaxBodySize), LongRequestTimeout))
+		mux.HandleFunc("GET /admin/health", withTimeout(h.adminOnly(h.handleAdminHealth), DefaultRequestTimeout))
 	}
 
 	// Health Check (no auth, minimal timeout)
-	mux.HandleFunc("GET /health", withRequestID(withRecover(withTimeout(h.handleHealth, 5*time.Second))))
+	mux.HandleFunc("GET /health", withTimeout(h.handleHealth, 5*time.Second))
 }
 
 func (h *Handler) protected(handler http.HandlerFunc) http.HandlerFunc {
@@ -334,7 +288,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 				"path", path,
 				"action", action,
 				"error", err,
-				"request_id", getRequestID(r.Context()),
+				"request_id", server.GetRequestID(r.Context()),
 			)
 			writeError(w, http.StatusForbidden, ErrCodeForbidden, "Authorization check failed")
 			return

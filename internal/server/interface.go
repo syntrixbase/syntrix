@@ -24,4 +24,8 @@ type Service interface {
 	// RegisterGRPCService registers a gRPC service implementation.
 	// This must be called BEFORE Start().
 	RegisterGRPCService(desc *grpc.ServiceDesc, impl interface{})
+
+	// HTTPMux returns the underlying HTTP ServeMux for direct route registration.
+	// This must be called BEFORE Start().
+	HTTPMux() *http.ServeMux
 }

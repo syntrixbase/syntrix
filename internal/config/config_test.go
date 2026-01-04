@@ -25,7 +25,6 @@ func TestLoadConfig_Defaults(t *testing.T) {
 func TestLoadConfig_EnvVars(t *testing.T) {
 	os.Setenv("MONGO_URI", "mongodb://test:27017")
 	os.Setenv("DB_NAME", "testdb")
-	os.Setenv("GATEWAY_PORT", "9090")
 	os.Setenv("GATEWAY_QUERY_SERVICE_URL", "http://api-env")
 	os.Setenv("QUERY_PORT", "9092")
 	os.Setenv("QUERY_CSP_SERVICE_URL", "http://csp-env")
@@ -35,7 +34,6 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 	defer func() {
 		os.Unsetenv("MONGO_URI")
 		os.Unsetenv("DB_NAME")
-		os.Unsetenv("GATEWAY_PORT")
 		os.Unsetenv("GATEWAY_QUERY_SERVICE_URL")
 		os.Unsetenv("QUERY_PORT")
 		os.Unsetenv("QUERY_CSP_SERVICE_URL")
@@ -48,7 +46,6 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 
 	assert.Equal(t, "mongodb://test:27017", cfg.Storage.Backends["default_mongo"].Mongo.URI)
 	assert.Equal(t, "testdb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
-	assert.Equal(t, 9090, cfg.Gateway.Port)
 	assert.Equal(t, "http://api-env", cfg.Gateway.QueryServiceURL)
 	assert.Equal(t, 9092, cfg.Query.Port)
 	assert.Equal(t, "http://csp-env", cfg.Query.CSPServiceURL)
@@ -70,7 +67,7 @@ func TestLoadConfig_LoadFileErrors(t *testing.T) {
 	cfg := LoadConfig()
 
 	// Defaults should remain when files fail to load/parse
-	assert.Equal(t, 8080, cfg.Gateway.Port)
+	assert.Equal(t, 8080, cfg.Server.HTTPPort)
 	assert.Equal(t, "mongodb://localhost:27017", cfg.Storage.Backends["default_mongo"].Mongo.URI)
 }
 

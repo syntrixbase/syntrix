@@ -11,6 +11,7 @@ import (
 
 	"github.com/codetrek/syntrix/internal/config"
 	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/codetrek/syntrix/internal/server"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/pkg/model"
 
@@ -109,8 +110,11 @@ func TestManager_InitAuthService_GenerateKey(t *testing.T) {
 }
 
 func TestManager_InitAPIServer_WithRules(t *testing.T) {
+	// Initialize a fresh server instance to avoid route conflicts with other tests
+	server.InitDefault(server.DefaultConfig(), nil)
+
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	rulesPath := filepath.Join(t.TempDir(), "rules.yaml")
 	rulesContent := "match:\n  /databases/{db}/documents/{doc}:\n    allow:\n      get: \"true\"\n"
 	assert.NoError(t, os.WriteFile(rulesPath, []byte(rulesContent), 0644))
@@ -122,13 +126,15 @@ func TestManager_InitAPIServer_WithRules(t *testing.T) {
 
 	err := mgr.initAPIServer(querySvc)
 	assert.NoError(t, err)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// API routes are now registered directly to the unified server, not added to m.servers
 }
 
 func TestManager_InitAPIServer_NoRules(t *testing.T) {
+	// Initialize a fresh server instance to avoid route conflicts with other tests
+	server.InitDefault(server.DefaultConfig(), nil)
+
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 
 	mgr := NewManager(cfg, Options{})
@@ -137,13 +143,15 @@ func TestManager_InitAPIServer_NoRules(t *testing.T) {
 
 	err := mgr.initAPIServer(querySvc)
 	assert.NoError(t, err)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// API routes are now registered directly to the unified server, not added to m.servers
 }
 
 func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
+	// Initialize a fresh server instance to avoid route conflicts with other tests
+	server.InitDefault(server.DefaultConfig(), nil)
+
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{})
 	mgr.authService = &stubAuthN{}
@@ -151,8 +159,7 @@ func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 	err := mgr.initAPIServer(&stubQueryService{})
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.rtServer)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// API routes are now registered directly to the unified server, not added to m.servers
 }
 
 func TestListenAddr_WithHost(t *testing.T) {
@@ -262,8 +269,11 @@ func TestManager_Init_RunCSPPath(t *testing.T) {
 }
 
 func TestManager_Init_RunRealtimePath(t *testing.T) {
+	// Initialize a fresh server instance to avoid route conflicts with other tests
+	server.InitDefault(server.DefaultConfig(), nil)
+
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{RunAPI: true})
@@ -271,8 +281,7 @@ func TestManager_Init_RunRealtimePath(t *testing.T) {
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.rtServer)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// API routes are now registered directly to the unified server, not added to m.servers
 }
 
 func TestManager_initPullerService_Success(t *testing.T) {
@@ -504,7 +513,7 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
@@ -513,9 +522,10 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
-	// In standalone mode, only the Gateway server should be created
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// In standalone mode, the Unified Server (server.Default()) handles all HTTP routing.
+	// No separate HTTP servers are added to m.servers since API routes are registered
+	// directly to the unified server mux.
+	assert.Len(t, mgr.servers, 0)
 	assert.NotNil(t, mgr.docStore)
 }
 
@@ -534,7 +544,7 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.CSP.Port = 0
 	cfg.Query.Port = 0
 	cfg.Identity.AuthZ.RulesFile = ""
@@ -546,10 +556,10 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
-	// In standalone mode, CSP and Query servers are not created,
-	// only the Gateway server should exist
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Unified Gateway", mgr.serverNames[0])
+	// In standalone mode, CSP and Query services run in-process without separate HTTP servers.
+	// The Unified Server (server.Default()) handles all HTTP routing.
+	// No separate HTTP servers are added to m.servers.
+	assert.Len(t, mgr.servers, 0)
 }
 
 func TestManager_createQueryService(t *testing.T) {
@@ -608,7 +618,7 @@ func TestManager_initStandalone_APIServerError(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = "/nonexistent/rules/file.yaml"
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
@@ -635,7 +645,7 @@ func TestManager_initDistributed_APIServerError(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Gateway.Port = 0
+	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = "/nonexistent/rules/file.yaml"
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeDistributed,

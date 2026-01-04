@@ -148,3 +148,7 @@ func (s *serverImpl) RegisterHTTPHandler(pattern string, handler http.Handler) {
 func (s *serverImpl) RegisterGRPCService(desc *grpc.ServiceDesc, impl interface{}) {
 	s.grpcServer.RegisterService(desc, impl)
 }
+
+func (s *serverImpl) HTTPMux() *http.ServeMux {
+	return s.httpMux
+}

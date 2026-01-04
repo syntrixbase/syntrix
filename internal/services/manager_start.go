@@ -49,7 +49,8 @@ func (m *Manager) Start(bgCtx context.Context) {
 				}
 
 				if err := m.rtServer.StartBackgroundTasks(bgCtx); err != nil {
-					if maxRetries%10 == 0 {
+					// Log every 10th attempt to reduce noise
+					if (i+1)%10 == 0 {
 						log.Printf("Attempt %d/%d: Failed to start realtime background tasks: %v", i+1, maxRetries, err)
 					}
 

@@ -1,5 +1,5 @@
 server:
-  http_port: 8000
+  http_port: 8080
   http_read_timeout: 10s
   http_write_timeout: 10s
   http_idle_timeout: 60s
@@ -43,7 +43,6 @@ identity:
     rules_file: "security.yaml"
 
 gateway:
-  port: 8080
   query_service_url: "http://localhost:8082"
   realtime:
     transport: "both"
