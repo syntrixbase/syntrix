@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,6 +31,7 @@ type ServiceEnv struct {
 	Cancel      context.CancelFunc
 	MongoURI    string
 	DBName      string
+	testPrefix  string // Unique prefix for this test to isolate users and collections
 }
 
 func setupServiceEnv(t *testing.T, rulesContent string, configModifiers ...func(*config.Config)) *ServiceEnv {
@@ -39,206 +39,51 @@ func setupServiceEnv(t *testing.T, rulesContent string, configModifiers ...func(
 }
 
 func setupServiceEnvWithOptions(t *testing.T, rulesContent string, configModifiers []func(*config.Config), optsModifiers []func(*services.Options)) *ServiceEnv {
-	// 1. Setup Config
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
+	// Use the global test environment instead of creating a new one
+	// This avoids route conflicts when multiple tests run in parallel
+	env := GetGlobalEnv()
+	if env == nil {
+		t.Fatal("Global test environment not initialized. Make sure TestMain is running.")
 	}
-	// Use a unique database name for each test to allow parallel execution
-	// Sanitize test name to be safe for MongoDB and keep it short (max 63 chars)
-	// We use the last 8 chars of the test name + timestamp to ensure uniqueness and brevity
+
+	// Create a unique collection prefix for this test to isolate data
 	safeName := strings.ReplaceAll(t.Name(), "/", "_")
 	safeName = strings.ReplaceAll(safeName, "\\", "_")
 	if len(safeName) > 20 {
 		safeName = safeName[len(safeName)-20:]
 	}
-	dbName := fmt.Sprintf("test_%s_%d", safeName, time.Now().UnixNano()%100000)
+	collectionPrefix := fmt.Sprintf("%s_%d", safeName, time.Now().UnixNano()%100000)
 
-	// Clean DB
-	ctx := context.Background()
-	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-
-	// Connect using driver to drop database
-	client, err := mongo.Connect(connCtx, options.Client().ApplyURI(mongoURI))
-	if err != nil {
-		t.Fatalf("Failed to connect to MongoDB: %v", err)
-	}
-	defer client.Disconnect(ctx)
-
-	dropCtx, dropCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer dropCancel()
-	// Ensure we start with a clean state (though the name is unique)
-	err = client.Database(dbName).Drop(dropCtx)
-	require.NoError(t, err)
-
-	apiPort := getFreePort(t)
-	queryPort := getFreePort(t)
-	realtimePort := apiPort
-	cspPort := getFreePort(t)
-
-	// Create security rules file
-	if rulesContent == "" {
-		rulesContent = `
-rules_version: '1'
-service: syntrix
-match:
-  /databases/{database}/documents:
-    match:
-      /{document=**}:
-        allow:
-          read, write: "true"
-`
-	}
-	rulesFile := t.TempDir() + "/security.yaml"
-	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
-	require.NoError(t, err)
-
-	cfg := &config.Config{
-		Gateway: config.GatewayConfig{
-			Port:            apiPort,
-			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
-		},
-		Query: config.QueryConfig{
-			Port:          queryPort,
-			CSPServiceURL: fmt.Sprintf("http://localhost:%d", cspPort),
-		},
-		CSP: config.CSPConfig{
-			Port: cspPort,
-		},
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"default": {
-					Type: "mongo",
-					Mongo: config.MongoConfig{
-						URI:          mongoURI,
-						DatabaseName: dbName,
-					},
-				},
-			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					DataCollection: "documents",
-					SysCollection:  "sys",
-				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					Collection: "users",
-				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					Collection: "revocations",
-				},
-			},
-		},
-		Identity: config.IdentityConfig{
-			AuthN: config.AuthNConfig{
-				AccessTokenTTL:  15 * time.Minute,
-				RefreshTokenTTL: 7 * 24 * time.Hour,
-				AuthCodeTTL:     2 * time.Minute,
-				PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
-			},
-			AuthZ: config.AuthZConfig{
-				RulesFile: rulesFile,
-			},
-		},
-		Puller: config.PullerConfig{
-			Backends: []config.PullerBackendConfig{
-				{
-					Name: "default",
-				},
-			},
-			Cleaner: config.CleanerConfig{
-				Interval:  1 * time.Minute,
-				Retention: 1 * time.Hour,
-			},
-			Buffer: config.BufferConfig{
-				Path:    t.TempDir() + "/puller_buffer",
-				MaxSize: "100MB",
-			},
-		},
-	}
-
-	// Apply config modifiers
-	for _, mod := range configModifiers {
-		mod(cfg)
-	}
-
-	// Check if NATS is available
-	natsAvailable := false
-	if os.Getenv("NATS_URL") != "" {
-		natsAvailable = true
-	} else {
-		conn, err := net.DialTimeout("tcp", "localhost:4222", 100*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			natsAvailable = true
-		}
-	}
-
-	opts := services.Options{
-		RunAPI:              true,
-		RunQuery:            true,
-		RunCSP:              true,
-		RunTriggerEvaluator: natsAvailable,
-		RunTriggerWorker:    natsAvailable,
-		RunPuller:           true,
-		ListenHost:          "localhost",
-	}
-	for _, mod := range optsModifiers {
-		mod(&opts)
-	}
-
-	manager := services.NewManager(cfg, opts)
-	require.NoError(t, manager.Init(context.Background()))
-
-	// Start Manager
-	mgrCtx, mgrCancel := context.WithCancel(context.Background())
-	manager.Start(mgrCtx)
-
-	// Wait for startup only for enabled services
-	if opts.RunAPI {
-		waitForHealth(t, fmt.Sprintf("http://localhost:%d/health", apiPort))
-	}
-	if opts.RunQuery {
-		waitForHealth(t, fmt.Sprintf("http://localhost:%d/health", queryPort))
-	}
-	if opts.RunCSP {
-		waitForHealth(t, fmt.Sprintf("http://localhost:%d/health", cspPort))
-	}
-
+	// Return a ServiceEnv that wraps the global environment
+	// The Cancel function just cleans up the test's data, not the global service
 	return &ServiceEnv{
-		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
-		QueryURL:    fmt.Sprintf("http://localhost:%d", queryPort),
-		RealtimeURL: fmt.Sprintf("http://localhost:%d", realtimePort),
-		CSPURL:      fmt.Sprintf("http://localhost:%d", cspPort),
-		Manager:     manager,
-		MongoURI:    mongoURI,
-		DBName:      dbName,
+		APIURL:      env.APIURL,
+		QueryURL:    env.QueryURL,
+		RealtimeURL: env.APIURL, // Realtime is on the same port as API
+		CSPURL:      env.CSPURL,
+		Manager:     env.Manager,
+		MongoURI:    env.MongoURI,
+		DBName:      env.DBName,
+		testPrefix:  collectionPrefix, // Use this prefix to isolate users and collections
 		Cancel: func() {
-			mgrCancel()
-			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			manager.Shutdown(shutdownCtx)
-
-			// Cleanup DB
-			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			// Cleanup collections with our prefix
+			cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cleanupCancel()
 
-			client, err := mongo.Connect(cleanupCtx, options.Client().ApplyURI(mongoURI))
+			client, err := mongo.Connect(cleanupCtx, options.Client().ApplyURI(env.MongoURI))
 			if err == nil {
 				defer client.Disconnect(context.Background())
-				_ = client.Database(dbName).Drop(cleanupCtx)
+				db := client.Database(env.DBName)
+
+				// List and drop collections with our prefix
+				collections, err := db.ListCollectionNames(cleanupCtx, map[string]interface{}{})
+				if err == nil {
+					for _, coll := range collections {
+						if strings.HasPrefix(coll, collectionPrefix) {
+							_ = db.Collection(coll).Drop(cleanupCtx)
+						}
+					}
+				}
 			}
 		},
 	}
@@ -256,10 +101,16 @@ func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
 }
 
 func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) string {
+	// Prefix the username with testPrefix to ensure uniqueness across parallel tests
+	prefixedUID := uid
+	if e.testPrefix != "" {
+		prefixedUID = fmt.Sprintf("%s_%s", e.testPrefix, uid)
+	}
+
 	// 1. Try SignUp
 	signupBody := map[string]string{
 		"tenant":   tenant,
-		"username": uid,
+		"username": prefixedUID,
 		"password": "password123456",
 	}
 	bodyBytes, _ := json.Marshal(signupBody)
@@ -281,7 +132,7 @@ func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) s
 		// Assume user exists, try Login
 		loginBody := map[string]string{
 			"tenant":   tenant,
-			"username": uid,
+			"username": prefixedUID,
 			"password": "password123456",
 		}
 		bodyBytes, _ := json.Marshal(loginBody)
@@ -340,7 +191,7 @@ func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) s
 	// 4. Re-Login to get new token
 	loginBody := map[string]string{
 		"tenant":   tenant,
-		"username": uid,
+		"username": prefixedUID,
 		"password": "password123456",
 	}
 	bodyBytes, _ = json.Marshal(loginBody)
@@ -526,7 +377,10 @@ type SnapshotPayload struct {
 
 func (e *ServiceEnv) ConnectWebSocket(t *testing.T) *websocket.Conn {
 	wsURL := "ws" + strings.TrimPrefix(e.RealtimeURL, "http") + "/realtime/ws"
-	ws, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 5 * time.Second,
+	}
+	ws, _, err := dialer.Dial(wsURL, nil)
 	require.NoError(t, err, "Failed to connect to websocket")
 	return ws
 }
@@ -542,7 +396,8 @@ func (e *ServiceEnv) AuthenticateWebSocket(t *testing.T, ws *websocket.Conn, tok
 	err := ws.WriteJSON(authMsg)
 	require.NoError(t, err, "Failed to send auth message")
 
-	// Wait for auth_ack
+	// Wait for auth_ack with timeout
+	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
 	msg := e.ReadWebSocketMessage(t, ws)
 	require.Equal(t, TypeAuthAck, msg.Type, "Expected auth_ack")
 }

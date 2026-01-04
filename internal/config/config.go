@@ -39,7 +39,6 @@ type StandaloneConfig struct {
 }
 
 type GatewayConfig struct {
-	Port            int               `yaml:"port"`
 	QueryServiceURL string            `yaml:"query_service_url"`
 	Auth            GatewayAuthConfig `yaml:"auth"`
 	Realtime        RealtimeConfig    `yaml:"realtime"`
@@ -193,7 +192,6 @@ func LoadConfig() *Config {
 		},
 		Server: server.DefaultConfig(),
 		Gateway: GatewayConfig{
-			Port:            8080,
 			QueryServiceURL: "http://localhost:8082",
 			Realtime: RealtimeConfig{
 				AllowedOrigins: []string{"http://localhost:8080", "http://localhost:3000", "http://localhost:5173"},
@@ -230,11 +228,6 @@ func LoadConfig() *Config {
 	loadFile("config/config.local.yml", cfg)
 
 	// 4. Override with Env Vars
-	if val := os.Getenv("GATEWAY_PORT"); val != "" {
-		if port, err := strconv.Atoi(val); err == nil {
-			cfg.Gateway.Port = port
-		}
-	}
 	if val := os.Getenv("GATEWAY_QUERY_SERVICE_URL"); val != "" {
 		cfg.Gateway.QueryServiceURL = val
 	}

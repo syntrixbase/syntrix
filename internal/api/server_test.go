@@ -9,6 +9,7 @@ import (
 	"github.com/codetrek/syntrix/internal/api/realtime"
 	"github.com/codetrek/syntrix/internal/engine"
 	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/codetrek/syntrix/internal/identity/types"
 	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -34,11 +35,17 @@ type MockAuthService struct {
 }
 
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
-	return next
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), types.ContextKeyTenant, "default")
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
-	return next
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), types.ContextKeyTenant, "default")
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 type MockAuthzEngine struct {
@@ -56,13 +63,8 @@ func TestNewServer(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	// Realtime server needs a stub, but we can pass nil for now if allowed, or create a dummy
-	// NewServer allows rt to be nil? Let's check implementation.
-	// routes() checks if s.realtime != nil. So nil is fine.
-
 	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
 	assert.NotNil(t, server)
-	assert.NotNil(t, server.mux)
 	assert.NotNil(t, server.rest)
 }
 
@@ -78,42 +80,76 @@ func TestNewServer_WithRealtime(t *testing.T) {
 	assert.NotNil(t, server.realtime)
 }
 
-func TestServer_ServeHTTP(t *testing.T) {
+func TestServer_RegisterRoutes(t *testing.T) {
 	mockQuery := new(MockQueryService)
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
 	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
 
-	t.Run("CORS Options", func(t *testing.T) {
-		req := httptest.NewRequest("OPTIONS", "/api/v1/health", nil)
+	// Create a mux and register routes
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	t.Run("Routes registered - health endpoint", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/health", nil)
 		w := httptest.NewRecorder()
 
-		server.ServeHTTP(w, req)
+		mux.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusOK, w.Code)
-		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+		// Health endpoint should respond (may be 200 or error depending on engine state)
+		// The key is that the route is registered and handled
+		assert.NotEqual(t, http.StatusNotFound, w.Code)
 	})
 
-	t.Run("Normal Request", func(t *testing.T) {
-		// We need to register a route to test normal request, or rely on rest handler's routes.
-		// rest.NewHandler registers /api/v1/health by default? Let's check rest handler.
-		// Assuming /api/v1/health exists.
+	t.Run("Routes registered - API endpoint", func(t *testing.T) {
+		// Mock GetDocument to return ErrNotFound
+		// Use valid document path format: collection/docId (even number of segments)
+		mockQuery.On("GetDocument", mock.Anything, "default", "users/test").Return(nil, model.ErrNotFound)
+		mockAuthz.On("Evaluate", mock.Anything, "users/test", "read", mock.Anything, mock.Anything).Return(true, nil)
 
-		// Mock GetDocument to return ErrNotFound so authorized middleware continues
-		mockQuery.On("GetDocument", mock.Anything, "default", "health").Return(nil, model.ErrNotFound)
-
-		// Mock Evaluate to return true
-		mockAuthz.On("Evaluate", mock.Anything, "health", "read", mock.Anything, mock.Anything).Return(true, nil)
-
-		req := httptest.NewRequest("GET", "/api/v1/health", nil)
+		req := httptest.NewRequest("GET", "/api/v1/users/test", nil)
 		w := httptest.NewRecorder()
 
-		server.ServeHTTP(w, req)
+		mux.ServeHTTP(w, req)
 
-		// Even if 404, it means ServeHTTP delegated to mux.
-		// But we want to verify it hit the mux.
-		// Since we can't easily inspect mux, we check if headers are set.
-		assert.Equal(t, "*", w.Header().Get("Access-Control-Allow-Origin"))
+		// Route should be registered (404 from handler, not from mux)
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+}
+
+func TestServer_RegisterRoutes_WithRealtime(t *testing.T) {
+	mockQuery := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzEngine)
+
+	rt := realtime.NewServer(mockQuery, "docs", mockAuth, realtime.Config{EnableAuth: true})
+	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
+
+	mux := http.NewServeMux()
+	server.RegisterRoutes(mux)
+
+	t.Run("Realtime WS route registered", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/realtime/ws", nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		// Should not be 404 (route exists, may fail for other reasons like missing upgrade header)
+		assert.NotEqual(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("Realtime SSE route registered", func(t *testing.T) {
+		// For SSE, we can't easily test the full flow because it requires Hub.Run().
+		// Instead, we verify the route exists by checking that the response is not 404.
+		// We use a mock approach: call with invalid method to confirm route exists.
+		req := httptest.NewRequest("POST", "/realtime/sse", nil) // SSE only accepts GET
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		// 405 Method Not Allowed means route exists but method is wrong
+		// This confirms the route is registered without triggering the blocking SSE handler
+		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	})
 }

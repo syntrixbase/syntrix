@@ -10,3 +10,4 @@ Index of task planning documents for Syntrix.
 
 - [017.2025-12-29-index-layer-implementation.md](017.2025-12-29-index-layer-implementation.md) — Index Layer Implementation (Data/Index/Query). Status: Planned. Depends on: 016.
 - [x] [025.2026-01-03-coverage-improvement.md](025.2026-01-03-coverage-improvement.md) - Coverage Improvement Report
+- [x] [026.2026-01-04-api-server-integration.md](026.2026-01-04-api-server-integration.md) - API Server Integration into Unified Server Layer. Status: Completed.

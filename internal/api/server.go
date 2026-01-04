@@ -9,46 +9,33 @@ import (
 	"github.com/codetrek/syntrix/internal/identity"
 )
 
+// Server is a route registrar for the API layer.
+// It registers REST, realtime, and console routes to a given ServeMux.
 type Server struct {
-	mux      *http.ServeMux
 	rest     *rest.Handler
 	realtime *realtime.Server
 }
 
+// NewServer creates a new API Server (route registrar).
 func NewServer(engine engine.Service, auth identity.AuthN, authz identity.AuthZ, rt *realtime.Server) *Server {
-	s := &Server{
-		mux:      http.NewServeMux(),
+	return &Server{
 		rest:     rest.NewHandler(engine, auth, authz),
 		realtime: rt,
 	}
-	s.routes()
-	return s
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// CORS headers
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-
-	if r.Method == "OPTIONS" {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
-
-	s.mux.ServeHTTP(w, r)
-}
-
-func (s *Server) routes() {
+// RegisterRoutes registers all API routes to the given ServeMux.
+// This includes REST API routes, realtime WebSocket/SSE routes, and console static files.
+func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	// Register REST routes
-	s.rest.RegisterRoutes(s.mux)
+	s.rest.RegisterRoutes(mux)
 
 	// Register Realtime routes
 	if s.realtime != nil {
-		s.mux.HandleFunc("GET /realtime/ws", s.realtime.HandleWS)
-		s.mux.HandleFunc("GET /realtime/sse", s.realtime.HandleSSE)
+		mux.HandleFunc("GET /realtime/ws", s.realtime.HandleWS)
+		mux.HandleFunc("GET /realtime/sse", s.realtime.HandleSSE)
 	}
 
 	// Console
-	s.mux.Handle("GET /console/", http.StripPrefix("/console/", http.FileServer(http.Dir("console"))))
+	mux.Handle("GET /console/", http.StripPrefix("/console/", http.FileServer(http.Dir("console"))))
 }

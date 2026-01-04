@@ -1,8 +1,10 @@
 package server
 
 import (
+	"bufio"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -170,4 +172,74 @@ func TestWriteError_WriteFailure(t *testing.T) {
 
 	// Should not panic and cover the error path
 	writeError(fw, http.StatusInternalServerError, "ERROR", "msg")
+}
+
+// mockHijacker implements http.Hijacker for testing
+type mockHijacker struct {
+	http.ResponseWriter
+	conn net.Conn
+	rw   *bufio.ReadWriter
+}
+
+func (m *mockHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	return m.conn, m.rw, nil
+}
+
+// mockFlusher implements http.Flusher for testing
+type mockFlusher struct {
+	http.ResponseWriter
+	flushed bool
+}
+
+func (m *mockFlusher) Flush() {
+	m.flushed = true
+}
+
+func TestResponseWriter_Hijack_Supported(t *testing.T) {
+	w := httptest.NewRecorder()
+	conn, _ := net.Pipe()
+	defer conn.Close()
+	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+
+	hijacker := &mockHijacker{
+		ResponseWriter: w,
+		conn:           conn,
+		rw:             rw,
+	}
+
+	rw2 := &responseWriter{ResponseWriter: hijacker}
+
+	c, bufrw, err := rw2.Hijack()
+	assert.NoError(t, err)
+	assert.Equal(t, conn, c)
+	assert.Equal(t, rw, bufrw)
+}
+
+func TestResponseWriter_Hijack_NotSupported(t *testing.T) {
+	w := httptest.NewRecorder()
+	rw := &responseWriter{ResponseWriter: w}
+
+	_, _, err := rw.Hijack()
+	assert.Error(t, err)
+	assert.Equal(t, http.ErrNotSupported, err)
+}
+
+func TestResponseWriter_Flush_Supported(t *testing.T) {
+	w := httptest.NewRecorder()
+	flusher := &mockFlusher{ResponseWriter: w}
+	rw := &responseWriter{ResponseWriter: flusher}
+
+	rw.Flush()
+	assert.True(t, flusher.flushed)
+}
+
+func TestResponseWriter_Flush_NotSupported(t *testing.T) {
+	// Create a ResponseWriter that doesn't implement http.Flusher
+	nonFlusher := &FaultyResponseWriter{ResponseWriter: httptest.NewRecorder()}
+	rw := &responseWriter{ResponseWriter: nonFlusher}
+
+	// Should not panic when Flusher is not supported
+	assert.NotPanics(t, func() {
+		rw.Flush()
+	})
 }

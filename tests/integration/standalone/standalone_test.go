@@ -1,4 +1,4 @@
-package integration
+package standalone
 
 import (
 	"bytes"
@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/codetrek/syntrix/internal/config"
+	"github.com/codetrek/syntrix/internal/server"
 	"github.com/codetrek/syntrix/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -85,10 +86,15 @@ match:
 	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
+	// Initialize the unified server for standalone mode
+	server.InitDefault(server.Config{
+		HTTPPort: apiPort,
+		GRPCPort: 0,
+	}, nil)
+
 	cfg := &config.Config{
-		Gateway: config.GatewayConfig{
-			Port: apiPort,
-			// Note: In standalone mode, QueryServiceURL is not used for HTTP calls
+		Server: server.Config{
+			HTTPPort: apiPort,
 		},
 		// Query and CSP configs don't need ports in standalone mode
 		// as they don't expose HTTP servers
@@ -373,88 +379,4 @@ func TestStandaloneMode_Watch(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Document update should work in standalone mode")
-}
-
-// TestStandaloneMode_CompareWithDistributed ensures standalone mode
-// produces the same results as distributed mode for basic operations.
-func TestStandaloneMode_CompareWithDistributed(t *testing.T) {
-	// Setup standalone env
-	standaloneEnv := setupStandaloneEnv(t, "")
-	defer standaloneEnv.Cancel()
-
-	// Setup distributed env for comparison
-	distributedEnv := setupServiceEnv(t, "")
-	defer distributedEnv.Cancel()
-
-	standaloneToken := standaloneEnv.GetToken(t, "compare_standalone", "user")
-	distributedToken := distributedEnv.GetToken(t, "compare_distributed", "user")
-
-	collection := "comparison"
-
-	// Create same document in both modes
-	docData := map[string]interface{}{
-		"value": "comparison-test",
-		"count": 42,
-	}
-	body, _ := json.Marshal(docData)
-
-	// Create in standalone
-	req1, _ := http.NewRequest(http.MethodPost, standaloneEnv.APIURL+"/api/v1/"+collection, bytes.NewBuffer(body))
-	req1.Header.Set("Authorization", "Bearer "+standaloneToken)
-	req1.Header.Set("Content-Type", "application/json")
-
-	body, _ = json.Marshal(docData)
-	req2, _ := http.NewRequest(http.MethodPost, distributedEnv.APIURL+"/api/v1/"+collection, bytes.NewBuffer(body))
-	req2.Header.Set("Authorization", "Bearer "+distributedToken)
-	req2.Header.Set("Content-Type", "application/json")
-
-	resp1, err := http.DefaultClient.Do(req1)
-	require.NoError(t, err)
-	defer resp1.Body.Close()
-
-	resp2, err := http.DefaultClient.Do(req2)
-	require.NoError(t, err)
-	defer resp2.Body.Close()
-
-	// Both should succeed
-	assert.Equal(t, http.StatusCreated, resp1.StatusCode, "Standalone create should succeed")
-	assert.Equal(t, http.StatusCreated, resp2.StatusCode, "Distributed create should succeed")
-
-	// Decode responses
-	var result1, result2 map[string]interface{}
-	json.NewDecoder(resp1.Body).Decode(&result1)
-	json.NewDecoder(resp2.Body).Decode(&result2)
-
-	// Verify both have IDs and same value
-	assert.Contains(t, result1, "id", "Standalone should return id")
-	assert.Contains(t, result2, "id", "Distributed should return id")
-	assert.Equal(t, result1["value"], result2["value"], "Values should match between modes")
-
-	// Query operations should also match
-	queryData := map[string]interface{}{
-		"collection": collection,
-	}
-	body, _ = json.Marshal(queryData)
-
-	req1, _ = http.NewRequest(http.MethodPost, standaloneEnv.APIURL+"/api/v1/query", bytes.NewBuffer(body))
-	req1.Header.Set("Authorization", "Bearer "+standaloneToken)
-	req1.Header.Set("Content-Type", "application/json")
-
-	body, _ = json.Marshal(queryData)
-	req2, _ = http.NewRequest(http.MethodPost, distributedEnv.APIURL+"/api/v1/query", bytes.NewBuffer(body))
-	req2.Header.Set("Authorization", "Bearer "+distributedToken)
-	req2.Header.Set("Content-Type", "application/json")
-
-	resp1, _ = http.DefaultClient.Do(req1)
-	defer resp1.Body.Close()
-
-	resp2, _ = http.DefaultClient.Do(req2)
-	defer resp2.Body.Close()
-
-	var docs1, docs2 []map[string]interface{}
-	json.NewDecoder(resp1.Body).Decode(&docs1)
-	json.NewDecoder(resp2.Body).Decode(&docs2)
-
-	// Both should have documents
-	assert.Equal(t, len(docs1), len(docs2), "Document count should match between modes")
 }

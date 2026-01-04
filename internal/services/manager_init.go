@@ -188,12 +188,9 @@ func (m *Manager) initAPIServer(queryService engine.Service) error {
 	}
 	m.rtServer = realtime.NewServer(queryService, m.cfg.Storage.Topology.Document.DataCollection, m.authService, rtCfg)
 
+	// Register API routes to the unified server
 	apiServer := api.NewServer(queryService, m.authService, authzEngine, m.rtServer)
-	m.servers = append(m.servers, &http.Server{
-		Addr:    listenAddr(m.opts.ListenHost, m.cfg.Gateway.Port),
-		Handler: apiServer,
-	})
-	m.serverNames = append(m.serverNames, "Unified Gateway")
+	apiServer.RegisterRoutes(server.Default().HTTPMux())
 
 	return nil
 }

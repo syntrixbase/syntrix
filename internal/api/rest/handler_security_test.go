@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/codetrek/syntrix/internal/server"
 	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 )
@@ -216,59 +217,6 @@ func TestTimeoutConstants(t *testing.T) {
 	assert.Equal(t, 60*time.Second, LongRequestTimeout)
 }
 
-func TestWithRecover_NoPanic(t *testing.T) {
-	// Handler that runs normally
-	handler := withRecover(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "success", rr.Body.String())
-}
-
-func TestWithRecover_Panic(t *testing.T) {
-	// Handler that panics
-	handler := withRecover(func(w http.ResponseWriter, r *http.Request) {
-		panic("test panic")
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	// Should not panic, should return 500
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
-	assert.Equal(t, "application/json", rr.Header().Get("Content-Type"))
-
-	var resp APIError
-	err := json.Unmarshal(rr.Body.Bytes(), &resp)
-	assert.NoError(t, err)
-	assert.Equal(t, ErrCodeInternalError, resp.Code)
-	assert.Equal(t, "Internal server error", resp.Message)
-}
-
-func TestWithRecover_PanicWithError(t *testing.T) {
-	// Handler that panics with an error
-	handler := withRecover(func(w http.ResponseWriter, r *http.Request) {
-		panic(io.EOF) // panic with error value
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	// Should not panic, should return 500
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
-}
-
 func TestWithTimeout_Normal(t *testing.T) {
 	// Handler that completes quickly
 	handler := withTimeout(func(w http.ResponseWriter, r *http.Request) {
@@ -329,84 +277,8 @@ func TestWithTimeout_ContextCancellation(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rr.Code)
 }
 
-func TestMiddlewareChain(t *testing.T) {
-	// Test that withRecover and withTimeout work together
-	handler := withRecover(withTimeout(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("success"))
-	}, 1*time.Second))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, "success", rr.Body.String())
-}
-
-func TestMiddlewareChain_PanicWithTimeout(t *testing.T) {
-	// Test that panic recovery works even with timeout middleware
-	handler := withRecover(withTimeout(func(w http.ResponseWriter, r *http.Request) {
-		panic("test panic in chained middleware")
-	}, 1*time.Second))
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusInternalServerError, rr.Code)
-	var resp APIError
-	err := json.Unmarshal(rr.Body.Bytes(), &resp)
-	assert.NoError(t, err)
-	assert.Equal(t, ErrCodeInternalError, resp.Code)
-}
-
-// Tests for Request ID middleware
-
-func TestWithRequestID_GeneratesID(t *testing.T) {
-	handler := withRequestID(func(w http.ResponseWriter, r *http.Request) {
-		// Verify request ID is in context
-		requestID := getRequestID(r.Context())
-		assert.NotEmpty(t, requestID, "Request ID should be generated")
-		w.WriteHeader(http.StatusOK)
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	rr := httptest.NewRecorder()
-
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-	// Verify request ID is in response header
-	assert.NotEmpty(t, rr.Header().Get("X-Request-ID"))
-}
-
-func TestWithRequestID_UsesExisting(t *testing.T) {
-	existingID := "existing-request-id-123"
-	handler := withRequestID(func(w http.ResponseWriter, r *http.Request) {
-		requestID := getRequestID(r.Context())
-		assert.Equal(t, existingID, requestID)
-		w.WriteHeader(http.StatusOK)
-	})
-
-	req := httptest.NewRequest("GET", "/test", nil)
-	req.Header.Set("X-Request-ID", existingID)
-	rr := httptest.NewRecorder()
-
-	handler(rr, req)
-
-	assert.Equal(t, http.StatusOK, rr.Code)
-	assert.Equal(t, existingID, rr.Header().Get("X-Request-ID"))
-}
-
-func TestGetRequestID_NoID(t *testing.T) {
-	req := httptest.NewRequest("GET", "/test", nil)
-	// No request ID in context
-	id := getRequestID(req.Context())
-	assert.Empty(t, id)
-}
+// Note: Middleware tests for withRecover and withRequestID have been moved to internal/server
+// as those middlewares are now provided by the unified server layer.
 
 // Tests for Validation Config
 
@@ -651,8 +523,8 @@ func TestSplitPath(t *testing.T) {
 
 func TestLogRequest(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/v1/users", nil)
-	ctx := context.WithValue(req.Context(), contextKeyRequestID, "test-request-id")
-	req = req.WithContext(ctx)
+	// logRequest uses server.GetRequestID which needs the server's context key
+	// For testing, we just verify logRequest doesn't panic without a request ID
 
 	// This should not panic and should log the request
 	// We can't easily verify the log output, but we can verify it doesn't error
@@ -664,3 +536,6 @@ func TestLogRequest_NoRequestID(t *testing.T) {
 	// No request ID in context
 	logRequest(req, http.StatusCreated, 50*time.Millisecond)
 }
+
+// Ensure server package is imported for GetRequestID
+var _ = server.GetRequestID

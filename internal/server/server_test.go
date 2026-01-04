@@ -136,7 +136,7 @@ func TestGlobal(t *testing.T) {
 
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
-	assert.Equal(t, 8000, cfg.HTTPPort)
+	assert.Equal(t, 8080, cfg.HTTPPort)
 	assert.Equal(t, 9000, cfg.GRPCPort)
 	assert.NotZero(t, cfg.HTTPReadTimeout)
 	assert.NotZero(t, cfg.HTTPWriteTimeout)
@@ -164,4 +164,16 @@ func TestGlobalHelpers_NoInit(t *testing.T) {
 	RegisterHTTP("/test", nil)
 	HandleFunc("/test", nil)
 	RegisterGRPC(nil, nil)
+}
+
+func TestServer_HTTPMux(t *testing.T) {
+	cfg := Config{
+		HTTPPort: 0,
+	}
+	srv := New(cfg, nil).(*serverImpl)
+	require.NotNil(t, srv)
+
+	mux := srv.HTTPMux()
+	require.NotNil(t, mux)
+	assert.Equal(t, srv.httpMux, mux)
 }

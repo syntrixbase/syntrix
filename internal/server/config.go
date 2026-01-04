@@ -23,7 +23,7 @@ type Config struct {
 // DefaultConfig returns safe defaults for development.
 func DefaultConfig() Config {
 	return Config{
-		HTTPPort:         8000,
+		HTTPPort:         8080,
 		HTTPReadTimeout:  10 * time.Second,
 		HTTPWriteTimeout: 10 * time.Second,
 		HTTPIdleTimeout:  60 * time.Second,
