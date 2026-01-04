@@ -7,8 +7,8 @@ import (
 	"path"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/google/cel-go/cel"
 )
 
@@ -19,7 +19,7 @@ const MaxCacheSize = 1000
 
 // Evaluator is responsible for matching events against trigger conditions.
 type Evaluator interface {
-	Evaluate(ctx context.Context, t *trigger.Trigger, event *storage.Event) (bool, error)
+	Evaluate(ctx context.Context, t *trigger.Trigger, event *types.TriggerEvent) (bool, error)
 }
 
 // celeEvaluator implements Evaluator using Google CEL.
@@ -46,7 +46,7 @@ func NewEvaluator() (Evaluator, error) {
 	}, nil
 }
 
-func (e *celeEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event *storage.Event) (bool, error) {
+func (e *celeEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event *types.TriggerEvent) (bool, error) {
 	// 1. Check event type (create, update, delete)
 	eventTypeMatch := false
 	for _, evt := range t.Events {

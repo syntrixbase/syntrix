@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/codetrek/syntrix/internal/puller"
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/internal/trigger/internal/evaluator"
 	"github.com/codetrek/syntrix/internal/trigger/internal/pubsub"
@@ -27,6 +28,13 @@ type FactoryOption func(*defaultTriggerFactory)
 func WithTenant(tenant string) FactoryOption {
 	return func(f *defaultTriggerFactory) {
 		f.tenant = tenant
+	}
+}
+
+// WithPuller sets the puller service for the factory.
+func WithPuller(p puller.Service) FactoryOption {
+	return func(f *defaultTriggerFactory) {
+		f.puller = p
 	}
 }
 
@@ -65,6 +73,7 @@ type defaultTriggerFactory struct {
 	store        storage.DocumentStore
 	nats         *nats.Conn
 	auth         identity.AuthN
+	puller       puller.Service
 	tenant       string
 	startFromNow bool
 	metrics      types.Metrics
@@ -90,12 +99,16 @@ func NewFactory(store storage.DocumentStore, nats *nats.Conn, auth identity.Auth
 
 // Engine returns a new TriggerEngine.
 func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
+	if f.puller == nil {
+		return nil, fmt.Errorf("puller service is required for trigger engine")
+	}
+
 	eval, err := evaluator.NewEvaluator()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create evaluator: %w", err)
 	}
 
-	w := watcher.NewWatcher(f.store, f.tenant, watcher.WatcherOptions{
+	w := watcher.NewWatcher(f.puller, f.store, f.tenant, watcher.WatcherOptions{
 		StartFromNow: f.startFromNow,
 	})
 

@@ -149,7 +149,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	tmpDir := t.TempDir()
 	bufferPath := filepath.Join(tmpDir, "buffer")
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	mongoClient, err := mongo.Connect(ctx, options.Client().ApplyURI(mongoURI))

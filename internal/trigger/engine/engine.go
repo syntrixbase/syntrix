@@ -27,7 +27,7 @@ func (e *defaultTriggerEngine) LoadTriggers(triggers []*trigger.Trigger) error {
 	defer e.mu.Unlock()
 
 	for _, t := range triggers {
-		if err := trigger.ValidateTrigger(t); err != nil {
+		if err := ValidateTrigger(t); err != nil {
 			return err
 		}
 	}
@@ -103,7 +103,7 @@ func (e *defaultTriggerEngine) Start(ctx context.Context) error {
 				}
 			}
 
-			if evt.ResumeToken != nil {
+			if evt.ResumeToken != "" {
 				if err := e.watcher.SaveCheckpoint(ctx, evt.ResumeToken); err != nil {
 					log.Printf("[Error] Failed to save checkpoint: %v", err)
 				}

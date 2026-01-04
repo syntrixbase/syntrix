@@ -152,6 +152,21 @@ match:
 				RulesFile: rulesFile,
 			},
 		},
+		Puller: config.PullerConfig{
+			Backends: []config.PullerBackendConfig{
+				{
+					Name: "default",
+				},
+			},
+			Cleaner: config.CleanerConfig{
+				Interval:  1 * time.Minute,
+				Retention: 1 * time.Hour,
+			},
+			Buffer: config.BufferConfig{
+				Path:    t.TempDir() + "/puller_buffer",
+				MaxSize: "100MB",
+			},
+		},
 	}
 
 	// Apply config modifiers
@@ -177,6 +192,7 @@ match:
 		RunCSP:              true,
 		RunTriggerEvaluator: natsAvailable,
 		RunTriggerWorker:    natsAvailable,
+		RunPuller:           true,
 		ListenHost:          "localhost",
 	}
 	for _, mod := range optsModifiers {

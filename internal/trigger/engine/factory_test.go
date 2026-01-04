@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/codetrek/syntrix/internal/trigger/internal/pubsub"
@@ -55,12 +56,23 @@ func TestFactoryOptions(t *testing.T) {
 
 func TestFactory_Engine_Success(t *testing.T) {
 	t.Parallel()
+	mockPuller := new(MockPullerService)
 	// If nats is nil, Engine() should succeed (with nil publisher)
-	f, err := NewFactory(nil, nil, nil)
+	f, err := NewFactory(nil, nil, nil, WithPuller(mockPuller))
 	assert.NoError(t, err)
 	e, err := f.Engine()
 	assert.NoError(t, err)
 	assert.NotNil(t, e)
+}
+
+func TestFactory_Engine_NoPuller(t *testing.T) {
+	t.Parallel()
+	f, err := NewFactory(nil, nil, nil)
+	assert.NoError(t, err)
+	e, err := f.Engine()
+	assert.Error(t, err)
+	assert.Nil(t, e)
+	assert.Contains(t, err.Error(), "puller service is required")
 }
 
 func TestFactory_Engine_WithNATS(t *testing.T) {
@@ -73,16 +85,36 @@ func TestFactory_Engine_WithNATS(t *testing.T) {
 		return mockPub, nil
 	}
 
+	mockPuller := new(MockPullerService)
 	// Pass a dummy nats conn (can be nil if our mock doesn't check, but factory checks f.nats != nil)
 	// We need f.nats != nil to trigger the branch.
 	// But NewFactory takes *nats.Conn.
 	// We can pass &nats.Conn{}
-	f, err := NewFactory(nil, &nats.Conn{}, nil)
+	f, err := NewFactory(nil, &nats.Conn{}, nil, WithPuller(mockPuller))
 	assert.NoError(t, err)
 
 	e, err := f.Engine()
 	assert.NoError(t, err)
 	assert.NotNil(t, e)
+}
+
+func TestFactory_Engine_PublisherFail(t *testing.T) {
+	// Mock newTaskPublisher
+	originalNewTaskPublisher := newTaskPublisher
+	defer func() { newTaskPublisher = originalNewTaskPublisher }()
+
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+		return nil, fmt.Errorf("publisher error")
+	}
+
+	mockPuller := new(MockPullerService)
+	f, err := NewFactory(nil, &nats.Conn{}, nil, WithPuller(mockPuller))
+	assert.NoError(t, err)
+
+	e, err := f.Engine()
+	assert.Error(t, err)
+	assert.Nil(t, e)
+	assert.Contains(t, err.Error(), "failed to create publisher")
 }
 
 func TestFactory_Consumer_Fail(t *testing.T) {
