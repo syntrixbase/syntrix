@@ -4,7 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/codetrek/syntrix/internal/storage"
+	triggertypes "github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -64,48 +66,128 @@ func (m *MockDocumentStore) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
+// MockPullerService
+type MockPullerService struct {
+	mock.Mock
+}
+
+func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *events.PullerEvent, error) {
+	args := m.Called(ctx, consumerID, after)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(<-chan *events.PullerEvent), args.Error(1)
+}
+
 func TestNewWatcher(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 	assert.NotNil(t, w)
 }
 
 func TestWatch_WithCheckpoint(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	checkpointDoc := &storage.Document{
 		Data: map[string]interface{}{"token": "resume-token"},
 	}
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(checkpointDoc, nil)
 
-	ch := make(chan storage.Event)
-	mockStore.On("Watch", mock.Anything, "tenant1", "", "resume-token", mock.Anything).Return((<-chan storage.Event)(ch), nil)
+	ch := make(chan *events.PullerEvent)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "resume-token").Return((<-chan *events.PullerEvent)(ch), nil)
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, (<-chan storage.Event)(ch), eventCh)
+	assert.NotNil(t, eventCh)
+
+	// Verify event conversion
+	go func() {
+		ch <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				TenantID:     "tenant1",
+				OpType:       events.OperationInsert,
+				MgoDocID:     "doc1",
+				FullDocument: &storage.Document{Id: "doc1"},
+			},
+			Progress: "next-token",
+		}
+		close(ch)
+	}()
+
+	evt := <-eventCh
+	assert.Equal(t, triggertypes.EventCreate, evt.Type)
+	assert.Equal(t, "doc1", evt.Id)
+	assert.Equal(t, "next-token", evt.ResumeToken)
+
 	mockStore.AssertExpectations(t)
+	mockPuller.AssertExpectations(t)
 }
 
 func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
 
-	ch := make(chan storage.Event)
-	mockStore.On("Watch", mock.Anything, "tenant1", "", nil, mock.Anything).Return((<-chan storage.Event)(ch), nil)
+	ch := make(chan *events.PullerEvent)
+	// Expect empty string for resume token
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch), nil)
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
-	assert.Equal(t, (<-chan storage.Event)(ch), eventCh)
+	assert.NotNil(t, eventCh)
+
 	mockStore.AssertExpectations(t)
+	mockPuller.AssertExpectations(t)
+}
+
+func TestWatch_FilterTenant(t *testing.T) {
+	mockStore := new(MockDocumentStore)
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+
+	ch := make(chan *events.PullerEvent)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch), nil)
+
+	eventCh, err := w.Watch(context.Background())
+	assert.NoError(t, err)
+
+	go func() {
+		// Wrong tenant
+		ch <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				TenantID: "tenant2",
+				OpType:   events.OperationInsert,
+			},
+		}
+		// Correct tenant
+		ch <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				TenantID: "tenant1",
+				OpType:   events.OperationInsert,
+				MgoDocID: "doc1",
+			},
+		}
+		close(ch)
+	}()
+
+	evt := <-eventCh
+	assert.Equal(t, "doc1", evt.Id)
+
+	_, ok := <-eventCh
+	assert.False(t, ok)
 }
 
 func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{StartFromNow: false})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: false})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
 
@@ -117,7 +199,8 @@ func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 
 func TestSaveCheckpoint_Update(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(nil)
 
@@ -128,7 +211,8 @@ func TestSaveCheckpoint_Update(t *testing.T) {
 
 func TestSaveCheckpoint_Create(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(model.ErrNotFound)
 	mockStore.On("Create", mock.Anything, "default", mock.Anything).Return(nil)
@@ -140,7 +224,8 @@ func TestSaveCheckpoint_Create(t *testing.T) {
 
 func TestClose(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	// Close should be a no-op and return nil
 	err := w.Close()
@@ -149,7 +234,8 @@ func TestClose(t *testing.T) {
 
 func TestWatch_GetError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	// Get returns unexpected error
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, assert.AnError)
@@ -161,11 +247,106 @@ func TestWatch_GetError(t *testing.T) {
 
 func TestSaveCheckpoint_UpdateError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	w := NewWatcher(mockStore, "tenant1", WatcherOptions{})
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(assert.AnError)
 
 	err := w.SaveCheckpoint(context.Background(), "new-token")
 	assert.Error(t, err)
 	mockStore.AssertExpectations(t)
+}
+
+func TestWatch_EventTypes(t *testing.T) {
+	mockStore := new(MockDocumentStore)
+	mockPuller := new(MockPullerService)
+	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+
+	pullerCh := make(chan *events.PullerEvent)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(pullerCh), nil)
+
+	eventCh, err := w.Watch(context.Background())
+	if err != nil {
+		t.Fatalf("Watch failed: %v", err)
+	}
+
+	go func() {
+		// Insert
+		pullerCh <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				MgoDocID: "doc1", TenantID: "tenant1", OpType: events.OperationInsert,
+				FullDocument: &storage.Document{Id: "doc1", Data: map[string]interface{}{"a": 1}},
+			},
+			Progress: "t1",
+		}
+		// Update
+		pullerCh <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				MgoDocID: "doc2", TenantID: "tenant1", OpType: events.OperationUpdate,
+				FullDocument: &storage.Document{Id: "doc2", Data: map[string]interface{}{"a": 2}},
+			},
+			Progress: "t2",
+		}
+		// Delete
+		pullerCh <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				MgoDocID: "doc3", TenantID: "tenant1", OpType: events.OperationDelete,
+				MgoColl: "users",
+			},
+			Progress: "t3",
+		}
+		// Soft Delete (Update with Deleted=true)
+		pullerCh <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				MgoDocID: "doc4", TenantID: "tenant1", OpType: events.OperationUpdate,
+				FullDocument: &storage.Document{Id: "doc4", Deleted: true},
+			},
+			Progress: "t4",
+		}
+		// Replace
+		pullerCh <- &events.PullerEvent{
+			Change: &events.ChangeEvent{
+				MgoDocID: "doc5", TenantID: "tenant1", OpType: events.OperationReplace,
+				FullDocument: &storage.Document{Id: "doc5", Data: map[string]interface{}{"b": 1}},
+			},
+			Progress: "t5",
+		}
+		close(pullerCh)
+	}()
+
+	// Verify Insert
+	evt1 := <-eventCh
+	assert.Equal(t, triggertypes.EventCreate, evt1.Type)
+	assert.Equal(t, "doc1", evt1.Id)
+	assert.NotNil(t, evt1.Document)
+
+	// Verify Update
+	evt2 := <-eventCh
+	assert.Equal(t, triggertypes.EventUpdate, evt2.Type)
+	assert.Equal(t, "doc2", evt2.Id)
+	assert.NotNil(t, evt2.Document)
+	// assert.NotNil(t, evt2.Before) // Before is not available for updates in Puller events yet
+
+	// Verify Delete
+	evt3 := <-eventCh
+	assert.Equal(t, triggertypes.EventDelete, evt3.Type)
+	assert.Equal(t, "doc3", evt3.Id)
+	assert.Nil(t, evt3.Document)
+	assert.NotNil(t, evt3.Before)
+	assert.Equal(t, "users", evt3.Before.Collection)
+
+	// Verify Soft Delete
+	evt4 := <-eventCh
+	assert.Equal(t, triggertypes.EventDelete, evt4.Type)
+	assert.Equal(t, "doc4", evt4.Id)
+	assert.NotNil(t, evt4.Document)
+	assert.True(t, evt4.Document.Deleted)
+
+	// Verify Replace
+	evt5 := <-eventCh
+	assert.Equal(t, triggertypes.EventCreate, evt5.Type)
+	assert.Equal(t, "doc5", evt5.Id)
+	assert.NotNil(t, evt5.Document)
 }

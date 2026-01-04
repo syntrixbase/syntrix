@@ -7,6 +7,7 @@ import (
 
 	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/codetrek/syntrix/internal/trigger/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,7 +20,7 @@ func TestCELEvaluator(t *testing.T) {
 	tests := []struct {
 		name      string
 		trigger   *trigger.Trigger
-		event     *storage.Event
+		event     *types.TriggerEvent
 		wantMatch bool
 		wantErr   bool
 	}{
@@ -30,8 +31,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "event.document.age > 18",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 					Data:       map[string]interface{}{"age": 20},
@@ -47,8 +48,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "event.document.age > 18",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 					Data:       map[string]interface{}{"age": 16},
@@ -64,8 +65,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "true",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 				},
@@ -80,8 +81,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "orders",
 				Condition:  "true",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 				},
@@ -96,8 +97,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "chats/*/members",
 				Condition:  "true",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "chats/123/members",
 				},
@@ -112,8 +113,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "chats/*/members",
 				Condition:  "true",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "chats/123/messages",
 				},
@@ -128,8 +129,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "event.document.role == 'admin' && event.document.active == true",
 			},
-			event: &storage.Event{
-				Type: storage.EventUpdate,
+			event: &types.TriggerEvent{
+				Type: types.EventUpdate,
 				Document: &storage.Document{
 					Collection: "users",
 					Data: map[string]interface{}{
@@ -148,8 +149,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "invalid syntax ???",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 				},
@@ -164,8 +165,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "event.before.status == 'pending' && event.document.status == 'active'",
 			},
-			event: &storage.Event{
-				Type: storage.EventUpdate,
+			event: &types.TriggerEvent{
+				Type: types.EventUpdate,
 				Document: &storage.Document{
 					Collection: "users",
 					Data:       map[string]interface{}{"status": "active"},
@@ -185,8 +186,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "logs",
 				Condition:  "event.timestamp > 0",
 			},
-			event: &storage.Event{
-				Type:      storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type:      types.EventCreate,
 				Timestamp: 1234567890,
 				Document: &storage.Document{
 					Collection: "logs",
@@ -202,8 +203,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 				},
@@ -218,8 +219,8 @@ func TestCELEvaluator(t *testing.T) {
 				Collection: "users",
 				Condition:  "invalid syntax !!!",
 			},
-			event: &storage.Event{
-				Type: storage.EventCreate,
+			event: &types.TriggerEvent{
+				Type: types.EventCreate,
 				Document: &storage.Document{
 					Collection: "users",
 				},
@@ -261,8 +262,8 @@ func TestCELEvaluator_CacheEviction(t *testing.T) {
 	celEval.cacheMutex.Unlock()
 
 	// Now add one more via Evaluate to trigger eviction check
-	event := &storage.Event{
-		Type: storage.EventCreate,
+	event := &types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Collection: "test",
 			Data:       map[string]interface{}{"newfield": 1},
@@ -308,8 +309,8 @@ func TestCELEvaluator_DeleteEventWithBeforeOnly(t *testing.T) {
 		Condition:  "true",
 	}
 
-	event := &storage.Event{
-		Type:     storage.EventDelete,
+	event := &types.TriggerEvent{
+		Type:     types.EventDelete,
 		Document: nil,
 		Before: &storage.Document{
 			Collection: "users",
@@ -332,8 +333,8 @@ func TestCELEvaluator_CollectionMismatchWithBeforeOnly(t *testing.T) {
 		Condition:  "true",
 	}
 
-	event := &storage.Event{
-		Type:     storage.EventDelete,
+	event := &types.TriggerEvent{
+		Type:     types.EventDelete,
 		Document: nil,
 		Before: &storage.Document{
 			Collection: "users",
@@ -357,8 +358,8 @@ func TestCELEvaluator_CELNonBoolReturn(t *testing.T) {
 		Condition:  "event.document.name", // Returns string, not bool
 	}
 
-	event := &storage.Event{
-		Type: storage.EventCreate,
+	event := &types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "test"},
@@ -380,8 +381,8 @@ func TestCELEvaluator_CacheHit(t *testing.T) {
 		Condition:  "event.document.age > 18",
 	}
 
-	event := &storage.Event{
-		Type: storage.EventCreate,
+	event := &types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Collection: "users",
 			Data:       map[string]interface{}{"age": 25},

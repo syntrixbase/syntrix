@@ -1,21 +1,22 @@
-package trigger
+package engine
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/codetrek/syntrix/internal/trigger"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateTrigger(t *testing.T) {
 	tests := []struct {
 		name    string
-		trigger *Trigger
+		trigger *trigger.Trigger
 		wantErr string
 	}{
 		{
 			name: "valid trigger",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -26,7 +27,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "missing id",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				Tenant:     "valid-tenant",
 				Collection: "users",
 				Events:     []string{"create"},
@@ -36,7 +37,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "invalid id",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "invalid id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -47,7 +48,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "missing tenant",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Collection: "users",
 				Events:     []string{"create"},
@@ -57,7 +58,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "invalid tenant",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "invalid tenant",
 				Collection: "users",
@@ -68,7 +69,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "tenant too long",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     strings.Repeat("a", 129),
 				Collection: "users",
@@ -79,7 +80,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "missing collection",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:     "valid-id",
 				Tenant: "valid-tenant",
 				Events: []string{"create"},
@@ -89,7 +90,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "collection too long",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: strings.Repeat("a", 129),
@@ -100,7 +101,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "missing events",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -110,7 +111,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "invalid event",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -121,7 +122,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "missing url",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -131,7 +132,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "invalid url scheme",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -142,7 +143,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "url without host",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -153,7 +154,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "valid https url",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",
@@ -164,7 +165,7 @@ func TestValidateTrigger(t *testing.T) {
 		},
 		{
 			name: "invalid url format",
-			trigger: &Trigger{
+			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Tenant:     "valid-tenant",
 				Collection: "users",

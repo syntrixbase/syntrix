@@ -3,18 +3,31 @@ package engine
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/codetrek/syntrix/internal/puller"
 	"github.com/codetrek/syntrix/internal/trigger"
 	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/stretchr/testify/mock"
 )
+
+// MockPullerService
+type MockPullerService struct {
+	mock.Mock
+}
+
+func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *puller.Event, error) {
+	args := m.Called(ctx, consumerID, after)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(<-chan *puller.Event), args.Error(1)
+}
 
 // MockEvaluator
 type MockEvaluator struct {
 	mock.Mock
 }
 
-func (m *MockEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event *storage.Event) (bool, error) {
+func (m *MockEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event *types.TriggerEvent) (bool, error) {
 	args := m.Called(ctx, t, event)
 	return args.Bool(0), args.Error(1)
 }
@@ -24,12 +37,12 @@ type MockWatcher struct {
 	mock.Mock
 }
 
-func (m *MockWatcher) Watch(ctx context.Context) (<-chan storage.Event, error) {
+func (m *MockWatcher) Watch(ctx context.Context) (<-chan types.TriggerEvent, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(<-chan storage.Event), args.Error(1)
+	return args.Get(0).(<-chan types.TriggerEvent), args.Error(1)
 }
 
 func (m *MockWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {

@@ -3,14 +3,14 @@ package watcher
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/codetrek/syntrix/internal/trigger/types"
 )
 
 // DocumentWatcher watches for document changes in the storage.
 type DocumentWatcher interface {
 	// Watch starts watching for changes.
 	// It returns a channel of events or an error if the watch could not be started.
-	Watch(ctx context.Context) (<-chan types.Event, error)
+	Watch(ctx context.Context) (<-chan types.TriggerEvent, error)
 
 	// SaveCheckpoint saves the resume token for the watcher.
 	SaveCheckpoint(ctx context.Context, token interface{}) error

@@ -1,10 +1,12 @@
-package trigger
+package engine
 
 import (
 	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
+
+	"github.com/codetrek/syntrix/internal/trigger"
 )
 
 var (
@@ -12,7 +14,7 @@ var (
 )
 
 // ValidateTrigger checks if the trigger configuration is valid.
-func ValidateTrigger(t *Trigger) error {
+func ValidateTrigger(t *trigger.Trigger) error {
 	if t.ID == "" {
 		return errors.New("trigger id is required")
 	}

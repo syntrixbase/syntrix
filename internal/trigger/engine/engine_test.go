@@ -56,12 +56,12 @@ func TestStart(t *testing.T) {
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
 	// Setup watcher channel
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
 	// Setup event
-	evt := storage.Event{
-		Type: storage.EventCreate,
+	evt := types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Id:         "doc1",
 			Collection: "users",
@@ -150,12 +150,12 @@ func TestStart_EvaluateError(t *testing.T) {
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
 	// Setup watcher channel
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
 	// Setup event
-	evt := storage.Event{
-		Type: storage.EventCreate,
+	evt := types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Id:         "doc1",
 			Collection: "users",
@@ -201,12 +201,12 @@ func TestStart_NilDocumentAndBefore(t *testing.T) {
 	}
 
 	// Setup watcher channel
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
 	// Setup event with nil Document and Before
-	evt := storage.Event{
-		Type:     storage.EventDelete,
+	evt := types.TriggerEvent{
+		Type:     types.EventDelete,
 		Document: nil,
 		Before:   nil,
 	}
@@ -255,11 +255,11 @@ func TestStart_PublishError(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
-	evt := storage.Event{
-		Type: storage.EventCreate,
+	evt := types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Id:         "doc1",
 			Collection: "users",
@@ -307,11 +307,11 @@ func TestStart_SaveCheckpointError(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
-	evt := storage.Event{
-		Type: storage.EventCreate,
+	evt := types.TriggerEvent{
+		Type: types.EventCreate,
 		Document: &storage.Document{
 			Id:         "doc1",
 			Collection: "users",
@@ -360,12 +360,12 @@ func TestStart_BeforeOnlyEvent(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan storage.Event)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan storage.Event)(eventCh), nil)
+	eventCh := make(chan types.TriggerEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
 
 	// Delete event with only Before (Document is nil)
-	evt := storage.Event{
-		Type:     storage.EventDelete,
+	evt := types.TriggerEvent{
+		Type:     types.EventDelete,
 		Document: nil,
 		Before: &storage.Document{
 			Id:         "doc1",

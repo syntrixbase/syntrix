@@ -234,7 +234,14 @@ func (m *Manager) initTriggerServices() error {
 		return fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
-	factory, err := triggerFactoryFactory(m.docStore, nc, m.authService, triggerengine.WithStreamName(m.cfg.Trigger.StreamName))
+	opts := []triggerengine.FactoryOption{
+		triggerengine.WithStreamName(m.cfg.Trigger.StreamName),
+	}
+	if m.pullerService != nil {
+		opts = append(opts, triggerengine.WithPuller(m.pullerService))
+	}
+
+	factory, err := triggerFactoryFactory(m.docStore, nc, m.authService, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create trigger factory: %w", err)
 	}
