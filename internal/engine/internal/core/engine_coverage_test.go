@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // newTestEngine creates an engine for tests that don't use WatchCollection
@@ -36,7 +36,7 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				storedDocs := []*storage.Document{
+				storedDocs := []*storage.StoredDoc{
 					{
 						Fullpath:   "test/1",
 						Collection: "test",
@@ -78,7 +78,7 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 				Collection: "test",
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				m.On("Query", mock.Anything, "default", mock.Anything).Return([]*storage.Document{}, nil)
+				m.On("Query", mock.Anything, "default", mock.Anything).Return([]*storage.StoredDoc{}, nil)
 			},
 			expectedDocs: []model.Document{},
 			expectError:  false,
@@ -115,7 +115,7 @@ func TestEngine_Push_Coverage(t *testing.T) {
 		name              string
 		req               storage.ReplicationPushRequest
 		mockSetup         func(*MockStorageBackend)
-		expectedConflicts []*storage.Document
+		expectedConflicts []*storage.StoredDoc
 		expectError       bool
 	}
 
@@ -126,17 +126,17 @@ func TestEngine_Push_Coverage(t *testing.T) {
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
 					{
-						Doc:         &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 2},
+						Doc:         &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 2},
 						BaseVersion: ptr(int64(1)),
 					},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
 				// Existing doc has version 3, but we expect base version 1 -> Conflict
-				existingDoc := &storage.Document{Id: "test/1", Fullpath: "test/1", Version: 3, Data: map[string]interface{}{"foo": "old"}}
+				existingDoc := &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 3, Data: map[string]interface{}{"foo": "old"}}
 				m.On("Get", mock.Anything, "default", "test/1").Return(existingDoc, nil)
 			},
-			expectedConflicts: []*storage.Document{
+			expectedConflicts: []*storage.StoredDoc{
 				{Id: "test/1", Fullpath: "test/1", Version: 3, Data: map[string]interface{}{"foo": "old"}},
 			},
 			expectError: false,
@@ -147,13 +147,13 @@ func TestEngine_Push_Coverage(t *testing.T) {
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
 					{
-						Doc:         &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Deleted: true, Version: 2},
+						Doc:         &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Collection: "test", Deleted: true, Version: 2},
 						BaseVersion: ptr(int64(1)),
 					},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				existingDoc := &storage.Document{Id: "test/1", Fullpath: "test/1", Version: 1}
+				existingDoc := &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 1}
 				m.On("Get", mock.Anything, "default", "test/1").Return(existingDoc, nil)
 				m.On("Delete", mock.Anything, "default", "test/1", mock.MatchedBy(func(f model.Filters) bool {
 					return f[0].Field == "version" && f[0].Value == int64(1)
@@ -168,23 +168,23 @@ func TestEngine_Push_Coverage(t *testing.T) {
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
 					{
-						Doc:         &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Deleted: true, Version: 2},
+						Doc:         &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Collection: "test", Deleted: true, Version: 2},
 						BaseVersion: ptr(int64(1)),
 					},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				existingDoc := &storage.Document{Id: "test/1", Fullpath: "test/1", Version: 1}
+				existingDoc := &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 1}
 				m.On("Get", mock.Anything, "default", "test/1").Return(existingDoc, nil).Once()
 
 				// Delete fails with PreconditionFailed
 				m.On("Delete", mock.Anything, "default", "test/1", mock.Anything).Return(model.ErrPreconditionFailed)
 
 				// Fetch latest for conflict
-				latestDoc := &storage.Document{Id: "test/1", Fullpath: "test/1", Version: 3}
+				latestDoc := &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 3}
 				m.On("Get", mock.Anything, "default", "test/1").Return(latestDoc, nil).Once()
 			},
-			expectedConflicts: []*storage.Document{
+			expectedConflicts: []*storage.StoredDoc{
 				{Id: "test/1", Fullpath: "test/1", Version: 3},
 			},
 			expectError: false,
@@ -195,7 +195,7 @@ func TestEngine_Push_Coverage(t *testing.T) {
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
 					{
-						Doc: &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Version: 1},
+						Doc: &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Collection: "test", Version: 1},
 					},
 				},
 			},
@@ -205,7 +205,7 @@ func TestEngine_Push_Coverage(t *testing.T) {
 				// Create fails (maybe race condition)
 				m.On("Create", mock.Anything, "default", mock.Anything).Return(assert.AnError)
 			},
-			expectedConflicts: []*storage.Document{
+			expectedConflicts: []*storage.StoredDoc{
 				{Id: "test/1", Fullpath: "test/1", Collection: "test", Version: 1},
 			},
 			expectError: false,
@@ -215,7 +215,7 @@ func TestEngine_Push_Coverage(t *testing.T) {
 			req: storage.ReplicationPushRequest{
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "test/1", Fullpath: "test/1"}},
+					{Doc: &storage.StoredDoc{Id: "test/1", Fullpath: "test/1"}},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
@@ -249,32 +249,6 @@ func TestEngine_Push_Coverage(t *testing.T) {
 
 func ptr(i int64) *int64 {
 	return &i
-}
-
-func TestFlattenStorageDocument_Nil(t *testing.T) {
-	res := flattenStorageDocument(nil)
-	assert.Nil(t, res)
-}
-
-func TestFlattenStorageDocument_Deleted(t *testing.T) {
-	doc := &storage.Document{
-		Fullpath:   "col/doc1",
-		Collection: "col",
-		Data:       map[string]interface{}{"foo": "bar"},
-		Deleted:    true,
-	}
-	res := flattenStorageDocument(doc)
-	assert.True(t, res["deleted"].(bool))
-}
-
-func TestExtractIDFromFullpath_Invalid(t *testing.T) {
-	id := extractIDFromFullpath("col")
-	assert.Equal(t, "", id)
-}
-
-func TestExtractIDFromFullpath_Valid(t *testing.T) {
-	id := extractIDFromFullpath("col/doc1")
-	assert.Equal(t, "doc1", id)
 }
 
 func TestReplaceDocument_StorageError(t *testing.T) {
@@ -314,7 +288,7 @@ func TestReplaceDocument_UpdateError(t *testing.T) {
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
 	// Get returns success
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{}, nil).Once()
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{}, nil).Once()
 	// Update returns error
 	mockStorage.On("Update", mock.Anything, "default", "col/doc1", mock.Anything, mock.Anything).Return(errors.New("update error"))
 
@@ -330,7 +304,7 @@ func TestReplaceDocument_GetAfterUpdateError(t *testing.T) {
 	doc := model.Document{"id": "doc1", "collection": "col", "foo": "bar"}
 
 	// Get returns success
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{}, nil).Once()
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{}, nil).Once()
 	// Update returns success
 	mockStorage.On("Update", mock.Anything, "default", "col/doc1", mock.Anything, mock.Anything).Return(nil)
 	// Get after update returns error
@@ -385,7 +359,7 @@ func TestPush_DeleteNotFound(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Deleted:  true,
 				},
@@ -393,7 +367,7 @@ func TestPush_DeleteNotFound(t *testing.T) {
 		},
 	}
 
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{Version: 1}, nil).Once()
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{Version: 1}, nil).Once()
 	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(nil, model.ErrNotFound)
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", mock.Anything).Return(model.ErrNotFound)
 
@@ -412,7 +386,7 @@ func TestPush_DeleteNotFoundThenGetSuccess(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Deleted:  true,
 				},
@@ -421,7 +395,7 @@ func TestPush_DeleteNotFoundThenGetSuccess(t *testing.T) {
 	}
 
 	// First Get returns existing doc
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  1,
 	}, nil).Once()
@@ -430,7 +404,7 @@ func TestPush_DeleteNotFoundThenGetSuccess(t *testing.T) {
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", mock.Anything).Return(model.ErrNotFound)
 
 	// Get after NotFound finds a doc (someone recreated it - race condition)
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  2,
 		Data:     map[string]interface{}{"recreated": true},
@@ -453,7 +427,7 @@ func TestPush_UpdateConflict(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},
@@ -463,7 +437,7 @@ func TestPush_UpdateConflict(t *testing.T) {
 	}
 
 	// Get returns existing doc with version 2 (conflict)
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  2,
 		Data:     map[string]interface{}{"foo": "baz"},
@@ -484,7 +458,7 @@ func TestPush_UpdatePreconditionFailed(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},
@@ -494,7 +468,7 @@ func TestPush_UpdatePreconditionFailed(t *testing.T) {
 	}
 
 	// Get returns existing doc with version 1 (match)
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  1,
 	}, nil).Once()
@@ -503,7 +477,7 @@ func TestPush_UpdatePreconditionFailed(t *testing.T) {
 	mockStorage.On("Update", mock.Anything, "default", "col/doc1", mock.Anything, mock.Anything).Return(model.ErrPreconditionFailed)
 
 	// Fetch latest for conflict
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  2,
 	}, nil).Once()
@@ -523,7 +497,7 @@ func TestPush_EmptyFullpathWithIDInData(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "", // Empty fullpath
 					Data:     map[string]interface{}{"id": "doc1", "foo": "bar"},
 				},
@@ -533,7 +507,7 @@ func TestPush_EmptyFullpathWithIDInData(t *testing.T) {
 
 	// Should construct fullpath as col/doc1 from Data["id"]
 	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", mock.Anything, "default", mock.MatchedBy(func(d *storage.Document) bool {
+	mockStorage.On("Create", mock.Anything, "default", mock.MatchedBy(func(d storage.StoredDoc) bool {
 		return d.Fullpath == "col/doc1"
 	})).Return(nil)
 
@@ -552,7 +526,7 @@ func TestPush_CreateConflict(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},
@@ -581,7 +555,7 @@ func TestPush_DeletePreconditionFailed(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Deleted:  true,
 				},
@@ -591,7 +565,7 @@ func TestPush_DeletePreconditionFailed(t *testing.T) {
 	}
 
 	// Document exists with matching version
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  1,
 	}, nil).Once()
@@ -600,7 +574,7 @@ func TestPush_DeletePreconditionFailed(t *testing.T) {
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", mock.Anything).Return(model.ErrPreconditionFailed)
 
 	// Fetch latest for conflict
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  2,
 	}, nil).Once()
@@ -621,7 +595,7 @@ func TestPush_DeleteStorageError(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Deleted:  true,
 				},
@@ -630,7 +604,7 @@ func TestPush_DeleteStorageError(t *testing.T) {
 	}
 
 	// Document exists
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  1,
 	}, nil)
@@ -653,7 +627,7 @@ func TestPush_UpdateStorageError(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},
@@ -662,7 +636,7 @@ func TestPush_UpdateStorageError(t *testing.T) {
 	}
 
 	// Document exists
-	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "default", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath: "col/doc1",
 		Version:  1,
 	}, nil)
@@ -685,7 +659,7 @@ func TestPush_GetStorageError(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},
@@ -776,8 +750,8 @@ func TestWatchCollection_Success(t *testing.T) {
 
 	// Create event channel
 	eventCh := make(chan storage.Event, 2)
-	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}}
-	eventCh <- storage.Event{Type: storage.EventUpdate, Document: &storage.Document{Id: "doc2", Collection: "col"}}
+	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.StoredDoc{Id: "doc1", Collection: "col"}}
+	eventCh <- storage.Event{Type: storage.EventUpdate, Document: &storage.StoredDoc{Id: "doc2", Collection: "col"}}
 	close(eventCh)
 
 	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
@@ -807,7 +781,7 @@ func TestWatchCollection_ContextCancel(t *testing.T) {
 
 	// Create a channel that won't close immediately
 	eventCh := make(chan storage.Event, 1)
-	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.Document{Id: "doc1", Collection: "col"}}
+	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.StoredDoc{Id: "doc1", Collection: "col"}}
 
 	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
 
@@ -860,7 +834,7 @@ func TestGetDocument_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	doc := &storage.Document{
+	doc := &storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Data:       map[string]interface{}{"foo": "bar"},
@@ -891,14 +865,14 @@ func TestReplaceDocument_CustomTenant(t *testing.T) {
 	engine := newTestEngine(mockStorage)
 
 	// ReplaceDocument calls Get first to check if doc exists
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Version:    1,
 	}, nil).Once()
 	mockStorage.On("Update", mock.Anything, "custom-tenant", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
 	// After update, Get is called again to return updated doc
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Data:       map[string]interface{}{"foo": "bar"},
@@ -917,7 +891,7 @@ func TestPatchDocument_CustomTenant(t *testing.T) {
 
 	// PatchDocument calls Patch then Get
 	mockStorage.On("Patch", mock.Anything, "custom-tenant", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.Document{
+	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Data:       map[string]interface{}{"foo": "bar", "baz": "qux"},
@@ -963,7 +937,7 @@ func TestExecuteQuery_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	storedDocs := []*storage.Document{
+	storedDocs := []*storage.StoredDoc{
 		{
 			Fullpath:   "col/doc1",
 			Collection: "col",
@@ -1002,7 +976,7 @@ func TestPull_CustomTenant(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	storedDocs := []*storage.Document{
+	storedDocs := []*storage.StoredDoc{
 		{
 			Fullpath:   "col/doc1",
 			Collection: "col",
@@ -1032,7 +1006,7 @@ func TestPush_CustomTenant(t *testing.T) {
 		Collection: "col",
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{
+				Doc: &storage.StoredDoc{
 					Fullpath: "col/doc1",
 					Data:     map[string]interface{}{"foo": "bar"},
 				},

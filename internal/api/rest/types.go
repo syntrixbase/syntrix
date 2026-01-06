@@ -1,8 +1,8 @@
 package rest
 
 import (
-	"github.com/codetrek/syntrix/internal/identity/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/identity/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 type ReplicaChange struct {

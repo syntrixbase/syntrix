@@ -3,11 +3,12 @@ package core
 import (
 	"context"
 	"errors"
-	"strings"
 
-	"github.com/codetrek/syntrix/internal/csp"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/csp"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Engine handles all business logic and coordinates with the storage backend.
@@ -30,7 +31,7 @@ func (e *Engine) GetDocument(ctx context.Context, tenant string, path string) (m
 	if err != nil {
 		return nil, err
 	}
-	return flattenStorageDocument(stored), nil
+	return helper.FlattenStorageDocument(stored), nil
 }
 
 // CreateDocument creates a new document.
@@ -44,37 +45,9 @@ func (e *Engine) CreateDocument(ctx context.Context, tenant string, doc model.Do
 	if collection == "" {
 		return errors.New("collection is required")
 	}
-	fullpath := collection + "/" + doc.GetID()
 	doc.StripProtectedFields()
 
-	return e.storage.Create(ctx, tenant, storage.NewDocument(tenant, fullpath, collection, doc))
-}
-
-func flattenStorageDocument(doc *storage.Document) model.Document {
-	if doc == nil {
-		return nil
-	}
-	out := make(model.Document)
-	for k, v := range doc.Data {
-		out[k] = v
-	}
-	out.SetID(extractIDFromFullpath(doc.Fullpath))
-	out.SetCollection(doc.Collection)
-	out["version"] = doc.Version
-	out["updatedAt"] = doc.UpdatedAt
-	out["createdAt"] = doc.CreatedAt
-	if doc.Deleted {
-		out["deleted"] = true
-	}
-	return out
-}
-
-func extractIDFromFullpath(fullpath string) string {
-	parts := strings.Split(fullpath, "/")
-	if len(parts)%2 != 0 {
-		return ""
-	}
-	return parts[len(parts)-1]
+	return e.storage.Create(ctx, tenant, types.NewStoredDoc(tenant, collection, doc.GetID(), doc))
 }
 
 // ReplaceDocument replaces a document or creates it if it doesn't exist (Upsert).
@@ -101,11 +74,11 @@ func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.D
 	if err != nil {
 		if err == model.ErrNotFound {
 			// Create
-			storedDoc := storage.NewDocument(tenant, fullpath, collection, doc)
+			storedDoc := storage.NewStoredDoc(tenant, collection, id, doc)
 			if err := e.storage.Create(ctx, tenant, storedDoc); err != nil {
 				return nil, err
 			}
-			return flattenStorageDocument(storedDoc), nil
+			return helper.FlattenStorageDocument(&storedDoc), nil
 		}
 		return nil, err
 	}
@@ -121,7 +94,7 @@ func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.D
 		return nil, err
 	}
 
-	return flattenStorageDocument(updatedDoc), nil
+	return helper.FlattenStorageDocument(updatedDoc), nil
 }
 
 // PatchDocument updates specific fields of a document (Merge + CAS).
@@ -153,7 +126,7 @@ func (e *Engine) PatchDocument(ctx context.Context, tenant string, doc model.Doc
 		return nil, err
 	}
 
-	return flattenStorageDocument(updatedDoc), nil
+	return helper.FlattenStorageDocument(updatedDoc), nil
 }
 
 // DeleteDocument deletes a document.
@@ -170,7 +143,7 @@ func (e *Engine) ExecuteQuery(ctx context.Context, tenant string, q model.Query)
 
 	flatDocs := make([]model.Document, len(storedDocs))
 	for i, d := range storedDocs {
-		flatDocs[i] = flattenStorageDocument(d)
+		flatDocs[i] = helper.FlattenStorageDocument(d)
 	}
 
 	return flatDocs, nil
@@ -213,7 +186,7 @@ func (e *Engine) Pull(ctx context.Context, tenant string, req storage.Replicatio
 	}
 
 	if docs == nil {
-		docs = make([]*storage.Document, 0)
+		docs = make([]*storage.StoredDoc, 0)
 	}
 
 	newCheckpoint := req.Checkpoint
@@ -229,7 +202,7 @@ func (e *Engine) Pull(ctx context.Context, tenant string, req storage.Replicatio
 
 // Push handles replication push requests.
 func (e *Engine) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	var conflicts []*storage.Document
+	var conflicts []*storage.StoredDoc
 
 	for _, change := range req.Changes {
 		doc := change.Doc
@@ -249,7 +222,7 @@ func (e *Engine) Push(ctx context.Context, tenant string, req storage.Replicatio
 		existing, err := e.storage.Get(ctx, tenant, doc.Fullpath)
 		if err != nil {
 			if err == model.ErrNotFound {
-				if err := e.storage.Create(ctx, tenant, doc); err != nil {
+				if err := e.storage.Create(ctx, tenant, *doc); err != nil {
 					conflicts = append(conflicts, doc)
 				}
 				continue

@@ -3,7 +3,7 @@ package worker
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // SecretProvider resolves secret references.

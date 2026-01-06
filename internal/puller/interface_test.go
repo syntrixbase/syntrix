@@ -5,7 +5,7 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/config"
 )
 
 func TestNewService(t *testing.T) {

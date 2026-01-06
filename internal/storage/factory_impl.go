@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/storage/internal/mongo"
-	"github.com/codetrek/syntrix/internal/storage/internal/router"
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage/internal/mongo"
+	"github.com/syntrixbase/syntrix/internal/storage/internal/router"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	mongodriver "go.mongodb.org/mongo-driver/mongo"
 )
 

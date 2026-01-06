@@ -3,11 +3,11 @@ package rest
 import (
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // ValidationConfig holds configurable limits for validation
@@ -48,76 +48,8 @@ func SetValidationConfig(cfg ValidationConfig) {
 	validationConfig = cfg
 }
 
-var (
-	pathRegex = regexp.MustCompile(`^[a-zA-Z0-9_\-\./]+$`)
-	idRegex   = regexp.MustCompile(`^[a-zA-Z0-9_\-\.]{1,64}$`)
-)
-
-func validatePathSyntax(path string) error {
-	if path == "" {
-		return errors.New("path cannot be empty")
-	}
-
-	if len(path) > validationConfig.MaxPathLength {
-		return fmt.Errorf("path length cannot exceed %d characters", validationConfig.MaxPathLength)
-	}
-
-	if !pathRegex.MatchString(path) {
-		return errors.New("path contains invalid characters")
-	}
-
-	// Ensure path does not start or end with /
-	if strings.HasPrefix(path, "/") || strings.HasSuffix(path, "/") {
-		return errors.New("path cannot start or end with /")
-	}
-
-	// Ensure no double slashes
-	if strings.Contains(path, "//") {
-		return errors.New("path cannot contain empty segments")
-	}
-
-	return nil
-}
-
-func validateAndExplodeFullpath(path string) (collection string, docId string, err error) {
-	if err := validatePathSyntax(path); err != nil {
-		return "", "", err
-	}
-
-	parts := strings.Split(path, "/")
-	if len(parts)%2 != 0 {
-		return path, "", nil // It's a collection path
-	}
-
-	// It's a document path
-	collection = strings.Join(parts[:len(parts)-1], "/")
-	docId = parts[len(parts)-1]
-	return collection, docId, nil
-}
-
-func validateDocumentPath(path string) error {
-	if err := validatePathSyntax(path); err != nil {
-		return err
-	}
-	parts := strings.Split(path, "/")
-	if len(parts)%2 != 0 {
-		return errors.New("invalid document path: must have even number of segments (e.g. collection/doc)")
-	}
-	return nil
-}
-
-func validateCollection(collection string) error {
-	if err := validatePathSyntax(collection); err != nil {
-		return err
-	}
-	if len(strings.Split(collection, "/"))%2 != 0 {
-		return nil
-	}
-	return errors.New("invalid collection path: must have odd number of segments (e.g. collection or collection/doc/subcollection)")
-}
-
 func validateQuery(q model.Query) error {
-	if err := validateCollection(q.Collection); err != nil {
+	if err := helper.CheckCollectionPath(q.Collection); err != nil {
 		return fmt.Errorf("invalid collection: %w", err)
 	}
 	if q.Limit < 0 {
@@ -152,7 +84,7 @@ func validateQuery(q model.Query) error {
 }
 
 func validateReplicationPull(req storage.ReplicationPullRequest) error {
-	if err := validateCollection(req.Collection); err != nil {
+	if err := helper.CheckCollectionPath(req.Collection); err != nil {
 		return fmt.Errorf("invalid collection: %w", err)
 	}
 	if req.Limit < 0 {
@@ -165,14 +97,14 @@ func validateReplicationPull(req storage.ReplicationPullRequest) error {
 }
 
 func validateReplicationPush(req storage.ReplicationPushRequest) error {
-	if err := validateCollection(req.Collection); err != nil {
+	if err := helper.CheckCollectionPath(req.Collection); err != nil {
 		return fmt.Errorf("invalid collection: %w", err)
 	}
 	for _, change := range req.Changes {
 		if change.Doc == nil {
 			return errors.New("change document cannot be nil")
 		}
-		if err := validateDocumentPath(change.Doc.Fullpath); err != nil {
+		if err := helper.CheckDocumentPath(change.Doc.Fullpath); err != nil {
 			return fmt.Errorf("invalid document path in change: %w", err)
 		}
 		// Ensure document path matches collection prefix

@@ -6,8 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -48,11 +49,11 @@ func (m *documentStore) getCollection(nameOrPath string) *mongo.Collection {
 	return m.db.Collection(m.dataCollection)
 }
 
-func (m *documentStore) Get(ctx context.Context, tenant string, fullpath string) (*types.Document, error) {
+func (m *documentStore) Get(ctx context.Context, tenant string, fullpath string) (*types.StoredDoc, error) {
 	collection := m.getCollection(fullpath)
 	id := types.CalculateTenantID(tenant, fullpath)
 
-	var doc types.Document
+	var doc types.StoredDoc
 	err := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant, "deleted": bson.M{"$ne": true}}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
@@ -64,7 +65,7 @@ func (m *documentStore) Get(ctx context.Context, tenant string, fullpath string)
 	return &doc, nil
 }
 
-func (m *documentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+func (m *documentStore) Create(ctx context.Context, tenant string, doc types.StoredDoc) error {
 	collection := m.getCollection(doc.Collection)
 
 	// Ensure derived fields are populated
@@ -80,7 +81,7 @@ func (m *documentStore) Create(ctx context.Context, tenant string, doc *types.Do
 	if mongo.IsDuplicateKeyError(err) {
 		// Check if the document exists but is soft-deleted
 		id := types.CalculateTenantID(tenant, doc.Fullpath)
-		var existingDoc types.Document
+		var existingDoc types.StoredDoc
 		if findErr := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant}).Decode(&existingDoc); findErr == nil {
 			if existingDoc.Deleted {
 				// Overwrite the soft-deleted document
@@ -200,7 +201,7 @@ func (m *documentStore) Delete(ctx context.Context, tenant string, path string, 
 		}
 		// If document exists but matched count is 0, it means version conflict or already deleted
 		// We can check if it is already deleted
-		var doc types.Document
+		var doc types.StoredDoc
 		if err := collection.FindOne(ctx, bson.M{"_id": id, "tenant_id": tenant}).Decode(&doc); err == nil {
 			if doc.Deleted {
 				return model.ErrNotFound // Already deleted
@@ -212,7 +213,7 @@ func (m *documentStore) Delete(ctx context.Context, tenant string, path string, 
 	return nil
 }
 
-func (m *documentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+func (m *documentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.StoredDoc, error) {
 	collection := m.getCollection(q.Collection)
 
 	filter := makeFilterBSON(q.Filters)
@@ -247,9 +248,13 @@ func (m *documentStore) Query(ctx context.Context, tenant string, q model.Query)
 	}
 	defer cursor.Close(ctx)
 
-	var docs []*types.Document
+	var docs []*types.StoredDoc
 	if err := cursor.All(ctx, &docs); err != nil {
 		return nil, err
+	}
+
+	for _, d := range docs {
+		d.Collection = q.Collection // Ensure collection is set
 	}
 
 	return docs, nil
@@ -323,6 +328,11 @@ func (m *documentStore) Watch(ctx context.Context, tenant string, collectionName
 				continue
 			}
 
+			if evt.Document != nil {
+				coll, _, _ := helper.ExplodeFullpath(evt.Document.Fullpath)
+				evt.Document.Collection = coll
+			}
+
 			select {
 			case out <- *evt:
 			case <-ctx.Done():
@@ -335,10 +345,10 @@ func (m *documentStore) Watch(ctx context.Context, tenant string, collectionName
 }
 
 type changeStreamEvent struct {
-	ID                       interface{}     `bson:"_id"`
-	OperationType            string          `bson:"operationType"`
-	FullDocument             *types.Document `bson:"fullDocument"`
-	FullDocumentBeforeChange *types.Document `bson:"fullDocumentBeforeChange"`
+	ID                       interface{}      `bson:"_id"`
+	OperationType            string           `bson:"operationType"`
+	FullDocument             *types.StoredDoc `bson:"fullDocument"`
+	FullDocumentBeforeChange *types.StoredDoc `bson:"fullDocumentBeforeChange"`
 	DocumentKey              struct {
 		ID string `bson:"_id"`
 	} `bson:"documentKey"`

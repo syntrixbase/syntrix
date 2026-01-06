@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -105,7 +105,7 @@ func TestServer_StartBackgroundTasks_Broadcast(t *testing.T) {
 	srv.hub.Register(client)
 
 	// Emit an event and close stream to stop watcher
-	stream <- storage.Event{Id: "users/1", Type: storage.EventCreate, Document: &storage.Document{Fullpath: "users/1", Collection: "users", Data: map[string]interface{}{"foo": "bar"}}}
+	stream <- storage.Event{Id: "users/1", Type: storage.EventCreate, Document: &storage.StoredDoc{Fullpath: "users/1", Collection: "users", Data: map[string]interface{}{"foo": "bar"}}}
 	close(stream)
 
 	select {

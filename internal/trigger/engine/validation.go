@@ -6,7 +6,7 @@ import (
 	"net/url"
 	"regexp"
 
-	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 var (

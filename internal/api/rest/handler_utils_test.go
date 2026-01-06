@@ -6,8 +6,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 func TestNewHandler_Panic(t *testing.T) {

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/mock"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -50,7 +50,7 @@ func (m *mockStream) SetTrailer(md metadata.MD) {
 }
 
 type controllableIterator struct {
-	events []*events.ChangeEvent
+	events []*events.StoreChangeEvent
 	idx    int
 }
 
@@ -59,7 +59,7 @@ func (m *controllableIterator) Next() bool {
 	return m.idx <= len(m.events)
 }
 
-func (m *controllableIterator) Event() *events.ChangeEvent {
+func (m *controllableIterator) Event() *events.StoreChangeEvent {
 	if m.idx > 0 && m.idx <= len(m.events) {
 		return m.events[m.idx-1]
 	}
@@ -76,14 +76,14 @@ func (m *controllableIterator) Close() error {
 
 type controllableEventSource struct {
 	replayFunc func(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error)
-	handler    func(ctx context.Context, backendName string, event *events.ChangeEvent) error
+	handler    func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error
 }
 
-func (m *controllableEventSource) SetEventHandler(handler func(ctx context.Context, backendName string, event *events.ChangeEvent) error) {
+func (m *controllableEventSource) SetEventHandler(handler func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error) {
 	m.handler = handler
 }
 
-func (m *controllableEventSource) EmitEvent(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+func (m *controllableEventSource) EmitEvent(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 	if m.handler != nil {
 		return m.handler(ctx, backendName, event)
 	}
@@ -104,14 +104,14 @@ func TestServer_StateMachine_HappyPath(t *testing.T) {
 
 	// Setup
 	cfg := config.PullerGRPCConfig{ChannelSize: 100}
-	replayEvt := &events.ChangeEvent{
+	replayEvt := &events.StoreChangeEvent{
 		EventID:     "replay-1",
 		ClusterTime: events.ClusterTime{T: 100, I: 1},
 	}
 
 	source := &controllableEventSource{
 		replayFunc: func(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
-			return &controllableIterator{events: []*events.ChangeEvent{replayEvt}}, nil
+			return &controllableIterator{events: []*events.StoreChangeEvent{replayEvt}}, nil
 		},
 	}
 	server := NewServer(cfg, source, nil)
@@ -162,7 +162,7 @@ func TestServer_StateMachine_HappyPath(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Broadcast a live event via source
-	liveEvt := &events.ChangeEvent{
+	liveEvt := &events.StoreChangeEvent{
 		EventID:     "live-1",
 		ClusterTime: events.ClusterTime{T: 200, I: 1},
 	}
@@ -188,7 +188,7 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 	var replayCount int
 	var mu sync.Mutex
 
-	replayEvt2 := &events.ChangeEvent{
+	replayEvt2 := &events.StoreChangeEvent{
 		EventID:     "replay-2",
 		ClusterTime: events.ClusterTime{T: 103, I: 1}, // Newer than overflow events
 	}
@@ -200,7 +200,7 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 			replayCount++
 			t.Logf("Replay called. Count: %d", replayCount)
 			// Return the event, assuming only overflow triggers replay (or if initial replay happens, it gets this too, which is fine)
-			return &controllableIterator{events: []*events.ChangeEvent{replayEvt2}}, nil
+			return &controllableIterator{events: []*events.StoreChangeEvent{replayEvt2}}, nil
 		},
 	}
 	server := NewServer(cfg, source, nil)
@@ -227,7 +227,7 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 	time.Sleep(100 * time.Millisecond) // Wait for live mode
 
 	// 2. Fill the channel (size 1)
-	evt1 := &events.ChangeEvent{EventID: "evt-1", ClusterTime: events.ClusterTime{T: 100}}
+	evt1 := &events.StoreChangeEvent{EventID: "evt-1", ClusterTime: events.ClusterTime{T: 100}}
 
 	// Let's make stream.Send block for the first event
 	sendBlock := make(chan struct{})
@@ -247,13 +247,13 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 	// Now channel is empty (item picked up), but consumer is blocked.
 	// Broadcast evt-2. It goes to channel (size 1). Channel full.
 	t.Log("Emitting evt-2")
-	evt2 := &events.ChangeEvent{EventID: "evt-2", ClusterTime: events.ClusterTime{T: 101}}
+	evt2 := &events.StoreChangeEvent{EventID: "evt-2", ClusterTime: events.ClusterTime{T: 101}}
 	source.EmitEvent(context.Background(), "db1", evt2)
 	time.Sleep(50 * time.Millisecond)
 
 	// Broadcast evt-3. Channel full -> Overflow!
 	t.Log("Emitting evt-3")
-	evt3 := &events.ChangeEvent{EventID: "evt-3", ClusterTime: events.ClusterTime{T: 102}}
+	evt3 := &events.StoreChangeEvent{EventID: "evt-3", ClusterTime: events.ClusterTime{T: 102}}
 	source.EmitEvent(context.Background(), "db1", evt3)
 	time.Sleep(50 * time.Millisecond)
 
@@ -303,7 +303,7 @@ func TestServer_Boundary_EmptyReplay(t *testing.T) {
 	cfg := config.PullerGRPCConfig{ChannelSize: 100}
 	source := &controllableEventSource{
 		replayFunc: func(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
-			return &controllableIterator{events: []*events.ChangeEvent{}}, nil
+			return &controllableIterator{events: []*events.StoreChangeEvent{}}, nil
 		},
 	}
 	server := NewServer(cfg, source, nil)
@@ -331,7 +331,7 @@ func TestServer_Boundary_EmptyReplay(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Emit live event
-	liveEvt := &events.ChangeEvent{EventID: "live-1", ClusterTime: events.ClusterTime{T: 200}}
+	liveEvt := &events.StoreChangeEvent{EventID: "live-1", ClusterTime: events.ClusterTime{T: 200}}
 	source.EmitEvent(context.Background(), "db1", liveEvt)
 
 	select {
@@ -369,11 +369,11 @@ func TestServer_Boundary_SendError(t *testing.T) {
 	// Scenario: stream.Send returns error -> Should terminate subscription
 
 	cfg := config.PullerGRPCConfig{ChannelSize: 100}
-	replayEvt := &events.ChangeEvent{EventID: "replay-1", ClusterTime: events.ClusterTime{T: 100}}
+	replayEvt := &events.StoreChangeEvent{EventID: "replay-1", ClusterTime: events.ClusterTime{T: 100}}
 
 	source := &controllableEventSource{
 		replayFunc: func(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
-			return &controllableIterator{events: []*events.ChangeEvent{replayEvt}}, nil
+			return &controllableIterator{events: []*events.StoreChangeEvent{replayEvt}}, nil
 		},
 	}
 	server := NewServer(cfg, source, nil)
@@ -389,7 +389,7 @@ func TestServer_Boundary_SendError(t *testing.T) {
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		source.EmitEvent(context.Background(), "db1", &events.ChangeEvent{EventID: "live-1", ClusterTime: events.ClusterTime{T: 200}})
+		source.EmitEvent(context.Background(), "db1", &events.StoreChangeEvent{EventID: "live-1", ClusterTime: events.ClusterTime{T: 200}})
 	}()
 
 	req := &pullerv1.SubscribeRequest{ConsumerId: "error-consumer"}

@@ -3,8 +3,8 @@ package router
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 type mockTenantDocStore struct {

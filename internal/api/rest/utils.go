@@ -3,11 +3,11 @@ package rest
 import (
 	"strings"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
-func flattenDocument(doc *storage.Document) model.Document {
+func flattenDocument(doc *storage.StoredDoc) model.Document {
 	if doc == nil {
 		return nil
 	}

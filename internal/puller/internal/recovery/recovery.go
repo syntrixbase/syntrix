@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
 
 // GapThreshold is the default time gap that triggers a gap detection alert.
@@ -55,7 +55,7 @@ func NewGapDetector(opts GapDetectorOptions) *GapDetector {
 
 // RecordEvent records an event and checks for gaps.
 // Returns true if a gap was detected.
-func (g *GapDetector) RecordEvent(evt *events.ChangeEvent) bool {
+func (g *GapDetector) RecordEvent(evt *events.StoreChangeEvent) bool {
 	// Convert cluster time to actual time
 	eventTime := time.Unix(int64(evt.ClusterTime.T), 0)
 

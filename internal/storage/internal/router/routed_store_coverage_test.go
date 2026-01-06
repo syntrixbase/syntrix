@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestRoutedDocumentStore_Coverage(t *testing.T) {
@@ -31,7 +31,7 @@ func TestRoutedDocumentStore_Coverage(t *testing.T) {
 		router.On("Select", tenant, types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedDocumentStore(router)
-		err := rs.Create(ctx, tenant, &types.Document{})
+		err := rs.Create(ctx, tenant, types.StoredDoc{})
 
 		assert.ErrorIs(t, err, errSelect)
 	})

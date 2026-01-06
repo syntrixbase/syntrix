@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/google/cel-go/cel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestHub_Broadcast_TableDriven(t *testing.T) {
@@ -48,7 +48,7 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 			event: storage.Event{
 				Type: storage.EventCreate,
 				Id:   "users/123",
-				Document: &storage.Document{
+				Document: &storage.StoredDoc{
 					Id:         "users/123",
 					Collection: "users",
 					Data:       map[string]interface{}{"name": "Alice"},
@@ -84,7 +84,7 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 			event: storage.Event{
 				Type: storage.EventCreate,
 				Id:   "users/adult",
-				Document: &storage.Document{
+				Document: &storage.StoredDoc{
 					Id:         "users/adult",
 					Collection: "users",
 					Data:       map[string]interface{}{"name": "Alice", "age": 25},
@@ -116,7 +116,7 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 			event: storage.Event{
 				Type: storage.EventCreate,
 				Id:   "users/young",
-				Document: &storage.Document{
+				Document: &storage.StoredDoc{
 					Id:         "users/young",
 					Collection: "users",
 					Data:       map[string]interface{}{"name": "Bob", "age": 18},
@@ -163,7 +163,7 @@ func TestHub_Broadcast_TableDriven(t *testing.T) {
 			event: storage.Event{
 				Type:     storage.EventCreate,
 				Id:       "users/123",
-				Document: &storage.Document{Id: "users/123", Collection: "users", Data: map[string]interface{}{}},
+				Document: &storage.StoredDoc{Id: "users/123", Collection: "users", Data: map[string]interface{}{}},
 			},
 			expectedEvents: map[string]bool{"c1": true},
 		},

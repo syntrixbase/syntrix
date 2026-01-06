@@ -5,11 +5,11 @@ import (
 	"log"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/trigger"
-	"github.com/codetrek/syntrix/internal/trigger/internal/evaluator"
-	"github.com/codetrek/syntrix/internal/trigger/internal/pubsub"
-	"github.com/codetrek/syntrix/internal/trigger/internal/watcher"
-	"github.com/codetrek/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/evaluator"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/pubsub"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/watcher"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // defaultTriggerEngine implements TriggerEngine.
@@ -63,7 +63,7 @@ func (e *defaultTriggerEngine) Start(ctx context.Context) error {
 			e.mu.RUnlock()
 
 			for _, t := range currentTriggers {
-				matched, err := e.evaluator.Evaluate(ctx, t, &evt)
+				matched, err := e.evaluator.Evaluate(ctx, t, evt)
 				if err != nil {
 					log.Printf("[Error] Evaluation failed for trigger %s: %v", t.ID, err)
 					continue
@@ -103,8 +103,8 @@ func (e *defaultTriggerEngine) Start(ctx context.Context) error {
 				}
 			}
 
-			if evt.ResumeToken != "" {
-				if err := e.watcher.SaveCheckpoint(ctx, evt.ResumeToken); err != nil {
+			if evt.Progress != "" {
+				if err := e.watcher.SaveCheckpoint(ctx, evt.Progress); err != nil {
 					log.Printf("[Error] Failed to save checkpoint: %v", err)
 				}
 			}

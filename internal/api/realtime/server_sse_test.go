@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -62,7 +62,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 		Type:     storage.EventCreate,
 		Id:       "users/1",
 		TenantID: "default",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Fullpath:   "users/1",
 			Collection: "users",
 			TenantID:   "default",

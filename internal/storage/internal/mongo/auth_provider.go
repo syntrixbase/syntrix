@@ -3,7 +3,7 @@ package mongo
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

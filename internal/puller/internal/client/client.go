@@ -8,9 +8,9 @@ import (
 	"io"
 	"log/slog"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -135,12 +135,12 @@ func (c *Client) Close() error {
 func (c *Client) convertEvent(evt *pullerv1.PullerEvent) *events.PullerEvent {
 	change := evt.ChangeEvent
 
-	normalized := &events.ChangeEvent{
+	normalized := &events.StoreChangeEvent{
 		EventID:   change.EventId,
 		TenantID:  change.Tenant,
 		MgoColl:   change.MgoColl,
 		MgoDocID:  change.MgoDocId,
-		OpType:    events.OperationType(change.OpType),
+		OpType:    events.StoreOperationType(change.OpType),
 		Timestamp: change.Timestamp,
 		TxnNumber: &change.TxnNumber,
 		Backend:   change.Backend,
@@ -154,7 +154,7 @@ func (c *Client) convertEvent(evt *pullerv1.PullerEvent) *events.PullerEvent {
 	}
 
 	if len(change.FullDoc) > 0 {
-		var doc storage.Document
+		var doc storage.StoredDoc
 		if err := json.Unmarshal(change.FullDoc, &doc); err == nil {
 			normalized.FullDocument = &doc
 		} else {

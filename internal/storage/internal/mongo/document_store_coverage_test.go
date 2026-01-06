@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -31,8 +31,10 @@ func TestDocumentStore_Delete_Coverage(t *testing.T) {
 	})
 
 	t.Run("Delete Already Soft-Deleted Document", func(t *testing.T) {
-		path := "users/deleted_user"
-		doc := types.NewDocument(tenant, path, "users", map[string]interface{}{
+		collection := "users"
+		docID := "deleted_user"
+		path := collection + "/" + docID
+		doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
 			"name": "To Be Deleted",
 		})
 
@@ -71,12 +73,15 @@ func TestDocumentStore_Coverage_Extended(t *testing.T) {
 	})
 
 	t.Run("Create with Empty CollectionHash", func(t *testing.T) {
-		doc := types.NewDocument(tenant, "users/empty_hash", "users", map[string]interface{}{"a": 1})
+		doc := types.NewStoredDoc(tenant, "users", "empty_hash", map[string]interface{}{"a": 1})
 		doc.CollectionHash = "" // Explicitly empty
 		err := store.Create(ctx, tenant, doc)
 		require.NoError(t, err)
-		assert.NotEmpty(t, doc.CollectionHash)
-		assert.Equal(t, types.CalculateCollectionHash("users"), doc.CollectionHash)
+		// Fetch the doc from the database to verify CollectionHash was populated
+		fetched, err := store.Get(ctx, tenant, "users/empty_hash")
+		require.NoError(t, err)
+		assert.NotEmpty(t, fetched.CollectionHash)
+		assert.Equal(t, types.CalculateCollectionHash("users"), fetched.CollectionHash)
 	})
 
 	t.Run("Update Non-Existent Document", func(t *testing.T) {
@@ -105,7 +110,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 	// 1. Watch with ResumeToken
 	t.Run("Watch with ResumeToken", func(t *testing.T) {
 		// Create a doc to generate an event
-		doc := types.NewDocument(tenant, "watch/resume", "watch", map[string]interface{}{"v": 1})
+		doc := types.NewStoredDoc(tenant, "watch", "resume", map[string]interface{}{"v": 1})
 		require.NoError(t, store.Create(ctx, tenant, doc))
 
 		// Start watching to get a token
@@ -143,7 +148,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		ch, err := store.Watch(ctx, "", "watch_global", nil, types.WatchOptions{})
 		require.NoError(t, err)
 
-		doc := types.NewDocument("tenant1", "watch_global/doc1", "watch_global", map[string]interface{}{"v": 1})
+		doc := types.NewStoredDoc("tenant1", "watch_global", "doc1", map[string]interface{}{"v": 1})
 		require.NoError(t, store.Create(ctx, "tenant1", doc))
 
 		select {
@@ -156,17 +161,19 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 
 	// 3. Watch Undelete (Update on soft-deleted)
 	t.Run("Watch Undelete", func(t *testing.T) {
-		path := "watch/undelete"
-		doc := types.NewDocument(tenant, path, "watch_undelete", map[string]interface{}{"v": 1})
+		collection := "watch_undelete"
+		docID := "doc1"
+		path := collection + "/" + docID
+		doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"v": 1})
 		require.NoError(t, store.Create(ctx, tenant, doc))
 		require.NoError(t, store.Delete(ctx, tenant, path, nil))
 
-		// Watch with IncludeBefore to catch the state transition
-		ch, err := store.Watch(ctx, tenant, "watch_undelete", nil, types.WatchOptions{IncludeBefore: true})
+		// Watch the collection (not the specific path) with IncludeBefore to catch the state transition
+		ch, err := store.Watch(ctx, tenant, collection, nil, types.WatchOptions{IncludeBefore: true})
 		require.NoError(t, err)
 
 		// Re-create (which is an update/replace on soft-deleted doc)
-		doc2 := types.NewDocument(tenant, path, "watch_undelete", map[string]interface{}{"v": 2})
+		doc2 := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"v": 2})
 		require.NoError(t, store.Create(ctx, tenant, doc2))
 
 		select {
@@ -179,11 +186,13 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 
 	// 4. Watch Real Delete
 	t.Run("Watch Real Delete", func(t *testing.T) {
-		path := "watch/real_delete"
-		doc := types.NewDocument(tenant, path, "watch_delete", nil)
+		collection := "watch"
+		docID := "real_delete"
+		path := collection + "/" + docID
+		doc := types.NewStoredDoc(tenant, collection, docID, nil)
 		require.NoError(t, store.Create(ctx, tenant, doc))
 
-		ch, err := store.Watch(ctx, tenant, "watch_delete", nil, types.WatchOptions{})
+		ch, err := store.Watch(ctx, tenant, collection, nil, types.WatchOptions{})
 		require.NoError(t, err)
 
 		// Perform hard delete using raw mongo client
@@ -234,8 +243,8 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		// Replace with soft-deleted before-state should yield create
 		change := changeStreamEvent{
 			OperationType:            "replace",
-			FullDocument:             &types.Document{TenantID: "t1", Collection: "c1"},
-			FullDocumentBeforeChange: &types.Document{Deleted: true},
+			FullDocument:             &types.StoredDoc{TenantID: "t1", Collection: "c1"},
+			FullDocumentBeforeChange: &types.StoredDoc{Deleted: true},
 			DocumentKey: struct {
 				ID string `bson:"_id"`
 			}{ID: "t1:path"},
@@ -250,8 +259,8 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		ds := store.(*documentStore)
 		change := changeStreamEvent{
 			OperationType:            "update",
-			FullDocumentBeforeChange: &types.Document{Deleted: true},
-			FullDocument:             &types.Document{TenantID: "t1", Collection: "c1"},
+			FullDocumentBeforeChange: &types.StoredDoc{Deleted: true},
+			FullDocument:             &types.StoredDoc{TenantID: "t1", Collection: "c1"},
 			DocumentKey: struct {
 				ID string `bson:"_id"`
 			}{ID: "t1:path"},
@@ -307,7 +316,7 @@ func (s *stubChangeStream) Next(ctx context.Context) bool {
 func (s *stubChangeStream) Decode(v any) error {
 	ce := v.(*changeStreamEvent)
 	ce.OperationType = "insert"
-	ce.FullDocument = &types.Document{TenantID: "tenant", Collection: "docs"}
+	ce.FullDocument = &types.StoredDoc{TenantID: "tenant", Collection: "docs"}
 	ce.DocumentKey = struct {
 		ID string `bson:"_id"`
 	}{ID: "tenant:docs/id"}

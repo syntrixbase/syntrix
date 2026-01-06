@@ -1,7 +1,7 @@
 package trigger
 
 import (
-	"github.com/codetrek/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 type Trigger = types.Trigger

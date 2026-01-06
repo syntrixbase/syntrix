@@ -1,4 +1,4 @@
-.PHONY: build run test clean
+.PHONY: build run test clean generate
 
 CLI_APP_NAME=syntrix-cli
 APP_NAME=syntrix
@@ -17,7 +17,7 @@ endif
 APP_BIN=$(BUILD_DIR)/$(APP_NAME)$(EXE_EXT)
 CLI_BIN=$(BUILD_DIR)/$(CLI_APP_NAME)$(EXE_EXT)
 
-build:
+build: generate
 	@$(MKDIR_P)
 	@echo "Building $(CLI_APP_NAME)..."
 	@go build -o $(CLI_BIN) ./cmd/syntrix-cli
@@ -45,3 +45,7 @@ coverage:
 clean:
 	@echo "Cleaning..."
 	@$(RM_RF)
+
+generate:
+	@echo "Running go generate..."
+	@go generate ./...

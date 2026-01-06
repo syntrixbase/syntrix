@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 // mockAuthService is a minimal AuthN stub for realtime tests.

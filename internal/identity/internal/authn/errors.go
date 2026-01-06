@@ -1,7 +1,7 @@
 package authn
 
 import (
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 var (

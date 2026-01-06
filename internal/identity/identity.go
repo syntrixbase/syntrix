@@ -1,11 +1,11 @@
 package identity
 
 import (
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/internal/identity/internal/authn"
-	"github.com/codetrek/syntrix/internal/identity/internal/authz"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity/internal/authn"
+	"github.com/syntrixbase/syntrix/internal/identity/internal/authz"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // Errors from authn

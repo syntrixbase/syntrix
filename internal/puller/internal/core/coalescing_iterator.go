@@ -1,15 +1,15 @@
 package core
 
 import (
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 )
 
 // CoalescingIterator wraps an iterator and coalesces events in batches.
 type CoalescingIterator struct {
 	source    events.Iterator
 	coalescer *buffer.Coalescer
-	buffer    []*events.ChangeEvent
+	buffer    []*events.StoreChangeEvent
 	index     int
 	err       error
 	batchSize int
@@ -71,7 +71,7 @@ func (i *CoalescingIterator) Next() bool {
 }
 
 // Event returns the current event.
-func (i *CoalescingIterator) Event() *events.ChangeEvent {
+func (i *CoalescingIterator) Event() *events.StoreChangeEvent {
 	if i.buffer != nil && i.index >= 0 && i.index < len(i.buffer) {
 		return i.buffer[i.index]
 	}

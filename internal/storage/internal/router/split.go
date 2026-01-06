@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 // SplitDocumentRouter routes read operations to replica and write operations to primary

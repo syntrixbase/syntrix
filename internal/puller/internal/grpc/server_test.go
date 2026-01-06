@@ -6,23 +6,23 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/core"
-	"github.com/codetrek/syntrix/internal/puller/internal/cursor"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // mockEventSource implements the EventSource interface for testing
 type mockEventSource struct {
-	handler func(ctx context.Context, backendName string, event *events.ChangeEvent) error
+	handler func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error
 }
 
-func (m *mockEventSource) SetEventHandler(handler func(ctx context.Context, backendName string, event *events.ChangeEvent) error) {
+func (m *mockEventSource) SetEventHandler(handler func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error) {
 	m.handler = handler
 }
 
-func (m *mockEventSource) EmitEvent(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+func (m *mockEventSource) EmitEvent(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 	if m.handler != nil {
 		return m.handler(ctx, backendName, event)
 	}
@@ -35,10 +35,10 @@ func (m *mockEventSource) Replay(ctx context.Context, after map[string]string, c
 
 type mockIterator struct{}
 
-func (m *mockIterator) Next() bool                 { return false }
-func (m *mockIterator) Event() *events.ChangeEvent { return nil }
-func (m *mockIterator) Err() error                 { return nil }
-func (m *mockIterator) Close() error               { return nil }
+func (m *mockIterator) Next() bool                      { return false }
+func (m *mockIterator) Event() *events.StoreChangeEvent { return nil }
+func (m *mockIterator) Err() error                      { return nil }
+func (m *mockIterator) Close() error                    { return nil }
 
 func TestNewServer(t *testing.T) {
 	t.Parallel()
@@ -97,18 +97,18 @@ func TestServer_ConvertEvent(t *testing.T) {
 	tests := []struct {
 		name    string
 		backend string
-		event   *events.ChangeEvent
+		event   *events.StoreChangeEvent
 		wantErr bool
 	}{
 		{
 			name:    "basic event",
 			backend: "backend-1",
-			event: &events.ChangeEvent{
+			event: &events.StoreChangeEvent{
 				EventID:  "evt-123",
 				TenantID: "tenant-1",
 				MgoColl:  "users",
 				MgoDocID: "doc-1",
-				OpType:   events.OperationInsert,
+				OpType:   events.StoreOperationInsert,
 				ClusterTime: events.ClusterTime{
 					T: 100,
 					I: 1,
@@ -120,19 +120,19 @@ func TestServer_ConvertEvent(t *testing.T) {
 		{
 			name:    "event with full document",
 			backend: "backend-2",
-			event: &events.ChangeEvent{
+			event: &events.StoreChangeEvent{
 				EventID:      "evt-456",
-				OpType:       events.OperationUpdate,
-				FullDocument: &storage.Document{Data: map[string]any{"name": "test", "value": 123}},
+				OpType:       events.StoreOperationUpdate,
+				FullDocument: &storage.StoredDoc{Data: map[string]any{"name": "test", "value": 123}},
 			},
 			wantErr: false,
 		},
 		{
 			name:    "event with update description",
 			backend: "backend-3",
-			event: &events.ChangeEvent{
+			event: &events.StoreChangeEvent{
 				EventID: "evt-789",
-				OpType:  events.OperationUpdate,
+				OpType:  events.StoreOperationUpdate,
 				UpdateDesc: &events.UpdateDescription{
 					UpdatedFields: map[string]any{"name": "new"},
 				},

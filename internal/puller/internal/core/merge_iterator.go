@@ -3,7 +3,7 @@ package core
 import (
 	"container/heap"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
 
 // MergeIterator merges multiple event iterators into a single ordered stream.
@@ -12,7 +12,7 @@ type MergeIterator struct {
 	iterators []events.Iterator
 	pq        priorityQueue
 	err       error
-	current   *events.ChangeEvent
+	current   *events.StoreChangeEvent
 }
 
 // NewMergeIterator creates a new MergeIterator.
@@ -74,7 +74,7 @@ func (mi *MergeIterator) Next() bool {
 }
 
 // Event returns the current event.
-func (mi *MergeIterator) Event() *events.ChangeEvent {
+func (mi *MergeIterator) Event() *events.StoreChangeEvent {
 	return mi.current
 }
 
@@ -96,7 +96,7 @@ func (mi *MergeIterator) Close() error {
 
 // priorityQueue implements heap.Interface
 type item struct {
-	event  *events.ChangeEvent
+	event  *events.StoreChangeEvent
 	iterID int
 }
 

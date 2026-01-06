@@ -12,10 +12,10 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/server"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Context keys for request-scoped values

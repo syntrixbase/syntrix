@@ -4,12 +4,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
-	triggertypes "github.com/codetrek/syntrix/internal/trigger/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // MockDocumentStore is a mock implementation of storage.DocumentStore
@@ -17,17 +16,17 @@ type MockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *MockDocumentStore) Create(ctx context.Context, tenant string, doc *storage.Document) error {
+func (m *MockDocumentStore) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
 	args := m.Called(ctx, tenant, doc)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Get(ctx context.Context, tenant, id string) (*storage.Document, error) {
+func (m *MockDocumentStore) Get(ctx context.Context, tenant, id string) (*storage.StoredDoc, error) {
 	args := m.Called(ctx, tenant, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(*storage.StoredDoc), args.Error(1)
 }
 
 func (m *MockDocumentStore) Update(ctx context.Context, tenant, id string, data map[string]interface{}, filters model.Filters) error {
@@ -45,12 +44,12 @@ func (m *MockDocumentStore) Delete(ctx context.Context, tenant, id string, pred 
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.Document, error) {
+func (m *MockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
 	args := m.Called(ctx, tenant, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*storage.Document), args.Error(1)
+	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
 }
 
 func (m *MockDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
@@ -91,7 +90,7 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 	mockPuller := new(MockPullerService)
 	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
 
-	checkpointDoc := &storage.Document{
+	checkpointDoc := &storage.StoredDoc{
 		Data: map[string]interface{}{"token": "resume-token"},
 	}
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(checkpointDoc, nil)
@@ -106,11 +105,12 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 	// Verify event conversion
 	go func() {
 		ch <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
+			Change: &events.StoreChangeEvent{
+				EventID:      "evt-doc1",
 				TenantID:     "tenant1",
-				OpType:       events.OperationInsert,
+				OpType:       events.StoreOperationInsert,
 				MgoDocID:     "doc1",
-				FullDocument: &storage.Document{Id: "doc1"},
+				FullDocument: &storage.StoredDoc{Id: "doc1"},
 			},
 			Progress: "next-token",
 		}
@@ -118,9 +118,9 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 	}()
 
 	evt := <-eventCh
-	assert.Equal(t, triggertypes.EventCreate, evt.Type)
-	assert.Equal(t, "doc1", evt.Id)
-	assert.Equal(t, "next-token", evt.ResumeToken)
+	assert.Equal(t, events.EventCreate, evt.Type)
+	assert.Equal(t, "evt-doc1", evt.Id) // Id comes from EventID, not MgoDocID
+	assert.Equal(t, "next-token", evt.Progress)
 
 	mockStore.AssertExpectations(t)
 	mockPuller.AssertExpectations(t)
@@ -161,24 +161,28 @@ func TestWatch_FilterTenant(t *testing.T) {
 	go func() {
 		// Wrong tenant
 		ch <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				TenantID: "tenant2",
-				OpType:   events.OperationInsert,
+			Change: &events.StoreChangeEvent{
+				EventID:      "evt-wrong",
+				TenantID:     "tenant2",
+				OpType:       events.StoreOperationInsert,
+				FullDocument: &storage.StoredDoc{Id: "wrong"},
 			},
 		}
 		// Correct tenant
 		ch <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				TenantID: "tenant1",
-				OpType:   events.OperationInsert,
-				MgoDocID: "doc1",
+			Change: &events.StoreChangeEvent{
+				EventID:      "evt-doc1",
+				TenantID:     "tenant1",
+				OpType:       events.StoreOperationInsert,
+				MgoDocID:     "doc1",
+				FullDocument: &storage.StoredDoc{Id: "doc1"},
 			},
 		}
 		close(ch)
 	}()
 
 	evt := <-eventCh
-	assert.Equal(t, "doc1", evt.Id)
+	assert.Equal(t, "evt-doc1", evt.Id) // Id comes from EventID
 
 	_, ok := <-eventCh
 	assert.False(t, ok)
@@ -275,41 +279,42 @@ func TestWatch_EventTypes(t *testing.T) {
 	go func() {
 		// Insert
 		pullerCh <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				MgoDocID: "doc1", TenantID: "tenant1", OpType: events.OperationInsert,
-				FullDocument: &storage.Document{Id: "doc1", Data: map[string]interface{}{"a": 1}},
+			Change: &events.StoreChangeEvent{
+				EventID: "evt-doc1", MgoDocID: "doc1", TenantID: "tenant1", OpType: events.StoreOperationInsert,
+				FullDocument: &storage.StoredDoc{Id: "doc1", Data: map[string]interface{}{"a": 1}},
 			},
 			Progress: "t1",
 		}
 		// Update
 		pullerCh <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				MgoDocID: "doc2", TenantID: "tenant1", OpType: events.OperationUpdate,
-				FullDocument: &storage.Document{Id: "doc2", Data: map[string]interface{}{"a": 2}},
+			Change: &events.StoreChangeEvent{
+				EventID: "evt-doc2", MgoDocID: "doc2", TenantID: "tenant1", OpType: events.StoreOperationUpdate,
+				FullDocument: &storage.StoredDoc{Id: "doc2", Data: map[string]interface{}{"a": 2}},
 			},
 			Progress: "t2",
 		}
-		// Delete
+		// Hard Delete - will be ignored by Transform (returns ErrDeleteOPIgnored)
+		// So we don't expect to receive this event
 		pullerCh <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				MgoDocID: "doc3", TenantID: "tenant1", OpType: events.OperationDelete,
+			Change: &events.StoreChangeEvent{
+				EventID: "evt-doc3", MgoDocID: "doc3", TenantID: "tenant1", OpType: events.StoreOperationDelete,
 				MgoColl: "users",
 			},
 			Progress: "t3",
 		}
-		// Soft Delete (Update with Deleted=true)
+		// Soft Delete (Update with Deleted=true) - transforms to EventDelete
 		pullerCh <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				MgoDocID: "doc4", TenantID: "tenant1", OpType: events.OperationUpdate,
-				FullDocument: &storage.Document{Id: "doc4", Deleted: true},
+			Change: &events.StoreChangeEvent{
+				EventID: "evt-doc4", MgoDocID: "doc4", TenantID: "tenant1", OpType: events.StoreOperationUpdate,
+				FullDocument: &storage.StoredDoc{Id: "doc4", Deleted: true},
 			},
 			Progress: "t4",
 		}
-		// Replace
+		// Replace - transforms to EventCreate (recreate after soft delete)
 		pullerCh <- &events.PullerEvent{
-			Change: &events.ChangeEvent{
-				MgoDocID: "doc5", TenantID: "tenant1", OpType: events.OperationReplace,
-				FullDocument: &storage.Document{Id: "doc5", Data: map[string]interface{}{"b": 1}},
+			Change: &events.StoreChangeEvent{
+				EventID: "evt-doc5", MgoDocID: "doc5", TenantID: "tenant1", OpType: events.StoreOperationReplace,
+				FullDocument: &storage.StoredDoc{Id: "doc5", Data: map[string]interface{}{"b": 1}},
 			},
 			Progress: "t5",
 		}
@@ -318,35 +323,29 @@ func TestWatch_EventTypes(t *testing.T) {
 
 	// Verify Insert
 	evt1 := <-eventCh
-	assert.Equal(t, triggertypes.EventCreate, evt1.Type)
-	assert.Equal(t, "doc1", evt1.Id)
+	assert.Equal(t, events.EventCreate, evt1.Type)
+	assert.Equal(t, "evt-doc1", evt1.Id)
 	assert.NotNil(t, evt1.Document)
 
 	// Verify Update
 	evt2 := <-eventCh
-	assert.Equal(t, triggertypes.EventUpdate, evt2.Type)
-	assert.Equal(t, "doc2", evt2.Id)
+	assert.Equal(t, events.EventUpdate, evt2.Type)
+	assert.Equal(t, "evt-doc2", evt2.Id)
 	assert.NotNil(t, evt2.Document)
-	// assert.NotNil(t, evt2.Before) // Before is not available for updates in Puller events yet
 
-	// Verify Delete
-	evt3 := <-eventCh
-	assert.Equal(t, triggertypes.EventDelete, evt3.Type)
-	assert.Equal(t, "doc3", evt3.Id)
-	assert.Nil(t, evt3.Document)
-	assert.NotNil(t, evt3.Before)
-	assert.Equal(t, "users", evt3.Before.Collection)
+	// Note: Hard DELETE (StoreOperationDelete) is ignored by Transform
+	// Syntrix uses soft delete, so hard deletes are not exposed to triggers
 
-	// Verify Soft Delete
+	// Verify Soft Delete (UPDATE with Deleted=true -> EventDelete)
 	evt4 := <-eventCh
-	assert.Equal(t, triggertypes.EventDelete, evt4.Type)
-	assert.Equal(t, "doc4", evt4.Id)
+	assert.Equal(t, events.EventDelete, evt4.Type)
+	assert.Equal(t, "evt-doc4", evt4.Id)
 	assert.NotNil(t, evt4.Document)
 	assert.True(t, evt4.Document.Deleted)
 
-	// Verify Replace
+	// Verify Replace -> EventCreate
 	evt5 := <-eventCh
-	assert.Equal(t, triggertypes.EventCreate, evt5.Type)
-	assert.Equal(t, "doc5", evt5.Id)
+	assert.Equal(t, events.EventCreate, evt5.Type)
+	assert.Equal(t, "evt-doc5", evt5.Id)
 	assert.NotNil(t, evt5.Document)
 }

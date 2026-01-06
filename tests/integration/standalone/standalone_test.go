@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/server"
-	"github.com/codetrek/syntrix/internal/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/services"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

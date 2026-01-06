@@ -6,8 +6,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/gorilla/schema"
 )
@@ -92,7 +93,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := validateCollection(collection); err != nil {
+	if err := helper.CheckCollectionPath(collection); err != nil {
 		log.Println("[Warning][Push] invalid collection:", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid collection")
 		return
@@ -133,8 +134,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 			continue // Skip invalid
 		}
 
-		id := collection + "/" + docID
-		doc := storage.NewDocument(tenant, id, collection, docData)
+		doc := storage.NewStoredDoc(tenant, collection, docID, docData)
 		doc.Version = version
 
 		if change.Action == "delete" {
@@ -142,7 +142,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		}
 
 		changes = append(changes, storage.ReplicationPushChange{
-			Doc: doc,
+			Doc: &doc,
 		})
 	}
 

@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // natsPublisher implements TaskPublisher using NATS JetStream.

@@ -8,10 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 // TestAuthorized_GetDocumentError covers the case where GetDocument returns an error other than ErrNotFound

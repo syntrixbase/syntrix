@@ -3,8 +3,8 @@ package rest
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestFlattenDocument(t *testing.T) {
@@ -14,7 +14,7 @@ func TestFlattenDocument(t *testing.T) {
 	})
 
 	t.Run("Deleted Document", func(t *testing.T) {
-		doc := &storage.Document{
+		doc := &storage.StoredDoc{
 			Fullpath:   "test/1",
 			Collection: "test",
 			Data:       map[string]interface{}{"foo": "bar"},
@@ -27,7 +27,7 @@ func TestFlattenDocument(t *testing.T) {
 	})
 
 	t.Run("Normal Document", func(t *testing.T) {
-		doc := &storage.Document{
+		doc := &storage.StoredDoc{
 			Fullpath:   "test/1",
 			Collection: "test",
 			Data:       map[string]interface{}{"foo": "bar"},
@@ -43,7 +43,7 @@ func TestFlattenDocument(t *testing.T) {
 	})
 
 	t.Run("ID in Data", func(t *testing.T) {
-		doc := &storage.Document{
+		doc := &storage.StoredDoc{
 			Fullpath:   "test/1",
 			Collection: "test",
 			Data:       map[string]interface{}{"id": "custom_id"},

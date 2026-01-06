@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/cursor"
-	"github.com/codetrek/syntrix/internal/puller/internal/recovery"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/recovery"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -45,7 +45,7 @@ func TestPuller_SetEventHandler(t *testing.T) {
 	p := New(config.PullerConfig{}, nil)
 
 	called := false
-	handler := func(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+	handler := func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 		called = true
 		return nil
 	}
@@ -57,7 +57,7 @@ func TestPuller_SetEventHandler(t *testing.T) {
 	}
 
 	// Verify handler can be called
-	_ = p.eventHandler(context.Background(), "test", &events.ChangeEvent{})
+	_ = p.eventHandler(context.Background(), "test", &events.StoreChangeEvent{})
 	if !called {
 		t.Error("eventHandler should have been called")
 	}
@@ -127,7 +127,7 @@ func TestPuller_Subscribe_SendsEvents(t *testing.T) {
 	}
 
 	// Send an event through the handler
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID: "test-event-1",
 		MgoColl: "test",
 	}
@@ -156,7 +156,7 @@ func TestPuller_Subscribe_NonBlocking(t *testing.T) {
 	}
 
 	// When channel is not full, handler should return nil (event sent)
-	evt := &events.ChangeEvent{EventID: "test"}
+	evt := &events.StoreChangeEvent{EventID: "test"}
 	p.subs.Broadcast(evt)
 }
 
@@ -169,12 +169,12 @@ func TestPuller_Subscribe_ChannelFull(t *testing.T) {
 
 	// Fill the channel (buffer size is 1000)
 	for i := 0; i < 1000; i++ {
-		evt := &events.ChangeEvent{EventID: "test"}
+		evt := &events.StoreChangeEvent{EventID: "test"}
 		p.subs.Broadcast(evt)
 	}
 
 	// The channel should be full now, sending more should not block
-	evt := &events.ChangeEvent{EventID: "overflow"}
+	evt := &events.StoreChangeEvent{EventID: "overflow"}
 	p.subs.Broadcast(evt)
 
 	// Drain channel to avoid leaks
@@ -312,7 +312,7 @@ func TestPuller_watchChangeStream_ProcessesEvent(t *testing.T) {
 	backend := p.backends["backend1"]
 
 	var handled atomic.Int32
-	p.SetEventHandler(func(ctx context.Context, backendName string, evt *events.ChangeEvent) error {
+	p.SetEventHandler(func(ctx context.Context, backendName string, evt *events.StoreChangeEvent) error {
 		handled.Add(1)
 		return nil
 	})

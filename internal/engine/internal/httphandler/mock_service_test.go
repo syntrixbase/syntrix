@@ -3,8 +3,8 @@ package httphandler
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/mock"
 )

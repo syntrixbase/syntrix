@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 func TestClient_HandleMessage_Unauthenticated(t *testing.T) {

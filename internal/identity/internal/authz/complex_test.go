@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestEngine_ComplexScenarios(t *testing.T) {

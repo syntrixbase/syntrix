@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/cursor"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
 )
 
 // Subscriber represents an active subscription to the event stream.
@@ -33,7 +33,7 @@ type Subscriber struct {
 	done chan struct{}
 
 	// ch receives events for this subscriber.
-	ch chan *events.ChangeEvent
+	ch chan *events.StoreChangeEvent
 
 	// overflow indicates if the subscriber channel has overflowed.
 	overflow bool
@@ -58,7 +58,7 @@ func NewSubscriber(id string, after *cursor.ProgressMarker, coalesceOnCatchUp bo
 		done:              make(chan struct{}),
 		// Increase buffer size to handle transient spikes and avoid flapping between live and catchup modes.
 		// 10000 events * ~1KB/event ~= 10MB memory per subscriber.
-		ch: make(chan *events.ChangeEvent, channelSize),
+		ch: make(chan *events.StoreChangeEvent, channelSize),
 	}
 }
 
@@ -105,7 +105,7 @@ func (s *Subscriber) CurrentProgress() *cursor.ProgressMarker {
 }
 
 // Events returns the channel of events for this subscriber.
-func (s *Subscriber) Events() <-chan *events.ChangeEvent {
+func (s *Subscriber) Events() <-chan *events.StoreChangeEvent {
 	return s.ch
 }
 
@@ -195,7 +195,7 @@ func (m *SubscriberManager) CloseAll() {
 }
 
 // Broadcast sends an event to all subscribers.
-func (m *SubscriberManager) Broadcast(be *events.ChangeEvent) {
+func (m *SubscriberManager) Broadcast(be *events.StoreChangeEvent) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for id, sub := range m.subscribers {

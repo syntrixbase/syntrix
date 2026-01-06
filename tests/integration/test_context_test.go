@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/services"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/services"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

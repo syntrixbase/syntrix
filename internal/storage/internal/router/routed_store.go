@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // RoutedDocumentStore implements DocumentStore by routing operations
@@ -17,7 +17,7 @@ func NewRoutedDocumentStore(router types.DocumentRouter) types.DocumentStore {
 	return &RoutedDocumentStore{router: router}
 }
 
-func (s *RoutedDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.Document, error) {
+func (s *RoutedDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.StoredDoc, error) {
 	store, err := s.router.Select(tenant, types.OpRead)
 	if err != nil {
 		return nil, err
@@ -25,7 +25,7 @@ func (s *RoutedDocumentStore) Get(ctx context.Context, tenant string, path strin
 	return store.Get(ctx, tenant, path)
 }
 
-func (s *RoutedDocumentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+func (s *RoutedDocumentStore) Create(ctx context.Context, tenant string, doc types.StoredDoc) error {
 	store, err := s.router.Select(tenant, types.OpWrite)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func (s *RoutedDocumentStore) Delete(ctx context.Context, tenant string, path st
 	return store.Delete(ctx, tenant, path, pred)
 }
 
-func (s *RoutedDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+func (s *RoutedDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.StoredDoc, error) {
 	store, err := s.router.Select(tenant, types.OpRead)
 	if err != nil {
 		return nil, err

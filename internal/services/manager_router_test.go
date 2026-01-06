@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Mocks
@@ -51,14 +51,14 @@ type mockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *mockDocumentStore) Get(ctx context.Context, tenant, path string) (*types.Document, error) {
+func (m *mockDocumentStore) Get(ctx context.Context, tenant, path string) (*types.StoredDoc, error) {
 	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.Document), args.Error(1)
+	return args.Get(0).(*types.StoredDoc), args.Error(1)
 }
-func (m *mockDocumentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+func (m *mockDocumentStore) Create(ctx context.Context, tenant string, doc types.StoredDoc) error {
 	return m.Called(ctx, tenant, doc).Error(0)
 }
 func (m *mockDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
@@ -70,9 +70,9 @@ func (m *mockDocumentStore) Patch(ctx context.Context, tenant, path string, data
 func (m *mockDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
 	return m.Called(ctx, tenant, path, pred).Error(0)
 }
-func (m *mockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+func (m *mockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.StoredDoc, error) {
 	args := m.Called(ctx, tenant, q)
-	return args.Get(0).([]*types.Document), args.Error(1)
+	return args.Get(0).([]*types.StoredDoc), args.Error(1)
 }
 func (m *mockDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
 	args := m.Called(ctx, tenant, collection, resumeToken, opts)
@@ -170,7 +170,7 @@ func TestManager_Init_RouterWiring(t *testing.T) {
 	// For now, just checking not nil is a basic check.
 	// To be more rigorous, we could call a method and see if it hits the mock.
 
-	mockDocStore.On("Get", mock.Anything, "default", "test").Return(&types.Document{}, nil)
+	mockDocStore.On("Get", mock.Anything, "default", "test").Return(&types.StoredDoc{}, nil)
 	_, _ = mgr.docStore.Get(context.Background(), "default", "test")
 	mockDocStore.AssertCalled(t, "Get", mock.Anything, "default", "test")
 }

@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {

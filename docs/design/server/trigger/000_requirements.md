@@ -17,7 +17,7 @@
 ## Non-Goals
 
 - Changing business semantics of trigger evaluation, retry math, or CEL language.
-- Reworking storage.Event or storage.Document shapes.
+- Reworking storage.Event or storage.StoredDoc shapes.
 - Introducing new external dependencies.
 
 ## Constraints

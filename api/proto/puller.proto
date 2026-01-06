@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package syntrix.puller.v1;
 
-option go_package = "github.com/codetrek/syntrix/api/puller/v1;pullerv1";
+option go_package = "github.com/syntrixbase/syntrix/api/gen/puller/v1;pullerv1";
 
 // PullerService provides access to the merged event stream from all backends.
 // Consumers subscribe to events and manage their own progress.
@@ -57,7 +57,7 @@ message ChangeEvent {
   // Operation type: "insert", "update", "replace", or "delete".
   string op_type = 5;
 
-  // Full document after the change (JSON encoded storage.Document).
+  // Full document after the change (JSON encoded storage.StoredDoc).
   // Empty for delete operations.
   bytes full_doc = 6;
 

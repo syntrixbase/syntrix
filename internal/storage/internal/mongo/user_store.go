@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 	"github.com/zeebo/blake3"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"

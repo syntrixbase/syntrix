@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/trigger"
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 func TestLoadTriggers(t *testing.T) {
@@ -56,22 +57,22 @@ func TestStart(t *testing.T) {
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
 	// Setup watcher channel
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
 	// Setup event
-	evt := types.TriggerEvent{
-		Type: types.EventCreate,
-		Document: &storage.Document{
+	evt := events.SyntrixChangeEvent{
+		Type: events.EventCreate,
+		Document: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users",
 			Data:       map[string]interface{}{"foo": "bar"},
 		},
-		ResumeToken: "token1",
+		Progress: "token1",
 	}
 
 	// Expect evaluation
-	mockEvaluator.On("Evaluate", mock.Anything, trig, &evt).Return(true, nil)
+	mockEvaluator.On("Evaluate", mock.Anything, trig, evt).Return(true, nil)
 
 	// Expect publish
 	mockPublisher.On("Publish", mock.Anything, mock.MatchedBy(func(task *types.DeliveryTask) bool {
@@ -150,13 +151,13 @@ func TestStart_EvaluateError(t *testing.T) {
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
 	// Setup watcher channel
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
 	// Setup event
-	evt := types.TriggerEvent{
-		Type: types.EventCreate,
-		Document: &storage.Document{
+	evt := events.SyntrixChangeEvent{
+		Type: events.EventCreate,
+		Document: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users",
 			Data:       map[string]interface{}{"foo": "bar"},
@@ -164,7 +165,7 @@ func TestStart_EvaluateError(t *testing.T) {
 	}
 
 	// Expect evaluation error
-	mockEvaluator.On("Evaluate", mock.Anything, trig, &evt).Return(false, assert.AnError)
+	mockEvaluator.On("Evaluate", mock.Anything, trig, mock.AnythingOfType("events.SyntrixChangeEvent")).Return(false, assert.AnError)
 
 	// Run Start in background
 	ctx, cancel := context.WithCancel(context.Background())
@@ -201,12 +202,12 @@ func TestStart_NilDocumentAndBefore(t *testing.T) {
 	}
 
 	// Setup watcher channel
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
 	// Setup event with nil Document and Before
-	evt := types.TriggerEvent{
-		Type:     types.EventDelete,
+	evt := events.SyntrixChangeEvent{
+		Type:     events.EventDelete,
 		Document: nil,
 		Before:   nil,
 	}
@@ -255,19 +256,19 @@ func TestStart_PublishError(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
-	evt := types.TriggerEvent{
-		Type: types.EventCreate,
-		Document: &storage.Document{
+	evt := events.SyntrixChangeEvent{
+		Type: events.EventCreate,
+		Document: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users",
 			Data:       map[string]interface{}{"foo": "bar"},
 		},
 	}
 
-	mockEvaluator.On("Evaluate", mock.Anything, trig, &evt).Return(true, nil)
+	mockEvaluator.On("Evaluate", mock.Anything, trig, mock.AnythingOfType("events.SyntrixChangeEvent")).Return(true, nil)
 	mockPublisher.On("Publish", mock.Anything, mock.Anything).Return(assert.AnError)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -307,20 +308,20 @@ func TestStart_SaveCheckpointError(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
-	evt := types.TriggerEvent{
-		Type: types.EventCreate,
-		Document: &storage.Document{
+	evt := events.SyntrixChangeEvent{
+		Type: events.EventCreate,
+		Document: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users",
 			Data:       map[string]interface{}{"foo": "bar"},
 		},
-		ResumeToken: "token1",
+		Progress: "token1",
 	}
 
-	mockEvaluator.On("Evaluate", mock.Anything, trig, &evt).Return(false, nil)
+	mockEvaluator.On("Evaluate", mock.Anything, trig, mock.AnythingOfType("events.SyntrixChangeEvent")).Return(false, nil)
 	mockWatcher.On("SaveCheckpoint", mock.Anything, "token1").Return(assert.AnError)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -360,21 +361,21 @@ func TestStart_BeforeOnlyEvent(t *testing.T) {
 	}
 	e.LoadTriggers([]*trigger.Trigger{trig})
 
-	eventCh := make(chan types.TriggerEvent)
-	mockWatcher.On("Watch", mock.Anything).Return((<-chan types.TriggerEvent)(eventCh), nil)
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
 
 	// Delete event with only Before (Document is nil)
-	evt := types.TriggerEvent{
-		Type:     types.EventDelete,
+	evt := events.SyntrixChangeEvent{
+		Type:     events.EventDelete,
 		Document: nil,
-		Before: &storage.Document{
+		Before: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users",
 			Data:       map[string]interface{}{"foo": "bar"},
 		},
 	}
 
-	mockEvaluator.On("Evaluate", mock.Anything, trig, &evt).Return(true, nil)
+	mockEvaluator.On("Evaluate", mock.Anything, trig, mock.AnythingOfType("events.SyntrixChangeEvent")).Return(true, nil)
 	mockPublisher.On("Publish", mock.Anything, mock.MatchedBy(func(task *types.DeliveryTask) bool {
 		return task.DocumentID == "doc1" && task.Collection == "users"
 	})).Return(nil)

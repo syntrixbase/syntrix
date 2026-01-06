@@ -3,8 +3,8 @@ package types
 import (
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // ContextKey is used for storing identity data in the request context.

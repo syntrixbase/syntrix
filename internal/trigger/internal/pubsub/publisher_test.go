@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/trigger"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 type MockJetStream struct {

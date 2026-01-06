@@ -3,11 +3,11 @@ package pubsub
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 func TestNewTaskConsumer_NilConn(t *testing.T) {

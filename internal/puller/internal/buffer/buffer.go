@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/codetrek/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -138,7 +138,7 @@ func NewForBackend(basePath, backendName string, logger *slog.Logger) (*Buffer, 
 }
 
 // Write stores an event and updates the checkpoint in the same batch.
-func (b *Buffer) Write(evt *events.ChangeEvent, token bson.Raw) error {
+func (b *Buffer) Write(evt *events.StoreChangeEvent, token bson.Raw) error {
 	b.mu.RLock()
 	if b.closed {
 		b.mu.RUnlock()
@@ -174,7 +174,7 @@ func (b *Buffer) Write(evt *events.ChangeEvent, token bson.Raw) error {
 }
 
 // Read retrieves an event by its buffer key.
-func (b *Buffer) Read(key string) (*events.ChangeEvent, error) {
+func (b *Buffer) Read(key string) (*events.StoreChangeEvent, error) {
 	b.mu.RLock()
 	if b.closed {
 		b.mu.RUnlock()
@@ -191,7 +191,7 @@ func (b *Buffer) Read(key string) (*events.ChangeEvent, error) {
 	}
 	defer closer.Close()
 
-	var evt events.ChangeEvent
+	var evt events.StoreChangeEvent
 	if err := json.Unmarshal(value, &evt); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal event: %w", err)
 	}
@@ -205,7 +205,7 @@ type Iterator interface {
 	Next() bool
 
 	// Event returns the current event.
-	Event() *events.ChangeEvent
+	Event() *events.StoreChangeEvent
 
 	// Key returns the current buffer key.
 	Key() string
@@ -219,7 +219,7 @@ type Iterator interface {
 
 type bufferIterator struct {
 	iter  *pebble.Iterator
-	evt   *events.ChangeEvent
+	evt   *events.StoreChangeEvent
 	key   string
 	err   error
 	first bool
@@ -250,7 +250,7 @@ func (i *bufferIterator) Next() bool {
 		i.key = string(i.iter.Key())
 		value := i.iter.Value()
 
-		var evt events.ChangeEvent
+		var evt events.StoreChangeEvent
 		if err := json.Unmarshal(value, &evt); err != nil {
 			i.err = fmt.Errorf("failed to unmarshal event: %w", err)
 			return false
@@ -261,7 +261,7 @@ func (i *bufferIterator) Next() bool {
 	}
 }
 
-func (i *bufferIterator) Event() *events.ChangeEvent {
+func (i *bufferIterator) Event() *events.StoreChangeEvent {
 	return i.evt
 }
 

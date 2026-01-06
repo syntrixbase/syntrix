@@ -8,7 +8,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // CSPClient provides HTTP-based access to a remote CSP service.

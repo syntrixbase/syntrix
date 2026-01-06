@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // MockAuth is a flexible mock for identity.AuthN
@@ -322,7 +322,7 @@ func TestHub_Broadcast_SlowClient_Drop(t *testing.T) {
 	// Broadcast event
 	event := storage.Event{
 		Type: storage.EventCreate,
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "1",
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "test"},
@@ -546,7 +546,7 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	hub.broadcast <- storage.Event{
 		Type: storage.EventCreate,
 		Id:   "test/1",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Collection: "test",
 			Data:       map[string]interface{}{"a": 1},
 		},

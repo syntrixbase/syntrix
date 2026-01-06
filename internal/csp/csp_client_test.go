@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestNewCSPClient(t *testing.T) {

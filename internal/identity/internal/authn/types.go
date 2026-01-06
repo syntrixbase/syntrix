@@ -1,8 +1,8 @@
 package authn
 
 import (
-	identtypes "github.com/codetrek/syntrix/internal/identity/types"
-	"github.com/codetrek/syntrix/internal/storage"
+	identtypes "github.com/syntrixbase/syntrix/internal/identity/types"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // Directly reuse public identity types to avoid duplicate definitions and adapters.

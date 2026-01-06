@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -37,9 +37,9 @@ func New() *Normalizer {
 }
 
 // Normalize converts a RawEvent to a ChangeEvent.
-func (n *Normalizer) Normalize(raw *RawEvent) (*events.ChangeEvent, error) {
+func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) {
 	// Extract operation type
-	opType := events.OperationType(raw.OperationType)
+	opType := events.StoreOperationType(raw.OperationType)
 	if !opType.IsValid() {
 		return nil, fmt.Errorf("unknown operation type: %s", raw.OperationType)
 	}
@@ -51,21 +51,21 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.ChangeEvent, error) {
 	}
 
 	// Convert full document
-	var fullDoc *storage.Document
+	var fullDoc *storage.StoredDoc
 	if raw.FullDocument != nil {
-		// Marshal/Unmarshal to convert bson.M to storage.Document
+		// Marshal/Unmarshal to convert bson.M to storage.StoredDoc
 		data, err := bson.Marshal(raw.FullDocument)
 		if err != nil {
 			return nil, fmt.Errorf("failed to marshal fullDocument: %w", err)
 		}
-		fullDoc = &storage.Document{}
+		fullDoc = &storage.StoredDoc{}
 		if err := bson.Unmarshal(data, fullDoc); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal fullDocument to storage.Document: %w", err)
+			return nil, fmt.Errorf("failed to unmarshal fullDocument to storage.StoredDoc: %w", err)
 		}
 	}
 
 	// Enforce fullDocument for update/replace
-	if (opType == events.OperationUpdate || opType == events.OperationReplace) && fullDoc == nil {
+	if (opType == events.StoreOperationUpdate || opType == events.StoreOperationReplace) && fullDoc == nil {
 		return nil, fmt.Errorf("fullDocument missing for %s operation (UpdateLookup required)", opType)
 	}
 
@@ -79,7 +79,7 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.ChangeEvent, error) {
 	eventID := generateEventID(raw.ClusterTime, raw.Namespace.Coll, docID)
 
 	// Create change event
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:      eventID,
 		TenantID:     tenantID,
 		MgoColl:      raw.Namespace.Coll,

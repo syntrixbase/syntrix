@@ -10,10 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/trigger/internal/worker"
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/worker"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // DefaultChannelBufferSize is the default buffer size for worker channels.

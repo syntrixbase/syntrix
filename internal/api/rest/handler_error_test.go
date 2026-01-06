@@ -8,10 +8,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // TestAuthHandlerErrors covers error paths in handler_auth.go

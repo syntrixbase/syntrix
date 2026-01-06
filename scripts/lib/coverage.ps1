@@ -9,7 +9,7 @@ $content = Get-Content $env:TMPFILE
 $ok = $content |
     Where-Object { $_ -match '^ok' } |
     Where-Object { $_ -notmatch '^ok\s+tests/' } |
-    ForEach-Object { $_ -replace 'of statements', '' -replace 'github.com/codetrek/syntrix/', '' }
+    ForEach-Object { $_ -replace 'of statements', '' -replace 'github.com/syntrixbase/syntrix/', '' }
 
 $ok |
     Where-Object { $_ -match 'coverage:\s+\d+(\.\d+)?%' } |
@@ -21,7 +21,7 @@ $ok |
 
 $other = $content |
     Where-Object { $_ -notmatch '^ok' } |
-    ForEach-Object { $_ -replace 'github.com/codetrek/syntrix/', '' }
+    ForEach-Object { $_ -replace 'github.com/syntrixbase/syntrix/', '' }
 
 $other | ForEach-Object { $_ }
 
@@ -49,7 +49,7 @@ if ($Mode -ieq 'detail') {
     Write-Output ('-'*97)
 
     $funcData = go tool cover -func="$CoverProfile" |
-        ForEach-Object { $_ -replace 'github.com/codetrek/syntrix/', '' }
+        ForEach-Object { $_ -replace 'github.com/syntrixbase/syntrix/', '' }
 
     $count100 = 0
     $count95to100 = 0

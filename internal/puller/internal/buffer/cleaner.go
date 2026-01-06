@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
 
 // Cleaner periodically removes old events from the buffer.

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 var (
@@ -38,8 +38,8 @@ type RevokedToken struct {
 	RevokedAt time.Time `bson:"revoked_at"`
 }
 
-// Document represents a stored document in the database
-type Document struct {
+// StoredDoc represents a stored document in the database
+type StoredDoc struct {
 	// Id is the unique identifier for the document, tenant_id:hash(fullpath)
 	Id string `json:"id" bson:"_id"`
 
@@ -82,10 +82,10 @@ type WatchOptions struct {
 // DocumentStore defines the interface for document storage operations
 type DocumentStore interface {
 	// Get retrieves a document by its path
-	Get(ctx context.Context, tenant string, path string) (*Document, error)
+	Get(ctx context.Context, tenant string, path string) (*StoredDoc, error)
 
 	// Create inserts a new document. Fails if it already exists.
-	Create(ctx context.Context, tenant string, doc *Document) error
+	Create(ctx context.Context, tenant string, doc StoredDoc) error
 
 	// Update updates an existing document.
 	// If pred is provided, it performs a CAS (Compare-And-Swap) operation.
@@ -99,7 +99,7 @@ type DocumentStore interface {
 	Delete(ctx context.Context, tenant string, path string, pred model.Filters) error
 
 	// Query executes a complex query
-	Query(ctx context.Context, tenant string, q model.Query) ([]*Document, error)
+	Query(ctx context.Context, tenant string, q model.Query) ([]*StoredDoc, error)
 
 	// Watch returns a channel of events for a given collection (or all if empty).
 	// resumeToken can be nil to start from now.
@@ -189,8 +189,8 @@ type Event struct {
 	Id          string      `json:"id"`
 	TenantID    string      `json:"tenantId"`
 	Type        EventType   `json:"type"`
-	Document    *Document   `json:"document,omitempty"` // Nil for delete
-	Before      *Document   `json:"before,omitempty"`   // Previous state, if available
+	Document    *StoredDoc  `json:"document,omitempty"` // Nil for delete
+	Before      *StoredDoc  `json:"before,omitempty"`   // Previous state, if available
 	Timestamp   int64       `json:"timestamp"`
 	ResumeToken interface{} `json:"-"` // Opaque token for resuming watch
 }
@@ -204,14 +204,14 @@ type ReplicationPullRequest struct {
 
 // ReplicationPullResponse represents the response for a pull request
 type ReplicationPullResponse struct {
-	Documents  []*Document `json:"documents"`
-	Checkpoint int64       `json:"checkpoint"`
+	Documents  []*StoredDoc `json:"documents"`
+	Checkpoint int64        `json:"checkpoint"`
 }
 
 // ReplicationPushChange represents a single change in a push request
 type ReplicationPushChange struct {
-	Doc         *Document `json:"doc"`
-	BaseVersion *int64    `json:"baseVersion"` // Version known to the client
+	Doc         *StoredDoc `json:"doc"`
+	BaseVersion *int64     `json:"baseVersion"` // Version known to the client
 }
 
 // ReplicationPushRequest represents a request to push changes
@@ -222,5 +222,5 @@ type ReplicationPushRequest struct {
 
 // ReplicationPushResponse represents the response for a push request
 type ReplicationPushResponse struct {
-	Conflicts []*Document `json:"conflicts"`
+	Conflicts []*StoredDoc `json:"conflicts"`
 }

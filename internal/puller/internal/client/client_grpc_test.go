@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	"google.golang.org/grpc"
 )
 

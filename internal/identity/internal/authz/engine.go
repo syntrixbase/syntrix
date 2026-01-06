@@ -10,9 +10,9 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/checker/decls"

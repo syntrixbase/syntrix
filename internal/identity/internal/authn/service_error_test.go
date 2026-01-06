@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/config"
 )
 
 func TestValidateToken_ErrorPaths(t *testing.T) {

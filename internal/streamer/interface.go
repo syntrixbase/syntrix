@@ -1,0 +1,83 @@
+// Package streamer provides centralized fan-out and subscription matching.
+// It replaces the pull-based CSP package with a subscription-based model.
+package streamer
+
+import (
+	"context"
+
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+)
+
+// Service is the Streamer service interface.
+// Both local implementation and gRPC client implement this interface,
+// enabling single-process mode without network or serialization overhead.
+type Service interface {
+	// Stream establishes a bidirectional stream for subscriptions and events.
+	// Used by Gateway to register interest and receive updates.
+	Stream(ctx context.Context) (Stream, error)
+}
+
+// Stream is a bidirectional stream for Gateway <-> Streamer communication.
+// This interface abstracts the underlying transport (local or gRPC).
+//
+// Usage:
+//
+//	stream, _ := service.Stream(ctx)
+//	defer stream.Close()
+//	subID, _ := stream.Subscribe("tenant1", "users", []Filter{{Field: "status", Op: "eq", Value: "active"}})
+//	for {
+//	    delivery, err := stream.Recv()
+//	    if err != nil { break }
+//	    // process delivery.Event
+//	}
+type Stream interface {
+	// Subscribe creates a new subscription for the specified tenant and collection.
+	// Returns the subscription ID on success.
+	// For document ID match, use Filter{Field: "id", Op: "eq", Value: docID}.
+	Subscribe(tenant, collection string, filters []Filter) (subscriptionID string, err error)
+
+	// Unsubscribe removes a subscription by ID.
+	Unsubscribe(subscriptionID string) error
+
+	// Recv receives an EventDelivery from the Streamer.
+	// Blocks until an event is available or an error occurs.
+	// Returns io.EOF when the stream is closed.
+	Recv() (*EventDelivery, error)
+
+	// Close closes the stream and releases resources.
+	Close() error
+}
+
+// StreamerServer is the server-side interface for managing the Streamer service.
+// This extends Service with lifecycle operations.
+type StreamerServer interface {
+	Service
+
+	// Start begins the streamer service, connecting to Puller and
+	// processing events.
+	Start(ctx context.Context) error
+
+	// Stop gracefully shuts down the streamer service.
+	Stop(ctx context.Context) error
+}
+
+// EventProcessor is an internal interface for processing events from Puller.
+// This is implemented by streamerService and used by PullerIntegration.
+type EventProcessor interface {
+	// ProcessEvent processes a SyntrixChangeEvent (already transformed from StoreChangeEvent).
+	ProcessEvent(e events.SyntrixChangeEvent) error
+
+	// ProcessEventJSON processes a JSON-encoded StoreChangeEvent from Puller.
+	// It transforms the event to SyntrixChangeEvent internally.
+	ProcessEventJSON(data []byte) error
+}
+
+// subscriptionHandler is the internal interface for localStream to manage subscriptions.
+// This decouples localStream from the concrete streamerService implementation.
+type subscriptionHandler interface {
+	// subscribe registers a new subscription and returns the subscription ID.
+	subscribe(gatewayID, tenant, collection string, filters []Filter) (subscriptionID string, err error)
+
+	// unsubscribe removes a subscription by ID.
+	unsubscribe(subscriptionID string) error
+}

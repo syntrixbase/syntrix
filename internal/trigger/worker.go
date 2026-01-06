@@ -1,8 +1,8 @@
 package trigger
 
 import (
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/trigger/internal/worker"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/worker"
 )
 
 // DeliveryWorker is an alias for worker.DeliveryWorker interface

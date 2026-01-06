@@ -3,10 +3,11 @@ package engine
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/puller"
-	"github.com/codetrek/syntrix/internal/trigger"
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // MockPullerService
@@ -27,7 +28,7 @@ type MockEvaluator struct {
 	mock.Mock
 }
 
-func (m *MockEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event *types.TriggerEvent) (bool, error) {
+func (m *MockEvaluator) Evaluate(ctx context.Context, t *trigger.Trigger, event events.SyntrixChangeEvent) (bool, error) {
 	args := m.Called(ctx, t, event)
 	return args.Bool(0), args.Error(1)
 }
@@ -37,12 +38,12 @@ type MockWatcher struct {
 	mock.Mock
 }
 
-func (m *MockWatcher) Watch(ctx context.Context) (<-chan types.TriggerEvent, error) {
+func (m *MockWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeEvent, error) {
 	args := m.Called(ctx)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(<-chan types.TriggerEvent), args.Error(1)
+	return args.Get(0).(<-chan events.SyntrixChangeEvent), args.Error(1)
 }
 
 func (m *MockWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {

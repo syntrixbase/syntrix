@@ -3,8 +3,8 @@ package mongo
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestMakeFilterBSON_FieldAndOpMapping(t *testing.T) {

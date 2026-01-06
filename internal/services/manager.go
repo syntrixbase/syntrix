@@ -5,12 +5,12 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/codetrek/syntrix/internal/api/realtime"
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/puller"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/api/realtime"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 // DeploymentMode represents the deployment mode of the service.

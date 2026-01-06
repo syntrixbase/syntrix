@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -65,7 +65,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
 		Id:   "users/u1",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "users/u1",
 			Collection: "users",
 			Data:       map[string]interface{}{"role": "admin"},
@@ -85,7 +85,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
 		Id:   "users/u2",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "users/u2",
 			Collection: "users",
 			Data:       map[string]interface{}{"role": "guest"},
@@ -103,7 +103,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
 		Id:   "posts/p1",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "posts/p1",
 			Collection: "posts",
 			Data:       map[string]interface{}{"tags": []interface{}{"rust", "golang"}},
@@ -123,7 +123,7 @@ func TestHub_Broadcast_ComplexFilters(t *testing.T) {
 	hub.Broadcast(storage.Event{
 		Type: storage.EventCreate,
 		Id:   "posts/p2",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "posts/p2",
 			Collection: "posts",
 			Data:       map[string]interface{}{"tags": []interface{}{"python", "java"}},
