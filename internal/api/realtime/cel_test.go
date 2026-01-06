@@ -3,8 +3,8 @@ package realtime
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestCEL_TypeMismatch(t *testing.T) {

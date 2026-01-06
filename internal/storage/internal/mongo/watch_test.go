@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -31,7 +31,7 @@ func TestMongoBackend_Watch(t *testing.T) {
 		time.Sleep(10 * time.Millisecond) // Wait for watch to establish
 
 		// Create
-		doc := types.NewDocument(tenant, "users/watcher", "users", map[string]interface{}{"msg": "hello"})
+		doc := types.NewStoredDoc(tenant, "users", "watcher", map[string]interface{}{"msg": "hello"})
 		backend.Create(context.Background(), tenant, doc)
 
 		filters := model.Filters{
@@ -82,12 +82,12 @@ func TestMongoBackend_Watch_Recreate(t *testing.T) {
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		doc := types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v1"})
+		doc := types.NewStoredDoc(tenant, "users", "recreate", map[string]interface{}{"msg": "v1"})
 		_ = backend.Create(context.Background(), tenant, doc)
 
 		_ = backend.Delete(context.Background(), tenant, "users/recreate", nil)
 
-		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate", "users", map[string]interface{}{"msg": "v2"}))
+		_ = backend.Create(context.Background(), tenant, types.NewStoredDoc(tenant, "users", "recreate", map[string]interface{}{"msg": "v2"}))
 	}()
 
 	expected := []types.EventType{types.EventCreate, types.EventDelete, types.EventCreate}
@@ -125,12 +125,12 @@ func TestMongoBackend_Watch_Recreate_WithBefore(t *testing.T) {
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
-		doc := types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v1"})
+		doc := types.NewStoredDoc(tenant, "users", "recreate-before", map[string]interface{}{"msg": "v1"})
 		_ = backend.Create(context.Background(), tenant, doc)
 
 		_ = backend.Delete(context.Background(), tenant, "users/recreate-before", nil)
 
-		_ = backend.Create(context.Background(), tenant, types.NewDocument(tenant, "users/recreate-before", "users", map[string]interface{}{"msg": "v2"}))
+		_ = backend.Create(context.Background(), tenant, types.NewStoredDoc(tenant, "users", "recreate-before", map[string]interface{}{"msg": "v2"}))
 	}()
 
 	expected := []types.EventType{types.EventCreate, types.EventDelete, types.EventCreate}

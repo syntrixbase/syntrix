@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestBuffer_New_Error(t *testing.T) {
@@ -40,7 +40,7 @@ func TestBuffer_Closed_Errors(t *testing.T) {
 	buf, _ := New(Options{Path: dir})
 	buf.Close()
 
-	evt := &events.ChangeEvent{EventID: "1"}
+	evt := &events.StoreChangeEvent{EventID: "1"}
 
 	if err := buf.Write(evt, testToken); err == nil || err.Error() != "buffer is closed" {
 		t.Errorf("Expected 'buffer is closed' error from Write, got %v", err)
@@ -83,9 +83,9 @@ func TestBuffer_Write_MarshalError(t *testing.T) {
 	defer buf.Close()
 
 	// Create event with unserializable field
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID: "1",
-		FullDocument: &storage.Document{
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{
 				"bad": make(chan int),
 			},
@@ -149,7 +149,7 @@ func TestBuffer_ScanFrom_AfterKey(t *testing.T) {
 	defer buf.Close()
 
 	// Write 3 events
-	evts := []*events.ChangeEvent{
+	evts := []*events.StoreChangeEvent{
 		{EventID: "1", Timestamp: 100},
 		{EventID: "2", Timestamp: 200},
 		{EventID: "3", Timestamp: 300},
@@ -200,12 +200,12 @@ func TestBuffer_Write_Atomicity(t *testing.T) {
 		t.Fatalf("New() error = %v", err)
 	}
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-atomicity",
 		TenantID: "tenant-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -273,14 +273,14 @@ func TestBuffer_ScanFrom_Bounds(t *testing.T) {
 	defer buf.Close()
 
 	// Write 3 events: A, B, C
-	evts := make([]*events.ChangeEvent, 3)
+	evts := make([]*events.StoreChangeEvent, 3)
 	for i := 0; i < 3; i++ {
-		evts[i] = &events.ChangeEvent{
+		evts[i] = &events.StoreChangeEvent{
 			EventID:  string(rune('A' + i)), // A, B, C
 			TenantID: "tenant-1",
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-1",
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1000 + i),
 				I: 1,
@@ -335,7 +335,7 @@ func TestBuffer_DeleteBefore_NoMatch(t *testing.T) {
 	defer buf.Close()
 
 	// Write an event with a "high" key
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:     "evt-high",
 		ClusterTime: events.ClusterTime{T: 2000, I: 1},
 	}

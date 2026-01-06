@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/server"
 )
 
 func (m *Manager) Start(bgCtx context.Context) {

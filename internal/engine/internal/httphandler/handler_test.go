@@ -7,8 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -265,7 +265,7 @@ func TestHandler_Pull_Success(t *testing.T) {
 		Limit:      10,
 	}
 	expectedResp := &storage.ReplicationPullResponse{
-		Documents:  []*storage.Document{},
+		Documents:  []*storage.StoredDoc{},
 		Checkpoint: 0,
 	}
 	mockService.On("Pull", mock.Anything, "default", pullReq).Return(expectedResp, nil)

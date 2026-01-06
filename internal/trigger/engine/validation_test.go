@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/trigger"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 func TestValidateTrigger(t *testing.T) {

@@ -1,10 +1,10 @@
 package storage
 
 import (
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
-type Document = types.Document
+type StoredDoc = types.StoredDoc
 type User = types.User
 type RevokedToken = types.RevokedToken
 type DocumentStore = types.DocumentStore

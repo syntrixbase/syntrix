@@ -8,11 +8,11 @@ import (
 	"net"
 	"sync"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/core"
-	"github.com/codetrek/syntrix/internal/puller/internal/cursor"
+	pullerv1 "github.com/syntrixbase/syntrix/api/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -21,7 +21,7 @@ import (
 // EventSource provides the event handler setter interface.
 // The handler function receives events from the puller for distribution.
 type EventSource interface {
-	SetEventHandler(handler func(ctx context.Context, backendName string, event *events.ChangeEvent) error)
+	SetEventHandler(handler func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error)
 	Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error)
 }
 
@@ -36,7 +36,7 @@ type Server struct {
 	subs        *core.SubscriberManager
 
 	// eventChan receives events from the puller for broadcasting
-	eventChan chan *events.ChangeEvent
+	eventChan chan *events.StoreChangeEvent
 
 	// ctx controls the server lifecycle
 	ctx    context.Context
@@ -66,7 +66,7 @@ func NewServer(cfg config.PullerGRPCConfig, eventSource EventSource, logger *slo
 		eventSource: eventSource,
 		logger:      logger.With("component", "puller-grpc"),
 		subs:        core.NewSubscriberManager(logger),
-		eventChan:   make(chan *events.ChangeEvent, channelSize),
+		eventChan:   make(chan *events.StoreChangeEvent, channelSize),
 		ctx:         ctx,
 		cancel:      cancel,
 	}
@@ -98,7 +98,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mu.Unlock()
 
 	// Set up event handler to receive events from puller
-	s.eventSource.SetEventHandler(func(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+	s.eventSource.SetEventHandler(func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 		// Ensure backend name is set
 		if event.Backend == "" {
 			event.Backend = backendName
@@ -299,7 +299,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 	}
 }
 
-func drainChannel(ch <-chan *events.ChangeEvent) {
+func drainChannel(ch <-chan *events.StoreChangeEvent) {
 	for {
 		select {
 		case <-ch:
@@ -310,7 +310,7 @@ func drainChannel(ch <-chan *events.ChangeEvent) {
 }
 
 // sendEvent sends a single event to the stream and updates subscriber position.
-func (s *Server) sendEvent(stream pullerv1.PullerService_SubscribeServer, sub *core.Subscriber, backend string, evt *events.ChangeEvent) error {
+func (s *Server) sendEvent(stream pullerv1.PullerService_SubscribeServer, sub *core.Subscriber, backend string, evt *events.StoreChangeEvent) error {
 	// Convert to gRPC event
 	changeEvt, err := s.convertEvent(backend, evt)
 	if err != nil {
@@ -335,7 +335,7 @@ func (s *Server) sendEvent(stream pullerv1.PullerService_SubscribeServer, sub *c
 }
 
 // convertEvent converts a ChangeEvent to a gRPC ChangeEvent.
-func (s *Server) convertEvent(backend string, evt *events.ChangeEvent) (*pullerv1.ChangeEvent, error) {
+func (s *Server) convertEvent(backend string, evt *events.StoreChangeEvent) (*pullerv1.ChangeEvent, error) {
 	var fullDocBytes []byte
 	var updateDescBytes []byte
 	var err error

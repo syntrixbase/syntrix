@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/api/realtime"
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/trigger"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/api/realtime"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -166,10 +166,10 @@ type storageBackendStub struct {
 	watchCalls atomic.Int32
 }
 
-func (s *storageBackendStub) Get(context.Context, string, string) (*storage.Document, error) {
+func (s *storageBackendStub) Get(context.Context, string, string) (*storage.StoredDoc, error) {
 	return nil, model.ErrNotFound
 }
-func (s *storageBackendStub) Create(context.Context, string, *storage.Document) error { return nil }
+func (s *storageBackendStub) Create(context.Context, string, *storage.StoredDoc) error { return nil }
 func (s *storageBackendStub) Update(context.Context, string, string, map[string]interface{}, model.Filters) error {
 	return nil
 }
@@ -177,7 +177,7 @@ func (s *storageBackendStub) Patch(context.Context, string, string, map[string]i
 	return nil
 }
 func (s *storageBackendStub) Delete(context.Context, string, string, model.Filters) error { return nil }
-func (s *storageBackendStub) Query(context.Context, string, model.Query) ([]*storage.Document, error) {
+func (s *storageBackendStub) Query(context.Context, string, model.Query) ([]*storage.StoredDoc, error) {
 	return nil, nil
 }
 func (s *storageBackendStub) Watch(context.Context, string, string, interface{}, storage.WatchOptions) (<-chan storage.Event, error) {
@@ -335,7 +335,7 @@ func (s *stubPullerService) Stop(ctx context.Context) error {
 	return nil
 }
 func (s *stubPullerService) BackendNames() []string { return nil }
-func (s *stubPullerService) SetEventHandler(func(ctx context.Context, backendName string, event *events.ChangeEvent) error) {
+func (s *stubPullerService) SetEventHandler(func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error) {
 }
 func (s *stubPullerService) Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
 	return nil, nil

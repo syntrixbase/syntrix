@@ -107,3 +107,25 @@ func TestStripProtectedFieldsAndIsEmpty(t *testing.T) {
 	nonEmpty := Document{"id": "1", "x": 1}
 	assert.False(t, nonEmpty.IsEmpty())
 }
+
+func TestIsDeleted(t *testing.T) {
+	t.Run("deleted true", func(t *testing.T) {
+		doc := Document{"id": "1", "deleted": true}
+		assert.True(t, doc.IsDeleted())
+	})
+
+	t.Run("deleted false", func(t *testing.T) {
+		doc := Document{"id": "1", "deleted": false}
+		assert.False(t, doc.IsDeleted())
+	})
+
+	t.Run("deleted missing", func(t *testing.T) {
+		doc := Document{"id": "1"}
+		assert.False(t, doc.IsDeleted())
+	})
+
+	t.Run("deleted wrong type", func(t *testing.T) {
+		doc := Document{"id": "1", "deleted": "true"}
+		assert.False(t, doc.IsDeleted())
+	})
+}

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,13 +87,13 @@ match:
 	defer factory.Close()
 	backend := factory.Document()
 
-	docs := []interface{}{
-		&storage.Document{Id: storage.CalculateTenantID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
-		&storage.Document{Id: storage.CalculateTenantID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
-		&storage.Document{Id: storage.CalculateTenantID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
+	docs := []storage.StoredDoc{
+		{Id: storage.CalculateTenantID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
+		{Id: storage.CalculateTenantID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
+		{Id: storage.CalculateTenantID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
 	}
 	for _, d := range docs {
-		err := backend.Create(ctx, "default", d.(*storage.Document))
+		err := backend.Create(ctx, "default", d)
 		require.NoError(t, err)
 	}
 

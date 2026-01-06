@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/google/cel-go/cel"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func compileFiltersToCEL(filters []model.Filter) (cel.Program, error) {

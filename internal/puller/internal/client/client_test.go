@@ -4,9 +4,9 @@ import (
 	"log/slog"
 	"testing"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
+	pullerv1 "github.com/syntrixbase/syntrix/api/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestConvertEvent(t *testing.T) {
@@ -34,12 +34,12 @@ func TestConvertEvent(t *testing.T) {
 				Progress: "p1",
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID:   "evt-123",
 					TenantID:  "tenant-1",
 					MgoColl:   "users",
 					MgoDocID:  "doc-1",
-					OpType:    events.OperationType("insert"),
+					OpType:    events.StoreOperationType("insert"),
 					Timestamp: 1234567890,
 				},
 				Progress: "p1",
@@ -62,12 +62,12 @@ func TestConvertEvent(t *testing.T) {
 				Progress: "p2",
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID:  "evt-456",
 					TenantID: "tenant-2",
 					MgoColl:  "orders",
 					MgoDocID: "doc-2",
-					OpType:   events.OperationType("update"),
+					OpType:   events.StoreOperationType("update"),
 					ClusterTime: events.ClusterTime{
 						T: 100,
 						I: 5,
@@ -85,9 +85,9 @@ func TestConvertEvent(t *testing.T) {
 				},
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID: "evt-789",
-					OpType:  events.OperationType("delete"),
+					OpType:  events.StoreOperationType("delete"),
 				},
 			},
 		},
@@ -100,9 +100,9 @@ func TestConvertEvent(t *testing.T) {
 				},
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID: "evt-full",
-					FullDocument: &storage.Document{
+					FullDocument: &storage.StoredDoc{
 						Id:   "doc-1",
 						Data: map[string]interface{}{"name": "test"},
 					},
@@ -118,7 +118,7 @@ func TestConvertEvent(t *testing.T) {
 				},
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID: "evt-update",
 					UpdateDesc: &events.UpdateDescription{
 						UpdatedFields: map[string]interface{}{"name": "new"},
@@ -136,7 +136,7 @@ func TestConvertEvent(t *testing.T) {
 				},
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID: "evt-invalid-doc",
 				},
 			},
@@ -150,7 +150,7 @@ func TestConvertEvent(t *testing.T) {
 				},
 			},
 			expected: &events.PullerEvent{
-				Change: &events.ChangeEvent{
+				Change: &events.StoreChangeEvent{
 					EventID: "evt-invalid-desc",
 				},
 			},

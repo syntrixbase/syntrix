@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestDocumentStore_TenantIsolation(t *testing.T) {
@@ -22,10 +22,12 @@ func TestDocumentStore_TenantIsolation(t *testing.T) {
 
 	tenantA := "tenantA"
 	tenantB := "tenantB"
-	path := "users/user1"
+	collection := "users"
+	docID := "user1"
+	path := collection + "/" + docID
 
 	// 1. Create document in Tenant A
-	docA := types.NewDocument(tenantA, path, "users", map[string]interface{}{
+	docA := types.NewStoredDoc(tenantA, collection, docID, map[string]interface{}{
 		"name": "User A",
 	})
 	err := store.Create(ctx, tenantA, docA)
@@ -49,7 +51,7 @@ func TestDocumentStore_TenantIsolation(t *testing.T) {
 	assert.ErrorIs(t, err, model.ErrNotFound, "Tenant B should not be able to delete Tenant A's document")
 
 	// 6. Create document with SAME path in Tenant B
-	docB := types.NewDocument(tenantB, path, "users", map[string]interface{}{
+	docB := types.NewStoredDoc(tenantB, collection, docID, map[string]interface{}{
 		"name": "User B",
 	})
 	err = store.Create(ctx, tenantB, docB)
@@ -73,13 +75,15 @@ func TestDocumentStore_TenantIsolation(t *testing.T) {
 func TestDocumentStore_TenantIDGeneration(t *testing.T) {
 	t.Parallel()
 	tenant := "mytenant"
-	path := "some/path"
+	collection := "some"
+	docid := "path"
+	path := collection + "/" + docid
 
 	// Calculate expected ID
 	expectedID := types.CalculateTenantID(tenant, path)
 
 	// Create doc
-	doc := types.NewDocument(tenant, path, "some", nil)
+	doc := types.NewStoredDoc(tenant, collection, docid, nil)
 
 	assert.Equal(t, expectedID, doc.Id)
 	assert.Equal(t, tenant, doc.TenantID)

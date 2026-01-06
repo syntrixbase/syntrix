@@ -6,12 +6,10 @@ import (
 	"log"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/storage/types"
-	triggertypes "github.com/codetrek/syntrix/internal/trigger/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // WatcherOptions configures the watcher.
@@ -36,7 +34,7 @@ func NewWatcher(p puller.Service, store storage.DocumentStore, tenant string, op
 	}
 }
 
-func (w *pullerWatcher) Watch(ctx context.Context) (<-chan triggertypes.TriggerEvent, error) {
+func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeEvent, error) {
 	// 1. Load Checkpoint
 	// We use "default" tenant for system checkpoints as per design implication of tenant-scoped keys.
 	// Key format: sys/checkpoints/trigger_evaluator/<tenant>
@@ -67,7 +65,7 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan triggertypes.TriggerE
 		return nil, err
 	}
 
-	outCh := make(chan triggertypes.TriggerEvent)
+	outCh := make(chan events.SyntrixChangeEvent)
 
 	go func() {
 		defer close(outCh)
@@ -78,7 +76,10 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan triggertypes.TriggerE
 			}
 
 			// Convert
-			event := w.convertEvent(pEvent)
+			event, err := events.Transform(pEvent)
+			if err != nil {
+				continue
+			}
 
 			select {
 			case outCh <- event:
@@ -91,46 +92,9 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan triggertypes.TriggerE
 	return outCh, nil
 }
 
-func (w *pullerWatcher) convertEvent(pEvent *events.PullerEvent) triggertypes.TriggerEvent {
-	evt := triggertypes.TriggerEvent{
-		Id:          pEvent.Change.MgoDocID,
-		TenantID:    pEvent.Change.TenantID,
-		Timestamp:   pEvent.Change.Timestamp,
-		ResumeToken: pEvent.Progress,
-	}
-
-	// Map OpType
-	switch pEvent.Change.OpType {
-	case events.OperationInsert:
-		evt.Type = triggertypes.EventCreate
-		evt.Document = pEvent.Change.FullDocument
-	case events.OperationUpdate, events.OperationReplace:
-		if pEvent.Change.FullDocument != nil && pEvent.Change.FullDocument.Deleted {
-			evt.Type = triggertypes.EventDelete
-			// For soft delete, we might have the document
-			evt.Document = pEvent.Change.FullDocument
-		} else if pEvent.Change.OpType == events.OperationReplace {
-			evt.Type = triggertypes.EventCreate
-			evt.Document = pEvent.Change.FullDocument
-		} else {
-			evt.Type = triggertypes.EventUpdate
-			evt.Document = pEvent.Change.FullDocument
-		}
-	case events.OperationDelete:
-		evt.Type = triggertypes.EventDelete
-		// Construct minimal Before document for Delete events
-		evt.Before = &types.Document{
-			Collection: pEvent.Change.MgoColl,
-			Id:         pEvent.Change.MgoDocID,
-			TenantID:   pEvent.Change.TenantID,
-		}
-	}
-
-	return evt
-}
-
 func (w *pullerWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {
-	checkpointKey := fmt.Sprintf("sys/checkpoints/trigger_evaluator/%s", w.tenant)
+	coll := "sys/checkpoints/trigger_evaluator"
+	checkpointKey := fmt.Sprintf("%s/%s", coll, w.tenant)
 	checkpointTenant := "default"
 
 	data := map[string]interface{}{
@@ -142,7 +106,7 @@ func (w *pullerWatcher) SaveCheckpoint(ctx context.Context, token interface{}) e
 	if err != nil {
 		if err == model.ErrNotFound {
 			// Create if not exists
-			doc := storage.NewDocument(checkpointTenant, checkpointKey, "sys/checkpoints/trigger_evaluator", data)
+			doc := storage.NewStoredDoc(checkpointTenant, coll, w.tenant, data)
 			return w.store.Create(ctx, checkpointTenant, doc)
 		}
 		return err

@@ -2,7 +2,7 @@
 // versions:
 // - protoc-gen-go-grpc v1.6.0
 // - protoc             v3.21.12
-// source: api/proto/puller.proto
+// source: puller.proto
 
 package pullerv1
 
@@ -130,5 +130,5 @@ var PullerService_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "api/proto/puller.proto",
+	Metadata: "puller.proto",
 }

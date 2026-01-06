@@ -3,7 +3,7 @@ package csp
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // Service defines the interface for Change Stream processing.

@@ -4,19 +4,19 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func TestOperationType_IsValid(t *testing.T) {
 	tests := []struct {
-		op    OperationType
+		op    StoreOperationType
 		valid bool
 	}{
-		{OperationInsert, true},
-		{OperationUpdate, true},
-		{OperationReplace, true},
-		{OperationDelete, true},
+		{StoreOperationInsert, true},
+		{StoreOperationUpdate, true},
+		{StoreOperationReplace, true},
+		{StoreOperationDelete, true},
 		{"INSERT", false}, // uppercase is invalid
 		{"unknown", false},
 		{"", false},
@@ -87,15 +87,15 @@ func TestClusterTime_PrimitiveConversion(t *testing.T) {
 }
 
 func TestChangeEvent_JSON(t *testing.T) {
-	evt := &ChangeEvent{
+	evt := &StoreChangeEvent{
 		EventID:     "evt-123",
 		TenantID:    "tenant-abc",
 		MgoColl:     "users",
 		MgoDocID:    "doc-456",
-		OpType:      OperationInsert,
+		OpType:      StoreOperationInsert,
 		ClusterTime: ClusterTime{T: 1735567890, I: 1},
 		Timestamp:   1735567890000,
-		FullDocument: &storage.Document{
+		FullDocument: &storage.StoredDoc{
 			Id:       "doc-456",
 			TenantID: "tenant-abc",
 		},
@@ -126,7 +126,7 @@ func TestChangeEvent_JSON(t *testing.T) {
 	}
 
 	// Unmarshal
-	var decoded ChangeEvent
+	var decoded StoreChangeEvent
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatalf("json.Unmarshal() error = %v", err)
 	}
@@ -146,9 +146,9 @@ func TestChangeEvent_JSON(t *testing.T) {
 }
 
 func TestPullerEvent_JSON(t *testing.T) {
-	change := &ChangeEvent{
+	change := &StoreChangeEvent{
 		EventID: "evt-123",
-		OpType:  OperationInsert,
+		OpType:  StoreOperationInsert,
 	}
 	evt := &PullerEvent{
 		Change:   change,
@@ -216,7 +216,7 @@ func TestBufferKey(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			evt := &ChangeEvent{
+			evt := &StoreChangeEvent{
 				EventID:     tt.eventID,
 				ClusterTime: tt.ct,
 			}

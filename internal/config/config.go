@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/server"
 	"gopkg.in/yaml.v3"
 )
 

@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 type fakeDocumentStore struct{}
 
-func (f *fakeDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.Document, error) {
+func (f *fakeDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.StoredDoc, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc types.StoredDoc) error {
 	return nil
 }
 func (f *fakeDocumentStore) Update(ctx context.Context, tenant string, path string, data map[string]interface{}, pred model.Filters) error {
@@ -27,7 +27,7 @@ func (f *fakeDocumentStore) Patch(ctx context.Context, tenant string, path strin
 func (f *fakeDocumentStore) Delete(ctx context.Context, tenant string, path string, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.StoredDoc, error) {
 	return nil, nil
 }
 func (f *fakeDocumentStore) Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {

@@ -8,8 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -20,7 +20,7 @@ func TestHandlePull(t *testing.T) {
 	server := createTestServer(mockService, nil, nil)
 
 	resp := &storage.ReplicationPullResponse{
-		Documents: []*storage.Document{
+		Documents: []*storage.StoredDoc{
 			{
 				Id:         "hash-1",
 				Fullpath:   "rooms/room-1/messages/msg-1",
@@ -52,7 +52,7 @@ func TestHandlePush(t *testing.T) {
 	server := createTestServer(mockService, nil, nil)
 
 	resp := &storage.ReplicationPushResponse{
-		Conflicts: []*storage.Document{},
+		Conflicts: []*storage.StoredDoc{},
 	}
 
 	mockService.On("Push", mock.Anything, "default", mock.AnythingOfType("types.ReplicationPushRequest")).Return(resp, nil)
@@ -240,7 +240,7 @@ func TestHandlePush_FlattensConflicts(t *testing.T) {
 	mockService := new(MockQueryService)
 	server := createTestServer(mockService, nil, nil)
 
-	conflictDoc := &storage.Document{
+	conflictDoc := &storage.StoredDoc{
 		Id:         "rooms/room-1/messages/msg-1",
 		Fullpath:   "rooms/room-1/messages/msg-1",
 		Collection: "rooms/room-1/messages",
@@ -248,7 +248,7 @@ func TestHandlePush_FlattensConflicts(t *testing.T) {
 		Version:    2,
 	}
 	mockService.On("Push", mock.Anything, "default", mock.AnythingOfType("types.ReplicationPushRequest")).Return(&storage.ReplicationPushResponse{
-		Conflicts: []*storage.Document{conflictDoc},
+		Conflicts: []*storage.StoredDoc{conflictDoc},
 	}, nil)
 
 	pushReq := ReplicaPushRequest{

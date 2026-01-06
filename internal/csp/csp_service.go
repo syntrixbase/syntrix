@@ -3,7 +3,7 @@ package csp
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // CSPService provides direct access to storage for change stream watching.

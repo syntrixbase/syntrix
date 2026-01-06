@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
 
 func TestSubscriber_ShouldSend(t *testing.T) {
@@ -69,7 +69,7 @@ func TestSubscriberManager(t *testing.T) {
 	assert.Equal(t, sub1, mgr.Get("sub1"))
 
 	// Test Broadcast
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		Backend: "db1",
 		EventID: "evt1",
 	}
@@ -116,7 +116,7 @@ func TestSubscriberManager_Race(t *testing.T) {
 			case <-done:
 				return
 			default:
-				mgr.Broadcast(&events.ChangeEvent{})
+				mgr.Broadcast(&events.StoreChangeEvent{})
 			}
 		}
 	}()

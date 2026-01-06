@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
@@ -30,7 +30,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 		name    string
 		raw     *RawEvent
 		wantErr bool
-		check   func(*testing.T, *events.ChangeEvent)
+		check   func(*testing.T, *events.StoreChangeEvent)
 	}{
 		{
 			name: "insert operation",
@@ -42,8 +42,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				"testdb", "testcoll",
 			),
 			wantErr: false,
-			check: func(t *testing.T, evt *events.ChangeEvent) {
-				if evt.OpType != events.OperationInsert {
+			check: func(t *testing.T, evt *events.StoreChangeEvent) {
+				if evt.OpType != events.StoreOperationInsert {
 					t.Errorf("OpType = %s, want insert", evt.OpType)
 				}
 				if evt.MgoDocID != "doc1" {
@@ -72,8 +72,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				"testdb", "testcoll",
 			),
 			wantErr: false,
-			check: func(t *testing.T, evt *events.ChangeEvent) {
-				if evt.OpType != events.OperationUpdate {
+			check: func(t *testing.T, evt *events.StoreChangeEvent) {
+				if evt.OpType != events.StoreOperationUpdate {
 					t.Errorf("OpType = %s, want update", evt.OpType)
 				}
 				if evt.TenantID != "tenant-2" {
@@ -103,8 +103,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				"testdb", "testcoll",
 			),
 			wantErr: false,
-			check: func(t *testing.T, evt *events.ChangeEvent) {
-				if evt.OpType != events.OperationDelete {
+			check: func(t *testing.T, evt *events.StoreChangeEvent) {
+				if evt.OpType != events.StoreOperationDelete {
 					t.Errorf("OpType = %s, want delete", evt.OpType)
 				}
 				if evt.FullDocument != nil {
@@ -139,7 +139,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 				)
 			}(),
 			wantErr: false,
-			check: func(t *testing.T, evt *events.ChangeEvent) {
+			check: func(t *testing.T, evt *events.StoreChangeEvent) {
 				if evt.MgoDocID == "" {
 					t.Error("MgoDocID should not be empty")
 				}
@@ -160,7 +160,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 				return raw
 			}(),
 			wantErr: false,
-			check: func(t *testing.T, evt *events.ChangeEvent) {
+			check: func(t *testing.T, evt *events.StoreChangeEvent) {
 				if evt.TxnNumber == nil || *evt.TxnNumber != 100 {
 					t.Error("TxnNumber not preserved")
 				}

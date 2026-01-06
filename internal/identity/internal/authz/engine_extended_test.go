@@ -6,9 +6,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // TestEmptyAndInvalidRules covers:

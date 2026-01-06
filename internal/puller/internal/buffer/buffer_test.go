@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -93,18 +93,18 @@ func TestBuffer_WriteAndRead(t *testing.T) {
 	}
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		TenantID: "tenant-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
 		},
 		Timestamp: time.Now().UnixMilli(),
-		FullDocument: &storage.Document{
+		FullDocument: &storage.StoredDoc{
 			Id:       "doc-1",
 			TenantID: "tenant-1",
 		},
@@ -153,12 +153,12 @@ func TestBuffer_ScanFrom(t *testing.T) {
 
 	// Write multiple events
 	for i := 0; i < 5; i++ {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID:  "evt-" + string(rune('a'+i)),
 			TenantID: "tenant-1",
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-" + string(rune('a'+i)),
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1234567890 + i),
 				I: 1,
@@ -223,11 +223,11 @@ func TestBuffer_Head(t *testing.T) {
 	}
 
 	// Write an event
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -266,11 +266,11 @@ func TestBuffer_Delete(t *testing.T) {
 	}
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -327,11 +327,11 @@ func TestBuffer_Count(t *testing.T) {
 
 	// Write 3 events
 	for i := 0; i < 3; i++ {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID:  "evt-" + string(rune('a'+i)),
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-" + string(rune('a'+i)),
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1234567890 + i),
 				I: 1,
@@ -397,11 +397,11 @@ func TestBuffer_Write_Closed(t *testing.T) {
 
 	buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -517,11 +517,11 @@ func TestBuffer_DeleteBefore(t *testing.T) {
 	// Write 5 events with increasing timestamps
 	var keys []string
 	for i := 0; i < 5; i++ {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID:  "evt-" + string(rune('a'+i)),
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-" + string(rune('a'+i)),
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1000 + i),
 				I: 1,
@@ -617,11 +617,11 @@ func TestBuffer_CountAfter(t *testing.T) {
 	// Write 5 events
 	var keys []string
 	for i := 0; i < 5; i++ {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID:  "evt-" + string(rune('a'+i)),
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-" + string(rune('a'+i)),
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1000 + i),
 				I: 1,
@@ -715,11 +715,11 @@ func TestIterator_Key(t *testing.T) {
 	}
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -762,11 +762,11 @@ func TestBuffer_Write(t *testing.T) {
 	require.NoError(t, err)
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -816,11 +816,11 @@ func TestBuffer_Write_NilToken_Error(t *testing.T) {
 	require.NoError(t, err)
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -923,21 +923,21 @@ func TestBuffer_Write_BatchesBySize(t *testing.T) {
 	require.NoError(t, err)
 	defer buf.Close()
 
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
 		},
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-2",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567891,
 			I: 1,
@@ -978,11 +978,11 @@ func TestBuffer_Write_FlushesOnInterval(t *testing.T) {
 	require.NoError(t, err)
 	defer buf.Close()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -1018,21 +1018,21 @@ func TestBuffer_DeleteBefore_SkipsCheckpoint(t *testing.T) {
 	token := bson.Raw{0x05, 0x00, 0x00, 0x00, 0x00}
 	require.NoError(t, buf.SaveCheckpoint(token))
 
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1000,
 			I: 1,
 		},
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-2",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1001,
 			I: 1,
@@ -1069,11 +1069,11 @@ func TestBuffer_First(t *testing.T) {
 	assert.Empty(t, key)
 
 	// Write events
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		EventID:     "1",
 		ClusterTime: events.ClusterTime{T: 1, I: 1},
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		EventID:     "2",
 		ClusterTime: events.ClusterTime{T: 2, I: 2},
 	}
@@ -1107,10 +1107,10 @@ func TestBuffer_Size(t *testing.T) {
 	assert.GreaterOrEqual(t, initialSize, int64(0))
 
 	// Write event
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:     "1",
 		ClusterTime: events.ClusterTime{T: 1, I: 1},
-		FullDocument: &storage.Document{
+		FullDocument: &storage.StoredDoc{
 			Id: string(make([]byte, 1024*10)),
 		},
 	}
@@ -1171,7 +1171,7 @@ func TestBuffer_ClosedScenarios(t *testing.T) {
 
 	// Test all methods that should fail when closed
 	t.Run("Write", func(t *testing.T) {
-		err := buf.Write(&events.ChangeEvent{}, testToken)
+		err := buf.Write(&events.StoreChangeEvent{}, testToken)
 		assert.ErrorContains(t, err, "buffer is closed")
 	})
 

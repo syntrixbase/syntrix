@@ -16,7 +16,7 @@ if [ $failed -ne 0 ]; then
   exit 1
 fi
 
-sed -i 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' test_output.txt
+sed -i 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' test_output.txt
 
 echo "---------------------------------------------------------------------------------------------------------"
 echo -e "\nPackage coverage details:"
@@ -42,7 +42,7 @@ cat test_output.txt | \
 go tool cover -func=coverage.out > coverage.txt
 
 # Clean up package names for processing
-sed 's/github.com\/codetrek\/syntrix\///g' coverage.txt > coverage.clean.txt
+sed 's/github.com\/syntrixbase\/syntrix\///g' coverage.txt > coverage.clean.txt
 
 echo "---------------------------------------------------------------------------------------------------------"
 echo -e "\nFunction coverage details (excluding >= ${threshold_print}%):"

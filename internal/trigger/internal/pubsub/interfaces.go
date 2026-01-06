@@ -3,7 +3,7 @@ package pubsub
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // TaskPublisher publishes delivery tasks.

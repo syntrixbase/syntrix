@@ -4,10 +4,10 @@ import (
 	"context"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestEngine_GetDocument_TableDriven(t *testing.T) {
@@ -24,7 +24,7 @@ func TestEngine_GetDocument_TableDriven(t *testing.T) {
 			name: "Success",
 			path: "test/1",
 			mockSetup: func(m *MockStorageBackend) {
-				storedDoc := &storage.Document{
+				storedDoc := &storage.StoredDoc{
 					Fullpath:   "test/1",
 					Collection: "test",
 					Data:       map[string]interface{}{"foo": "bar"},
@@ -104,7 +104,7 @@ func TestEngine_CreateDocument_TableDriven(t *testing.T) {
 				"createdAt":  int64(5678), // Should be stripped
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d *storage.Document) bool {
+				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d storage.StoredDoc) bool {
 					_, hasVersion := d.Data["version"]
 					_, hasUpdated := d.Data["updatedAt"]
 					_, hasCreated := d.Data["createdAt"]
@@ -122,7 +122,7 @@ func TestEngine_CreateDocument_TableDriven(t *testing.T) {
 			name: "Storage Error",
 			doc:  model.Document{"id": "1", "collection": "test", "foo": "bar"},
 			mockSetup: func(m *MockStorageBackend) {
-				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d *storage.Document) bool {
+				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d storage.StoredDoc) bool {
 					return d.Fullpath == "test/1"
 				})).Return(assert.AnError)
 			},
@@ -186,7 +186,7 @@ func TestEngine_ReplaceDocument_TableDriven(t *testing.T) {
 			},
 			mockSetup: func(m *MockStorageBackend) {
 				m.On("Get", mock.Anything, "default", "test/1").Return(nil, model.ErrNotFound)
-				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d *storage.Document) bool {
+				m.On("Create", mock.Anything, "default", mock.MatchedBy(func(d storage.StoredDoc) bool {
 					_, hasVersion := d.Data["version"]
 					_, hasUpdated := d.Data["updatedAt"]
 					_, hasCreated := d.Data["createdAt"]
@@ -214,13 +214,13 @@ func TestEngine_ReplaceDocument_TableDriven(t *testing.T) {
 				"version":    int64(99),
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				existingDoc := &storage.Document{Id: "test/1", Version: 1, Data: map[string]interface{}{"foo": "old"}}
+				existingDoc := &storage.StoredDoc{Id: "test/1", Version: 1, Data: map[string]interface{}{"foo": "old"}}
 				m.On("Get", mock.Anything, "default", "test/1").Return(existingDoc, nil).Once()
 
 				expectedUpdate := map[string]interface{}{"foo": "new", "id": "1"}
 				m.On("Update", mock.Anything, "default", "test/1", expectedUpdate, model.Filters(nil)).Return(nil)
 
-				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.Document{Id: "test/1", Fullpath: "test/1", Version: 2, Data: expectedUpdate}, nil).Once()
+				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 2, Data: expectedUpdate}, nil).Once()
 			},
 			expectedDoc: model.Document{
 				"id":      "1",
@@ -242,7 +242,7 @@ func TestEngine_ReplaceDocument_TableDriven(t *testing.T) {
 			name: "Update Error",
 			doc:  model.Document{"id": "1", "collection": "test", "foo": "new"},
 			mockSetup: func(m *MockStorageBackend) {
-				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.Document{Id: "test/1", Version: 1}, nil).Once()
+				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.StoredDoc{Id: "test/1", Version: 1}, nil).Once()
 				m.On("Update", mock.Anything, "default", "test/1", mock.Anything, model.Filters(nil)).Return(assert.AnError)
 			},
 			expectError: true,
@@ -313,7 +313,7 @@ func TestEngine_PatchDocument_TableDriven(t *testing.T) {
 				m.On("Patch", mock.Anything, "default", "test/1", patchFields, model.Filters(nil)).Return(nil).Once()
 
 				expectedMergedData := map[string]interface{}{"foo": "old", "bar": "baz"}
-				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.Document{Id: "test/1", Fullpath: "test/1", Version: 2, Data: expectedMergedData}, nil).Once()
+				m.On("Get", mock.Anything, "default", "test/1").Return(&storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Version: 2, Data: expectedMergedData}, nil).Once()
 			},
 			expectedDoc: model.Document{
 				"foo": "old",
@@ -375,7 +375,7 @@ func TestEngine_Pull_TableDriven(t *testing.T) {
 		name         string
 		req          storage.ReplicationPullRequest
 		mockSetup    func(*MockStorageBackend)
-		expectedDocs []*storage.Document
+		expectedDocs []*storage.StoredDoc
 		expectedCP   int64
 		expectError  bool
 	}
@@ -389,7 +389,7 @@ func TestEngine_Pull_TableDriven(t *testing.T) {
 				Limit:      10,
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				expectedDocs := []*storage.Document{
+				expectedDocs := []*storage.StoredDoc{
 					{Id: "test/1", UpdatedAt: 101},
 					{Id: "test/2", UpdatedAt: 102},
 				}
@@ -397,7 +397,7 @@ func TestEngine_Pull_TableDriven(t *testing.T) {
 					return q.Collection == "test" && q.Limit == 10 && q.Filters[0].Value == int64(100)
 				})).Return(expectedDocs, nil)
 			},
-			expectedDocs: []*storage.Document{
+			expectedDocs: []*storage.StoredDoc{
 				{Id: "test/1", UpdatedAt: 101},
 				{Id: "test/2", UpdatedAt: 102},
 			},
@@ -445,7 +445,7 @@ func TestEngine_Push_TableDriven(t *testing.T) {
 		name              string
 		req               storage.ReplicationPushRequest
 		mockSetup         func(*MockStorageBackend)
-		expectedConflicts []*storage.Document
+		expectedConflicts []*storage.StoredDoc
 		expectError       bool
 	}
 
@@ -455,11 +455,11 @@ func TestEngine_Push_TableDriven(t *testing.T) {
 			req: storage.ReplicationPushRequest{
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "test/1", Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1}},
+					{Doc: &storage.StoredDoc{Id: "test/1", Fullpath: "test/1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 1}},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
-				existingDoc := &storage.Document{Id: "test/1", Version: 1}
+				existingDoc := &storage.StoredDoc{Id: "test/1", Version: 1}
 				m.On("Get", mock.Anything, "default", "test/1").Return(existingDoc, nil)
 				m.On("Update", mock.Anything, "default", "test/1", map[string]interface{}{"foo": "bar"}, mock.Anything).Return(nil)
 			},
@@ -471,7 +471,7 @@ func TestEngine_Push_TableDriven(t *testing.T) {
 			req: storage.ReplicationPushRequest{
 				Collection: "test",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Id: "test/2", Fullpath: "test/2", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 0}},
+					{Doc: &storage.StoredDoc{Id: "test/2", Fullpath: "test/2", Collection: "test", Data: map[string]interface{}{"foo": "bar"}, Version: 0}},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {

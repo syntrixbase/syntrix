@@ -3,8 +3,8 @@ package engine
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 func TestNewFactory_Coverage(t *testing.T) {

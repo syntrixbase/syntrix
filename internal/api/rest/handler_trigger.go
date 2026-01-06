@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 type TriggerGetRequest struct {
@@ -41,7 +42,7 @@ func (h *Handler) handleTriggerGet(w http.ResponseWriter, r *http.Request) {
 
 	// Validate all paths before processing
 	for _, path := range req.Paths {
-		if err := validateDocumentPath(path); err != nil {
+		if err := helper.CheckDocumentPath(path); err != nil {
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid path: "+path)
 			return
 		}
@@ -83,7 +84,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 
 	// Validate all paths before processing
 	for _, op := range req.Writes {
-		if err := validateDocumentPath(op.Path); err != nil {
+		if err := helper.CheckDocumentPath(op.Path); err != nil {
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid path: "+op.Path)
 			return
 		}

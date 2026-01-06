@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/server"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -324,10 +324,10 @@ type fakeDocumentStore struct {
 	retention time.Duration
 }
 
-func (f *fakeDocumentStore) Get(ctx context.Context, tenant, path string) (*storage.Document, error) {
+func (f *fakeDocumentStore) Get(ctx context.Context, tenant, path string) (*storage.StoredDoc, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc *storage.Document) error {
+func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
 	return nil
 }
 func (f *fakeDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
@@ -339,7 +339,7 @@ func (f *fakeDocumentStore) Patch(ctx context.Context, tenant, path string, data
 func (f *fakeDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.Document, error) {
+func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
 	return nil, nil
 }
 func (f *fakeDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {

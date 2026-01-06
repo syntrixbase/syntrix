@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 )
 
 func TestParseSize(t *testing.T) {
@@ -69,14 +69,14 @@ func TestPuller_Replay(t *testing.T) {
 	defer buf.Close()
 
 	// Write some events to buffer
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		EventID:     "1-1-hash1",
 		Timestamp:   1000,
 		ClusterTime: events.ClusterTime{T: 1, I: 1},
 		MgoColl:     "coll1",
 		MgoDocID:    "doc1",
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		EventID:     "2-2-hash2",
 		Timestamp:   2000,
 		ClusterTime: events.ClusterTime{T: 2, I: 2},

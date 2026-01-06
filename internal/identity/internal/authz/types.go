@@ -1,7 +1,7 @@
 package authz
 
 import (
-	identtypes "github.com/codetrek/syntrix/internal/identity/types"
+	identtypes "github.com/syntrixbase/syntrix/internal/identity/types"
 )
 
 // Reuse public identity rule/request types to avoid duplication.

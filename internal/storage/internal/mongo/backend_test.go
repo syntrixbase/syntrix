@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -72,11 +72,13 @@ func TestMongoBackend_CRUD(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	docPath := "users/testuser"
+	collection := "users"
+	docID := "testuser"
+	docPath := collection + "/" + docID
 	tenant := "default"
 
 	// 1. Create
-	doc := types.NewDocument(tenant, docPath, "users", map[string]interface{}{
+	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
 		"name": "Test User",
 		"age":  30,
 	})
@@ -84,11 +86,11 @@ func TestMongoBackend_CRUD(t *testing.T) {
 	require.NoError(t, err)
 
 	// 2. Get
-	fetchedDoc, err := backend.Get(ctx, tenant, docPath)
+	fetchedDoc, err := backend.Get(ctx, tenant, collection+"/"+docID)
 	require.NoError(t, err)
 	assert.Equal(t, doc.Id, fetchedDoc.Id)
 	assert.Equal(t, doc.Collection, fetchedDoc.Collection)
-	assert.Equal(t, types.CalculateCollectionHash("users"), fetchedDoc.CollectionHash)
+	assert.Equal(t, types.CalculateCollectionHash(collection), fetchedDoc.CollectionHash)
 	assert.Equal(t, "Test User", fetchedDoc.Data["name"])
 	assert.Equal(t, int64(1), fetchedDoc.Version)
 
@@ -133,11 +135,13 @@ func TestMongoBackend_Update_IfMatch(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	docPath := "users/ifmatch"
+	collection := "users"
+	docID := "ifmatch"
+	docPath := collection + "/" + docID
 	tenant := "default"
 
 	// 1. Create
-	doc := types.NewDocument(tenant, docPath, "users", map[string]interface{}{
+	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
 		"status": "active",
 		"score":  100,
 	})
@@ -182,10 +186,12 @@ func TestMongoBackend_FilterOperators_OnUpdatePatchDelete(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	path := "users/filter-ops"
+	collection := "users"
+	docID := "filter-ops"
+	path := collection + "/" + docID
 	tenant := "default"
 
-	seed := types.NewDocument(tenant, path, "users", map[string]interface{}{
+	seed := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
 		"age":  int64(30),
 		"tags": []string{"a", "b"},
 	})
@@ -230,7 +236,7 @@ func TestMongoBackend_CreateDuplicate(t *testing.T) {
 
 	ctx := context.Background()
 	tenant := "default"
-	doc := types.NewDocument(tenant, "users/dup", "users", nil)
+	doc := types.NewStoredDoc(tenant, "users", "dup", nil)
 
 	err := backend.Create(ctx, tenant, doc)
 	require.NoError(t, err)
@@ -289,11 +295,14 @@ func TestMongoBackend_Patch(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	docPath := "users/patchuser"
+
+	collection := "users"
+	docID := "patchuser"
+	docPath := collection + "/" + docID
 	tenant := "default"
 
 	// Create initial document
-	doc := types.NewDocument(tenant, docPath, "users", map[string]interface{}{
+	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
 		"name": "Original Name",
 		"info": map[string]interface{}{
 			"age":  30,
@@ -339,10 +348,12 @@ func TestMongoBackend_Patch_WithFilter(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	path := "users/patch-precond"
+	collection := "users"
+	docID := "patch-precond"
+	path := collection + "/" + docID
 	tenant := "default"
 
-	base := types.NewDocument(tenant, path, "users", map[string]interface{}{"name": "One"})
+	base := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"name": "One"})
 	require.NoError(t, backend.Create(ctx, tenant, base))
 
 	wrong := model.Filters{{Field: "version", Op: "==", Value: int64(0)}}
@@ -368,10 +379,12 @@ func TestMongoBackend_Delete_WithFilter(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	path := "users/delete-precond"
+	collection := "users"
+	docID := "delete-precond"
+	path := collection + "/" + docID
 	tenant := "default"
 
-	doc := types.NewDocument(tenant, path, "users", map[string]interface{}{"name": "ToDelete"})
+	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"name": "ToDelete"})
 	require.NoError(t, backend.Create(ctx, tenant, doc))
 
 	wrong := model.Filters{{Field: "version", Op: "==", Value: int64(0)}}

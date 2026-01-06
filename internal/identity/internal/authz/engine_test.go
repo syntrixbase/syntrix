@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -27,11 +27,11 @@ func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path 
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) ListDocuments(ctx context.Context, parent string, pageSize int, pageToken string) ([]*storage.Document, string, error) {
+func (m *MockQueryService) ListDocuments(ctx context.Context, parent string, pageSize int, pageToken string) ([]*storage.StoredDoc, string, error) {
 	return nil, "", nil
 }
 
-func (m *MockQueryService) QueryDocuments(ctx context.Context, parent string, filter string) ([]*storage.Document, error) {
+func (m *MockQueryService) QueryDocuments(ctx context.Context, parent string, filter string) ([]*storage.StoredDoc, error) {
 	return nil, nil
 }
 

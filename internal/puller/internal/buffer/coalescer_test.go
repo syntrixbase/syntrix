@@ -3,19 +3,19 @@ package buffer
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestCoalescer_Add_FirstEvent(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 
 	result := c.Add(evt)
@@ -32,19 +32,19 @@ func TestCoalescer_InsertThenDelete(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	insert := &events.ChangeEvent{
+	insert := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(insert)
 
-	delete := &events.ChangeEvent{
+	delete := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationDelete,
+		OpType:   events.StoreOperationDelete,
 	}
 	c.Add(delete)
 
@@ -63,23 +63,23 @@ func TestCoalescer_InsertThenUpdate(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	insert := &events.ChangeEvent{
+	insert := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationInsert,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "original"},
 		},
 	}
 	c.Add(insert)
 
-	update := &events.ChangeEvent{
+	update := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationUpdate,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationUpdate,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "updated"},
 		},
 	}
@@ -95,7 +95,7 @@ func TestCoalescer_InsertThenUpdate(t *testing.T) {
 		t.Fatalf("Flush() returned %d events, want 1", len(flushed))
 	}
 
-	if flushed[0].OpType != events.OperationInsert {
+	if flushed[0].OpType != events.StoreOperationInsert {
 		t.Errorf("OpType = %s, want insert", flushed[0].OpType)
 	}
 	if flushed[0].FullDocument.Data["name"] != "updated" {
@@ -107,23 +107,23 @@ func TestCoalescer_UpdateThenUpdate(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	update1 := &events.ChangeEvent{
+	update1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationUpdate,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationUpdate,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "first"},
 		},
 	}
 	c.Add(update1)
 
-	update2 := &events.ChangeEvent{
+	update2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationUpdate,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationUpdate,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "second"},
 		},
 	}
@@ -144,19 +144,19 @@ func TestCoalescer_UpdateThenDelete(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	update := &events.ChangeEvent{
+	update := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationUpdate,
+		OpType:   events.StoreOperationUpdate,
 	}
 	c.Add(update)
 
-	delete := &events.ChangeEvent{
+	delete := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationDelete,
+		OpType:   events.StoreOperationDelete,
 	}
 	c.Add(delete)
 
@@ -166,7 +166,7 @@ func TestCoalescer_UpdateThenDelete(t *testing.T) {
 		t.Fatalf("Flush() returned %d events, want 1", len(flushed))
 	}
 
-	if flushed[0].OpType != events.OperationDelete {
+	if flushed[0].OpType != events.StoreOperationDelete {
 		t.Errorf("OpType = %s, want delete", flushed[0].OpType)
 	}
 }
@@ -175,17 +175,17 @@ func TestCoalescer_FlushOne(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "coll-a",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "coll-b",
 		MgoDocID: "doc-2",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(evt1)
 	c.Add(evt2)
@@ -213,11 +213,11 @@ func TestCoalescer_Clear(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	evt := &events.ChangeEvent{
+	evt := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(evt)
 
@@ -229,24 +229,24 @@ func TestCoalescer_Clear(t *testing.T) {
 
 func TestCoalesceEvents(t *testing.T) {
 	t.Parallel()
-	evts := []*events.ChangeEvent{
+	evts := []*events.StoreChangeEvent{
 		{
 			EventID:  "evt-1",
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-1",
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 		},
 		{
 			EventID:  "evt-2",
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-1",
-			OpType:   events.OperationDelete,
+			OpType:   events.StoreOperationDelete,
 		},
 		{
 			EventID:  "evt-3",
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-2",
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 		},
 	}
 
@@ -270,23 +270,23 @@ func TestCoalescer_InsertThenReplace(t *testing.T) {
 	t.Parallel()
 	c := NewCoalescer()
 
-	insert := &events.ChangeEvent{
+	insert := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationInsert,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "original"},
 		},
 	}
 	c.Add(insert)
 
-	replace := &events.ChangeEvent{
+	replace := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationReplace,
-		FullDocument: &storage.Document{
+		OpType:   events.StoreOperationReplace,
+		FullDocument: &storage.StoredDoc{
 			Data: map[string]any{"name": "replaced"},
 		},
 	}
@@ -298,7 +298,7 @@ func TestCoalescer_InsertThenReplace(t *testing.T) {
 		t.Fatalf("Flush() returned %d events, want 1", len(flushed))
 	}
 
-	if flushed[0].OpType != events.OperationInsert {
+	if flushed[0].OpType != events.StoreOperationInsert {
 		t.Errorf("OpType = %s, want insert", flushed[0].OpType)
 	}
 	if flushed[0].FullDocument.Data["name"] != "replaced" {
@@ -309,19 +309,19 @@ func TestCoalescer_InsertThenReplace(t *testing.T) {
 func TestCoalescer_InsertThenInsert(t *testing.T) {
 	c := NewCoalescer()
 
-	insert1 := &events.ChangeEvent{
+	insert1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(insert1)
 
-	insert2 := &events.ChangeEvent{
+	insert2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(insert2)
 
@@ -338,19 +338,19 @@ func TestCoalescer_InsertThenInsert(t *testing.T) {
 func TestCoalescer_DeleteThenInsert(t *testing.T) {
 	c := NewCoalescer()
 
-	delete := &events.ChangeEvent{
+	delete := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationDelete,
+		OpType:   events.StoreOperationDelete,
 	}
 	c.Add(delete)
 
-	insert := &events.ChangeEvent{
+	insert := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 	}
 	c.Add(insert)
 
@@ -359,7 +359,7 @@ func TestCoalescer_DeleteThenInsert(t *testing.T) {
 	if len(flushed) != 1 {
 		t.Fatalf("Flush() returned %d events, want 1", len(flushed))
 	}
-	if flushed[0].OpType != events.OperationInsert {
+	if flushed[0].OpType != events.StoreOperationInsert {
 		t.Errorf("OpType = %s, want insert", flushed[0].OpType)
 	}
 }
@@ -367,21 +367,21 @@ func TestCoalescer_DeleteThenInsert(t *testing.T) {
 func TestCoalescer_ReplaceThenUpdate(t *testing.T) {
 	c := NewCoalescer()
 
-	replace := &events.ChangeEvent{
+	replace := &events.StoreChangeEvent{
 		EventID:      "evt-1",
 		MgoColl:      "testcoll",
 		MgoDocID:     "doc-1",
-		OpType:       events.OperationReplace,
-		FullDocument: &storage.Document{Data: map[string]any{"name": "replaced"}},
+		OpType:       events.StoreOperationReplace,
+		FullDocument: &storage.StoredDoc{Data: map[string]any{"name": "replaced"}},
 	}
 	c.Add(replace)
 
-	update := &events.ChangeEvent{
+	update := &events.StoreChangeEvent{
 		EventID:      "evt-2",
 		MgoColl:      "testcoll",
 		MgoDocID:     "doc-1",
-		OpType:       events.OperationUpdate,
-		FullDocument: &storage.Document{Data: map[string]any{"name": "updated"}},
+		OpType:       events.StoreOperationUpdate,
+		FullDocument: &storage.StoredDoc{Data: map[string]any{"name": "updated"}},
 	}
 	c.Add(update)
 
@@ -398,19 +398,19 @@ func TestCoalescer_ReplaceThenUpdate(t *testing.T) {
 func TestCoalescer_ReplaceThenDelete(t *testing.T) {
 	c := NewCoalescer()
 
-	replace := &events.ChangeEvent{
+	replace := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationReplace,
+		OpType:   events.StoreOperationReplace,
 	}
 	c.Add(replace)
 
-	delete := &events.ChangeEvent{
+	delete := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationDelete,
+		OpType:   events.StoreOperationDelete,
 	}
 	c.Add(delete)
 
@@ -419,7 +419,7 @@ func TestCoalescer_ReplaceThenDelete(t *testing.T) {
 	if len(flushed) != 1 {
 		t.Fatalf("Flush() returned %d events, want 1", len(flushed))
 	}
-	if flushed[0].OpType != events.OperationDelete {
+	if flushed[0].OpType != events.StoreOperationDelete {
 		t.Errorf("OpType = %s, want delete", flushed[0].OpType)
 	}
 }
@@ -427,19 +427,19 @@ func TestCoalescer_ReplaceThenDelete(t *testing.T) {
 func TestCoalescer_ReplaceThenReplace(t *testing.T) {
 	c := NewCoalescer()
 
-	replace1 := &events.ChangeEvent{
+	replace1 := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationReplace,
+		OpType:   events.StoreOperationReplace,
 	}
 	c.Add(replace1)
 
-	replace2 := &events.ChangeEvent{
+	replace2 := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationReplace,
+		OpType:   events.StoreOperationReplace,
 	}
 	c.Add(replace2)
 
@@ -456,19 +456,19 @@ func TestCoalescer_ReplaceThenReplace(t *testing.T) {
 func TestCoalescer_UpdateThenReplace(t *testing.T) {
 	c := NewCoalescer()
 
-	update := &events.ChangeEvent{
+	update := &events.StoreChangeEvent{
 		EventID:  "evt-1",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationUpdate,
+		OpType:   events.StoreOperationUpdate,
 	}
 	c.Add(update)
 
-	replace := &events.ChangeEvent{
+	replace := &events.StoreChangeEvent{
 		EventID:  "evt-2",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationReplace,
+		OpType:   events.StoreOperationReplace,
 	}
 	c.Add(replace)
 

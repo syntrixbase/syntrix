@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
@@ -436,7 +436,7 @@ func setupMockQuery() *MockQueryService {
 	m := new(MockQueryService)
 	// Mock Pull for Snapshot
 	m.On("Pull", mock.Anything, mock.Anything, mock.Anything).Return(&storage.ReplicationPullResponse{
-		Documents: []*storage.Document{{Id: "1", Data: map[string]interface{}{"name": "test"}}},
+		Documents: []*storage.StoredDoc{{Id: "1", Data: map[string]interface{}{"name": "test"}}},
 	}, nil).Maybe()
 	return m
 }

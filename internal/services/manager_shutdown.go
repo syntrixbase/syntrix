@@ -4,7 +4,7 @@ import (
 	"context"
 	"log"
 
-	"github.com/codetrek/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/server"
 )
 
 func (m *Manager) Shutdown(ctx context.Context) {

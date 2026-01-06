@@ -6,8 +6,8 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Service defines the interface required by the HTTP handler.

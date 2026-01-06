@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"github.com/zeebo/blake3"
 )
 
@@ -30,20 +31,30 @@ func CalculateCollectionHash(collection string) string {
 	return hex.EncodeToString(hash[:16])
 }
 
-// NewDocument creates a new document instance with initialized metadata
-func NewDocument(tenant string, fullpath string, collection string, data map[string]interface{}) *Document {
+func NewStoredDoc(tenant, collection, docid string, data map[string]interface{}) StoredDoc {
 	// Calculate Parent from collection path
 	parent := ""
 	if idx := strings.LastIndex(collection, "/"); idx != -1 {
 		parent = collection[:idx]
 	}
 
+	if data == nil {
+		data = make(map[string]interface{})
+	}
+
+	if id, exists := data["id"]; !exists || id != docid {
+		data["id"] = docid
+	}
+
+	model.StripProtectedFields(data)
+
+	fullpath := collection + "/" + docid
 	id := CalculateTenantID(tenant, fullpath)
 	collectionHash := CalculateCollectionHash(collection)
 
 	now := time.Now().UnixMilli()
 
-	return &Document{
+	return StoredDoc{
 		Id:             id,
 		TenantID:       tenant,
 		Fullpath:       fullpath,

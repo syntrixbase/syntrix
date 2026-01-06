@@ -3,7 +3,7 @@ package router
 import (
 	"errors"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 var (

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // Hub maintains the set of active clients and broadcasts messages to the
@@ -174,7 +174,7 @@ func (h *Hub) Unregister(client *Client) {
 	}
 }
 
-func flattenDocument(doc *storage.Document) map[string]interface{} {
+func flattenDocument(doc *storage.StoredDoc) map[string]interface{} {
 	if doc == nil {
 		return nil
 	}

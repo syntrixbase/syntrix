@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/flowcontrol"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/flowcontrol"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -111,14 +111,14 @@ func TestPuller_Backpressure(t *testing.T) {
 
 	// Test SlowDown
 	// Set handler that sleeps for 5ms (trigger SlowDown)
-	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 		time.Sleep(5 * time.Millisecond)
 		return nil
 	})
 
 	// Measure time
 	start := time.Now()
-	p.invokeHandlerWithBackpressure(context.Background(), backend, &events.ChangeEvent{})
+	p.invokeHandlerWithBackpressure(context.Background(), backend, &events.StoreChangeEvent{})
 	duration := time.Since(start)
 
 	// Expected: 5ms (handler) + 10ms (sleep) = ~15ms
@@ -128,13 +128,13 @@ func TestPuller_Backpressure(t *testing.T) {
 
 	// Test Pause
 	// Set handler that sleeps for 15ms (trigger Pause)
-	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 		time.Sleep(15 * time.Millisecond)
 		return nil
 	})
 
 	start = time.Now()
-	p.invokeHandlerWithBackpressure(context.Background(), backend, &events.ChangeEvent{})
+	p.invokeHandlerWithBackpressure(context.Background(), backend, &events.StoreChangeEvent{})
 	duration = time.Since(start)
 
 	// Expected: 15ms (handler) + 50ms (sleep) = ~65ms

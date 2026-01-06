@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/identity"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

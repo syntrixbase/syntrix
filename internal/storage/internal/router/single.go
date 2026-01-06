@@ -1,7 +1,7 @@
 package router
 
 import (
-	"github.com/codetrek/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 // SingleRouter routes all operations to a single set of stores.

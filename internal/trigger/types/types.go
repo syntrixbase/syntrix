@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	stypes "github.com/codetrek/syntrix/internal/storage/types"
+	stypes "github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 // FatalError represents an error that should not be retried.

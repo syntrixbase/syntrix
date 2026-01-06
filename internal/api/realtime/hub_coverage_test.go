@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestHub_Register_Closed(t *testing.T) {
@@ -132,7 +132,7 @@ func TestHub_Broadcast_BackpressureFallback(t *testing.T) {
 	evt := storage.Event{
 		Type: types.EventUpdate,
 		Id:   "rooms/doc1",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Collection: "rooms",
 			Data:       map[string]interface{}{"x": 1},
 		},
@@ -163,14 +163,14 @@ func TestDetermineEventTenant(t *testing.T) {
 		{
 			name: "From Document TenantID",
 			event: storage.Event{
-				Document: &storage.Document{TenantID: "t2"},
+				Document: &storage.StoredDoc{TenantID: "t2"},
 			},
 			expected: "t2",
 		},
 		{
 			name: "From Before TenantID",
 			event: storage.Event{
-				Before: &storage.Document{TenantID: "t3"},
+				Before: &storage.StoredDoc{TenantID: "t3"},
 			},
 			expected: "t3",
 		},

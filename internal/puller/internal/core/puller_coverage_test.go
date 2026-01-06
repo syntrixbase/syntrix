@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -181,7 +181,7 @@ func TestPuller_EventHandlerError(t *testing.T) {
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
 	// Set a handler that returns an error
-	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.ChangeEvent) error {
+	p.SetEventHandler(func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
 		return fmt.Errorf("simulated handler error")
 	})
 

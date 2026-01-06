@@ -9,14 +9,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/buffer"
-	"github.com/codetrek/syntrix/internal/puller/internal/cursor"
-	"github.com/codetrek/syntrix/internal/puller/internal/flowcontrol"
-	"github.com/codetrek/syntrix/internal/puller/internal/metrics"
-	"github.com/codetrek/syntrix/internal/puller/internal/normalizer"
-	"github.com/codetrek/syntrix/internal/puller/internal/recovery"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/flowcontrol"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/metrics"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/normalizer"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/recovery"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -25,7 +25,7 @@ import (
 
 // EventHandler is a function that handles events from the change stream.
 // Note: This type must match the signature in grpc.EventSource interface.
-type EventHandler = func(ctx context.Context, backendName string, event *events.ChangeEvent) error
+type EventHandler = func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error
 
 // Backend represents a single MongoDB backend being watched.
 type Backend struct {
@@ -41,7 +41,7 @@ type Backend struct {
 	cleaner         *buffer.Cleaner
 
 	// eventChan receives normalized events from the change stream
-	eventChan chan *events.ChangeEvent
+	eventChan chan *events.StoreChangeEvent
 }
 
 // Puller is the main puller service that watches MongoDB change streams
@@ -190,7 +190,7 @@ func (p *Puller) AddBackend(name string, client *mongo.Client, dbName string, cf
 		recoveryHandler: recoveryHandler,
 		backpressure:    bpMonitor,
 		cleaner:         cleaner,
-		eventChan:       make(chan *events.ChangeEvent, 1000),
+		eventChan:       make(chan *events.StoreChangeEvent, 1000),
 	}
 
 	p.logger.Info("added backend", "name", name, "database", dbName)
@@ -363,7 +363,7 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 	return nil
 }
 
-func (p *Puller) invokeHandlerWithBackpressure(ctx context.Context, backend *Backend, evt *events.ChangeEvent) {
+func (p *Puller) invokeHandlerWithBackpressure(ctx context.Context, backend *Backend, evt *events.StoreChangeEvent) {
 	// Broadcast to subscribers
 	p.subs.Broadcast(evt)
 
@@ -458,7 +458,7 @@ type backendInjectingIterator struct {
 	backendName string
 }
 
-func (i *backendInjectingIterator) Event() *events.ChangeEvent {
+func (i *backendInjectingIterator) Event() *events.StoreChangeEvent {
 	evt := i.Iterator.Event()
 	if evt != nil && evt.Backend == "" {
 		evt.Backend = i.backendName

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage/types"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Mock Router
@@ -29,15 +29,15 @@ type mockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *mockDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.Document, error) {
+func (m *mockDocumentStore) Get(ctx context.Context, tenant string, path string) (*types.StoredDoc, error) {
 	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*types.Document), args.Error(1)
+	return args.Get(0).(*types.StoredDoc), args.Error(1)
 }
 
-func (m *mockDocumentStore) Create(ctx context.Context, tenant string, doc *types.Document) error {
+func (m *mockDocumentStore) Create(ctx context.Context, tenant string, doc types.StoredDoc) error {
 	args := m.Called(ctx, tenant, doc)
 	return args.Error(0)
 }
@@ -57,12 +57,12 @@ func (m *mockDocumentStore) Delete(ctx context.Context, tenant string, path stri
 	return args.Error(0)
 }
 
-func (m *mockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.Document, error) {
+func (m *mockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*types.StoredDoc, error) {
 	args := m.Called(ctx, tenant, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*types.Document), args.Error(1)
+	return args.Get(0).([]*types.StoredDoc), args.Error(1)
 }
 
 func (m *mockDocumentStore) Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
@@ -87,7 +87,7 @@ func TestRoutedDocumentStore(t *testing.T) {
 		store := new(mockDocumentStore)
 
 		router.On("Select", tenant, types.OpRead).Return(store, nil)
-		store.On("Get", ctx, tenant, "path").Return(&types.Document{}, nil)
+		store.On("Get", ctx, tenant, "path").Return(&types.StoredDoc{}, nil)
 
 		rs := NewRoutedDocumentStore(router)
 		_, err := rs.Get(ctx, tenant, "path")
@@ -105,7 +105,7 @@ func TestRoutedDocumentStore(t *testing.T) {
 		store.On("Create", ctx, tenant, mock.Anything).Return(nil)
 
 		rs := NewRoutedDocumentStore(router)
-		err := rs.Create(ctx, tenant, &types.Document{})
+		err := rs.Create(ctx, tenant, types.StoredDoc{})
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -169,7 +169,7 @@ func TestRoutedDocumentStore(t *testing.T) {
 		store := new(mockDocumentStore)
 
 		router.On("Select", tenant, types.OpRead).Return(store, nil)
-		store.On("Query", ctx, tenant, mock.Anything).Return([]*types.Document{}, nil)
+		store.On("Query", ctx, tenant, mock.Anything).Return([]*types.StoredDoc{}, nil)
 
 		rs := NewRoutedDocumentStore(router)
 		_, err := rs.Query(ctx, tenant, model.Query{})

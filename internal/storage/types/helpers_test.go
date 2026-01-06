@@ -43,14 +43,14 @@ func TestNewDocument(t *testing.T) {
 	data := map[string]interface{}{
 		"key": "value",
 	}
-	doc := NewDocument("tenant1", "/users/123", "users", data)
+	doc := NewStoredDoc("tenant1", "users", "123", data)
 
 	assert.Equal(t, "tenant1", doc.TenantID)
-	assert.Equal(t, "/users/123", doc.Fullpath)
+	assert.Equal(t, "users/123", doc.Fullpath)
 	assert.Equal(t, "users", doc.Collection)
 	assert.Equal(t, data, doc.Data)
 	assert.NotEmpty(t, doc.Id)
-	assert.Equal(t, CalculateTenantID("tenant1", "/users/123"), doc.Id)
+	assert.Equal(t, CalculateTenantID("tenant1", "users/123"), doc.Id)
 	assert.Equal(t, CalculateCollectionHash("users"), doc.CollectionHash)
 	assert.NotZero(t, doc.CreatedAt)
 	assert.NotZero(t, doc.UpdatedAt)
@@ -58,7 +58,7 @@ func TestNewDocument(t *testing.T) {
 
 func TestNewDocument_NoSlashCollection(t *testing.T) {
 	data := map[string]interface{}{"key": "value"}
-	doc := NewDocument("tenant1", "/root", "root", data)
+	doc := NewStoredDoc("tenant1", "root", "", data)
 
 	assert.Equal(t, "root", doc.Collection)
 	assert.Empty(t, doc.Parent)

@@ -6,7 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // decodeBody decodes request body into dst, using cached body from context if available.
@@ -43,7 +44,7 @@ func decodeBodyAsDocument(r *http.Request) (model.Document, error) {
 func (h *Handler) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
-	if err := validateDocumentPath(path); err != nil {
+	if err := helper.CheckDocumentPath(path); err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid document path")
 		return
 	}
@@ -65,7 +66,7 @@ func (h *Handler) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 	collection := r.PathValue("path")
 
-	if err := validateCollection(collection); err != nil {
+	if err := helper.CheckCollectionPath(collection); err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid collection path")
 		return
 	}
@@ -109,7 +110,7 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleReplaceDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
-	collection, docID, err := validateAndExplodeFullpath(path)
+	collection, docID, err := helper.ExplodeFullpath(path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid document path")
 		return
@@ -157,7 +158,7 @@ func (h *Handler) handleReplaceDocument(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
-	collection, docID, err := validateAndExplodeFullpath(path)
+	collection, docID, err := helper.ExplodeFullpath(path)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid document path")
 		return
@@ -209,7 +210,7 @@ func (h *Handler) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 
-	if err := validateDocumentPath(path); err != nil {
+	if err := helper.CheckDocumentPath(path); err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid document path")
 		return
 	}

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {

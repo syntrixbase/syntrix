@@ -3,8 +3,8 @@ package core
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/mock"
 )
@@ -14,15 +14,15 @@ type MockStorageBackend struct {
 	mock.Mock
 }
 
-func (m *MockStorageBackend) Get(ctx context.Context, tenant, path string) (*storage.Document, error) {
+func (m *MockStorageBackend) Get(ctx context.Context, tenant, path string) (*storage.StoredDoc, error) {
 	args := m.Called(ctx, tenant, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).(*storage.Document), args.Error(1)
+	return args.Get(0).(*storage.StoredDoc), args.Error(1)
 }
 
-func (m *MockStorageBackend) Create(ctx context.Context, tenant string, doc *storage.Document) error {
+func (m *MockStorageBackend) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
 	args := m.Called(ctx, tenant, doc)
 	return args.Error(0)
 }
@@ -42,12 +42,12 @@ func (m *MockStorageBackend) Delete(ctx context.Context, tenant, path string, pr
 	return args.Error(0)
 }
 
-func (m *MockStorageBackend) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.Document, error) {
+func (m *MockStorageBackend) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
 	args := m.Called(ctx, tenant, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*storage.Document), args.Error(1)
+	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
 }
 
 func (m *MockStorageBackend) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {

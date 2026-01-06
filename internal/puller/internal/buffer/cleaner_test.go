@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestNewCleaner(t *testing.T) {
@@ -107,11 +107,11 @@ func TestCleaner_CleanupNow(t *testing.T) {
 	defer buf.Close()
 
 	// Write an old event (with very old timestamp)
-	oldEvt := &events.ChangeEvent{
+	oldEvt := &events.StoreChangeEvent{
 		EventID:  "old-evt",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1, // Very old timestamp
 			I: 1,
@@ -122,11 +122,11 @@ func TestCleaner_CleanupNow(t *testing.T) {
 	}
 
 	// Write a recent event
-	recentEvt := &events.ChangeEvent{
+	recentEvt := &events.StoreChangeEvent{
 		EventID:  "recent-evt",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-2",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: uint32(time.Now().Unix()),
 			I: 1,
@@ -224,11 +224,11 @@ func TestCleaner_RunTriggersCleanup(t *testing.T) {
 	defer buf.Close()
 
 	// Write an old event
-	oldEvt := &events.ChangeEvent{
+	oldEvt := &events.StoreChangeEvent{
 		EventID:  "old-evt",
 		MgoColl:  "testcoll",
 		MgoDocID: "doc-1",
-		OpType:   events.OperationInsert,
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1, // Very old timestamp
 			I: 1,
@@ -329,17 +329,17 @@ func TestCleaner_MaxSize(t *testing.T) {
 
 	// Write 10 events
 	for i := 0; i < 10; i++ {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID:  "evt-" + string(rune('a'+i)),
 			MgoColl:  "testcoll",
 			MgoDocID: "doc-1",
-			OpType:   events.OperationInsert,
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(time.Now().Unix()) + uint32(i),
 				I: 1,
 			},
 			// Add some payload to increase size
-			FullDocument: &storage.Document{
+			FullDocument: &storage.StoredDoc{
 				Id:       "doc-1",
 				TenantID: "tenant-1",
 				Data:     map[string]any{"data": "some payload"},

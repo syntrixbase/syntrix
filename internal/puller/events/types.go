@@ -3,25 +3,25 @@
 package events
 
 import (
-	"github.com/codetrek/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
-// OperationType represents the type of change operation.
+// StoreOperationType represents the type of change operation.
 // All values are lowercase to match MongoDB change stream semantics.
-type OperationType string
+type StoreOperationType string
 
 const (
-	OperationInsert  OperationType = "insert"
-	OperationUpdate  OperationType = "update"
-	OperationReplace OperationType = "replace"
-	OperationDelete  OperationType = "delete"
+	StoreOperationInsert  StoreOperationType = "insert"
+	StoreOperationUpdate  StoreOperationType = "update"
+	StoreOperationReplace StoreOperationType = "replace"
+	StoreOperationDelete  StoreOperationType = "delete"
 )
 
 // IsValid checks if the operation type is a known valid type.
-func (o OperationType) IsValid() bool {
+func (o StoreOperationType) IsValid() bool {
 	switch o {
-	case OperationInsert, OperationUpdate, OperationReplace, OperationDelete:
+	case StoreOperationInsert, StoreOperationUpdate, StoreOperationReplace, StoreOperationDelete:
 		return true
 	default:
 		return false
@@ -90,13 +90,13 @@ type TruncatedArray struct {
 // PullerEvent is the top-level wrapper for events emitted by the Puller service.
 // It contains the actual change event and the progress marker.
 type PullerEvent struct {
-	Change   *ChangeEvent `json:"change_event"`
-	Progress string       `json:"progress"`
+	Change   *StoreChangeEvent `json:"change_event"`
+	Progress string            `json:"progress"`
 }
 
-// ChangeEvent is the canonical event schema published by Puller.
+// StoreChangeEvent is the canonical event schema published by Puller.
 // Field names use short JSON keys with Mongo provenance as defined in the design docs.
-type ChangeEvent struct {
+type StoreChangeEvent struct {
 	// Identity
 	EventID  string `json:"eventId"`
 	TenantID string `json:"tenant"` // Derived from FullDocument.TenantID
@@ -106,8 +106,8 @@ type ChangeEvent struct {
 	MgoDocID string `json:"mgoDocId"`
 
 	// Operation
-	OpType       OperationType      `json:"opType"`
-	FullDocument *storage.Document  `json:"fullDoc,omitempty"`
+	OpType       StoreOperationType `json:"opType"`
+	FullDocument *storage.StoredDoc `json:"fullDoc,omitempty"`
 	UpdateDesc   *UpdateDescription `json:"updateDesc,omitempty"`
 
 	// Metadata
@@ -120,7 +120,7 @@ type ChangeEvent struct {
 // BufferKey generates the PebbleDB key for this event.
 // Format: {clusterTime.T}-{clusterTime.I}-{eventId}
 // This ensures events are stored in cluster time order.
-func (e *ChangeEvent) BufferKey() string {
+func (e *StoreChangeEvent) BufferKey() string {
 	return FormatBufferKey(e.ClusterTime, e.EventID)
 }
 
@@ -158,7 +158,7 @@ type Iterator interface {
 	Next() bool
 
 	// Event returns the current event.
-	Event() *ChangeEvent
+	Event() *StoreChangeEvent
 
 	// Err returns any error encountered during iteration.
 	Err() error

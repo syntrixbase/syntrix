@@ -40,12 +40,12 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/puller/internal/client"
-	"github.com/codetrek/syntrix/internal/puller/internal/core"
-	pullergrpc "github.com/codetrek/syntrix/internal/puller/internal/grpc"
-	"github.com/codetrek/syntrix/internal/puller/internal/health"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/client"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
+	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"
+	"github.com/syntrixbase/syntrix/internal/puller/internal/health"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -147,16 +147,16 @@ func NewGRPCServer(cfg config.PullerGRPCConfig, svc LocalService, logger *slog.L
 // Types
 
 type Event = events.PullerEvent
-type ChangeEvent = events.ChangeEvent
+type ChangeEvent = events.StoreChangeEvent
 type UpdateDescription = events.UpdateDescription
 type TruncatedArray = events.TruncatedArray
 type ClusterTime = events.ClusterTime
-type OperationType = events.OperationType
+type OperationType = events.StoreOperationType
 type Iterator = events.Iterator
 
 const (
-	OperationInsert  = events.OperationInsert
-	OperationUpdate  = events.OperationUpdate
-	OperationReplace = events.OperationReplace
-	OperationDelete  = events.OperationDelete
+	OperationInsert  = events.StoreOperationInsert
+	OperationUpdate  = events.StoreOperationUpdate
+	OperationReplace = events.StoreOperationReplace
+	OperationDelete  = events.StoreOperationDelete
 )

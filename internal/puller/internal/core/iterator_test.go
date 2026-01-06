@@ -4,18 +4,18 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/puller/events"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
 
 // MockIterator is a simple mock for events.Iterator
 type MockIterator struct {
-	events []*events.ChangeEvent
+	events []*events.StoreChangeEvent
 	index  int
 	err    error
 }
 
-func NewMockIterator(evts []*events.ChangeEvent) *MockIterator {
+func NewMockIterator(evts []*events.StoreChangeEvent) *MockIterator {
 	return &MockIterator{
 		events: evts,
 		index:  -1,
@@ -30,7 +30,7 @@ func (m *MockIterator) Next() bool {
 	return m.index < len(m.events)
 }
 
-func (m *MockIterator) Event() *events.ChangeEvent {
+func (m *MockIterator) Event() *events.StoreChangeEvent {
 	if m.index >= 0 && m.index < len(m.events) {
 		return m.events[m.index]
 	}
@@ -47,13 +47,13 @@ func (m *MockIterator) Close() error {
 
 func TestMergeIterator_Order(t *testing.T) {
 	// Iterator 1: A(100), C(300)
-	iter1 := NewMockIterator([]*events.ChangeEvent{
+	iter1 := NewMockIterator([]*events.StoreChangeEvent{
 		{EventID: "A", ClusterTime: events.ClusterTime{T: 100}},
 		{EventID: "C", ClusterTime: events.ClusterTime{T: 300}},
 	})
 
 	// Iterator 2: B(200), D(400)
-	iter2 := NewMockIterator([]*events.ChangeEvent{
+	iter2 := NewMockIterator([]*events.StoreChangeEvent{
 		{EventID: "B", ClusterTime: events.ClusterTime{T: 200}},
 		{EventID: "D", ClusterTime: events.ClusterTime{T: 400}},
 	})
@@ -86,7 +86,7 @@ func TestMergeIterator_Empty(t *testing.T) {
 }
 
 func TestMergeIterator_Error(t *testing.T) {
-	iter1 := NewMockIterator([]*events.ChangeEvent{
+	iter1 := NewMockIterator([]*events.StoreChangeEvent{
 		{EventID: "A", ClusterTime: events.ClusterTime{T: 100}},
 	})
 	iter2 := NewMockIterator(nil)
@@ -110,10 +110,10 @@ func TestMergeIterator_Error(t *testing.T) {
 
 func TestCoalescingIterator_Basic(t *testing.T) {
 	// Input: Insert(A), Update(A), Insert(B)
-	input := []*events.ChangeEvent{
-		{EventID: "1", MgoDocID: "A", OpType: events.OperationInsert, ClusterTime: events.ClusterTime{T: 100}},
-		{EventID: "2", MgoDocID: "A", OpType: events.OperationUpdate, ClusterTime: events.ClusterTime{T: 200}},
-		{EventID: "3", MgoDocID: "B", OpType: events.OperationInsert, ClusterTime: events.ClusterTime{T: 300}},
+	input := []*events.StoreChangeEvent{
+		{EventID: "1", MgoDocID: "A", OpType: events.StoreOperationInsert, ClusterTime: events.ClusterTime{T: 100}},
+		{EventID: "2", MgoDocID: "A", OpType: events.StoreOperationUpdate, ClusterTime: events.ClusterTime{T: 200}},
+		{EventID: "3", MgoDocID: "B", OpType: events.StoreOperationInsert, ClusterTime: events.ClusterTime{T: 300}},
 	}
 	iter := NewMockIterator(input)
 
@@ -127,7 +127,7 @@ func TestCoalescingIterator_Basic(t *testing.T) {
 
 	assert.True(t, ci.Next())
 	assert.Equal(t, "A", ci.Event().MgoDocID)
-	assert.Equal(t, events.OperationInsert, ci.Event().OpType)
+	assert.Equal(t, events.StoreOperationInsert, ci.Event().OpType)
 	// Should have latest timestamp/ID from the update if merged correctly?
 	// Coalescer logic: Insert + Update = Insert.
 	// The event ID usually takes the latest one.
@@ -141,10 +141,10 @@ func TestCoalescingIterator_Basic(t *testing.T) {
 
 func TestCoalescingIterator_Batching(t *testing.T) {
 	// Input: A, A, A (3 updates)
-	input := []*events.ChangeEvent{
-		{EventID: "1", MgoDocID: "A", OpType: events.OperationUpdate, ClusterTime: events.ClusterTime{T: 100}},
-		{EventID: "2", MgoDocID: "A", OpType: events.OperationUpdate, ClusterTime: events.ClusterTime{T: 200}},
-		{EventID: "3", MgoDocID: "A", OpType: events.OperationUpdate, ClusterTime: events.ClusterTime{T: 300}},
+	input := []*events.StoreChangeEvent{
+		{EventID: "1", MgoDocID: "A", OpType: events.StoreOperationUpdate, ClusterTime: events.ClusterTime{T: 100}},
+		{EventID: "2", MgoDocID: "A", OpType: events.StoreOperationUpdate, ClusterTime: events.ClusterTime{T: 200}},
+		{EventID: "3", MgoDocID: "A", OpType: events.StoreOperationUpdate, ClusterTime: events.ClusterTime{T: 300}},
 	}
 	iter := NewMockIterator(input)
 
@@ -165,10 +165,10 @@ func TestCoalescingIterator_Batching(t *testing.T) {
 
 func TestCoalescingIterator_Cancellation(t *testing.T) {
 	// Input: Insert(A), Delete(A) -> Should cancel out
-	input := []*events.ChangeEvent{
-		{EventID: "1", MgoDocID: "A", OpType: events.OperationInsert, ClusterTime: events.ClusterTime{T: 100}},
-		{EventID: "2", MgoDocID: "A", OpType: events.OperationDelete, ClusterTime: events.ClusterTime{T: 200}},
-		{EventID: "3", MgoDocID: "B", OpType: events.OperationInsert, ClusterTime: events.ClusterTime{T: 300}},
+	input := []*events.StoreChangeEvent{
+		{EventID: "1", MgoDocID: "A", OpType: events.StoreOperationInsert, ClusterTime: events.ClusterTime{T: 100}},
+		{EventID: "2", MgoDocID: "A", OpType: events.StoreOperationDelete, ClusterTime: events.ClusterTime{T: 200}},
+		{EventID: "3", MgoDocID: "B", OpType: events.StoreOperationInsert, ClusterTime: events.ClusterTime{T: 300}},
 	}
 	iter := NewMockIterator(input)
 
@@ -197,17 +197,17 @@ func TestCoalescingIterator_EdgeCases(t *testing.T) {
 
 func TestMergeIterator_Less_TieBreaker(t *testing.T) {
 	// Two events with same ClusterTime but different Backend
-	evt1 := &events.ChangeEvent{
+	evt1 := &events.StoreChangeEvent{
 		ClusterTime: events.ClusterTime{T: 100, I: 1},
 		Backend:     "backend1",
 	}
-	evt2 := &events.ChangeEvent{
+	evt2 := &events.StoreChangeEvent{
 		ClusterTime: events.ClusterTime{T: 100, I: 1},
 		Backend:     "backend2",
 	}
 
-	iter1 := NewMockIterator([]*events.ChangeEvent{evt1})
-	iter2 := NewMockIterator([]*events.ChangeEvent{evt2})
+	iter1 := NewMockIterator([]*events.StoreChangeEvent{evt1})
+	iter2 := NewMockIterator([]*events.StoreChangeEvent{evt2})
 
 	mi := NewMergeIterator([]events.Iterator{iter1, iter2})
 
@@ -222,7 +222,7 @@ func TestMergeIterator_Less_TieBreaker(t *testing.T) {
 }
 
 func TestMergeIterator_Error_New(t *testing.T) {
-	iter1 := NewMockIterator([]*events.ChangeEvent{})
+	iter1 := NewMockIterator([]*events.StoreChangeEvent{})
 	iter1.err = errors.New("iterator error")
 
 	mi := NewMergeIterator([]events.Iterator{iter1})

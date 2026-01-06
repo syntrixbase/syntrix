@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 type Server struct {

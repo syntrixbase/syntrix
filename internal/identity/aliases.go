@@ -1,6 +1,6 @@
 package identity
 
-import "github.com/codetrek/syntrix/internal/identity/types"
+import "github.com/syntrixbase/syntrix/internal/identity/types"
 
 type (
 	ContextKey     = types.ContextKey

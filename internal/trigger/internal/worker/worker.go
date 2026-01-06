@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // HTTPClientOptions configures the HTTP client.

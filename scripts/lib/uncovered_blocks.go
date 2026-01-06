@@ -394,7 +394,7 @@ func parseLine(line string) (Block, bool) {
 	filePath := locParts[0]
 
 	// Filter out prefix
-	filePath = strings.TrimPrefix(filePath, "github.com/codetrek/syntrix/")
+	filePath = strings.TrimPrefix(filePath, "github.com/syntrixbase/syntrix/")
 
 	rangeParts := strings.Split(locParts[1], ",")
 	if len(rangeParts) != 2 {

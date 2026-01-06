@@ -3,10 +3,10 @@ package realtime
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 type MockQueryService struct {

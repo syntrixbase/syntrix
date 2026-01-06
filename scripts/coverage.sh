@@ -30,7 +30,7 @@ go test ${PKGS} -covermode=atomic -coverprofile="$COVERPROFILE" > "$TMP_OUTPUT" 
 EXIT_CODE=$?
 set -e
 
-sed -i 's/of statements//g; s/github.com\/codetrek\/syntrix\///g' "$TMP_OUTPUT"
+sed -i 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT"
 
 echo
 echo "Package coverage summary:"
@@ -67,7 +67,7 @@ fi
 
 echo -e "\nFunction coverage details (excluding >= ${threshold_print}%):"
 
-FUNC_DATA=$(go tool cover -func="$COVERPROFILE" | sed 's/github.com\/codetrek\/syntrix\///g')
+FUNC_DATA=$(go tool cover -func="$COVERPROFILE" | sed 's/github.com\/syntrixbase\/syntrix\///g')
 
 printf "%-60s %-35s %s\n" "LOCATION" "FUNCTION" "COVERAGE"
 echo "---------------------------------------------------------------------------------------------------------"

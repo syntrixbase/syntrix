@@ -3,88 +3,11 @@ package rest
 import (
 	"testing"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 )
-
-func TestValidatePathSyntax(t *testing.T) {
-	tests := []struct {
-		name    string
-		path    string
-		wantErr bool
-	}{
-		{"valid path", "users/alice", false},
-		{"valid nested path", "rooms/room1/messages/msg1", false},
-		{"empty path", "", true},
-		{"invalid chars", "users/alice!", true},
-		{"starts with slash", "/users/alice", true},
-		{"ends with slash", "users/alice/", true},
-		{"double slash", "users//alice", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validatePathSyntax(tt.path)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateDocumentPath(t *testing.T) {
-	tests := []struct {
-		name    string
-		path    string
-		wantErr bool
-	}{
-		{"valid document path", "users/alice", false},
-		{"valid nested document path", "rooms/room1/messages/msg1", false},
-		{"invalid collection path", "users", true},
-		{"invalid nested collection path", "rooms/room1/messages", true},
-		{"invalid syntax", "/users/alice", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateDocumentPath(tt.path)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateCollection(t *testing.T) {
-	tests := []struct {
-		name       string
-		collection string
-		wantErr    bool
-	}{
-		{"valid collection", "users", false},
-		{"valid nested collection", "rooms/room1/messages", false},
-		{"invalid document path", "users/alice", true},
-		{"invalid nested document path", "rooms/room1/messages/msg1", true},
-		{"invalid syntax", "/users", true},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateCollection(tt.collection)
-			if tt.wantErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
-	}
-}
 
 func TestValidateData(t *testing.T) {
 	tests := []struct {
@@ -224,7 +147,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Fullpath: "users/alice"}},
+					{Doc: &storage.StoredDoc{Fullpath: "users/alice"}},
 				},
 			},
 			false,
@@ -249,7 +172,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Fullpath: "users/alice!"}},
+					{Doc: &storage.StoredDoc{Fullpath: "users/alice!"}},
 				},
 			},
 			true,
@@ -259,7 +182,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Fullpath: "posts/post1"}},
+					{Doc: &storage.StoredDoc{Fullpath: "posts/post1"}},
 				},
 			},
 			true,
@@ -269,7 +192,7 @@ func TestValidateReplicationPush(t *testing.T) {
 			storage.ReplicationPushRequest{
 				Collection: "users",
 				Changes: []storage.ReplicationPushChange{
-					{Doc: &storage.Document{Fullpath: "users/alice/posts"}},
+					{Doc: &storage.StoredDoc{Fullpath: "users/alice/posts"}},
 				},
 			},
 			true,

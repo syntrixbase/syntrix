@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -329,7 +329,7 @@ func TestClient_Pull_Success(t *testing.T) {
 }
 
 func TestClient_Push_Success(t *testing.T) {
-	expected := storage.ReplicationPushResponse{Conflicts: []*storage.Document{}}
+	expected := storage.ReplicationPushResponse{Conflicts: []*storage.StoredDoc{}}
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		require.Equal(t, "/internal/replication/v1/push", r.URL.Path)
 		var body map[string]interface{}
@@ -411,7 +411,7 @@ func TestClient_WatchCollection_InvalidJSONSkipped(t *testing.T) {
 
 func TestClient_Pull(t *testing.T) {
 	expectedResp := &storage.ReplicationPullResponse{
-		Documents: []*storage.Document{
+		Documents: []*storage.StoredDoc{
 			{Id: "1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}},
 		},
 		Checkpoint: 100,
@@ -455,7 +455,7 @@ func TestClient_Push(t *testing.T) {
 	req := storage.ReplicationPushRequest{
 		Changes: []storage.ReplicationPushChange{
 			{
-				Doc: &storage.Document{Id: "1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}},
+				Doc: &storage.StoredDoc{Id: "1", Collection: "test", Data: map[string]interface{}{"foo": "bar"}},
 			},
 		},
 	}

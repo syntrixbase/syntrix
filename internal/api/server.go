@@ -3,10 +3,10 @@ package api
 import (
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/api/realtime"
-	"github.com/codetrek/syntrix/internal/api/rest"
-	"github.com/codetrek/syntrix/internal/engine"
-	"github.com/codetrek/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/api/realtime"
+	"github.com/syntrixbase/syntrix/internal/api/rest"
+	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
 // Server is a route registrar for the API layer.

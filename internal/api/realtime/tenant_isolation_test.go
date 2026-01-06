@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestHub_TenantIsolation(t *testing.T) {
@@ -65,7 +65,7 @@ func TestHub_TenantIsolation(t *testing.T) {
 		Type:     storage.EventCreate,
 		Id:       "tenantA:user1",
 		TenantID: "tenantA",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "tenantA:user1",
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "User A"},
@@ -102,7 +102,7 @@ func TestHub_TenantIsolation(t *testing.T) {
 		Type:     storage.EventCreate,
 		Id:       "tenantB:user2",
 		TenantID: "tenantB",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "tenantB:user2",
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "User B"},
@@ -163,7 +163,7 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 		Type:     storage.EventCreate,
 		Id:       "tenantA:user1",
 		TenantID: "tenantA",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "tenantA:user1",
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "User A"},
@@ -184,7 +184,7 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 		Type:     storage.EventCreate,
 		Id:       "tenantB:user2",
 		TenantID: "tenantB",
-		Document: &storage.Document{
+		Document: &storage.StoredDoc{
 			Id:         "tenantB:user2",
 			Collection: "users",
 			Data:       map[string]interface{}{"name": "User B"},

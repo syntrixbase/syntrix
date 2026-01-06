@@ -1,7 +1,7 @@
 package mongo
 
 import (
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"go.mongodb.org/mongo-driver/bson"
 )
 

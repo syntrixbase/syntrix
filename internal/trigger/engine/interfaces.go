@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 
-	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 // TaskConsumer consumes delivery tasks.

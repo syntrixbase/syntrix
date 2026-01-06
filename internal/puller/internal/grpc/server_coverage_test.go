@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	pullerv1 "github.com/codetrek/syntrix/api/puller/v1"
-	"github.com/codetrek/syntrix/internal/config"
-	"github.com/codetrek/syntrix/internal/puller/events"
-	"github.com/codetrek/syntrix/internal/storage"
+	pullerv1 "github.com/syntrixbase/syntrix/api/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -108,7 +108,7 @@ func TestServer_Subscribe(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	if source.handler != nil {
-		evt := &events.ChangeEvent{
+		evt := &events.StoreChangeEvent{
 			EventID: "evt-1",
 			MgoColl: "users",
 		}
@@ -190,7 +190,7 @@ func TestServer_Subscribe_SendError(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Broadcast event
-	evt := &events.ChangeEvent{EventID: "evt1", Backend: "backend1"}
+	evt := &events.StoreChangeEvent{EventID: "evt1", Backend: "backend1"}
 	srv.eventChan <- evt
 
 	// Subscribe should return error
@@ -269,7 +269,7 @@ func TestServer_Subscribe_NilEvent(t *testing.T) {
 		return nil
 	}
 
-	srv.eventChan <- &events.ChangeEvent{
+	srv.eventChan <- &events.StoreChangeEvent{
 		Backend: "b1",
 		EventID: "1",
 	}
@@ -302,10 +302,10 @@ func TestServer_Subscribe_ConvertError(t *testing.T) {
 		"bad": make(chan int),
 	}
 
-	srv.eventChan <- &events.ChangeEvent{
+	srv.eventChan <- &events.StoreChangeEvent{
 		Backend:      "b1",
 		EventID:      "1",
-		FullDocument: &storage.Document{Data: badDoc},
+		FullDocument: &storage.StoredDoc{Data: badDoc},
 	}
 
 	// Should log error and continue.
@@ -316,7 +316,7 @@ func TestServer_Subscribe_ConvertError(t *testing.T) {
 		return nil
 	}
 
-	srv.eventChan <- &events.ChangeEvent{
+	srv.eventChan <- &events.StoreChangeEvent{
 		Backend: "b1",
 		EventID: "2",
 	}

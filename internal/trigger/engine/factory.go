@@ -3,15 +3,15 @@ package engine
 import (
 	"fmt"
 
-	"github.com/codetrek/syntrix/internal/identity"
-	"github.com/codetrek/syntrix/internal/puller"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/internal/trigger/internal/evaluator"
-	"github.com/codetrek/syntrix/internal/trigger/internal/pubsub"
-	"github.com/codetrek/syntrix/internal/trigger/internal/watcher"
-	"github.com/codetrek/syntrix/internal/trigger/internal/worker"
-	"github.com/codetrek/syntrix/internal/trigger/types"
 	"github.com/nats-io/nats.go"
+	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/evaluator"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/pubsub"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/watcher"
+	"github.com/syntrixbase/syntrix/internal/trigger/internal/worker"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 var (

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"

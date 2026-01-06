@@ -16,6 +16,14 @@ func CheckDocumentID(id string) bool {
 	return idRegex.MatchString(id)
 }
 
+func StripProtectedFields(doc Document) {
+	delete(doc, "version")
+	delete(doc, "updatedAt")
+	delete(doc, "createdAt")
+	delete(doc, "collection")
+	delete(doc, "deleted")
+}
+
 // User facing document type, represents a JSON object.
 //
 //	"id" field is reserved for document ID.
@@ -72,11 +80,7 @@ func (doc Document) HasKey(key string) bool {
 }
 
 func (doc Document) StripProtectedFields() {
-	delete(doc, "version")
-	delete(doc, "updatedAt")
-	delete(doc, "createdAt")
-	delete(doc, "collection")
-	delete(doc, "deleted")
+	StripProtectedFields(doc)
 }
 
 func (doc Document) IsEmpty() bool {
@@ -106,4 +110,11 @@ func (doc Document) ValidateDocument() error {
 	}
 
 	return nil
+}
+
+func (doc Document) IsDeleted() bool {
+	if deleted, ok := doc["deleted"].(bool); ok && deleted {
+		return true
+	}
+	return false
 }

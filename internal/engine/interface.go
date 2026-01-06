@@ -4,12 +4,12 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/codetrek/syntrix/internal/csp"
-	"github.com/codetrek/syntrix/internal/engine/internal/client"
-	"github.com/codetrek/syntrix/internal/engine/internal/core"
-	"github.com/codetrek/syntrix/internal/engine/internal/httphandler"
-	"github.com/codetrek/syntrix/internal/storage"
-	"github.com/codetrek/syntrix/pkg/model"
+	"github.com/syntrixbase/syntrix/internal/csp"
+	"github.com/syntrixbase/syntrix/internal/engine/internal/client"
+	"github.com/syntrixbase/syntrix/internal/engine/internal/core"
+	"github.com/syntrixbase/syntrix/internal/engine/internal/httphandler"
+	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Service defines the interface for the Query Engine.

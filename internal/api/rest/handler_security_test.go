@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/codetrek/syntrix/internal/server"
-	"github.com/codetrek/syntrix/pkg/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestMaxBodySize_UnderLimit(t *testing.T) {
@@ -328,28 +328,6 @@ func TestSetValidationConfig_DefaultsForZero(t *testing.T) {
 	SetValidationConfig(ValidationConfig{})
 	assert.Equal(t, DefaultValidationConfig().MaxQueryLimit, validationConfig.MaxQueryLimit)
 	assert.Equal(t, DefaultValidationConfig().MaxReplicationLimit, validationConfig.MaxReplicationLimit)
-
-	// Restore original config
-	SetValidationConfig(originalCfg)
-}
-
-func TestValidatePathSyntax_MaxLength(t *testing.T) {
-	// Save original config
-	originalCfg := validationConfig
-
-	// Set a small max path length
-	SetValidationConfig(ValidationConfig{
-		MaxPathLength: 20,
-	})
-
-	// Test path within limit
-	err := validatePathSyntax("short/path")
-	assert.NoError(t, err)
-
-	// Test path exceeding limit
-	err = validatePathSyntax("this/is/a/very/long/path/that/exceeds/limit")
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "20")
 
 	// Restore original config
 	SetValidationConfig(originalCfg)
