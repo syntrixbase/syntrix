@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"github.com/google/cel-go/cel"
-	pb "github.com/syntrixbase/syntrix/api/streamer/v1"
+	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 )
 
 // Subscriber represents a single subscription.

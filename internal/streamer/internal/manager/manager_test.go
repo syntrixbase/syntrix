@@ -7,7 +7,7 @@ import (
 	"github.com/google/cel-go/cel"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	pb "github.com/syntrixbase/syntrix/api/streamer/v1"
+	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 )
 
 // docIDFilter creates a filter for exact document ID matching.

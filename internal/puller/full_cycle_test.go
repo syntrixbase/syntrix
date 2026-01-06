@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	pullerv1 "github.com/syntrixbase/syntrix/api/puller/v1"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	pullerv1 "github.com/syntrixbase/syntrix/api/puller/v1"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"

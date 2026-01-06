@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	pb "github.com/syntrixbase/syntrix/api/streamer/v1"
+	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/helper"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"

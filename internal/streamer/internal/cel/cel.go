@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/google/cel-go/cel"
-	pb "github.com/syntrixbase/syntrix/api/streamer/v1"
+	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/streamer/internal/manager"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )

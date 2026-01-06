@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package syntrix.streamer.v1;
 
-option go_package = "github.com/syntrixbase/syntrix/api/streamer/v1;streamerv1";
+option go_package = "github.com/syntrixbase/syntrix/api/gen/streamer/v1;streamerv1";
 
 // StreamerService provides centralized fan-out and subscription matching.
 // Gateways connect via bidirectional streaming to receive matched events.

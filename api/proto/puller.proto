@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package syntrix.puller.v1;
 
-option go_package = "github.com/syntrixbase/syntrix/api/puller/v1;pullerv1";
+option go_package = "github.com/syntrixbase/syntrix/api/gen/puller/v1;pullerv1";
 
 // PullerService provides access to the merged event stream from all backends.
 // Consumers subscribe to events and manage their own progress.
