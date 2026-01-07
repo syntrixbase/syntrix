@@ -29,10 +29,10 @@ func NewService(store storage.DocumentStore) Service {
 	return core.New(store)
 }
 
-// NewClient creates a new remote Query Service client (HTTP client).
+// NewClient creates a new remote Query Service client (gRPC client).
 // Use this when the query service is running remotely.
-func NewClient(baseURL string) Service {
-	return client.New(baseURL)
+func NewClient(address string) (Service, error) {
+	return client.New(address)
 }
 
 // NewHTTPHandler creates an HTTP handler for the Query Service.

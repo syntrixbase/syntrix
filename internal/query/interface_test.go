@@ -76,8 +76,9 @@ func TestNewService(t *testing.T) {
 }
 
 func TestNewClient(t *testing.T) {
-	client := NewClient("http://localhost:8080")
+	client, err := NewClient("localhost:50051")
 
+	assert.NoError(t, err)
 	assert.NotNil(t, client)
 	// Verify that it implements the Service interface
 	var _ Service = client

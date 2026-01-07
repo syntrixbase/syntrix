@@ -94,7 +94,11 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 
 	if m.opts.RunAPI {
 		if queryService == nil {
-			queryService = query.NewClient(m.cfg.Gateway.QueryServiceURL)
+			var err error
+			queryService, err = query.NewClient(m.cfg.Gateway.QueryServiceURL)
+			if err != nil {
+				return fmt.Errorf("failed to create query client: %w", err)
+			}
 		}
 		// Initialize Streamer Service for Realtime
 		m.streamerService = m.createStreamerService()
