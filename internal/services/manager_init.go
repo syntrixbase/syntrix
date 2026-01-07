@@ -12,9 +12,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/streamer"
@@ -83,7 +83,7 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 // initDistributed initializes services for distributed deployment mode.
 // Services communicate via HTTP and can run on separate machines.
 func (m *Manager) initDistributed(ctx context.Context) error {
-	var queryService engine.Service
+	var queryService query.Service
 
 	if m.opts.RunQuery {
 		queryService = m.createQueryService()
@@ -94,7 +94,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 
 	if m.opts.RunAPI {
 		if queryService == nil {
-			queryService = engine.NewClient(m.cfg.Gateway.QueryServiceURL)
+			queryService = query.NewClient(m.cfg.Gateway.QueryServiceURL)
 		}
 		// Initialize Streamer Service for Realtime
 		m.streamerService = m.createStreamerService()
@@ -149,23 +149,23 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 
 // createQueryService creates a query engine service.
 // This separates service creation from HTTP server setup for standalone mode support.
-func (m *Manager) createQueryService() engine.Service {
-	service := engine.NewService(m.docStore)
+func (m *Manager) createQueryService() query.Service {
+	service := query.NewService(m.docStore)
 	log.Println("Initialized Local Query Engine")
 	return service
 }
 
 // initQueryHTTPServer creates an HTTP server for the query service.
 // In standalone mode, this is not called since query service runs in-process.
-func (m *Manager) initQueryHTTPServer(service engine.Service) {
+func (m *Manager) initQueryHTTPServer(service query.Service) {
 	m.servers = append(m.servers, &http.Server{
 		Addr:    listenAddr(m.opts.ListenHost, m.cfg.Query.Port),
-		Handler: engine.NewHTTPHandler(service),
+		Handler: query.NewHTTPHandler(service),
 	})
 	m.serverNames = append(m.serverNames, "Query Service")
 }
 
-func (m *Manager) initAPIServer(queryService engine.Service) error {
+func (m *Manager) initAPIServer(queryService query.Service) error {
 	var authzEngine identity.AuthZ
 
 	if m.cfg.Identity.AuthZ.RulesFile != "" {

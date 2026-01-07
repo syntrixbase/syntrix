@@ -8,12 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity/config"
+	"github.com/syntrixbase/syntrix/internal/query"
 )
 
 type mockQueryService struct {
-	engine.Service
+	query.Service
 }
 
 func TestNewEngine_ErrorPaths(t *testing.T) {

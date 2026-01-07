@@ -5,14 +5,14 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 )
 
 type Server struct {
 	hub            *Hub
-	queryService   engine.Service
+	queryService   query.Service
 	streamer       streamer.Service
 	dataCollection string
 	auth           identity.AuthN
@@ -26,7 +26,7 @@ type Config struct {
 	EnableAuth     bool
 }
 
-func NewServer(qs engine.Service, str streamer.Service, dataCollection string, auth identity.AuthN, cfg Config) *Server {
+func NewServer(qs query.Service, str streamer.Service, dataCollection string, auth identity.AuthN, cfg Config) *Server {
 	h := NewHub()
 	s := &Server{
 		hub:            h,

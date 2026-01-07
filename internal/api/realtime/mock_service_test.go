@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -14,7 +14,7 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-var _ engine.Service = &MockQueryService{}
+var _ query.Service = &MockQueryService{}
 
 func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
 	args := m.Called(ctx, tenant, path)

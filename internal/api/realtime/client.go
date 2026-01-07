@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
@@ -81,7 +81,7 @@ func safeCheckOrigin(r *http.Request) bool {
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
 	hub          *Hub
-	queryService engine.Service
+	queryService query.Service
 	auth         identity.AuthN
 	cfg          Config
 
@@ -440,7 +440,7 @@ func checkAllowedOrigin(origin string, reqHost string, cfg Config, credentialed 
 }
 
 // ServeReplicationStream handles websocket requests from the peer.
-func ServeWs(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(r.Context())
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -477,7 +477,7 @@ func ServeWs(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w htt
 }
 
 // ServeSSE handles Server-Sent Events requests.
-func ServeSSE(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
+func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	origin := r.Header.Get("Origin")
