@@ -10,7 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/identity/config"
 )
 
 func TestTokenService_ErrorPaths(t *testing.T) {

@@ -8,69 +8,32 @@ import (
 	"strconv"
 	"time"
 
+	api "github.com/syntrixbase/syntrix/internal/api/config"
+	csp "github.com/syntrixbase/syntrix/internal/csp/config"
+	identity "github.com/syntrixbase/syntrix/internal/identity/config"
+	puller "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
+	trigger "github.com/syntrixbase/syntrix/internal/trigger/config"
 	"gopkg.in/yaml.v3"
 )
 
 // Config holds the application configuration
 type Config struct {
-	Server     server.Config    `yaml:"server"`
-	Storage    StorageConfig    `yaml:"storage"`
-	Identity   IdentityConfig   `yaml:"identity"`
-	Deployment DeploymentConfig `yaml:"deployment"`
-
-	Gateway GatewayConfig `yaml:"gateway"`
-	Query   QueryConfig   `yaml:"query"`
-	CSP     CSPConfig     `yaml:"csp"`
-	Trigger TriggerConfig `yaml:"trigger"`
-	Puller  PullerConfig  `yaml:"puller"`
-}
-
-// DeploymentConfig holds deployment mode settings
-type DeploymentConfig struct {
-	Mode       string           `yaml:"mode"` // "standalone" or "distributed" (default)
-	Standalone StandaloneConfig `yaml:"standalone"`
-}
-
-// StandaloneConfig holds standalone-specific settings
-type StandaloneConfig struct {
-	EmbeddedNATS bool   `yaml:"embedded_nats"` // Use embedded NATS server
-	NATSDataDir  string `yaml:"nats_data_dir"` // Data directory for embedded NATS
-}
-
-type GatewayConfig struct {
-	QueryServiceURL string            `yaml:"query_service_url"`
-	Auth            GatewayAuthConfig `yaml:"auth"`
-	Realtime        RealtimeConfig    `yaml:"realtime"`
-}
-
-type RealtimeConfig struct {
-	AllowedOrigins []string `yaml:"allowed_origins"`
-	AllowDevOrigin bool     `yaml:"allow_dev_origin"`
-	EnableAuth     bool     `yaml:"enable_auth"`
-}
-
-type GatewayAuthConfig struct {
-	Issuer   string        `yaml:"issuer"`
-	Audience string        `yaml:"audience"`
-	JWKSURL  string        `yaml:"jwks_url"`
-	CacheTTL time.Duration `yaml:"cache_ttl"`
+	Server     server.Config             `yaml:"server"`
+	Storage    StorageConfig             `yaml:"storage"`
+	Identity   identity.Config           `yaml:"identity"`
+	Deployment services.DeploymentConfig `yaml:"deployment"`
+	Gateway    api.GatewayConfig         `yaml:"gateway"`
+	Query      QueryConfig               `yaml:"query"`
+	CSP        csp.Config                `yaml:"csp"`
+	Trigger    trigger.Config            `yaml:"trigger"`
+	Puller     puller.Config             `yaml:"puller"`
 }
 
 type QueryConfig struct {
 	Port          int    `yaml:"port"`
 	CSPServiceURL string `yaml:"csp_service_url"`
-}
-
-type CSPConfig struct {
-	Port int `yaml:"port"`
-}
-
-type TriggerConfig struct {
-	NatsURL     string `yaml:"nats_url"`
-	RulesFile   string `yaml:"rules_file"`
-	WorkerCount int    `yaml:"worker_count"`
-	StreamName  string `yaml:"stream_name"`
 }
 
 type StorageConfig struct {
@@ -115,22 +78,6 @@ type CollectionTopology struct {
 type MongoConfig struct {
 	URI          string `yaml:"uri"`
 	DatabaseName string `yaml:"database_name"`
-}
-
-type IdentityConfig struct {
-	AuthN AuthNConfig `yaml:"authn"`
-	AuthZ AuthZConfig `yaml:"authz"`
-}
-
-type AuthNConfig struct {
-	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`
-	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"`
-	AuthCodeTTL     time.Duration `yaml:"auth_code_ttl"`
-	PrivateKeyFile  string        `yaml:"private_key_file"`
-}
-
-type AuthZConfig struct {
-	RulesFile string `yaml:"rules_file"`
 }
 
 // LoadConfig loads configuration from files and environment variables
@@ -179,46 +126,17 @@ func LoadConfig() *Config {
 				},
 			},
 		},
-		Identity: IdentityConfig{
-			AuthN: AuthNConfig{
-				AccessTokenTTL:  15 * time.Minute,
-				RefreshTokenTTL: 7 * 24 * time.Hour,
-				AuthCodeTTL:     2 * time.Minute,
-				PrivateKeyFile:  "keys/auth_private.pem",
-			},
-			AuthZ: AuthZConfig{
-				RulesFile: "security.yaml",
-			},
-		},
-		Server: server.DefaultConfig(),
-		Gateway: GatewayConfig{
-			QueryServiceURL: "http://localhost:8082",
-			Realtime: RealtimeConfig{
-				AllowedOrigins: []string{"http://localhost:8080", "http://localhost:3000", "http://localhost:5173"},
-				AllowDevOrigin: true,
-				EnableAuth:     true,
-			},
-		},
+		Identity: identity.DefaultConfig(),
+		Server:   server.DefaultConfig(),
+		Gateway:  api.DefaultGatewayConfig(),
 		Query: QueryConfig{
 			Port:          8082,
 			CSPServiceURL: "http://localhost:8083",
 		},
-		CSP: CSPConfig{
-			Port: 8083,
-		},
-		Trigger: TriggerConfig{
-			NatsURL:     "nats://localhost:4222",
-			RulesFile:   "triggers.json",
-			WorkerCount: 16,
-		},
-		Deployment: DeploymentConfig{
-			Mode: "distributed", // Default to distributed mode
-			Standalone: StandaloneConfig{
-				EmbeddedNATS: true,        // Default to embedded NATS in standalone
-				NATSDataDir:  "data/nats", // Default data directory
-			},
-		},
-		Puller: DefaultPullerConfig(),
+		CSP:        csp.DefaultConfig(),
+		Trigger:    trigger.DefaultConfig(),
+		Deployment: services.DefaultDeploymentConfig(),
+		Puller:     puller.DefaultConfig(),
 	}
 
 	// 2. Load config.yml

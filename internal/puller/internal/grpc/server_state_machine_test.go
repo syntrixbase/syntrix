@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -103,7 +103,7 @@ func TestServer_StateMachine_HappyPath(t *testing.T) {
 	// Scenario: Replay finishes -> Switch to Live -> Receive events
 
 	// Setup
-	cfg := config.PullerGRPCConfig{ChannelSize: 100}
+	cfg := config.GRPCConfig{ChannelSize: 100}
 	replayEvt := &events.StoreChangeEvent{
 		EventID:     "replay-1",
 		ClusterTime: events.ClusterTime{T: 100, I: 1},
@@ -183,7 +183,7 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 	// Scenario: Live mode -> Channel overflow -> Switch to Catch-up -> Replay -> Switch back to Live
 
 	// Setup with small channel size to force overflow
-	cfg := config.PullerGRPCConfig{ChannelSize: 1}
+	cfg := config.GRPCConfig{ChannelSize: 1}
 
 	var replayCount int
 	var mu sync.Mutex
@@ -300,7 +300,7 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 func TestServer_Boundary_EmptyReplay(t *testing.T) {
 	// Scenario: Replay returns no events -> Immediate switch to Live
 
-	cfg := config.PullerGRPCConfig{ChannelSize: 100}
+	cfg := config.GRPCConfig{ChannelSize: 100}
 	source := &controllableEventSource{
 		replayFunc: func(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
 			return &controllableIterator{events: []*events.StoreChangeEvent{}}, nil
@@ -345,7 +345,7 @@ func TestServer_Boundary_EmptyReplay(t *testing.T) {
 func TestServer_Boundary_ImmediateCancel(t *testing.T) {
 	// Scenario: Context cancelled before Replay starts
 
-	cfg := config.PullerGRPCConfig{ChannelSize: 100}
+	cfg := config.GRPCConfig{ChannelSize: 100}
 	source := &controllableEventSource{}
 	server := NewServer(cfg, source, nil)
 	server.Start(context.Background())
@@ -368,7 +368,7 @@ func TestServer_Boundary_ImmediateCancel(t *testing.T) {
 func TestServer_Boundary_SendError(t *testing.T) {
 	// Scenario: stream.Send returns error -> Should terminate subscription
 
-	cfg := config.PullerGRPCConfig{ChannelSize: 100}
+	cfg := config.GRPCConfig{ChannelSize: 100}
 	replayEvt := &events.StoreChangeEvent{EventID: "replay-1", ClusterTime: events.ClusterTime{T: 100}}
 
 	source := &controllableEventSource{
@@ -404,7 +404,7 @@ func TestServer_Boundary_SendError(t *testing.T) {
 func TestServer_Boundary_InvalidMarker(t *testing.T) {
 	// Scenario: Subscribe with malformed after token
 
-	cfg := config.PullerGRPCConfig{ChannelSize: 100}
+	cfg := config.GRPCConfig{ChannelSize: 100}
 	server := NewServer(cfg, &controllableEventSource{}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

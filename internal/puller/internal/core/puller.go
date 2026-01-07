@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
@@ -47,7 +47,7 @@ type Backend struct {
 // Puller is the main puller service that watches MongoDB change streams
 // and distributes events to consumers.
 type Puller struct {
-	cfg      config.PullerConfig
+	cfg      config.Config
 	backends map[string]*Backend
 	logger   *slog.Logger
 
@@ -81,7 +81,7 @@ type Puller struct {
 }
 
 // New creates a new Puller instance.
-func New(cfg config.PullerConfig, logger *slog.Logger) *Puller {
+func New(cfg config.Config, logger *slog.Logger) *Puller {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -467,8 +467,8 @@ func (i *backendInjectingIterator) Event() *events.StoreChangeEvent {
 }
 
 // Subscribe subscribes to events from the puller with the given progress marker.
-// Returns a channel of events.
-func (p *Puller) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *events.PullerEvent, error) {
+// Returns a channel of events that will be closed when the context is canceled.
+func (p *Puller) Subscribe(ctx context.Context, consumerID string, after string) <-chan *events.PullerEvent {
 	pm := cursor.NewProgressMarker()
 
 	// Initialize progress marker from 'after' if provided
@@ -513,7 +513,7 @@ func (p *Puller) Subscribe(ctx context.Context, consumerID string, after string)
 		}
 	}()
 
-	return outCh, nil
+	return outCh
 }
 
 func parseSize(s string) (int64, error) {

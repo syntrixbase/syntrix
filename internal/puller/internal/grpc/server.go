@@ -7,9 +7,10 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"time"
 
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
@@ -29,7 +30,7 @@ type EventSource interface {
 type Server struct {
 	pullerv1.UnimplementedPullerServiceServer
 
-	cfg         config.PullerGRPCConfig
+	cfg         config.GRPCConfig
 	eventSource EventSource
 	logger      *slog.Logger
 	grpcServer  *grpc.Server
@@ -50,7 +51,7 @@ type Server struct {
 }
 
 // NewServer creates a new gRPC server.
-func NewServer(cfg config.PullerGRPCConfig, eventSource EventSource, logger *slog.Logger) *Server {
+func NewServer(cfg config.GRPCConfig, eventSource EventSource, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -211,6 +212,14 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 		s.logger.Info("starting in live mode (no history requested)", "consumerId", sub.ID)
 	}
 
+	// Setup heartbeat ticker if enabled
+	heartbeatInterval := s.cfg.HeartbeatInterval
+	if heartbeatInterval <= 0 {
+		heartbeatInterval = 30 * time.Second // Default to 30s
+	}
+	heartbeatTicker := time.NewTicker(heartbeatInterval)
+	defer heartbeatTicker.Stop()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -265,6 +274,8 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 			// Caught up
 			mode = "live"
 			s.logger.Info("subscriber caught up, switching to live mode", "consumerId", sub.ID)
+			// Reset heartbeat ticker when entering live mode
+			heartbeatTicker.Reset(heartbeatInterval)
 
 		} else {
 			// Live loop
@@ -276,6 +287,12 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 			case <-sub.Done():
 				s.logger.Info("subscriber closed", "consumerId", sub.ID)
 				return status.Error(codes.Canceled, "subscription closed")
+
+			case <-heartbeatTicker.C:
+				// Send heartbeat (PullerEvent with nil ChangeEvent)
+				if err := s.sendHeartbeat(stream, sub); err != nil {
+					return err
+				}
 
 			case evt := <-sub.Events():
 				// Check for overflow, but don't switch immediately.
@@ -329,6 +346,21 @@ func (s *Server) sendEvent(stream pullerv1.PullerService_SubscribeServer, sub *c
 	// Send to client
 	if err := stream.Send(pullerEvt); err != nil {
 		s.logger.Error("failed to send event", "error", err, "consumerId", sub.ID)
+		return err
+	}
+	return nil
+}
+
+// sendHeartbeat sends a heartbeat event to keep the connection alive.
+// Heartbeat is a PullerEvent with nil ChangeEvent but includes current progress.
+func (s *Server) sendHeartbeat(stream pullerv1.PullerService_SubscribeServer, sub *core.Subscriber) error {
+	pullerEvt := &pullerv1.PullerEvent{
+		ChangeEvent: nil, // nil indicates heartbeat
+		Progress:    sub.CurrentProgress().Encode(),
+	}
+
+	if err := stream.Send(pullerEvt); err != nil {
+		s.logger.Error("failed to send heartbeat", "error", err, "consumerId", sub.ID)
 		return err
 	}
 	return nil

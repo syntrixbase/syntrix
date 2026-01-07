@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 

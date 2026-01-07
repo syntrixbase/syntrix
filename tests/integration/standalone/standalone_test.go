@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/config"
+	identity "github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -133,14 +134,14 @@ match:
 				},
 			},
 		},
-		Identity: config.IdentityConfig{
-			AuthN: config.AuthNConfig{
+		Identity: identity.Config{
+			AuthN: identity.AuthNConfig{
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
 				PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
 			},
-			AuthZ: config.AuthZConfig{
+			AuthZ: identity.AuthZConfig{
 				RulesFile: rulesFile,
 			},
 		},

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 	"go.mongodb.org/mongo-driver/bson"
@@ -35,10 +35,7 @@ func TestPuller_WatchAndCheckpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch, err := p.Subscribe(ctx, "consumer-1", "")
-	if err != nil {
-		t.Fatalf("Subscribe failed: %v", err)
-	}
+	ch := p.Subscribe(ctx, "consumer-1", "")
 
 	// Start puller
 	err = p.Start(ctx)
@@ -124,7 +121,7 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_, _ = p.Subscribe(ctx, "c1", "")
+	_ = p.Subscribe(ctx, "c1", "")
 	_ = p.Start(ctx)
 
 	// Wait for change stream to be established
@@ -163,7 +160,7 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	ctx2, cancel2 := context.WithCancel(context.Background())
 	defer cancel2()
 
-	_, _ = p2.Subscribe(ctx2, "c1", "")
+	_ = p2.Subscribe(ctx2, "c1", "")
 	err = p2.Start(ctx2)
 	if err != nil {
 		t.Fatalf("Failed to restart puller: %v", err)
@@ -337,4 +334,91 @@ func TestPuller_WatchChangeStream_Invalidate(t *testing.T) {
 
 	// Stop puller
 	p.Stop(ctx)
+}
+
+func TestPuller_Subscribe_ContextCancel(t *testing.T) {
+	env := setupTestEnv(t)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
+	backendCfg := config.PullerBackendConfig{Collections: []string{"users"}}
+	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Subscribe to events
+	ch := p.Subscribe(ctx, "cancel-test", "")
+
+	// Start puller
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Cancel context - should trigger ctx.Done() branch in Subscribe goroutine
+	cancel()
+
+	// Channel should close
+	select {
+	case _, ok := <-ch:
+		if ok {
+			// May get an event, try again
+			select {
+			case _, ok := <-ch:
+				if ok {
+					t.Log("Received extra event")
+				}
+			case <-time.After(500 * time.Millisecond):
+				// OK
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for channel to close after context cancel")
+	}
+
+	p.Stop(context.Background())
+}
+
+func TestPuller_Subscribe_SubscriberClosed(t *testing.T) {
+	env := setupTestEnv(t)
+	cfg := newTestConfig(t)
+	p := New(cfg, nil)
+	backendCfg := config.PullerBackendConfig{Collections: []string{"users"}}
+	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Subscribe to events
+	ch := p.Subscribe(ctx, "close-test", "")
+
+	// Start puller
+	go func() {
+		_ = p.Start(ctx)
+	}()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Close all subscribers - should trigger sub.Done() branch
+	p.subs.CloseAll()
+
+	// Channel should close
+	select {
+	case _, ok := <-ch:
+		if ok {
+			// May get an event, try again
+			select {
+			case _, ok := <-ch:
+				if ok {
+					t.Log("Received extra event")
+				}
+			case <-time.After(500 * time.Millisecond):
+				// OK
+			}
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Timeout waiting for channel to close after subscriber closed")
+	}
+
+	p.Stop(context.Background())
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
+	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 
@@ -135,7 +136,7 @@ func TestManager_Shutdown_PullerAndNATS(t *testing.T) {
 	pullerSvc := &stubPullerService{}
 	mgr.natsProvider = np
 	mgr.pullerService = pullerSvc
-	mgr.pullerGRPC = puller.NewGRPCServer(config.PullerGRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
+	mgr.pullerGRPC = puller.NewGRPCServer(puller_config.GRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
 
 	mgr.Shutdown(context.Background())
 

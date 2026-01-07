@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"
 	"go.mongodb.org/mongo-driver/bson"
@@ -50,7 +50,7 @@ func TestPuller_GRPC_Integration(t *testing.T) {
 
 	// 2. Configure Puller
 	tmpDir := t.TempDir()
-	cfg := config.PullerConfig{
+	cfg := config.Config{
 		Buffer: config.BufferConfig{
 			Path:          filepath.Join(tmpDir, "buffer"),
 			BatchSize:     1, // Ensure immediate flush for testing
@@ -85,7 +85,7 @@ func TestPuller_GRPC_Integration(t *testing.T) {
 
 	// 3. Start gRPC Server
 	grpcPort := getFreePort(t)
-	grpcCfg := config.PullerGRPCConfig{
+	grpcCfg := config.GRPCConfig{
 		Address:        fmt.Sprintf(":%d", grpcPort),
 		MaxConnections: 10,
 	}
@@ -127,9 +127,15 @@ func TestPuller_GRPC_Integration(t *testing.T) {
 
 	// 6. Test Replay
 	t.Run("Replay", func(t *testing.T) {
+		// Wait for doc1 to be fully buffered
+		time.Sleep(100 * time.Millisecond)
+
 		// Insert another document
 		_, err = coll.InsertOne(ctx, bson.M{"_id": "doc2", "val": 2})
 		require.NoError(t, err)
+
+		// Wait for doc2 to be buffered
+		time.Sleep(100 * time.Millisecond)
 
 		replayCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 		defer cancel()

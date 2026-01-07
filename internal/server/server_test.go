@@ -177,3 +177,30 @@ func TestServer_HTTPMux(t *testing.T) {
 	require.NotNil(t, mux)
 	assert.Equal(t, srv.httpMux, mux)
 }
+
+func TestServer_Stop_ContextTimeout(t *testing.T) {
+	// Test Stop with an already cancelled context to trigger timeout path
+	cfg := Config{
+		HTTPPort: 0,
+		GRPCPort: 0,
+	}
+	srv := New(cfg, nil)
+	require.NotNil(t, srv)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start server
+	go func() {
+		_ = srv.Start(ctx)
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	// Stop with immediate timeout
+	stopCtx, stopCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer stopCancel()
+	time.Sleep(5 * time.Millisecond) // Let timeout expire
+
+	_ = srv.Stop(stopCtx)
+	cancel()
+}

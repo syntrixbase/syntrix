@@ -9,6 +9,7 @@ applyTo: "**"
 - Always run `make coverage` to evaluate test coverage and fix as needed.
 - Always ask "should I add more testing" and make robust but not over-engineering testing.
 - Always document the "Why" (reasoning/analysis) alongside the "How" (decision/implementation) in design discussion documents.
+- Reminder: Add timeout to test if potential stuck.
 - Reminder: Fix everything in one pass—search globally first, then verify and echo back, so the user never has to repeat the same request.
 
 ## 🚨 STOP CONDITIONS

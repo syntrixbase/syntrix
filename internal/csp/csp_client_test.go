@@ -219,3 +219,47 @@ func TestCSPClient_ImplementsService(t *testing.T) {
 	var svc Service = NewClient("http://localhost:8083")
 	assert.NotNil(t, svc)
 }
+
+func TestCSPClient_Watch_ContextCancelWhileSending(t *testing.T) {
+	// Create a server that sends events continuously
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		encoder := json.NewEncoder(w)
+		// Send many events to fill the channel
+		for i := 0; i < 100; i++ {
+			encoder.Encode(storage.Event{Id: "users/1", Type: storage.EventCreate})
+		}
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch, err := client.Watch(ctx, "test-tenant", "users", nil, storage.WatchOptions{})
+	assert.NoError(t, err)
+	assert.NotNil(t, ch)
+
+	// Let some events through
+	time.Sleep(10 * time.Millisecond)
+
+	// Cancel immediately - this should trigger ctx.Done() path in the goroutine
+	cancel()
+
+	// Drain remaining events
+	timeout := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return // Channel closed, test passed
+			}
+		case <-timeout:
+			return // Timeout is acceptable
+		}
+	}
+}

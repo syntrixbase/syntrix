@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestLoadConfig_Defaults(t *testing.T) {
@@ -157,7 +158,7 @@ func TestValidate(t *testing.T) {
 				"existing_backend": {},
 			},
 		},
-		Deployment: DeploymentConfig{
+		Deployment: services_config.DeploymentConfig{
 			Mode: "invalid_mode",
 		},
 	}
@@ -175,7 +176,7 @@ func TestValidate(t *testing.T) {
 				"existing_backend": {},
 			},
 		},
-		Deployment: DeploymentConfig{
+		Deployment: services_config.DeploymentConfig{
 			Mode: "standalone",
 		},
 	}
@@ -192,7 +193,7 @@ func TestValidate(t *testing.T) {
 				"existing_backend": {},
 			},
 		},
-		Deployment: DeploymentConfig{
+		Deployment: services_config.DeploymentConfig{
 			Mode: "distributed",
 		},
 	}
@@ -249,12 +250,12 @@ func TestLoadConfig_DeploymentEnvVars_EmbeddedNATS1(t *testing.T) {
 }
 
 func TestIsStandaloneMode(t *testing.T) {
-	cfg := &Config{Deployment: DeploymentConfig{Mode: "standalone"}}
+	cfg := &Config{Deployment: services_config.DeploymentConfig{Mode: "standalone"}}
 	assert.True(t, cfg.IsStandaloneMode())
 
-	cfg = &Config{Deployment: DeploymentConfig{Mode: "distributed"}}
+	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: "distributed"}}
 	assert.False(t, cfg.IsStandaloneMode())
 
-	cfg = &Config{Deployment: DeploymentConfig{Mode: ""}}
+	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: ""}}
 	assert.False(t, cfg.IsStandaloneMode())
 }

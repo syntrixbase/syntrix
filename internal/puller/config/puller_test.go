@@ -6,7 +6,7 @@ import (
 )
 
 func TestDefaultPullerConfig(t *testing.T) {
-	cfg := DefaultPullerConfig()
+	cfg := DefaultConfig()
 
 	if cfg.GRPC.Address != ":50051" {
 		t.Errorf("GRPC.Address = %q, want %q", cfg.GRPC.Address, ":50051")
@@ -51,48 +51,48 @@ func TestDefaultPullerConfig(t *testing.T) {
 }
 
 func TestPullerConfig_Validate(t *testing.T) {
-	validCfg := func() PullerConfig {
-		return DefaultPullerConfig()
+	validCfg := func() Config {
+		return DefaultConfig()
 	}
 
 	tests := []struct {
 		name    string
-		modify  func(*PullerConfig)
+		modify  func(*Config)
 		wantErr bool
 		errMsg  string
 	}{
 		{
 			name:    "valid default config",
-			modify:  func(c *PullerConfig) {},
+			modify:  func(c *Config) {},
 			wantErr: false,
 		},
 		{
 			name:    "empty grpc address",
-			modify:  func(c *PullerConfig) { c.GRPC.Address = "" },
+			modify:  func(c *Config) { c.GRPC.Address = "" },
 			wantErr: true,
 			errMsg:  "grpc.address",
 		},
 		{
 			name:    "zero max connections",
-			modify:  func(c *PullerConfig) { c.GRPC.MaxConnections = 0 },
+			modify:  func(c *Config) { c.GRPC.MaxConnections = 0 },
 			wantErr: true,
 			errMsg:  "max_connections",
 		},
 		{
 			name:    "negative max connections",
-			modify:  func(c *PullerConfig) { c.GRPC.MaxConnections = -1 },
+			modify:  func(c *Config) { c.GRPC.MaxConnections = -1 },
 			wantErr: true,
 			errMsg:  "max_connections",
 		},
 		{
 			name:    "empty backends",
-			modify:  func(c *PullerConfig) { c.Backends = nil },
+			modify:  func(c *Config) { c.Backends = nil },
 			wantErr: true,
 			errMsg:  "backends",
 		},
 		{
 			name: "backend with empty name",
-			modify: func(c *PullerConfig) {
+			modify: func(c *Config) {
 				c.Backends = []PullerBackendConfig{{Name: ""}}
 			},
 			wantErr: true,
@@ -100,7 +100,7 @@ func TestPullerConfig_Validate(t *testing.T) {
 		},
 		{
 			name: "backend missing collections",
-			modify: func(c *PullerConfig) {
+			modify: func(c *Config) {
 				c.Backends = []PullerBackendConfig{{
 					Name:        "test",
 					Collections: nil,
@@ -111,55 +111,55 @@ func TestPullerConfig_Validate(t *testing.T) {
 		},
 		{
 			name:    "empty buffer path",
-			modify:  func(c *PullerConfig) { c.Buffer.Path = "" },
+			modify:  func(c *Config) { c.Buffer.Path = "" },
 			wantErr: true,
 			errMsg:  "path",
 		},
 		{
 			name:    "zero buffer batch size",
-			modify:  func(c *PullerConfig) { c.Buffer.BatchSize = 0 },
+			modify:  func(c *Config) { c.Buffer.BatchSize = 0 },
 			wantErr: true,
 			errMsg:  "batch_size",
 		},
 		{
 			name:    "zero buffer batch interval",
-			modify:  func(c *PullerConfig) { c.Buffer.BatchInterval = 0 },
+			modify:  func(c *Config) { c.Buffer.BatchInterval = 0 },
 			wantErr: true,
 			errMsg:  "batch_interval",
 		},
 		{
 			name:    "zero buffer queue size",
-			modify:  func(c *PullerConfig) { c.Buffer.QueueSize = 0 },
+			modify:  func(c *Config) { c.Buffer.QueueSize = 0 },
 			wantErr: true,
 			errMsg:  "queue_size",
 		},
 		{
 			name:    "zero catch up threshold",
-			modify:  func(c *PullerConfig) { c.Consumer.CatchUpThreshold = 0 },
+			modify:  func(c *Config) { c.Consumer.CatchUpThreshold = 0 },
 			wantErr: true,
 			errMsg:  "catch_up_threshold",
 		},
 		{
 			name:    "zero cleaner interval",
-			modify:  func(c *PullerConfig) { c.Cleaner.Interval = 0 },
+			modify:  func(c *Config) { c.Cleaner.Interval = 0 },
 			wantErr: true,
 			errMsg:  "interval",
 		},
 		{
 			name:    "zero retention",
-			modify:  func(c *PullerConfig) { c.Cleaner.Retention = 0 },
+			modify:  func(c *Config) { c.Cleaner.Retention = 0 },
 			wantErr: true,
 			errMsg:  "retention",
 		},
 		{
 			name:    "invalid bootstrap mode",
-			modify:  func(c *PullerConfig) { c.Bootstrap.Mode = "invalid" },
+			modify:  func(c *Config) { c.Bootstrap.Mode = "invalid" },
 			wantErr: true,
 			errMsg:  "from_now' or 'from_beginning",
 		},
 		{
 			name:    "from_beginning bootstrap mode is valid",
-			modify:  func(c *PullerConfig) { c.Bootstrap.Mode = "from_beginning" },
+			modify:  func(c *Config) { c.Bootstrap.Mode = "from_beginning" },
 			wantErr: false,
 		},
 	}

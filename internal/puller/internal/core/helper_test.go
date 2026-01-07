@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -58,10 +58,10 @@ type TestEnv struct {
 	DB     *mongo.Database
 }
 
-func newTestConfig(t *testing.T) config.PullerConfig {
+func newTestConfig(t *testing.T) config.Config {
 	t.Helper()
 
-	cfg := config.DefaultPullerConfig()
+	cfg := config.DefaultConfig()
 	cfg.Buffer.Path = t.TempDir()
 	return cfg
 }

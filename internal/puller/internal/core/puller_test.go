@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/recovery"
@@ -21,7 +21,7 @@ import (
 
 func TestNew(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerConfig{}
+	cfg := config.Config{}
 
 	// Test with nil logger
 	p := New(cfg, nil)
@@ -42,7 +42,7 @@ func TestNew(t *testing.T) {
 
 func TestPuller_SetEventHandler(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	called := false
 	handler := func(ctx context.Context, backendName string, event *events.StoreChangeEvent) error {
@@ -65,7 +65,7 @@ func TestPuller_SetEventHandler(t *testing.T) {
 
 func TestPuller_BackendNames_Empty(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	names := p.BackendNames()
 	if len(names) != 0 {
@@ -75,7 +75,7 @@ func TestPuller_BackendNames_Empty(t *testing.T) {
 
 func TestPuller_Start_NoBackends(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	err := p.Start(context.Background())
 	if err == nil {
@@ -88,7 +88,7 @@ func TestPuller_Start_NoBackends(t *testing.T) {
 
 func TestPuller_Stop_NotStarted(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -102,13 +102,10 @@ func TestPuller_Stop_NotStarted(t *testing.T) {
 
 func TestPuller_Subscribe(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx := context.Background()
-	ch, err := p.Subscribe(ctx, "consumer-1", "")
-	if err != nil {
-		t.Fatalf("Subscribe() error = %v", err)
-	}
+	ch := p.Subscribe(ctx, "consumer-1", "")
 	if ch == nil {
 		t.Error("Subscribe() returned nil channel")
 	}
@@ -116,15 +113,12 @@ func TestPuller_Subscribe(t *testing.T) {
 
 func TestPuller_Subscribe_SendsEvents(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ch, err := p.Subscribe(ctx, "consumer-1", "")
-	if err != nil {
-		t.Fatalf("Subscribe() error = %v", err)
-	}
+	ch := p.Subscribe(ctx, "consumer-1", "")
 
 	// Send an event through the handler
 	evt := &events.StoreChangeEvent{
@@ -147,13 +141,10 @@ func TestPuller_Subscribe_SendsEvents(t *testing.T) {
 
 func TestPuller_Subscribe_NonBlocking(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx := context.Background()
-	_, err := p.Subscribe(ctx, "consumer-1", "")
-	if err != nil {
-		t.Fatalf("Subscribe() error = %v", err)
-	}
+	_ = p.Subscribe(ctx, "consumer-1", "")
 
 	// When channel is not full, handler should return nil (event sent)
 	evt := &events.StoreChangeEvent{EventID: "test"}
@@ -162,10 +153,10 @@ func TestPuller_Subscribe_NonBlocking(t *testing.T) {
 
 func TestPuller_Subscribe_ChannelFull(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx := context.Background()
-	ch, _ := p.Subscribe(ctx, "consumer-1", "")
+	ch := p.Subscribe(ctx, "consumer-1", "")
 
 	// Fill the channel (buffer size is 1000)
 	for i := 0; i < 1000; i++ {
@@ -184,7 +175,7 @@ func TestPuller_Subscribe_ChannelFull(t *testing.T) {
 }
 
 func TestPuller_SetDelayOverrides(t *testing.T) {
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	p.SetRetryDelay(5 * time.Second)
 	p.SetBackpressureSlowDownDelay(7 * time.Millisecond)
@@ -408,7 +399,7 @@ func TestPuller_watchChangeStream_DecodeError(t *testing.T) {
 
 func TestBuildWatchPipeline_NoFilter(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	cfg := config.PullerBackendConfig{}
 	pipeline := p.buildWatchPipeline(cfg)
@@ -420,7 +411,7 @@ func TestBuildWatchPipeline_NoFilter(t *testing.T) {
 
 func TestBuildWatchPipeline_Collections(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	cfg := config.PullerBackendConfig{
 		Collections: []string{"users", "orders"},
@@ -576,25 +567,23 @@ func (d *decodeErrorStream) Close(context.Context) error {
 
 func TestPuller_Subscribe_WithAfter(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	pm := cursor.NewProgressMarker()
 	pm.SetPosition("backend1", "pos1")
 	after := pm.Encode()
 
 	ctx := context.Background()
-	ch, err := p.Subscribe(ctx, "consumer-1", after)
-	require.NoError(t, err)
+	ch := p.Subscribe(ctx, "consumer-1", after)
 	require.NotNil(t, ch)
 }
 
 func TestPuller_Subscribe_WithInvalidAfter(t *testing.T) {
 	t.Parallel()
-	p := New(config.PullerConfig{}, nil)
+	p := New(config.Config{}, nil)
 
 	ctx := context.Background()
 	// Should not fail, just ignore invalid token
-	ch, err := p.Subscribe(ctx, "consumer-1", "invalid-token")
-	require.NoError(t, err)
+	ch := p.Subscribe(ctx, "consumer-1", "invalid-token")
 	require.NotNil(t, ch)
 }

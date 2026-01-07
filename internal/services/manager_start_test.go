@@ -13,6 +13,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
+	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/trigger"
@@ -255,7 +256,7 @@ func TestManager_Start_PullerAndGRPC(t *testing.T) {
 
 	pullerSvc := &stubPullerService{}
 	mgr.pullerService = pullerSvc
-	mgr.pullerGRPC = puller.NewGRPCServer(config.PullerGRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
+	mgr.pullerGRPC = puller.NewGRPCServer(puller_config.GRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
 
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -320,7 +321,7 @@ type pullerBackendCall struct {
 	db   string
 }
 
-func (s *stubPullerService) AddBackend(name string, _ *mongo.Client, dbName string, _ config.PullerBackendConfig) error {
+func (s *stubPullerService) AddBackend(name string, _ *mongo.Client, dbName string, _ puller_config.PullerBackendConfig) error {
 	s.mu.Lock()
 	s.addCalls = append(s.addCalls, pullerBackendCall{name: name, db: dbName})
 	s.mu.Unlock()
@@ -340,8 +341,8 @@ func (s *stubPullerService) SetEventHandler(func(ctx context.Context, backendNam
 func (s *stubPullerService) Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
 	return nil, nil
 }
-func (s *stubPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *events.PullerEvent, error) {
-	return make(chan *events.PullerEvent), nil
+func (s *stubPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *events.PullerEvent {
+	return make(chan *events.PullerEvent)
 }
 
 func freeAddr() string {

@@ -398,3 +398,45 @@ func TestCleaner_MaxSize(t *testing.T) {
 		t.Errorf("Final count = %d, want 0 (evicted all)", finalCount)
 	}
 }
+
+func TestCleaner_StopBeforeContextCancel(t *testing.T) {
+	t.Parallel()
+	dir, err := os.MkdirTemp("", "cleaner-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(dir)
+
+	buf, err := New(Options{Path: dir})
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+	defer buf.Close()
+
+	cleaner := NewCleaner(CleanerOptions{
+		Buffer:    buf,
+		Retention: time.Hour,
+		Interval:  10 * time.Second, // Long interval so ticker doesn't fire
+	})
+
+	ctx := context.Background() // Never cancelled
+
+	cleaner.Start(ctx)
+
+	// Wait briefly for the cleaner goroutine to start
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop the cleaner - this should trigger <-c.done branch
+	done := make(chan struct{})
+	go func() {
+		cleaner.Stop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// Good - cleaner stopped via done channel
+	case <-time.After(2 * time.Second):
+		t.Error("Stop() took too long - done channel may not be working")
+	}
+}

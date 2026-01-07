@@ -40,7 +40,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/client"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
@@ -52,10 +52,12 @@ import (
 // Service defines the interface for the Puller service.
 // Both the local Puller and the remote Client implement this interface.
 type Service interface {
-	// Subscribe subscribes to events from the puller.
+	// Subscribe subscribes to events from the puller with automatic reconnection.
 	// The after parameter is the progress marker to resume from (empty for beginning).
-	// Returns a channel of events that will be closed when the subscription ends.
-	Subscribe(ctx context.Context, consumerID string, after string) (<-chan *Event, error)
+	// Returns a channel of events that will be closed when:
+	//   - The context is canceled
+	//   - Max reconnect retries is reached (for remote clients)
+	Subscribe(ctx context.Context, consumerID string, after string) <-chan *Event
 }
 
 // LocalService extends Service with methods only available for local (in-process) pullers.
@@ -83,7 +85,7 @@ type LocalService interface {
 
 // NewService creates a new local Puller service (in-process).
 // Use this for the puller service that runs alongside storage.
-func NewService(cfg config.PullerConfig, logger *slog.Logger) LocalService {
+func NewService(cfg config.Config, logger *slog.Logger) LocalService {
 	return core.New(cfg, logger)
 }
 
@@ -139,7 +141,7 @@ func StartHealthServer(ctx context.Context, addr string, checker *HealthChecker)
 }
 
 // NewGRPCServer creates a new gRPC server for the puller service.
-func NewGRPCServer(cfg config.PullerGRPCConfig, svc LocalService, logger *slog.Logger) *GRPCServer {
+func NewGRPCServer(cfg config.GRPCConfig, svc LocalService, logger *slog.Logger) *GRPCServer {
 	return pullergrpc.NewServer(cfg, svc, logger)
 }
 

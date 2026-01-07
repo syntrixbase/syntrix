@@ -2,11 +2,13 @@ package grpc
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
@@ -42,7 +44,7 @@ func (m *mockIterator) Close() error                    { return nil }
 
 func TestNewServer(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{
+	cfg := config.GRPCConfig{
 		Address:        ":50051",
 		MaxConnections: 100,
 	}
@@ -71,7 +73,7 @@ func TestNewServer(t *testing.T) {
 
 func TestServer_SubscriberCount(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{}
+	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
@@ -90,7 +92,7 @@ func TestServer_SubscriberCount(t *testing.T) {
 
 func TestServer_ConvertEvent(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{}
+	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
@@ -182,7 +184,7 @@ func TestServer_ConvertEvent(t *testing.T) {
 
 func TestServer_Stop_NotRunning(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{}
+	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
@@ -195,7 +197,7 @@ func TestServer_Stop_NotRunning(t *testing.T) {
 
 func TestServer_Stop_Running(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{}
+	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
@@ -227,7 +229,7 @@ func TestServer_Stop_Running(t *testing.T) {
 
 func TestServer_Stop_WithTimeout(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{}
+	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
@@ -282,4 +284,150 @@ func TestProgressMarker_Clone_Nil(t *testing.T) {
 	if clone.Positions == nil {
 		t.Error("Cloned marker should have initialized Positions")
 	}
+}
+
+func TestServer_SendHeartbeat(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{
+		HeartbeatInterval: 100 * time.Millisecond,
+	}
+	source := &mockEventSource{}
+	server := NewServer(cfg, source, nil)
+
+	// Create a mock stream
+	sentEvents := make([]*mockSentEvent, 0)
+	mockStream := &mockSubscribeStream{
+		sentEvents: &sentEvents,
+	}
+
+	// Create a subscriber with some progress
+	initialProgress := &cursor.ProgressMarker{
+		Positions: map[string]string{"backend-1": "evt-123"},
+	}
+	sub := core.NewSubscriber("test-consumer", initialProgress, false, 100)
+
+	// Send heartbeat
+	err := server.sendHeartbeat(mockStream, sub)
+	if err != nil {
+		t.Fatalf("sendHeartbeat() error = %v", err)
+	}
+
+	// Verify heartbeat was sent
+	if len(sentEvents) != 1 {
+		t.Fatalf("Expected 1 sent event, got %d", len(sentEvents))
+	}
+
+	// Verify it's a heartbeat (nil ChangeEvent)
+	if sentEvents[0].event.ChangeEvent != nil {
+		t.Error("Heartbeat should have nil ChangeEvent")
+	}
+
+	// Progress should be present since we have positions
+	if sentEvents[0].event.Progress == "" {
+		t.Error("Heartbeat should have Progress marker when subscriber has positions")
+	}
+}
+
+func TestServer_SendHeartbeat_EmptyProgress(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{}
+	source := &mockEventSource{}
+	server := NewServer(cfg, source, nil)
+
+	// Create a mock stream
+	sentEvents := make([]*mockSentEvent, 0)
+	mockStream := &mockSubscribeStream{
+		sentEvents: &sentEvents,
+	}
+
+	// Create a subscriber with no progress (fresh subscriber)
+	sub := core.NewSubscriber("test-consumer", nil, false, 100)
+
+	// Send heartbeat
+	err := server.sendHeartbeat(mockStream, sub)
+	if err != nil {
+		t.Fatalf("sendHeartbeat() error = %v", err)
+	}
+
+	// Verify heartbeat was sent
+	if len(sentEvents) != 1 {
+		t.Fatalf("Expected 1 sent event, got %d", len(sentEvents))
+	}
+
+	// Verify it's a heartbeat (nil ChangeEvent)
+	if sentEvents[0].event.ChangeEvent != nil {
+		t.Error("Heartbeat should have nil ChangeEvent")
+	}
+	// Empty progress is valid for fresh subscribers
+}
+
+func TestServer_HeartbeatIntervalDefault(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{
+		HeartbeatInterval: 0, // Not set, should default to 30s
+	}
+	source := &mockEventSource{}
+	server := NewServer(cfg, source, nil)
+
+	// Verify config is stored
+	if server.cfg.HeartbeatInterval != 0 {
+		t.Error("HeartbeatInterval should be 0 in config (default applied at runtime)")
+	}
+}
+
+func TestServer_SendHeartbeat_Error(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{}
+	source := &mockEventSource{}
+	server := NewServer(cfg, source, slog.Default())
+
+	sub := core.NewSubscriber("test-consumer", nil, false, 100)
+
+	// Use a stream that returns an error on Send
+	mockStream := &mockErrorStream{
+		err: errors.New("send failed"),
+	}
+
+	err := server.sendHeartbeat(mockStream, sub)
+	if err == nil {
+		t.Fatal("sendHeartbeat() should return error when stream.Send fails")
+	}
+	if err.Error() != "send failed" {
+		t.Errorf("sendHeartbeat() error = %v, want 'send failed'", err)
+	}
+}
+
+type mockErrorStream struct {
+	pullerv1.PullerService_SubscribeServer
+	err error
+}
+
+func (m *mockErrorStream) Send(evt *pullerv1.PullerEvent) error {
+	return m.err
+}
+
+func (m *mockErrorStream) Context() context.Context {
+	return context.Background()
+}
+
+type mockSentEvent struct {
+	event *pullerv1.PullerEvent
+}
+
+type mockSubscribeStream struct {
+	pullerv1.PullerService_SubscribeServer
+	sentEvents *[]*mockSentEvent
+	ctx        context.Context
+}
+
+func (m *mockSubscribeStream) Send(evt *pullerv1.PullerEvent) error {
+	*m.sentEvents = append(*m.sentEvents, &mockSentEvent{event: evt})
+	return nil
+}
+
+func (m *mockSubscribeStream) Context() context.Context {
+	if m.ctx != nil {
+		return m.ctx
+	}
+	return context.Background()
 }

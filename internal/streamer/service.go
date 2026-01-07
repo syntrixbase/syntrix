@@ -36,6 +36,13 @@ type ServiceConfig struct {
 	pullerClient puller.Service
 }
 
+func DefaultServiceConfig() ServiceConfig {
+	return ServiceConfig{
+		PullerAddr:  "",
+		SendTimeout: 5 * time.Second,
+	}
+}
+
 // ServiceConfigOption is a functional option for ServiceConfig.
 type ServiceConfigOption func(*ServiceConfig)
 
@@ -142,11 +149,8 @@ func (s *streamerService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Subscribe to events
-	eventChan, err := s.pullerClient.Subscribe(ctx, "streamer", s.progress)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to puller: %w", err)
-	}
+	// Subscribe to events (auto-reconnects on failures)
+	eventChan := s.pullerClient.Subscribe(ctx, "streamer", s.progress)
 
 	go s.consumePullerEvents(ctx, eventChan)
 	s.logger.Info("Started consuming from Puller")

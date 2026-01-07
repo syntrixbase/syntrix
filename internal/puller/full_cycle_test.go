@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"
 	"go.mongodb.org/mongo-driver/bson"
@@ -47,7 +47,7 @@ func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *puller
 
 	// 2. Configure Puller
 	tmpDir := t.TempDir()
-	cfg := config.PullerConfig{
+	cfg := config.Config{
 		Buffer: config.BufferConfig{
 			Path:          filepath.Join(tmpDir, "buffer"),
 			BatchSize:     10,
@@ -84,7 +84,7 @@ func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *puller
 
 	// 3. Start gRPC Server
 	grpcPort := getFreePort(t)
-	grpcCfg := config.PullerGRPCConfig{
+	grpcCfg := config.GRPCConfig{
 		Address:        fmt.Sprintf(":%d", grpcPort),
 		MaxConnections: 10,
 	}
@@ -165,7 +165,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 
 	// Helper to start puller
 	startPuller := func() (*core.Puller, *pullergrpc.Server, pullerv1.PullerServiceClient, *grpc.ClientConn) {
-		cfg := config.PullerConfig{
+		cfg := config.Config{
 			Buffer: config.BufferConfig{
 				Path:          bufferPath,
 				BatchSize:     10,
@@ -194,7 +194,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 		require.NoError(t, err)
 
 		grpcPort := getFreePort(t)
-		grpcCfg := config.PullerGRPCConfig{
+		grpcCfg := config.GRPCConfig{
 			Address:        fmt.Sprintf(":%d", grpcPort),
 			MaxConnections: 10,
 		}

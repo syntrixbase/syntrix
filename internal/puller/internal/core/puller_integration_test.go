@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/flowcontrol"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -24,7 +24,7 @@ func TestPuller_Recovery_Restart(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cfg := config.PullerConfig{
+	cfg := config.Config{
 		Buffer: config.BufferConfig{
 			Path: tmpDir,
 		},
@@ -92,7 +92,7 @@ func TestPuller_Recovery_Restart(t *testing.T) {
 
 func TestPuller_Backpressure(t *testing.T) {
 	// Setup
-	cfg := config.PullerConfig{}
+	cfg := config.Config{}
 	p := New(cfg, slog.Default())
 	p.backpressureSlowDownDelay = 10 * time.Millisecond
 	p.backpressurePauseDelay = 50 * time.Millisecond
