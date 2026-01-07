@@ -220,6 +220,8 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 	heartbeatTicker := time.NewTicker(heartbeatInterval)
 	defer heartbeatTicker.Stop()
 
+	shouldDrain := false
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -232,8 +234,11 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 		}
 
 		if mode == "catchup" {
-			// Drain channel to make space for new events
-			drainChannel(sub.Events())
+			// Drain channel to make space for new events if we are recovering from overflow
+			if shouldDrain {
+				drainChannel(sub.Events())
+				shouldDrain = false
+			}
 			sub.GetAndResetOverflow() // Clear overflow flag
 
 			// Start replay
@@ -273,6 +278,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 			// Check if we overflowed during replay
 			if sub.GetAndResetOverflow() {
 				s.logger.Info("subscriber overflowed during replay, continuing catchup", "consumerId", sub.ID)
+				shouldDrain = true
 				continue
 			}
 
@@ -314,6 +320,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 				if hasOverflow {
 					s.logger.Info("subscriber overflowed, switching to catchup", "consumerId", sub.ID)
 					mode = "catchup"
+					shouldDrain = true
 					continue
 				}
 			}
