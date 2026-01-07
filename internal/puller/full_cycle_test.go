@@ -263,12 +263,10 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 
 	// 6. Consume remaining 5
 	for i := 5; i < 10; i++ {
-		t.Logf("[DEBUG] Waiting for event doc-%d...", i)
 		evt, err := stream2.Recv()
 		if err != nil {
 			t.Fatalf("[DEBUG] Failed to receive event doc-%d: %v", i, err)
 		}
-		t.Logf("[DEBUG] Received event: %s", evt.ChangeEvent.MgoDocId)
 		assert.Equal(t, fmt.Sprintf("doc-%d", i), evt.ChangeEvent.MgoDocId)
 	}
 }
