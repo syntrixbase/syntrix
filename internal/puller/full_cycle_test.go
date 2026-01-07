@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"
 	"go.mongodb.org/mongo-driver/bson"
@@ -47,7 +47,7 @@ func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *puller
 
 	// 2. Configure Puller
 	tmpDir := t.TempDir()
-	cfg := config.PullerConfig{
+	cfg := config.Config{
 		Buffer: config.BufferConfig{
 			Path:          filepath.Join(tmpDir, "buffer"),
 			BatchSize:     10,
@@ -84,7 +84,7 @@ func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *puller
 
 	// 3. Start gRPC Server
 	grpcPort := getFreePort(t)
-	grpcCfg := config.PullerGRPCConfig{
+	grpcCfg := config.GRPCConfig{
 		Address:        fmt.Sprintf(":%d", grpcPort),
 		MaxConnections: 10,
 	}
@@ -165,7 +165,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 
 	// Helper to start puller
 	startPuller := func() (*core.Puller, *pullergrpc.Server, pullerv1.PullerServiceClient, *grpc.ClientConn) {
-		cfg := config.PullerConfig{
+		cfg := config.Config{
 			Buffer: config.BufferConfig{
 				Path:          bufferPath,
 				BatchSize:     10,
@@ -194,7 +194,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 		require.NoError(t, err)
 
 		grpcPort := getFreePort(t)
-		grpcCfg := config.PullerGRPCConfig{
+		grpcCfg := config.GRPCConfig{
 			Address:        fmt.Sprintf(":%d", grpcPort),
 			MaxConnections: 10,
 		}
@@ -230,13 +230,19 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("doc-%d", i), evt.ChangeEvent.MgoDocId)
 		lastToken = evt.Progress
 	}
+	t.Logf("[DEBUG] Phase 1: Consumed 5 events, lastToken=%s", lastToken)
 
 	// 3. Stop Puller (Simulate Crash)
+	// Note: Some events may still be in transit from MongoDB change stream.
+	// The checkpoint saves the last written event's resume token, so on restart,
+	// the change stream will resume from that point and recover any missing events.
 	conn1.Close()
 	s1.Stop(ctx)
 	p1.Stop(ctx)
 
 	// 4. Restart Puller
+	// The puller will resume the change stream from the checkpoint and
+	// fetch any events that were in transit when we stopped.
 	p2, s2, c2, conn2 := startPuller()
 	defer func() {
 		conn2.Close()
@@ -245,6 +251,10 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	}()
 
 	// 5. Subscribe with last token
+	// The subscriber will:
+	// 1. Replay events from buffer (events already persisted)
+	// 2. Switch to live mode and receive new events (including doc-9 recovered via resume token)
+	t.Logf("[DEBUG] Subscribing with lastToken=%s", lastToken)
 	stream2, err := c2.Subscribe(ctx, &pullerv1.SubscribeRequest{
 		ConsumerId: "resilience-2",
 		After:      lastToken,
@@ -254,7 +264,9 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	// 6. Consume remaining 5
 	for i := 5; i < 10; i++ {
 		evt, err := stream2.Recv()
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatalf("[DEBUG] Failed to receive event doc-%d: %v", i, err)
+		}
 		assert.Equal(t, fmt.Sprintf("doc-%d", i), evt.ChangeEvent.MgoDocId)
 	}
 }

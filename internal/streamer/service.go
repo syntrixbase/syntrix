@@ -36,6 +36,13 @@ type ServiceConfig struct {
 	pullerClient puller.Service
 }
 
+func DefaultServiceConfig() ServiceConfig {
+	return ServiceConfig{
+		PullerAddr:  "",
+		SendTimeout: 5 * time.Second,
+	}
+}
+
 // ServiceConfigOption is a functional option for ServiceConfig.
 type ServiceConfigOption func(*ServiceConfig)
 
@@ -142,11 +149,8 @@ func (s *streamerService) Start(ctx context.Context) error {
 		return nil
 	}
 
-	// Subscribe to events
-	eventChan, err := s.pullerClient.Subscribe(ctx, "streamer", s.progress)
-	if err != nil {
-		return fmt.Errorf("failed to subscribe to puller: %w", err)
-	}
+	// Subscribe to events (auto-reconnects on failures)
+	eventChan := s.pullerClient.Subscribe(ctx, "streamer", s.progress)
 
 	go s.consumePullerEvents(ctx, eventChan)
 	s.logger.Info("Started consuming from Puller")
@@ -171,6 +175,13 @@ func (s *streamerService) consumePullerEvents(ctx context.Context, eventChan <-c
 			if evt.Change == nil {
 				continue // Skip events without change data
 			}
+
+			s.logger.Debug("Streamer: received event from puller",
+				"eventID", evt.Change.EventID,
+				"op", evt.Change.OpType,
+				"backend", evt.Change.Backend,
+			)
+
 			if event, err := events.Transform(evt); err == nil {
 				if err := s.ProcessEvent(event); err != nil {
 					s.logger.Error("Failed to process event", "error", err, "eventID", evt.Change.EventID)
@@ -236,6 +247,11 @@ func (s *streamerService) ProcessEvent(event events.SyntrixChangeEvent) error {
 	if event.Document == nil {
 		return nil // Skip events without document
 	}
+
+	s.logger.Debug("Streamer: processing event",
+		"tenantID", event.TenantID,
+		"collection", event.Document.Collection,
+	)
 
 	doc := helper.FlattenStorageDocument(event.Document)
 	matches := s.manager.Match(event.TenantID, event.Document.Collection, doc.GetID(), doc)

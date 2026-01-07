@@ -11,7 +11,11 @@ import (
 	"testing"
 	"time"
 
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/config"
+	csp_config "github.com/syntrixbase/syntrix/internal/csp/config"
+	identity "github.com/syntrixbase/syntrix/internal/identity/config"
+	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -176,14 +180,14 @@ match:
 		Server: server.Config{
 			HTTPPort: apiPort,
 		},
-		Gateway: config.GatewayConfig{
+		Gateway: api_config.GatewayConfig{
 			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
 		},
 		Query: config.QueryConfig{
 			Port:          queryPort,
 			CSPServiceURL: fmt.Sprintf("http://localhost:%d", cspPort),
 		},
-		CSP: config.CSPConfig{
+		CSP: csp_config.Config{
 			Port: cspPort,
 		},
 		Storage: config.StorageConfig{
@@ -221,26 +225,26 @@ match:
 				},
 			},
 		},
-		Identity: config.IdentityConfig{
-			AuthN: config.AuthNConfig{
+		Identity: identity.Config{
+			AuthN: identity.AuthNConfig{
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
 				PrivateKeyFile:  keysDir + "/auth_private.pem",
 			},
-			AuthZ: config.AuthZConfig{
+			AuthZ: identity.AuthZConfig{
 				RulesFile: rulesFile,
 			},
 		},
-		Puller: config.PullerConfig{
-			Backends: []config.PullerBackendConfig{
+		Puller: puller_config.Config{
+			Backends: []puller_config.PullerBackendConfig{
 				{Name: "default"},
 			},
-			Cleaner: config.CleanerConfig{
+			Cleaner: puller_config.CleanerConfig{
 				Interval:  1 * time.Minute,
 				Retention: 1 * time.Hour,
 			},
-			Buffer: config.BufferConfig{
+			Buffer: puller_config.BufferConfig{
 				Path:    bufferDir,
 				MaxSize: "100MB",
 			},

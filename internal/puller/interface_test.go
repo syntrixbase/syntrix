@@ -5,12 +5,12 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 )
 
 func TestNewService(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerConfig{}
+	cfg := config.Config{}
 
 	svc := NewService(cfg, nil)
 	if svc == nil {
@@ -32,7 +32,7 @@ func TestNewService(t *testing.T) {
 
 func TestNewService_WithLogger(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerConfig{}
+	cfg := config.Config{}
 	logger := slog.Default()
 
 	svc := NewService(cfg, logger)
@@ -60,11 +60,11 @@ func TestNewHealthChecker_WithLogger(t *testing.T) {
 
 func TestNewGRPCServer(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{
+	cfg := config.GRPCConfig{
 		Address:        ":50051",
 		MaxConnections: 100,
 	}
-	svc := NewService(config.PullerConfig{}, nil)
+	svc := NewService(config.Config{}, nil)
 
 	server := NewGRPCServer(cfg, svc, nil)
 	if server == nil {
@@ -74,11 +74,11 @@ func TestNewGRPCServer(t *testing.T) {
 
 func TestNewGRPCServer_WithLogger(t *testing.T) {
 	t.Parallel()
-	cfg := config.PullerGRPCConfig{
+	cfg := config.GRPCConfig{
 		Address:        ":50051",
 		MaxConnections: 100,
 	}
-	svc := NewService(config.PullerConfig{}, nil)
+	svc := NewService(config.Config{}, nil)
 	logger := slog.Default()
 
 	server := NewGRPCServer(cfg, svc, logger)

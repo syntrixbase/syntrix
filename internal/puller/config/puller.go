@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-// PullerConfig holds configuration for the Puller service.
-type PullerConfig struct {
+// Config holds configuration for the Puller service.
+type Config struct {
 	// gRPC Server configuration
-	GRPC PullerGRPCConfig `yaml:"grpc"`
+	GRPC GRPCConfig `yaml:"grpc"`
 
 	// Backend configurations - references storage.backends by name
 	Backends []PullerBackendConfig `yaml:"backends"`
@@ -31,13 +31,18 @@ type PullerConfig struct {
 	Health  HealthConfig  `yaml:"health"`
 }
 
-// PullerGRPCConfig holds gRPC server configuration.
-type PullerGRPCConfig struct {
+// GRPCConfig holds gRPC server configuration.
+type GRPCConfig struct {
 	Address        string `yaml:"address"`
 	MaxConnections int    `yaml:"max_connections"`
 	// ChannelSize is the size of the subscriber channel.
 	// Defaults to 10000 if not set.
 	ChannelSize int `yaml:"channel_size"`
+	// HeartbeatInterval is the interval at which the server sends heartbeat
+	// events to connected clients to keep connections alive.
+	// A heartbeat is a PullerEvent with nil ChangeEvent.
+	// Defaults to 30 seconds if not set. Set to 0 to disable.
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 }
 
 // PullerBackendConfig references a storage backend and adds puller-specific settings.
@@ -103,12 +108,13 @@ type HealthConfig struct {
 	Path string `yaml:"path"`
 }
 
-// DefaultPullerConfig returns sensible defaults for PullerConfig.
-func DefaultPullerConfig() PullerConfig {
-	return PullerConfig{
-		GRPC: PullerGRPCConfig{
-			Address:        ":50051",
-			MaxConnections: 100,
+// DefaultConfig returns sensible defaults for PullerConfig.
+func DefaultConfig() Config {
+	return Config{
+		GRPC: GRPCConfig{
+			Address:           ":50051",
+			MaxConnections:    100,
+			HeartbeatInterval: 30 * time.Second,
 		},
 		Backends: []PullerBackendConfig{
 			{
@@ -146,7 +152,7 @@ func DefaultPullerConfig() PullerConfig {
 }
 
 // Validate validates the PullerConfig.
-func (c *PullerConfig) Validate() error {
+func (c *Config) Validate() error {
 	if c.GRPC.Address == "" {
 		return errors.New("puller.grpc.address is required")
 	}

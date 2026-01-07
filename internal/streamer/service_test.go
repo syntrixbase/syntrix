@@ -2,8 +2,8 @@ package streamer
 
 import (
 	"context"
-	"errors"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -14,6 +14,12 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
 )
+
+var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+func init() {
+	slog.SetDefault(testLogger)
+}
 
 // testStoredDoc creates a StoredDoc with all required fields for testing.
 // Note: StoredDoc.Id is MongoDB's _id (tenant:hash format), NOT the user document ID.
@@ -599,11 +605,11 @@ func newTestPullerService() *testPullerService {
 	}
 }
 
-func (m *testPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *puller.Event, error) {
+func (m *testPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
 	if m.err != nil {
-		return nil, m.err
+		return nil
 	}
-	return m.events, nil
+	return m.events
 }
 
 func TestStart_WithMockPuller(t *testing.T) {
@@ -622,18 +628,8 @@ func TestStart_WithMockPuller(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 }
 
-func TestStart_SubscribeError(t *testing.T) {
-	mockPuller := newTestPullerService()
-	mockPuller.err = errors.New("subscribe failed")
-
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	err = s.Start(ctx)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to subscribe to puller")
-}
+// Note: TestStart_SubscribeError was removed because with the new auto-reconnect design,
+// Subscribe no longer returns an error. It returns a channel and handles reconnection internally.
 
 func TestStart_StandaloneMode(t *testing.T) {
 	// No puller configured - standalone mode
@@ -643,6 +639,25 @@ func TestStart_StandaloneMode(t *testing.T) {
 	ctx := context.Background()
 	err = s.Start(ctx)
 	require.NoError(t, err)
+}
+
+func TestStart_WithPullerAddr(t *testing.T) {
+	// Test that Start creates a puller client from address.
+	// gRPC connection is lazy, so NewClient won't fail even if server doesn't exist.
+	s, err := NewService(ServiceConfig{
+		PullerAddr: "localhost:50051", // Server may not exist, but gRPC is lazy
+	}, slog.Default())
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start should succeed because gRPC connection is lazy
+	err = s.Start(ctx)
+	require.NoError(t, err)
+
+	// Give time for background goroutine to start
+	time.Sleep(10 * time.Millisecond)
 }
 
 func TestConsumePullerEvents_ProcessEvent(t *testing.T) {
@@ -743,38 +758,9 @@ func TestConsumePullerEvents_ServiceStopped(t *testing.T) {
 	time.Sleep(20 * time.Millisecond)
 }
 
-func TestStart_WithPullerAddr_Error(t *testing.T) {
-	// Test that Start fails gracefully when puller address is specified
-	// but the server is not running. gRPC client creation is lazy, so
-	// the error happens at Subscribe time, not at NewClient time.
-	s, err := NewService(ServiceConfig{
-		PullerAddr: "localhost:59999", // Non-existent server
-	}, slog.Default())
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	err = s.Start(ctx)
-	// This should fail because no server is running at that address
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to subscribe to puller")
-}
-
-func TestStart_WithValidPullerAddr_NoServer(t *testing.T) {
-	// Test another variant of error handling with different address format
-	s, err := NewService(ServiceConfig{
-		PullerAddr: "invalid-host-that-does-not-exist:50051",
-	}, slog.Default())
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
-	defer cancel()
-
-	err = s.Start(ctx)
-	// Should fail during subscribe
-	assert.Error(t, err)
-}
+// Note: TestStart_WithPullerAddr_Error and TestStart_WithValidPullerAddr_NoServer were removed
+// because with the new auto-reconnect design, Subscribe no longer returns an immediate error.
+// The client will keep trying to reconnect in the background.
 
 func TestService_Subscribe_FilterCompileError(t *testing.T) {
 	// Test subscribe with invalid filter that causes compilation failure
@@ -809,4 +795,36 @@ func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
 	})
 
 	require.Error(t, err)
+}
+
+func TestService_ConsumePullerEvents_ServiceContextDone(t *testing.T) {
+	// Test that consumePullerEvents stops when service context is done
+	s, err := NewService(ServiceConfig{}, slog.Default())
+	require.NoError(t, err)
+	internal := getInternalService(s)
+
+	// Create a mock puller event channel
+	eventChan := make(chan *puller.Event)
+
+	// Start consumePullerEvents in a goroutine
+	consumeCtx := context.Background()
+	done := make(chan struct{})
+	go func() {
+		internal.consumePullerEvents(consumeCtx, eventChan)
+		close(done)
+	}()
+
+	// Wait briefly then stop the service (which cancels internal context)
+	time.Sleep(50 * time.Millisecond)
+	internal.cancel()
+
+	// consumePullerEvents should exit via s.ctx.Done()
+	select {
+	case <-done:
+		// Good
+	case <-time.After(2 * time.Second):
+		t.Fatal("consumePullerEvents did not exit after service context cancel")
+	}
+
+	close(eventChan)
 }

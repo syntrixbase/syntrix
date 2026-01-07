@@ -11,6 +11,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -287,7 +288,7 @@ func TestManager_Init_RunRealtimePath(t *testing.T) {
 func TestManager_initPullerService_Success(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Puller.Buffer.Path = t.TempDir()
-	cfg.Puller.Backends = []config.PullerBackendConfig{{Name: "primary"}}
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "primary"}}
 
 	mgr := NewManager(cfg, Options{Mode: ModeDistributed})
 	mgr.storageFactory = &stubStorageFactory{
@@ -306,7 +307,7 @@ func TestManager_initPullerService_Success(t *testing.T) {
 func TestManager_initPullerService_GetMongoError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Puller.Buffer.Path = t.TempDir()
-	cfg.Puller.Backends = []config.PullerBackendConfig{{Name: "missing"}}
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "missing"}}
 
 	mgr := NewManager(cfg, Options{})
 	mgr.storageFactory = &stubStorageFactory{
@@ -655,4 +656,67 @@ func TestManager_initDistributed_APIServerError(t *testing.T) {
 	err := mgr.Init(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create authz engine")
+}
+
+func TestManager_Init_PullerServiceError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &stubStorageFactory{
+			// Return an error for the "missing_backend" backend
+			errByName: map[string]error{"missing_backend": errors.New("backend not found")},
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Puller.Buffer.Path = t.TempDir()
+	// Configure a backend that will fail during initialization
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "missing_backend"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeDistributed,
+		RunPuller: true,
+		RunQuery:  true, // Need this to trigger storage initialization
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := mgr.Init(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get mongo client for backend")
+}
+
+func TestManager_initDistributed_TriggerServicesError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	// Configure NATS to fail connection
+	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
+
+	mgr := NewManager(cfg, Options{
+		Mode:                ModeDistributed,
+		RunTriggerEvaluator: true,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := mgr.Init(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to connect to NATS")
 }

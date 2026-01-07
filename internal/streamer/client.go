@@ -3,35 +3,91 @@ package streamer
 import (
 	"context"
 	"fmt"
-	"io"
 	"log/slog"
-	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// ConnectionState represents the current connection state.
+type ConnectionState int
+
+const (
+	// StateDisconnected indicates the client is not connected.
+	StateDisconnected ConnectionState = iota
+	// StateConnecting indicates the client is establishing a connection.
+	StateConnecting
+	// StateConnected indicates the client is connected and receiving events.
+	StateConnected
+	// StateReconnecting indicates the client is attempting to reconnect.
+	StateReconnecting
+)
+
+// String returns a string representation of the connection state.
+func (s ConnectionState) String() string {
+	switch s {
+	case StateDisconnected:
+		return "disconnected"
+	case StateConnecting:
+		return "connecting"
+	case StateConnected:
+		return "connected"
+	case StateReconnecting:
+		return "reconnecting"
+	default:
+		return "unknown"
+	}
+}
+
+// StateChangeCallback is called when connection state changes.
+type StateChangeCallback func(state ConnectionState, err error)
 
 // ClientConfig configures the Streamer client.
 type ClientConfig struct {
 	// StreamerAddr is the address of the Streamer gRPC server.
 	StreamerAddr string
 
-	// ReconnectInterval is the time between reconnection attempts.
-	ReconnectInterval time.Duration
+	// InitialBackoff is the initial wait time before first reconnect attempt.
+	// Defaults to 1 second.
+	InitialBackoff time.Duration
+
+	// MaxBackoff is the maximum wait time between reconnect attempts.
+	// Defaults to 30 seconds.
+	MaxBackoff time.Duration
+
+	// BackoffMultiplier is the factor by which backoff increases after each failure.
+	// Defaults to 2.0.
+	BackoffMultiplier float64
+
+	// MaxRetries is the maximum number of consecutive reconnect attempts.
+	// Set to 0 for unlimited retries. Defaults to 0 (unlimited).
+	MaxRetries int
 
 	// HeartbeatInterval is the time between heartbeat messages.
+	// If > 0, client sends periodic heartbeats to detect stale connections.
+	// Defaults to 30 seconds.
 	HeartbeatInterval time.Duration
+
+	// ActivityTimeout is the maximum time to wait for any message before
+	// considering the connection stale. Defaults to 90 seconds.
+	ActivityTimeout time.Duration
+
+	// OnStateChange is called when connection state changes. Optional.
+	OnStateChange StateChangeCallback
 }
 
 // DefaultClientConfig returns sensible defaults.
 func DefaultClientConfig() ClientConfig {
 	return ClientConfig{
 		StreamerAddr:      "localhost:50052",
-		ReconnectInterval: 5 * time.Second,
+		InitialBackoff:    1 * time.Second,
+		MaxBackoff:        30 * time.Second,
+		BackoffMultiplier: 2.0,
+		MaxRetries:        0, // unlimited
 		HeartbeatInterval: 30 * time.Second,
+		ActivityTimeout:   90 * time.Second,
 	}
 }
 
@@ -52,11 +108,22 @@ func NewClient(config ClientConfig, logger *slog.Logger) (Service, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if config.ReconnectInterval == 0 {
-		config.ReconnectInterval = 5 * time.Second
+
+	// Apply defaults
+	if config.InitialBackoff <= 0 {
+		config.InitialBackoff = 1 * time.Second
 	}
-	if config.HeartbeatInterval == 0 {
+	if config.MaxBackoff <= 0 {
+		config.MaxBackoff = 30 * time.Second
+	}
+	if config.BackoffMultiplier <= 0 {
+		config.BackoffMultiplier = 2.0
+	}
+	if config.HeartbeatInterval <= 0 {
 		config.HeartbeatInterval = 30 * time.Second
+	}
+	if config.ActivityTimeout <= 0 {
+		config.ActivityTimeout = 90 * time.Second
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -85,18 +152,23 @@ func NewClient(config ClientConfig, logger *slog.Logger) (Service, error) {
 }
 
 // Stream implements the Service interface.
-// Returns a bidirectional stream that wraps the gRPC stream.
+// Returns a bidirectional stream that wraps the gRPC stream with auto-reconnect.
 func (c *streamerClient) Stream(ctx context.Context) (Stream, error) {
 	grpcStream, err := c.client.Stream(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish stream: %w", err)
 	}
 
-	return &remoteStream{
-		ctx:        ctx,
-		grpcStream: grpcStream,
-		logger:     c.logger,
-	}, nil
+	rs := &remoteStream{
+		ctx:                 ctx,
+		grpcStream:          grpcStream,
+		client:              c,
+		logger:              c.logger,
+		activeSubscriptions: make(map[string]*subscriptionInfo),
+		state:               StateConnected,
+	}
+
+	return rs, nil
 }
 
 // Close closes the client connection.
@@ -110,174 +182,3 @@ func (c *streamerClient) Close() error {
 
 // Compile-time check
 var _ Service = (*streamerClient)(nil)
-
-// --- remoteStream Implementation ---
-
-// remoteStream implements the Stream interface for remote gRPC communication.
-type remoteStream struct {
-	ctx        context.Context
-	grpcStream pb.StreamerService_StreamClient
-	logger     *slog.Logger
-
-	closedMu sync.Mutex
-	closed   bool
-
-	// Pending subscribe requests waiting for responses
-	pendingSubscribes   map[string]chan *pb.SubscribeResponse
-	pendingSubscribesMu sync.Mutex
-
-	// recvLoop runs in background to route event deliveries
-	recvChan chan *EventDelivery
-	recvErr  error
-	recvOnce sync.Once
-}
-
-// Subscribe creates a new subscription and returns the subscription ID.
-func (rs *remoteStream) Subscribe(tenant, collection string, filters []Filter) (string, error) {
-	rs.ensureRecvLoop()
-
-	rs.closedMu.Lock()
-	if rs.closed {
-		rs.closedMu.Unlock()
-		return "", io.EOF
-	}
-	rs.closedMu.Unlock()
-
-	// Generate subscription ID
-	subID := uuid.New().String()
-
-	// Create response channel
-	respChan := make(chan *pb.SubscribeResponse, 1)
-	rs.pendingSubscribesMu.Lock()
-	rs.pendingSubscribes[subID] = respChan
-	rs.pendingSubscribesMu.Unlock()
-
-	defer func() {
-		rs.pendingSubscribesMu.Lock()
-		delete(rs.pendingSubscribes, subID)
-		rs.pendingSubscribesMu.Unlock()
-	}()
-
-	// Send subscribe request - directly construct proto
-	protoReq := &pb.SubscribeRequest{
-		SubscriptionId: subID,
-		Tenant:         tenant,
-		Collection:     collection,
-		Filters:        filtersToProto(filters),
-	}
-	if err := rs.grpcStream.Send(&pb.GatewayMessage{
-		Payload: &pb.GatewayMessage_Subscribe{Subscribe: protoReq},
-	}); err != nil {
-		return "", err
-	}
-
-	// Wait for response
-	select {
-	case resp := <-respChan:
-		if !resp.Success {
-			return "", fmt.Errorf("subscribe failed: %s", resp.Error)
-		}
-		return resp.SubscriptionId, nil
-	case <-rs.ctx.Done():
-		return "", rs.ctx.Err()
-	}
-}
-
-// Unsubscribe removes a subscription by ID.
-func (rs *remoteStream) Unsubscribe(subscriptionID string) error {
-	rs.closedMu.Lock()
-	if rs.closed {
-		rs.closedMu.Unlock()
-		return io.EOF
-	}
-	rs.closedMu.Unlock()
-
-	// Send unsubscribe request - directly construct proto
-	return rs.grpcStream.Send(&pb.GatewayMessage{
-		Payload: &pb.GatewayMessage_Unsubscribe{
-			Unsubscribe: &pb.UnsubscribeRequest{
-				SubscriptionId: subscriptionID,
-			},
-		},
-	})
-}
-
-// Recv receives an EventDelivery from the remote Streamer.
-func (rs *remoteStream) Recv() (*EventDelivery, error) {
-	rs.ensureRecvLoop()
-
-	select {
-	case delivery, ok := <-rs.recvChan:
-		if !ok {
-			if rs.recvErr != nil {
-				return nil, rs.recvErr
-			}
-			return nil, io.EOF
-		}
-		return delivery, nil
-	case <-rs.ctx.Done():
-		return nil, rs.ctx.Err()
-	}
-}
-
-// Close closes the stream.
-func (rs *remoteStream) Close() error {
-	rs.closedMu.Lock()
-	defer rs.closedMu.Unlock()
-
-	if !rs.closed {
-		rs.closed = true
-		return rs.grpcStream.CloseSend()
-	}
-	return nil
-}
-
-// ensureRecvLoop starts the background receive loop if not already running.
-func (rs *remoteStream) ensureRecvLoop() {
-	rs.recvOnce.Do(func() {
-		rs.recvChan = make(chan *EventDelivery, 100)
-		rs.pendingSubscribes = make(map[string]chan *pb.SubscribeResponse)
-		go rs.recvLoop()
-	})
-}
-
-// recvLoop reads from grpcStream and routes messages directly.
-func (rs *remoteStream) recvLoop() {
-	defer close(rs.recvChan)
-	for {
-		protoMsg, err := rs.grpcStream.Recv()
-		if err != nil {
-			rs.recvErr = err
-			return
-		}
-		// Process proto directly and route appropriately
-		switch payload := protoMsg.Payload.(type) {
-		case *pb.StreamerMessage_Delivery:
-			delivery := protoToEventDelivery(payload.Delivery)
-			select {
-			case rs.recvChan <- delivery:
-			case <-rs.ctx.Done():
-				return
-			}
-		case *pb.StreamerMessage_SubscribeResponse:
-			rs.handleSubscribeResponse(payload.SubscribeResponse)
-		case *pb.StreamerMessage_HeartbeatAck:
-			// Ignore heartbeat acks
-		}
-	}
-}
-
-// handleSubscribeResponse routes a subscribe response to the waiting caller.
-func (rs *remoteStream) handleSubscribeResponse(resp *pb.SubscribeResponse) {
-	rs.pendingSubscribesMu.Lock()
-	if ch, ok := rs.pendingSubscribes[resp.SubscriptionId]; ok {
-		select {
-		case ch <- resp:
-		default:
-		}
-	}
-	rs.pendingSubscribesMu.Unlock()
-}
-
-// Compile-time check
-var _ Stream = (*remoteStream)(nil)

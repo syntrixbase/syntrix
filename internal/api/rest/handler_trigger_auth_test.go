@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	identity_config "github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
@@ -73,7 +73,7 @@ func (m *MockAuthStorage) Close(ctx context.Context) error {
 func TestTriggerAuth(t *testing.T) {
 	// Setup Auth Service
 	mockStorage := new(MockAuthStorage)
-	authService, _ := identity.NewAuthN(config.AuthNConfig{
+	authService, _ := identity.NewAuthN(identity_config.AuthNConfig{
 		PrivateKeyFile:  filepath.Join(t.TempDir(), "key.pem"),
 		AccessTokenTTL:  time.Hour,
 		RefreshTokenTTL: time.Hour,

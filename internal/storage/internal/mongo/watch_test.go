@@ -9,6 +9,7 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMongoBackend_Watch(t *testing.T) {
@@ -26,25 +27,34 @@ func TestMongoBackend_Watch(t *testing.T) {
 		return
 	}
 
+	// Channel to collect errors from goroutine
+	errChan := make(chan error, 3)
+
 	// Perform Operations
 	go func() {
-		time.Sleep(10 * time.Millisecond) // Wait for watch to establish
+		time.Sleep(50 * time.Millisecond) // Wait for watch to establish
 
 		// Create
 		doc := types.NewStoredDoc(tenant, "users", "watcher", map[string]interface{}{"msg": "hello"})
-		backend.Create(context.Background(), tenant, doc)
-
-		filters := model.Filters{
-			{Field: "version", Op: "==", Value: doc.Version},
+		if err := backend.Create(context.Background(), tenant, doc); err != nil {
+			errChan <- err
+			return
 		}
-		// Update
+
+		// Update with version filter (optimistic locking test)
+		// doc.Version is int64(1) after NewStoredDoc
+		filters := model.Filters{
+			{Field: "version", Op: "==", Value: doc.Version}, // int64(1)
+		}
 		if err := backend.Update(context.Background(), tenant, "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
-			t.Logf("Update failed: %v", err)
+			errChan <- err
+			return
 		}
 
 		// Delete
 		if err := backend.Delete(context.Background(), tenant, "users/watcher", nil); err != nil {
-			t.Logf("Delete failed: %v", err)
+			errChan <- err
+			return
 		}
 	}()
 
@@ -54,12 +64,17 @@ func TestMongoBackend_Watch(t *testing.T) {
 		select {
 		case evt := <-stream:
 			t.Logf("Received event: Type=%s ID=%s", evt.Type, evt.Id)
-			assert.Equal(t, expectedType, evt.Type)
-			if i == 0 {
+			require.Equal(t, expectedType, evt.Type, "Event %d type mismatch", i)
+			if expectedType == types.EventCreate {
+				require.NotNil(t, evt.Document)
 				assert.Equal(t, "hello", evt.Document.Data["msg"])
-			} else if i == 1 {
+			} else if expectedType == types.EventUpdate {
+				require.NotNil(t, evt.Document)
 				assert.Equal(t, "world", evt.Document.Data["msg"])
 			}
+			// Delete event may not have Document
+		case err := <-errChan:
+			t.Fatalf("Operation failed: %v", err)
 		case <-ctx.Done():
 			t.Fatalf("Timeout waiting for event %s", expectedType)
 		}

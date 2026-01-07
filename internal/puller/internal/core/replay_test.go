@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 )
@@ -47,7 +47,7 @@ func TestParseSize(t *testing.T) {
 func TestPuller_Replay(t *testing.T) {
 	// Setup Puller with a real buffer backend
 	tmpDir := t.TempDir()
-	cfg := config.PullerConfig{
+	cfg := config.Config{
 		Buffer: config.BufferConfig{
 			Path:          filepath.Join(tmpDir, "buffer"),
 			BatchSize:     10,

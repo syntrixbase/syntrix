@@ -70,12 +70,12 @@ type MockPullerService struct {
 	mock.Mock
 }
 
-func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *events.PullerEvent, error) {
+func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *events.PullerEvent {
 	args := m.Called(ctx, consumerID, after)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil
 	}
-	return args.Get(0).(<-chan *events.PullerEvent), args.Error(1)
+	return args.Get(0).(<-chan *events.PullerEvent)
 }
 
 func TestNewWatcher(t *testing.T) {
@@ -96,7 +96,7 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(checkpointDoc, nil)
 
 	ch := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "resume-token").Return((<-chan *events.PullerEvent)(ch), nil)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "resume-token").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
@@ -135,7 +135,7 @@ func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 
 	ch := make(chan *events.PullerEvent)
 	// Expect empty string for resume token
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch), nil)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
@@ -153,7 +153,7 @@ func TestWatch_FilterTenant(t *testing.T) {
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
 
 	ch := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch), nil)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
@@ -269,7 +269,7 @@ func TestWatch_EventTypes(t *testing.T) {
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
 
 	pullerCh := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(pullerCh), nil)
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(pullerCh))
 
 	eventCh, err := w.Watch(context.Background())
 	if err != nil {

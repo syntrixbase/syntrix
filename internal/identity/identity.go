@@ -1,8 +1,8 @@
 package identity
 
 import (
-	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/internal/identity/internal/authn"
 	"github.com/syntrixbase/syntrix/internal/identity/internal/authz"
 	"github.com/syntrixbase/syntrix/internal/storage"

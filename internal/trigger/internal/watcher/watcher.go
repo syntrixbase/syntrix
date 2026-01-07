@@ -60,10 +60,7 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeE
 
 	// 2. Start Watch
 	consumerID := fmt.Sprintf("trigger-evaluator-%s", w.tenant)
-	pullerCh, err := w.puller.Subscribe(ctx, consumerID, resumeToken)
-	if err != nil {
-		return nil, err
-	}
+	pullerCh := w.puller.Subscribe(ctx, consumerID, resumeToken)
 
 	outCh := make(chan events.SyntrixChangeEvent)
 

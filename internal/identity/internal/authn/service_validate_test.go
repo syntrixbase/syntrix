@@ -6,7 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/identity/config"
 )
 
 func TestValidateToken(t *testing.T) {

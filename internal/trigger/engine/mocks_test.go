@@ -15,12 +15,12 @@ type MockPullerService struct {
 	mock.Mock
 }
 
-func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) (<-chan *puller.Event, error) {
+func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
 	args := m.Called(ctx, consumerID, after)
 	if args.Get(0) == nil {
-		return nil, args.Error(1)
+		return nil
 	}
-	return args.Get(0).(<-chan *puller.Event), args.Error(1)
+	return args.Get(0).(<-chan *puller.Event)
 }
 
 // MockEvaluator

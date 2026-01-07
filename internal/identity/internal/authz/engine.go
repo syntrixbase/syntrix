@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/engine"
+	"github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/google/cel-go/cel"

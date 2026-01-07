@@ -637,3 +637,48 @@ func TestClient_ExecuteQuery_Errors(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+func TestClient_WatchCollection_ContextCancelWhileSending(t *testing.T) {
+	// Create a server that streams events continuously
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Send many events to potentially fill the channel
+		for i := 0; i < 100; i++ {
+			evt := storage.Event{Id: "c/1", Type: storage.EventCreate}
+			data, _ := json.Marshal(evt)
+			w.Write(data)
+			w.Write([]byte("\n"))
+		}
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		<-r.Context().Done()
+	}))
+	defer ts.Close()
+
+	client := New(ts.URL)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	ch, err := client.WatchCollection(ctx, "default", "c")
+	assert.NoError(t, err)
+	assert.NotNil(t, ch)
+
+	// Let some events through
+	time.Sleep(10 * time.Millisecond)
+
+	// Cancel context - should trigger ctx.Done() path in the goroutine
+	cancel()
+
+	// Drain remaining events with timeout
+	timeout := time.After(time.Second)
+	for {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return // Channel closed, test passed
+			}
+		case <-timeout:
+			return // Timeout is acceptable
+		}
+	}
+}

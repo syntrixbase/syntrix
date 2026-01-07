@@ -112,7 +112,7 @@ awk -v threshold_func="$threshold_func" -v failed="$failed" '
 echo ""
 echo "---------------------------------------------------------------------------------------------------------"
 echo "Checking for uncovered blocks..."
-go run scripts/lib/uncovered_blocks.go coverage.out false 20 || failed=1
+go run ./scripts/lib/uncovered_blocks/ coverage.out false 20 || failed=1
 
 if [ $failed -ne 0 ]; then
   exit 1

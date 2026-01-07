@@ -2,10 +2,12 @@ package httphandler
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -628,4 +630,41 @@ func TestTenantOrDefault(t *testing.T) {
 		result := tenantOrDefault(tc.input)
 		assert.Equal(t, tc.expected, result)
 	}
+}
+
+func TestHandler_WatchCollection_ContextCancel(t *testing.T) {
+	handler, mockService := setupTestHandler()
+
+	// Create a channel that blocks
+	eventChan := make(chan storage.Event)
+	mockService.On("WatchCollection", mock.Anything, "default", "test").Return((<-chan storage.Event)(eventChan), nil)
+
+	reqBody, _ := json.Marshal(map[string]interface{}{"collection": "test", "tenant": "default"})
+	ctx, cancel := context.WithCancel(context.Background())
+	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
+	req = req.WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Start the handler in a goroutine
+	done := make(chan struct{})
+	go func() {
+		handler.ServeHTTP(w, req)
+		close(done)
+	}()
+
+	// Wait briefly then cancel context
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	// Handler should exit
+	select {
+	case <-done:
+		// Good
+	case <-time.After(2 * time.Second):
+		t.Fatal("Handler did not exit after context cancel")
+	}
+
+	close(eventChan)
+	mockService.AssertExpectations(t)
 }
