@@ -1,7 +1,6 @@
 package client
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -153,55 +152,6 @@ func (c *Client) ExecuteQuery(ctx context.Context, tenant string, q model.Query)
 		return nil, err
 	}
 	return docs, nil
-}
-
-func (c *Client) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
-	reqBody := map[string]string{"collection": collection, "tenant": tenant}
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+"/internal/v1/watch", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	out := make(chan storage.Event)
-	go func() {
-		defer close(out)
-		defer resp.Body.Close()
-
-		scanner := bufio.NewScanner(resp.Body)
-		for scanner.Scan() {
-			line := scanner.Bytes()
-			if len(line) == 0 {
-				continue
-			}
-			var evt storage.Event
-			if err := json.Unmarshal(line, &evt); err != nil {
-				continue
-			}
-			select {
-			case out <- evt:
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	return out, nil
 }
 
 func (c *Client) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {

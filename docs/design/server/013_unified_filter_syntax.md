@@ -1,0 +1,152 @@
+# Design: Unified Filter Syntax
+
+**Status**: Draft
+**Created**: 2026-01-07
+**Author**: Syntrix Team
+
+## 1. Problem Statement
+
+Currently, Filter definitions are duplicated across multiple packages with inconsistent operator syntax:
+
+| Location | Type | Operators |
+|----------|------|-----------|
+| `pkg/model/filter.go` | `model.Filter` | `==, !=, >, >=, <, <=, in` |
+| `internal/streamer/types.go` | `streamer.Filter` | `eq, ne, gt, gte, lt, lte, in, contains` |
+| `internal/api/rest/validation.go` | Validation | `==, >, >=, <, <=, in, array-contains` |
+| `internal/storage/internal/mongo/utils.go` | MongoDB mapping | `==, !=, >, >=, <, <=, in` |
+
+This causes:
+1. **Code duplication** - Two nearly identical Filter structs
+2. **API inconsistency** - REST API uses `==` while Streamer proto uses `eq`
+3. **Maintenance burden** - Changes require updates in multiple places
+4. **Developer confusion** - Which operators to use where?
+
+## 2. Goals
+
+1. Single `Filter` type definition in `pkg/model`
+2. Unified operator syntax across all components
+3. Backward compatibility or clear migration path
+4. Type-safe operator validation
+
+## 3. Design Decision
+
+### 3.1 Operator Syntax: Shorthand Style
+
+**Decision**: Use shorthand operators (`eq`, `ne`, `gt`, etc.)
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `eq` | Equal | `{"field": "status", "op": "==", "value": "active"}` |
+| `ne` | Not equal | `{"field": "age", "op": "!=", "value": 0}` |
+| `gt` | Greater than | `{"field": "price", "op": ">", "value": 100}` |
+| `gte` | Greater than or equal | `{"field": "count", "op": ">=", "value": 1}` |
+| `lt` | Less than | `{"field": "stock", "op": "<", "value": 10}` |
+| `lte` | Less than or equal | `{"field": "priority", "op": "<=", "value": 5}` |
+| `in` | In array | `{"field": "status", "op": "in", "value": ["a","b"]}` |
+| `contains` | Array contains | `{"field": "tags", "op": "contains", "value": "urgent"}` |
+
+**Rationale**:
+- JSON-friendly (no escaping needed for `>`, `<`)
+- Industry standard (Firestore, Stripe, MongoDB Atlas use similar)
+- Streamer proto already uses this style
+- Unambiguous in query strings
+
+### 3.2 Unified Filter Structure
+
+```go
+// pkg/model/filter.go
+
+// FilterOp defines the supported filter operators.
+type FilterOp string
+
+const (
+    OpEq       FilterOp = "=="       // Equal
+    OpNe       FilterOp = "!="       // Not equal
+    OpGt       FilterOp = ">"       // Greater than
+    OpGte      FilterOp = ">="      // Greater than or equal
+    OpLt       FilterOp = "<"       // Less than
+    OpLte      FilterOp = "<="      // Less than or equal
+    OpIn       FilterOp = "in"       // Value in array
+    OpContains FilterOp = "contains" // Array contains value
+)
+
+// ValidOps returns all valid filter operators.
+func ValidOps() []FilterOp {
+    return []FilterOp{OpEq, OpNe, OpGt, OpGte, OpLt, OpLte, OpIn, OpContains}
+}
+
+// IsValid checks if the operator is valid.
+func (op FilterOp) IsValid() bool {
+    switch op {
+    case OpEq, OpNe, OpGt, OpGte, OpLt, OpLte, OpIn, OpContains:
+        return true
+    }
+    return false
+}
+
+// Filters is a slice of Filter.
+type Filters []Filter
+
+// Filter represents a query filter condition.
+type Filter struct {
+    // Field is the field path (e.g., "status", "user.name", "id").
+    Field string `json:"field"`
+
+    // Op is the comparison operator.
+    Op FilterOp `json:"op"`
+
+    // Value is the value to compare against.
+    Value any `json:"value"`
+}
+
+// Validate checks if the filter is valid.
+func (f Filter) Validate() error {
+    if f.Field == "" {
+        return errors.New("filter field cannot be empty")
+    }
+    if !f.Op.IsValid() {
+        return fmt.Errorf("unsupported filter operator: %s", f.Op)
+    }
+    return nil
+}
+```
+
+## 4. Component Impact
+
+### 4.1 Streamer
+- Remove duplicate `Filter` type from `internal/streamer/types.go`
+- Use `model.Filter` directly
+
+### 4.2 Storage/MongoDB
+- Update `mapOp()` to accept `model.FilterOp`
+
+### 4.3 REST API
+- Use `Filter.Validate()` instead of inline switch
+
+### 4.4 Proto Definition
+The Streamer proto already uses shorthand style - no changes needed.
+
+## 5. Implementation
+
+See [Task 031: Unified Filter Syntax Implementation](../../../tasks/031.2026-01-07-unified-filter-syntax.md)
+
+## 6. Open Questions
+
+1. **Should we support `!=` (not equal)?**
+   - Currently Streamer has `ne`, Storage doesn't have `!=`
+   - Recommendation: Add `ne` support
+
+2. **Should `array-contains` become `contains`?**
+   - `contains` is shorter and clearer
+   - Recommendation: Yes, use `contains`
+
+3. **Case sensitivity?**
+   - Should `EQ` be valid?
+   - Recommendation: No, lowercase only for consistency
+
+## 7. Decision
+
+- [x] Use shorthand operators (`eq`, `ne`, `gt`, etc.)
+- [x] Single Filter type in `pkg/model`
+- [x] Type-safe `FilterOp` type
+- [ ] Backward compatibility layer (optional, can skip if internal only)

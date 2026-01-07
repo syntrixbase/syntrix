@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -19,7 +20,7 @@ import (
 )
 
 func TestClientHandleMessage_AuthAck(t *testing.T) {
-	c := &Client{hub: NewHub(), queryService: &MockQueryService{}, send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription)}
+	c := &Client{hub: NewTestHub(), queryService: &MockQueryService{}, send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string)}
 	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req"})
 
 	select {
@@ -33,7 +34,7 @@ func TestClientHandleMessage_AuthAck(t *testing.T) {
 
 func TestClientHandleMessage_AuthError(t *testing.T) {
 	c := &Client{
-		hub:          NewHub(),
+		hub:          NewTestHub(),
 		queryService: &MockQueryService{},
 		send:         make(chan BaseMessage, 1),
 		auth:         &mockAuthService{},
@@ -65,7 +66,7 @@ func TestClientHandleMessage_AuthError(t *testing.T) {
 
 func TestClientHandleMessage_AuthSuccess(t *testing.T) {
 	c := &Client{
-		hub:          NewHub(),
+		hub:          NewTestHub(),
 		queryService: &MockQueryService{},
 		send:         make(chan BaseMessage, 1),
 		auth:         &mockAuthService{},
@@ -99,7 +100,7 @@ func (m *mockAuthServiceSystem) ValidateToken(tokenString string) (*identity.Cla
 
 func TestClientHandleMessage_AuthSystemRole(t *testing.T) {
 	c := &Client{
-		hub:          NewHub(),
+		hub:          NewTestHub(),
 		queryService: setupMockQuery(),
 		send:         make(chan BaseMessage, 1),
 		auth:         &mockAuthServiceSystem{},
@@ -120,7 +121,7 @@ func TestClientHandleMessage_AuthSystemRole(t *testing.T) {
 }
 
 func TestClientHandleMessage_SubscribeSnapshot(t *testing.T) {
-	c := &Client{hub: NewHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 2), subscriptions: make(map[string]Subscription), authenticated: true}
+	c := &Client{hub: NewTestHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 2), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string), authenticated: true}
 	payload := SubscribePayload{Query: model.Query{Collection: "users"}, IncludeData: true, SendSnapshot: true}
 	b, _ := json.Marshal(payload)
 
@@ -143,7 +144,7 @@ func TestClientHandleMessage_SubscribeSnapshot(t *testing.T) {
 }
 
 func TestClientHandleMessage_Unsubscribe(t *testing.T) {
-	c := &Client{hub: NewHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: map[string]Subscription{"sub": {}}, authenticated: true}
+	c := &Client{hub: NewTestHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: map[string]Subscription{"sub": {}}, authenticated: true}
 	payload := UnsubscribePayload{ID: "sub"}
 	b, _ := json.Marshal(payload)
 
@@ -164,7 +165,7 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -194,7 +195,7 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -211,7 +212,13 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 }
 
 func TestHandleMessage_SubscribeCompileError(t *testing.T) {
-	c := &Client{hub: NewHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), authenticated: true}
+	hub := NewHub()
+	ms := new(MockStreamerStream)
+	ms.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("compile error"))
+	ms.On("Unsubscribe", mock.Anything).Return(nil).Maybe()
+	hub.SetStream(ms)
+
+	c := &Client{hub: hub, queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string), authenticated: true}
 	payload := SubscribePayload{Query: model.Query{Filters: []model.Filter{{Field: "age", Op: "!", Value: 1}}}}
 	b, _ := json.Marshal(payload)
 
@@ -226,7 +233,7 @@ func TestHandleMessage_SubscribeCompileError(t *testing.T) {
 }
 
 func TestHandleMessage_SubscribeBadJSON(t *testing.T) {
-	c := &Client{hub: NewHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), authenticated: true}
+	c := &Client{hub: NewTestHub(), queryService: setupMockQuery(), send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string), authenticated: true}
 
 	c.handleMessage(BaseMessage{Type: TypeSubscribe, ID: "sub-bad", Payload: []byte("{bad")})
 
@@ -283,7 +290,7 @@ func TestWritePump_SendsPing(t *testing.T) {
 	pingPeriod = 10 * time.Millisecond
 	defer func() { pingPeriod = original }()
 
-	_ = NewHub()
+	_ = NewTestHub()
 	clientCh := make(chan *Client, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
@@ -346,7 +353,7 @@ func TestWritePump_SendsHeartbeat(t *testing.T) {
 	heartbeatInterval = 10 * time.Millisecond
 	defer func() { heartbeatInterval = originalHeartbeat }()
 
-	_ = NewHub()
+	_ = NewTestHub()
 	clientCh := make(chan *Client, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{CheckOrigin: func(r *http.Request) bool { return true }}
@@ -394,7 +401,7 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := setupMockQuery()

@@ -153,11 +153,10 @@ match:
 	}
 
 	// Create manager in standalone mode
-	// Note: RunQuery and RunCSP are not needed as they're handled internally
+	// Note: RunQuery is not needed as it's handled internally
 	opts := services.Options{
 		RunAPI:              true,
 		RunQuery:            false, // No separate Query HTTP server
-		RunCSP:              false, // No separate CSP HTTP server
 		RunTriggerEvaluator: false, // Not testing triggers
 		RunTriggerWorker:    false,
 		ListenHost:          "localhost",

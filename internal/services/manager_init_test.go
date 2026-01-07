@@ -11,6 +11,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/storage"
@@ -245,28 +246,6 @@ func TestManager_Init_RunQueryPath(t *testing.T) {
 	assert.NotNil(t, mgr.docStore)
 	assert.Len(t, mgr.servers, 1)
 	assert.Equal(t, "Query Service", mgr.serverNames[0])
-}
-
-func TestManager_Init_RunCSPPath(t *testing.T) {
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
-
-	fakeDocStore := &fakeDocumentStore{}
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-		}, nil
-	}
-
-	cfg := config.LoadConfig()
-	cfg.CSP.Port = 0
-	mgr := NewManager(cfg, Options{RunCSP: true})
-
-	err := mgr.Init(context.Background())
-	assert.NoError(t, err)
-	assert.NotNil(t, mgr.docStore)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "CSP Service", mgr.serverNames[0])
 }
 
 func TestManager_Init_RunRealtimePath(t *testing.T) {
@@ -546,13 +525,11 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
-	cfg.CSP.Port = 0
 	cfg.Query.Port = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
 		RunAPI: true,
-		RunCSP: true, // This should be ignored in standalone mode
 	})
 
 	err := mgr.Init(context.Background())
@@ -568,18 +545,7 @@ func TestManager_createQueryService(t *testing.T) {
 	mgr := NewManager(cfg, Options{})
 	mgr.docStore = &fakeDocumentStore{}
 
-	// Create a mock CSP service
-	mockCSP := &mockCSPService{}
-	service := mgr.createQueryService(mockCSP)
-	assert.NotNil(t, service)
-}
-
-func TestManager_createCSPService(t *testing.T) {
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{})
-	mgr.docStore = &fakeDocumentStore{}
-
-	service := mgr.createCSPService()
+	service := mgr.createQueryService()
 	assert.NotNil(t, service)
 }
 
@@ -593,15 +559,6 @@ func TestManager_initQueryHTTPServer(t *testing.T) {
 
 	assert.Len(t, mgr.servers, 1)
 	assert.Equal(t, "Query Service", mgr.serverNames[0])
-}
-
-// mockCSPService implements csp.Service for testing
-type mockCSPService struct{}
-
-func (m *mockCSPService) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
-	ch := make(chan storage.Event)
-	close(ch)
-	return ch, nil
 }
 
 func TestManager_initStandalone_APIServerError(t *testing.T) {
@@ -719,4 +676,46 @@ func TestManager_initDistributed_TriggerServicesError(t *testing.T) {
 	err := mgr.Init(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to NATS")
+}
+
+// mockPullerService for streamer testing
+type mockPullerService struct{}
+
+func (m *mockPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
+	return nil
+}
+func (m *mockPullerService) AddBackend(name string, client *mongo.Client, dbName string, cfg puller_config.PullerBackendConfig) error {
+	return nil
+}
+func (m *mockPullerService) Start(context.Context) error { return nil }
+func (m *mockPullerService) Stop(context.Context) error  { return nil }
+func (m *mockPullerService) BackendNames() []string      { return nil }
+func (m *mockPullerService) SetEventHandler(handler func(ctx context.Context, backendName string, event *puller.ChangeEvent) error) {
+}
+func (m *mockPullerService) Replay(ctx context.Context, after map[string]string, streaming bool) (puller.Iterator, error) {
+	return nil, nil
+}
+
+func TestManager_createStreamerService(t *testing.T) {
+	done := make(chan bool)
+	go func() {
+		cfg := config.LoadConfig()
+		// Disable Mongo/Backends for this unit test requiring no IO
+		mgr := NewManager(cfg, Options{})
+
+		// Case 1: No Puller Service (already nil)
+		svc1 := mgr.createStreamerService()
+		assert.NotNil(t, svc1)
+
+		// Case 2: With Puller Service
+		mgr.pullerService = &mockPullerService{}
+		svc2 := mgr.createStreamerService()
+		assert.NotNil(t, svc2)
+		done <- true
+	}()
+	select {
+	case <-done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("TestManager_createStreamerService timed out")
+	}
 }

@@ -1,8 +1,10 @@
+export type FilterOp = '==' | '!=' | '>' | '>=' | '<' | '<=' | 'in' | 'contains';
+
 export interface DocumentReference<T> {
   id: string;
   path: string;
   get(): Promise<T | null>;
-  ifMatch(field: string, op: string, value: any): DocumentReference<T>;
+  ifMatch(field: string, op: FilterOp, value: any): DocumentReference<T>;
   set(data: T, ifMatch?: any[]): Promise<T>;
   update(data: Partial<T>, ifMatch?: any[]): Promise<T>;
   delete(ifMatch?: any[]): Promise<void>;
@@ -10,7 +12,7 @@ export interface DocumentReference<T> {
 }
 
 export interface Query<T> {
-  where(field: string, op: string, value: any): Query<T>;
+  where(field: string, op: FilterOp, value: any): Query<T>;
   orderBy(field: string, direction?: 'asc' | 'desc'): Query<T>;
   limit(n: number): Query<T>;
   get(): Promise<T[]>;

@@ -65,10 +65,7 @@ func validateQuery(q model.Query) error {
 		if f.Op == "" {
 			return errors.New("filter op cannot be empty")
 		}
-		switch f.Op {
-		case "==", ">", ">=", "<", "<=", "in", "array-contains":
-			// Valid
-		default:
+		if !f.Op.IsValid() {
 			return fmt.Errorf("unsupported filter operator: %s", f.Op)
 		}
 	}

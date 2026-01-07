@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestTokenFromQueryParam_TableDriven(t *testing.T) {
@@ -40,7 +41,8 @@ func TestTokenFromQueryParam_TableDriven(t *testing.T) {
 func TestServer_HandleWS_TableDriven(t *testing.T) {
 	t.Parallel()
 	mockQS := new(MockQueryService)
-	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true})
+	mockStreamer := new(MockStreamerService)
+	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, Config{EnableAuth: true})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
@@ -86,7 +88,14 @@ func TestServer_HandleWS_TableDriven(t *testing.T) {
 func TestServer_HandleSSE_TableDriven(t *testing.T) {
 	t.Parallel()
 	mockQS := new(MockQueryService)
-	server := NewServer(mockQS, "docs", &mockAuthService{}, Config{EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
+	mockStreamer := new(MockStreamerService)
+	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, Config{EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
+
+	// Setup Hub Stream
+	ms := new(MockStreamerStream)
+	ms.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("sub-id", nil).Maybe()
+	ms.On("Unsubscribe", mock.Anything).Return(nil).Maybe()
+	server.hub.SetStream(ms)
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())

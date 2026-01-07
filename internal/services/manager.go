@@ -10,6 +10,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
@@ -25,7 +26,6 @@ const (
 
 type Options struct {
 	RunAPI              bool
-	RunCSP              bool
 	RunQuery            bool
 	RunTriggerEvaluator bool
 	RunTriggerWorker    bool
@@ -58,6 +58,7 @@ type Manager struct {
 	revocationStore storage.TokenRevocationStore
 	authService     identity.AuthN
 	rtServer        *realtime.Server
+	streamerService streamer.StreamerServer
 	triggerConsumer triggerConsumer
 	triggerService  triggerService
 	natsProvider    trigger.NATSProvider

@@ -1,12 +1,12 @@
 import { StorageClient } from '../internal/storage-client';
-import { CollectionReference, DocumentReference, Query } from './types';
+import { CollectionReference, DocumentReference, Query, FilterOp } from './types';
 
 export class DocumentReferenceImpl<T> implements DocumentReference<T> {
   protected _ifMatch: any[] = [];
 
   constructor(private storage: StorageClient, public path: string, public id: string) {}
 
-  ifMatch(field: string, op: string, value: any): DocumentReference<T> {
+  ifMatch(field: string, op: FilterOp, value: any): DocumentReference<T> {
     const ref = new DocumentReferenceImpl<T>(this.storage, this.path, this.id);
     ref._ifMatch = [...this._ifMatch, { field, op, value }];
     return ref;
@@ -43,7 +43,7 @@ export class QueryImpl<T> implements Query<T> {
 
   constructor(protected storage: StorageClient, public path: string) {}
 
-  where(field: string, op: string, value: any): Query<T> {
+  where(field: string, op: FilterOp, value: any): Query<T> {
     this.filters.push({ field, op, value });
     return this;
   }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
@@ -11,12 +12,12 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
-	"github.com/syntrixbase/syntrix/internal/csp"
 	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	triggerengine "github.com/syntrixbase/syntrix/internal/trigger/engine"
 
@@ -64,12 +65,12 @@ func (m *Manager) Init(ctx context.Context) error {
 // initStandalone initializes services for standalone deployment mode.
 // All services run in a single process without HTTP inter-service communication.
 func (m *Manager) initStandalone(ctx context.Context) error {
-	// Create CSP service for local access (no HTTP server)
-	cspService := m.createCSPService()
-	log.Println("Initialized CSP Service (local)")
+	// Create Streamer service for local access
+	m.streamerService = m.createStreamerService()
+	log.Println("Initialized Streamer Service (local)")
 
-	// Create query service using local CSP service (no HTTP server)
-	queryService := m.createQueryService(cspService)
+	// Create query service
+	queryService := m.createQueryService()
 
 	// API server is the only HTTP server in standalone mode
 	if err := m.initAPIServer(queryService); err != nil {
@@ -85,9 +86,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 	var queryService engine.Service
 
 	if m.opts.RunQuery {
-		// In distributed mode, create remote CSP client
-		cspService := csp.NewClient(m.cfg.Query.CSPServiceURL)
-		queryService = m.createQueryService(cspService)
+		queryService = m.createQueryService()
 		if !m.opts.ForceQueryClient {
 			m.initQueryHTTPServer(queryService)
 		}
@@ -97,13 +96,12 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		if queryService == nil {
 			queryService = engine.NewClient(m.cfg.Gateway.QueryServiceURL)
 		}
+		// Initialize Streamer Service for Realtime
+		m.streamerService = m.createStreamerService()
+
 		if err := m.initAPIServer(queryService); err != nil {
 			return err
 		}
-	}
-
-	if m.opts.RunCSP {
-		m.initCSPServer()
 	}
 
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
@@ -116,7 +114,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 }
 
 func (m *Manager) initStorage(ctx context.Context) error {
-	if !(m.opts.RunQuery || m.opts.RunCSP || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker) {
+	if !(m.opts.RunQuery || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker) {
 		return nil
 	}
 
@@ -149,10 +147,10 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 	return nil
 }
 
-// createQueryService creates a query engine service using the given CSP service.
+// createQueryService creates a query engine service.
 // This separates service creation from HTTP server setup for standalone mode support.
-func (m *Manager) createQueryService(cspService csp.Service) engine.Service {
-	service := engine.NewServiceWithCSP(m.docStore, cspService)
+func (m *Manager) createQueryService() engine.Service {
+	service := engine.NewService(m.docStore)
 	log.Println("Initialized Local Query Engine")
 	return service
 }
@@ -186,7 +184,7 @@ func (m *Manager) initAPIServer(queryService engine.Service) error {
 		AllowDevOrigin: m.cfg.Gateway.Realtime.AllowDevOrigin,
 		EnableAuth:     m.cfg.Gateway.Realtime.EnableAuth,
 	}
-	m.rtServer = realtime.NewServer(queryService, m.cfg.Storage.Topology.Document.DataCollection, m.authService, rtCfg)
+	m.rtServer = realtime.NewServer(queryService, m.streamerService, m.cfg.Storage.Topology.Document.DataCollection, m.authService, rtCfg)
 
 	// Register API routes to the unified server
 	apiServer := api.NewServer(queryService, m.authService, authzEngine, m.rtServer)
@@ -195,19 +193,21 @@ func (m *Manager) initAPIServer(queryService engine.Service) error {
 	return nil
 }
 
-// createCSPService creates a CSP service for local access (standalone mode).
-func (m *Manager) createCSPService() csp.Service {
-	return csp.NewService(m.docStore)
-}
+// createStreamerService creates a Streamer service for local access.
+func (m *Manager) createStreamerService() streamer.StreamerServer {
+	cfg := streamer.DefaultServiceConfig()
+	// TODO: Load from m.cfg if available
 
-// initCSPServer creates an HTTP server for the CSP service (distributed mode).
-func (m *Manager) initCSPServer() {
-	cspServer := csp.NewServer(m.docStore)
-	m.servers = append(m.servers, &http.Server{
-		Addr:    listenAddr(m.opts.ListenHost, m.cfg.CSP.Port),
-		Handler: cspServer,
-	})
-	m.serverNames = append(m.serverNames, "CSP Service")
+	var opts []streamer.ServiceConfigOption
+	if m.pullerService != nil {
+		opts = append(opts, streamer.WithPullerClient(m.pullerService))
+	}
+
+	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
+	if err != nil {
+		log.Fatalf("Failed to create streamer service: %v", err)
+	}
+	return svc
 }
 
 func listenAddr(host string, port int) string {

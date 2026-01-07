@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/identity"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
@@ -114,7 +114,7 @@ func TestSafeCheckOrigin(t *testing.T) {
 
 func TestClient_HandleMessage_InvalidPayloads(t *testing.T) {
 	// Setup
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -123,7 +123,7 @@ func TestClient_HandleMessage_InvalidPayloads(t *testing.T) {
 		hub:           hub,
 		send:          make(chan BaseMessage, 10),
 		authenticated: true,
-		subscriptions: make(map[string]Subscription),
+		subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string),
 	}
 
 	// Test Subscribe with invalid payload
@@ -168,7 +168,7 @@ func TestClient_HandleMessage_InvalidPayloads(t *testing.T) {
 
 func TestClient_HandleAuth_InvalidToken(t *testing.T) {
 	// Setup
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -212,6 +212,11 @@ func TestClient_HandleAuth_InvalidToken(t *testing.T) {
 func TestClient_HandleSubscribe_InvalidFilter(t *testing.T) {
 	// Setup
 	hub := NewHub()
+	ms := new(MockStreamerStream)
+	ms.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("invalid filter"))
+	ms.On("Unsubscribe", mock.Anything).Return(nil).Maybe()
+	hub.SetStream(ms)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -220,7 +225,7 @@ func TestClient_HandleSubscribe_InvalidFilter(t *testing.T) {
 		hub:           hub,
 		send:          make(chan BaseMessage, 10),
 		authenticated: true,
-		subscriptions: make(map[string]Subscription),
+		subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string),
 	}
 
 	// Subscribe with invalid filter
@@ -294,71 +299,10 @@ func TestClient_WritePump_WriteError(t *testing.T) {
 	}
 }
 
-func TestHub_Broadcast_SlowClient_Drop(t *testing.T) {
-	hub := NewHub()
-	ctx, cancel := context.WithCancel(context.Background())
-	go hub.Run(ctx)
-	defer cancel()
-
-	// Create client with small buffer
-	client := &Client{
-		hub:           hub,
-		send:          make(chan BaseMessage, 1),
-		authenticated: true,
-		subscriptions: make(map[string]Subscription),
-	}
-
-	// Subscribe
-	client.subscriptions["sub1"] = Subscription{
-		Query: model.Query{Collection: "users"},
-	}
-
-	hub.Register(client)
-	time.Sleep(10 * time.Millisecond) // Wait for registration
-
-	// Fill the channel
-	client.send <- BaseMessage{ID: "filler"}
-
-	// Broadcast event
-	event := storage.Event{
-		Type: storage.EventCreate,
-		Document: &storage.StoredDoc{
-			Id:         "1",
-			Collection: "users",
-			Data:       map[string]interface{}{"name": "test"},
-		},
-		Timestamp: time.Now().UnixMilli(),
-	}
-
-	// This should hit the default case and timeout in the hub
-	hub.Broadcast(event)
-
-	// Wait for the timeout (50ms) + some buffer
-	time.Sleep(100 * time.Millisecond)
-
-	// Verify that the channel still has the filler and maybe the new message if it wasn't dropped?
-	// The code tries to send again with timeout. If it times out, the message is dropped.
-
-	select {
-	case msg := <-client.send:
-		assert.Equal(t, "filler", msg.ID)
-	default:
-		t.Fatal("Channel should have filler")
-	}
-
-	// Check if there is another message
-	select {
-	case <-client.send:
-		t.Log("Received broadcasted message (unexpected if dropped)")
-	default:
-		// Expected to be dropped
-	}
-}
-
 // MockQueryService is defined in mock_service_test.go
 
 func TestClient_HandleSubscribe_SnapshotError(t *testing.T) {
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -371,7 +315,7 @@ func TestClient_HandleSubscribe_SnapshotError(t *testing.T) {
 		queryService:  mockQS,
 		send:          make(chan BaseMessage, 10),
 		authenticated: true,
-		subscriptions: make(map[string]Subscription),
+		subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string),
 	}
 
 	subscribePayload := SubscribePayload{
@@ -447,7 +391,7 @@ func TestHasSystemRole_ContextKeyRoles(t *testing.T) {
 }
 
 func TestServeWs_HubClosed(t *testing.T) {
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately to simulate closed hub
 	go hub.Run(ctx)
@@ -469,7 +413,7 @@ func TestServeWs_HubClosed(t *testing.T) {
 }
 
 func TestServeSSE_HubClosed(t *testing.T) {
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 	go hub.Run(ctx)
@@ -504,7 +448,7 @@ func (w *FailWriter) Flush() {
 }
 
 func TestServeSSE_WriteError_Data(t *testing.T) {
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -542,14 +486,40 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	// Now enable failure
 	w.failOnWrite = true
 
-	// Broadcast a message
-	hub.broadcast <- storage.Event{
-		Type: storage.EventCreate,
-		Id:   "test/1",
-		Document: &storage.StoredDoc{
-			Collection: "test",
-			Data:       map[string]interface{}{"a": 1},
-		},
+	// Manually inject subscription to ensure delivery
+	var client *Client
+	hub.mu.RLock()
+	for c := range hub.clients {
+		client = c
+		break
+	}
+	hub.mu.RUnlock()
+
+	if client != nil {
+		subID := "test-sub"
+		streamerSubID := "streamer-sub-1"
+
+		hub.subscriptionsMu.Lock()
+		hub.subscriptions[streamerSubID] = &SubscriptionInfo{Client: client, ClientSubID: subID}
+		hub.subscriptionsMu.Unlock()
+
+		client.mu.Lock()
+		client.subscriptions[subID] = Subscription{IncludeData: true} // IncludeData to ensure document processing
+		client.mu.Unlock()
+
+		// Broadcast a message
+		hub.broadcast <- &streamer.EventDelivery{
+			SubscriptionIDs: []string{streamerSubID},
+			Event: &streamer.Event{
+				Operation:  streamer.OperationInsert,
+				Collection: "test",
+				DocumentID: "1",
+				Document:   model.Document{"id": "1", "collection": "test", "a": 1},
+				Tenant:     "default",
+			},
+		}
+	} else {
+		t.Fatal("Client not registered")
 	}
 
 	// ServeSSE should exit due to write error
@@ -572,7 +542,7 @@ func TestServeSSE_Heartbeat(t *testing.T) {
 		sseHeartbeatInterval = originalSSEHeartbeat
 	}()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()

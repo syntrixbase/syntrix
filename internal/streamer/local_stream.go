@@ -4,6 +4,8 @@ import (
 	"context"
 	"io"
 	"sync"
+
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // localStream implements the Stream interface for local (in-process) communication.
@@ -34,7 +36,7 @@ func newLocalStream(ctx context.Context, gatewayID string, handler subscriptionH
 }
 
 // Subscribe creates a new subscription and returns the subscription ID.
-func (ls *localStream) Subscribe(tenant, collection string, filters []Filter) (string, error) {
+func (ls *localStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
 	ls.closedMu.Lock()
 	if ls.closed {
 		ls.closedMu.Unlock()

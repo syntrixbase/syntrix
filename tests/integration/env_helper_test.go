@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/services"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -26,7 +27,6 @@ type ServiceEnv struct {
 	APIURL      string
 	QueryURL    string
 	RealtimeURL string
-	CSPURL      string
 	Manager     *services.Manager
 	Cancel      context.CancelFunc
 	MongoURI    string
@@ -60,7 +60,6 @@ func setupServiceEnvWithOptions(t *testing.T, rulesContent string, configModifie
 		APIURL:      env.APIURL,
 		QueryURL:    env.QueryURL,
 		RealtimeURL: env.APIURL, // Realtime is on the same port as API
-		CSPURL:      env.CSPURL,
 		Manager:     env.Manager,
 		MongoURI:    env.MongoURI,
 		DBName:      env.DBName,
@@ -351,9 +350,9 @@ type Query struct {
 }
 
 type Filter struct {
-	Field string      `json:"field"`
-	Op    string      `json:"op"`
-	Value interface{} `json:"value"`
+	Field string         `json:"field"`
+	Op    model.FilterOp `json:"op"`
+	Value interface{}    `json:"value"`
 }
 
 type UnsubscribePayload struct {

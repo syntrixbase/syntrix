@@ -56,14 +56,6 @@ func (m *MockService) ExecuteQuery(ctx context.Context, tenant string, q model.Q
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
-	args := m.Called(ctx, tenant, collection)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(<-chan storage.Event), args.Error(1)
-}
-
 func (m *MockService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {

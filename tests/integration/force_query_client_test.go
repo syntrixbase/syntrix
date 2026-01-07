@@ -76,7 +76,6 @@ func TestIntegration_ForceQueryClient_API(t *testing.T) {
 
 	optsMod := func(opts *services.Options) {
 		opts.RunQuery = false
-		opts.RunCSP = false
 		opts.RunTriggerEvaluator = false
 		opts.RunTriggerWorker = false
 		opts.ForceQueryClient = true

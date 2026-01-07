@@ -133,7 +133,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 			path:   "/api/v1/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"name": "Bob"}, "ifMatch": [{"field": "version", "op": "==", "value": 1}]}`,
 			setupMock: func(m *MockQueryService) {
-				filters := model.Filters{{Field: "version", Op: "==", Value: float64(1)}}
+				filters := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(1)}}
 				returnedDoc := model.Document{"name": "Bob", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
 				m.On("ReplaceDocument", mock.Anything, "default", mock.MatchedBy(func(doc model.Document) bool {
 					return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["name"] == "Bob"
@@ -202,7 +202,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 			path:   "/api/v1/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status": "read"}, "ifMatch": [{"field": "status", "op": "==", "value": "unread"}]}`,
 			setupMock: func(m *MockQueryService) {
-				filters := model.Filters{{Field: "status", Op: "==", Value: "unread"}}
+				filters := model.Filters{{Field: "status", Op: model.OpEq, Value: "unread"}}
 				returnedDoc := model.Document{"name": "Alice", "status": "read", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
 				m.On("PatchDocument", mock.Anything, "default", mock.MatchedBy(func(doc model.Document) bool {
 					return doc.GetCollection() == "rooms/room-1/messages" && doc.GetID() == "msg-1" && doc["status"] == "read"
@@ -279,7 +279,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 			path:   "/api/v1/rooms/room-1/messages/msg-1",
 			body:   `{"ifMatch": [{"field": "version", "op": "==", "value": 1}]}`,
 			setupMock: func(m *MockQueryService) {
-				pred := model.Filters{{Field: "version", Op: "==", Value: float64(1)}}
+				pred := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(1)}}
 				m.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", pred).Return(nil)
 			},
 			expectedStatus: http.StatusNoContent,
@@ -308,7 +308,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 			path:   "/api/v1/rooms/room-1/messages/msg-1",
 			body:   `{"ifMatch":[{"field":"version","op":"==","value":2}]}`,
 			setupMock: func(m *MockQueryService) {
-				pred := model.Filters{{Field: "version", Op: "==", Value: float64(2)}}
+				pred := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(2)}}
 				m.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", pred).Return(model.ErrPreconditionFailed)
 			},
 			expectedStatus: http.StatusPreconditionFailed,

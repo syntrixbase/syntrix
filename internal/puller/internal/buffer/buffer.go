@@ -3,7 +3,6 @@ package buffer
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/pebble"
-	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -22,9 +20,15 @@ type Buffer struct {
 	path     string
 	logger   *slog.Logger
 	newBatch func() pebbleBatch
-	writeCh  chan *writeRequest
 
-	// mu protects writes
+	// pending is the queue of writes waiting to be batched
+	pending []*writeRequest
+	// flushing is the queue of writes currently being batched
+	flushing []*writeRequest
+	// notifyCh is used to wake up the batcher
+	notifyCh chan struct{}
+
+	// mu protects pending, flushing, and closed
 	mu sync.RWMutex
 
 	// closed indicates if the buffer is closed
@@ -121,8 +125,8 @@ func New(opts Options) (*Buffer, error) {
 		batchInterval: batchInterval,
 		queueSize:     queueSize,
 		closeCh:       make(chan struct{}),
+		notifyCh:      make(chan struct{}, 1),
 	}
-	buf.writeCh = make(chan *writeRequest, buf.queueSize)
 	buf.startBatcher()
 
 	return buf, nil
@@ -137,357 +141,6 @@ func NewForBackend(basePath, backendName string, logger *slog.Logger) (*Buffer, 
 	})
 }
 
-// Write stores an event and updates the checkpoint in the same batch.
-func (b *Buffer) Write(evt *events.StoreChangeEvent, token bson.Raw) error {
-	b.mu.RLock()
-	closed := b.closed
-	b.mu.RUnlock()
-
-	if closed {
-		return fmt.Errorf("buffer is closed")
-	}
-
-	if len(token) == 0 {
-		return fmt.Errorf("checkpoint token is required")
-	}
-
-	// Key is the buffer key for ordering
-	key := []byte(evt.BufferKey())
-
-	// Value is the JSON-encoded event
-	value, err := json.Marshal(evt)
-	if err != nil {
-		return fmt.Errorf("failed to marshal event: %w", err)
-	}
-
-	req := &writeRequest{
-		key:   key,
-		value: value,
-		token: append([]byte(nil), token...),
-	}
-
-	// Send to write channel. We use a select with closeCh to avoid blocking
-	// indefinitely if the buffer is being closed. However, we need to be
-	// careful about the race between closeCh closing and writeCh closing.
-	select {
-	case b.writeCh <- req:
-		return nil
-	case <-b.closeCh:
-		return fmt.Errorf("buffer is closed")
-	}
-}
-
-// Read retrieves an event by its buffer key.
-func (b *Buffer) Read(key string) (*events.StoreChangeEvent, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return nil, fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	value, closer, err := b.db.Get([]byte(key))
-	if err != nil {
-		if err == pebble.ErrNotFound {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("failed to read event: %w", err)
-	}
-	defer closer.Close()
-
-	var evt events.StoreChangeEvent
-	if err := json.Unmarshal(value, &evt); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal event: %w", err)
-	}
-
-	return &evt, nil
-}
-
-// Iterator provides ordered iteration over events.
-type Iterator interface {
-	// Next advances to the next event. Returns false when done.
-	Next() bool
-
-	// Event returns the current event.
-	Event() *events.StoreChangeEvent
-
-	// Key returns the current buffer key.
-	Key() string
-
-	// Err returns any error encountered during iteration.
-	Err() error
-
-	// Close releases the iterator resources.
-	Close() error
-}
-
-type bufferIterator struct {
-	iter  *pebble.Iterator
-	evt   *events.StoreChangeEvent
-	key   string
-	err   error
-	first bool
-}
-
-func (i *bufferIterator) Next() bool {
-	if i.err != nil {
-		return false
-	}
-
-	for {
-		var valid bool
-		if i.first {
-			valid = i.iter.First()
-			i.first = false
-		} else {
-			valid = i.iter.Next()
-		}
-
-		if !valid {
-			return false
-		}
-
-		if isCheckpointKey(i.iter.Key()) {
-			continue
-		}
-
-		i.key = string(i.iter.Key())
-		value := i.iter.Value()
-
-		var evt events.StoreChangeEvent
-		if err := json.Unmarshal(value, &evt); err != nil {
-			i.err = fmt.Errorf("failed to unmarshal event: %w", err)
-			return false
-		}
-
-		i.evt = &evt
-		return true
-	}
-}
-
-func (i *bufferIterator) Event() *events.StoreChangeEvent {
-	return i.evt
-}
-
-func (i *bufferIterator) Key() string {
-	return i.key
-}
-
-func (i *bufferIterator) Err() error {
-	return i.err
-}
-
-func (i *bufferIterator) Close() error {
-	if i.iter != nil {
-		return i.iter.Close()
-	}
-	return nil
-}
-
-// ScanFrom returns an iterator starting from the given key (exclusive).
-// If afterKey is empty, starts from the beginning.
-func (b *Buffer) ScanFrom(afterKey string) (Iterator, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return nil, fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	iterOpts := &pebble.IterOptions{}
-	if afterKey != "" {
-		// Start after the given key
-		iterOpts.LowerBound = []byte(afterKey + "\x00") // Next key after afterKey
-	}
-
-	iter, err := b.db.NewIter(iterOpts)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create iterator: %w", err)
-	}
-
-	return &bufferIterator{
-		iter:  iter,
-		first: true,
-	}, nil
-}
-
-// Head returns the most recent event key.
-func (b *Buffer) Head() (string, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return "", fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	iter, err := b.db.NewIter(nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	for iter.Last(); iter.Valid(); iter.Prev() {
-		if isCheckpointKey(iter.Key()) {
-			continue
-		}
-		return string(iter.Key()), nil
-	}
-	return "", nil // Empty buffer
-}
-
-// First returns the oldest event key.
-func (b *Buffer) First() (string, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return "", fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	iter, err := b.db.NewIter(nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	for iter.First(); iter.Valid(); iter.Next() {
-		if isCheckpointKey(iter.Key()) {
-			continue
-		}
-		return string(iter.Key()), nil
-	}
-	return "", nil // Empty buffer
-}
-
-// Size returns the estimated disk usage of the buffer.
-func (b *Buffer) Size() (int64, error) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	if b.closed {
-		return 0, fmt.Errorf("buffer is closed")
-	}
-	// DiskSpaceUsage includes WAL and SSTables
-	return int64(b.db.Metrics().DiskSpaceUsage()), nil
-}
-
-// Delete removes an event from the buffer.
-func (b *Buffer) Delete(key string) error {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	if err := b.applyBatch(func(batch pebbleBatch) error {
-		if err := batch.Delete([]byte(key), pebble.Sync); err != nil {
-			return fmt.Errorf("failed to batch delete: %w", err)
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("failed to delete event: %w", err)
-	}
-	return nil
-}
-
-// DeleteBefore deletes all events with keys before the given key.
-// Returns the number of events deleted.
-func (b *Buffer) DeleteBefore(beforeKey string) (int, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return 0, fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	count := 0
-	iter, err := b.db.NewIter(&pebble.IterOptions{
-		UpperBound: []byte(beforeKey),
-	})
-	if err != nil {
-		return 0, fmt.Errorf("failed to create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	batch := b.newBatch()
-	defer batch.Close()
-
-	for iter.First(); iter.Valid(); iter.Next() {
-		if isCheckpointKey(iter.Key()) {
-			continue
-		}
-		if err := batch.Delete(iter.Key(), pebble.Sync); err != nil {
-			return 0, fmt.Errorf("failed to batch delete: %w", err)
-		}
-		count++
-	}
-
-	if count > 0 {
-		if err := batch.Commit(pebble.Sync); err != nil {
-			return 0, fmt.Errorf("failed to commit deletes: %w", err)
-		}
-	}
-
-	return count, nil
-}
-
-// Count returns the approximate number of events in the buffer.
-func (b *Buffer) Count() (int, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return 0, fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	count := 0
-	iter, err := b.db.NewIter(nil)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	for iter.First(); iter.Valid(); iter.Next() {
-		if isCheckpointKey(iter.Key()) {
-			continue
-		}
-		count++
-	}
-
-	return count, nil
-}
-
-// CountAfter returns the number of events after the given key.
-func (b *Buffer) CountAfter(afterKey string) (int, error) {
-	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
-		return 0, fmt.Errorf("buffer is closed")
-	}
-	b.mu.RUnlock()
-
-	count := 0
-	iterOpts := &pebble.IterOptions{}
-	if afterKey != "" {
-		iterOpts.LowerBound = []byte(afterKey + "\x00")
-	}
-
-	iter, err := b.db.NewIter(iterOpts)
-	if err != nil {
-		return 0, fmt.Errorf("failed to create iterator: %w", err)
-	}
-	defer iter.Close()
-
-	for iter.First(); iter.Valid(); iter.Next() {
-		if isCheckpointKey(iter.Key()) {
-			continue
-		}
-		count++
-	}
-
-	return count, nil
-}
-
 // Close closes the buffer.
 func (b *Buffer) Close() error {
 	b.mu.Lock()
@@ -498,12 +151,7 @@ func (b *Buffer) Close() error {
 	b.closed = true
 	b.mu.Unlock()
 
-	// Close writeCh first to signal batcher to stop accepting new writes.
-	// The batcher will drain any remaining items in the channel before exiting.
-	close(b.writeCh)
-
-	// Now close closeCh to unblock any Write() calls that are waiting.
-	// Since writeCh is already closed, the batcher won't receive these anyway.
+	// Signal batcher to stop
 	close(b.closeCh)
 
 	// Wait for batcher to finish flushing all pending writes.
@@ -599,113 +247,67 @@ func (b *Buffer) DeleteCheckpoint() error {
 	return nil
 }
 
-func (b *Buffer) applyBatch(apply func(batch pebbleBatch) error) error {
+// Delete removes an event from the buffer.
+func (b *Buffer) Delete(key string) error {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return fmt.Errorf("buffer is closed")
+	}
+	b.mu.RUnlock()
+
+	if err := b.applyBatch(func(batch pebbleBatch) error {
+		if err := batch.Delete([]byte(key), pebble.Sync); err != nil {
+			return fmt.Errorf("failed to batch delete: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("failed to delete event: %w", err)
+	}
+	return nil
+}
+
+// DeleteBefore deletes all events with keys before the given key.
+// Returns the number of events deleted.
+func (b *Buffer) DeleteBefore(beforeKey string) (int, error) {
+	b.mu.RLock()
+	if b.closed {
+		b.mu.RUnlock()
+		return 0, fmt.Errorf("buffer is closed")
+	}
+	b.mu.RUnlock()
+
+	count := 0
+	iter, err := b.db.NewIter(&pebble.IterOptions{
+		UpperBound: []byte(beforeKey),
+	})
+	if err != nil {
+		return 0, fmt.Errorf("failed to create iterator: %w", err)
+	}
+	defer iter.Close()
+
 	batch := b.newBatch()
 	defer batch.Close()
 
-	if err := apply(batch); err != nil {
-		return err
+	for iter.First(); iter.Valid(); iter.Next() {
+		if isCheckpointKey(iter.Key()) {
+			continue
+		}
+		if err := batch.Delete(iter.Key(), pebble.Sync); err != nil {
+			return 0, fmt.Errorf("failed to batch delete: %w", err)
+		}
+		count++
 	}
 
-	if err := batch.Commit(pebble.Sync); err != nil {
-		return fmt.Errorf("failed to commit batch: %w", err)
+	if count > 0 {
+		if err := batch.Commit(pebble.Sync); err != nil {
+			return 0, fmt.Errorf("failed to commit deletes: %w", err)
+		}
 	}
 
-	return nil
+	return count, nil
 }
 
 func isCheckpointKey(key []byte) bool {
 	return bytes.Equal(key, checkpointKeyBytes)
-}
-
-type writeRequest struct {
-	key   []byte
-	value []byte
-	token bson.Raw
-}
-
-func (b *Buffer) startBatcher() {
-	b.batcherWG.Add(1)
-	go b.runBatcher()
-}
-
-func (b *Buffer) runBatcher() {
-	defer b.batcherWG.Done()
-
-	ticker := time.NewTicker(b.batchInterval)
-	defer ticker.Stop()
-
-	var pending []*writeRequest
-
-	flush := func() {
-		if len(pending) == 0 {
-			return
-		}
-
-		batch := b.newBatch()
-		var commitErr error
-		var checkpointToken []byte
-
-		for _, req := range pending {
-			if err := batch.Set(req.key, req.value, pebble.Sync); err != nil {
-				commitErr = fmt.Errorf("failed to batch write event: %w", err)
-				break
-			}
-			if req.token != nil {
-				checkpointToken = append([]byte(nil), req.token...)
-			}
-		}
-
-		if commitErr == nil && checkpointToken != nil {
-			if err := batch.Set(checkpointKeyBytes, checkpointToken, pebble.Sync); err != nil {
-				commitErr = fmt.Errorf("failed to batch write checkpoint: %w", err)
-			}
-		}
-
-		if commitErr == nil {
-			if err := batch.Commit(pebble.Sync); err != nil {
-				commitErr = fmt.Errorf("failed to commit batch: %w", err)
-			}
-		}
-
-		_ = batch.Close()
-
-		if commitErr != nil {
-			b.logger.Error("failed to flush batch, stopping batcher", "error", commitErr)
-			b.mu.Lock()
-			if !b.closed {
-				b.closed = true
-				close(b.closeCh)
-			}
-			b.mu.Unlock()
-			return
-		}
-
-		pending = pending[:0]
-	}
-
-	for {
-		select {
-		case req, ok := <-b.writeCh:
-			if !ok {
-				flush()
-				return
-			}
-			pending = append(pending, req)
-			if len(pending) >= b.batchSize {
-				flush()
-			}
-		case <-ticker.C:
-			flush()
-		case <-b.closeCh:
-			// Drain remaining requests from writeCh until it's closed.
-			// Don't use default branch - wait for writeCh to be closed to ensure
-			// all pending writes are processed.
-			for req := range b.writeCh {
-				pending = append(pending, req)
-			}
-			flush()
-			return
-		}
-	}
 }

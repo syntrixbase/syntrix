@@ -17,7 +17,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
-	"github.com/google/cel-go/cel"
 	"github.com/gorilla/websocket"
 )
 
@@ -93,8 +92,9 @@ type Client struct {
 	send chan BaseMessage
 
 	// Subscriptions
-	subscriptions map[string]Subscription
-	mu            sync.Mutex
+	subscriptions  map[string]Subscription // clientSubID -> Subscription
+	streamerSubIDs map[string]string       // clientSubID -> streamerSubID
+	mu             sync.Mutex
 
 	tenant          string
 	authenticated   bool
@@ -104,7 +104,6 @@ type Client struct {
 type Subscription struct {
 	Query       model.Query
 	IncludeData bool
-	CelProgram  cel.Program
 }
 
 // readPump pumps messages from the websocket connection to the hub.
@@ -114,6 +113,14 @@ type Subscription struct {
 // reads from this goroutine.
 func (c *Client) readPump() {
 	defer func() {
+		// Clean up subscriptions
+		c.mu.Lock()
+		for _, sid := range c.streamerSubIDs {
+			c.hub.UnsubscribeFromStream(sid)
+			c.hub.UnregisterSubscription(sid)
+		}
+		c.mu.Unlock()
+
 		c.hub.Unregister(c)
 		c.conn.Close()
 	}()
@@ -159,11 +166,11 @@ func (c *Client) handleMessage(msg BaseMessage) {
 			return
 		}
 
-		// Compile CEL filters
-		prg, err := compileFiltersToCEL(payload.Query.Filters)
+		// Subscribe to Streamer
+		streamerSubID, err := c.hub.SubscribeToStream(c.tenant, payload.Query.Collection, payload.Query.Filters)
 		if err != nil {
-			log.Printf("[Error][WS] Failed to compile filters: %v", err)
-			errPayload, _ := json.Marshal(map[string]string{"message": "Invalid filter expression: " + err.Error()})
+			log.Printf("[Error][WS] Failed to subscribe: %v", err)
+			errPayload, _ := json.Marshal(map[string]string{"message": "Subscribe failed: " + err.Error()})
 			c.send <- BaseMessage{
 				ID:      msg.ID,
 				Type:    TypeError,
@@ -176,9 +183,11 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		c.subscriptions[msg.ID] = Subscription{
 			Query:       payload.Query,
 			IncludeData: payload.IncludeData,
-			CelProgram:  prg,
 		}
+		c.streamerSubIDs[msg.ID] = streamerSubID
 		c.mu.Unlock()
+
+		c.hub.RegisterSubscription(streamerSubID, c, msg.ID)
 		log.Printf("[Info][WS] Subscribed to collection=%s id=%s includeData=%v", payload.Query.Collection, msg.ID, payload.IncludeData)
 
 		// Send Ack
@@ -229,7 +238,17 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		}
 		c.mu.Lock()
 		delete(c.subscriptions, payload.ID)
+		sid, ok := c.streamerSubIDs[payload.ID]
+		if ok {
+			delete(c.streamerSubIDs, payload.ID)
+		}
 		c.mu.Unlock()
+
+		if ok {
+			c.hub.UnsubscribeFromStream(sid)
+			c.hub.UnregisterSubscription(sid)
+		}
+
 		log.Printf("[Info][WS] Unsubscribed id=%s", payload.ID)
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeUnsubscribeAck}
 	}
@@ -440,6 +459,7 @@ func ServeWs(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w htt
 		conn:            conn,
 		send:            make(chan BaseMessage, 256),
 		subscriptions:   make(map[string]Subscription),
+		streamerSubIDs:  make(map[string]string),
 		tenant:          tenant,
 		authenticated:   !cfg.EnableAuth || tenant != "",
 		allowAllTenants: allowAll || !cfg.EnableAuth,
@@ -494,6 +514,11 @@ func ServeSSE(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w ht
 		tenant, allowAll = tenantFromContext(ctx)
 	}
 
+	// Default tenant if not specified (development/test mode)
+	if tenant == "" && !cfg.EnableAuth {
+		tenant = "default"
+	}
+
 	client := &Client{
 		hub:             hub,
 		queryService:    qs,
@@ -502,6 +527,7 @@ func ServeSSE(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w ht
 		conn:            nil,
 		send:            make(chan BaseMessage, 256),
 		subscriptions:   make(map[string]Subscription),
+		streamerSubIDs:  make(map[string]string),
 		tenant:          tenant,
 		authenticated:   !cfg.EnableAuth || tenant != "",
 		allowAllTenants: allowAll || !cfg.EnableAuth,
@@ -509,14 +535,20 @@ func ServeSSE(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w ht
 
 	// Handle initial subscription from query params
 	collection := r.URL.Query().Get("collection")
-	// If collection is provided, subscribe to it.
-	// If not provided, we subscribe to everything (empty string matches all in Hub).
-	// We use "default" as the subscription ID.
+
+	// Subscribe to stream
+	streamerSubID, err := client.hub.SubscribeToStream(client.tenant, collection, nil)
+	if err != nil {
+		http.Error(w, "failed to subscribe: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	client.subscriptions["default"] = Subscription{
 		Query:       model.Query{Collection: collection},
 		IncludeData: true, // SSE clients typically expect data
 	}
-	log.Printf("[Info][SSE] connection established. Subscribed to collection=%s", collection)
+	client.streamerSubIDs["default"] = streamerSubID
+	client.hub.RegisterSubscription(streamerSubID, client, "default")
 
 	if !client.hub.Register(client) {
 		return
@@ -524,6 +556,11 @@ func ServeSSE(hub *Hub, qs engine.Service, auth identity.AuthN, cfg Config, w ht
 
 	// Unregister on exit
 	defer func() {
+		// Clean up subscriptions
+		for _, sid := range client.streamerSubIDs {
+			client.hub.UnsubscribeFromStream(sid)
+			client.hub.UnregisterSubscription(sid)
+		}
 		client.hub.Unregister(client)
 		log.Println("[Info][SSE] connection closed")
 	}()

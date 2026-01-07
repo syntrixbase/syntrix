@@ -33,6 +33,15 @@ func (m *Manager) Start(bgCtx context.Context) {
 		}()
 	}
 
+	// Start Streamer Service
+	if m.streamerService != nil {
+		go func() {
+			if err := m.streamerService.Start(bgCtx); err != nil {
+				log.Printf("Failed to start Streamer Service: %v", err)
+			}
+		}()
+	}
+
 	// Start Realtime Background Tasks with retry
 	if m.rtServer != nil {
 		go func() {

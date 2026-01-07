@@ -9,7 +9,6 @@ import (
 	"time"
 
 	api "github.com/syntrixbase/syntrix/internal/api/config"
-	csp "github.com/syntrixbase/syntrix/internal/csp/config"
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
 	puller "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -26,14 +25,12 @@ type Config struct {
 	Deployment services.DeploymentConfig `yaml:"deployment"`
 	Gateway    api.GatewayConfig         `yaml:"gateway"`
 	Query      QueryConfig               `yaml:"query"`
-	CSP        csp.Config                `yaml:"csp"`
 	Trigger    trigger.Config            `yaml:"trigger"`
 	Puller     puller.Config             `yaml:"puller"`
 }
 
 type QueryConfig struct {
-	Port          int    `yaml:"port"`
-	CSPServiceURL string `yaml:"csp_service_url"`
+	Port int `yaml:"port"`
 }
 
 type StorageConfig struct {
@@ -130,10 +127,8 @@ func LoadConfig() *Config {
 		Server:   server.DefaultConfig(),
 		Gateway:  api.DefaultGatewayConfig(),
 		Query: QueryConfig{
-			Port:          8082,
-			CSPServiceURL: "http://localhost:8083",
+			Port: 8082,
 		},
-		CSP:        csp.DefaultConfig(),
 		Trigger:    trigger.DefaultConfig(),
 		Deployment: services.DefaultDeploymentConfig(),
 		Puller:     puller.DefaultConfig(),
@@ -155,9 +150,6 @@ func LoadConfig() *Config {
 			cfg.Query.Port = port
 		}
 	}
-	if val := os.Getenv("QUERY_CSP_SERVICE_URL"); val != "" {
-		cfg.Query.CSPServiceURL = val
-	}
 
 	if val := os.Getenv("MONGO_URI"); val != "" {
 		if backend, ok := cfg.Storage.Backends["default_mongo"]; ok {
@@ -169,12 +161,6 @@ func LoadConfig() *Config {
 		if backend, ok := cfg.Storage.Backends["default_mongo"]; ok {
 			backend.Mongo.DatabaseName = val
 			cfg.Storage.Backends["default_mongo"] = backend
-		}
-	}
-
-	if val := os.Getenv("CSP_PORT"); val != "" {
-		if port, err := strconv.Atoi(val); err == nil {
-			cfg.CSP.Port = port
 		}
 	}
 

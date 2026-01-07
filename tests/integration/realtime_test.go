@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func TestRealtime_FullFlow(t *testing.T) {
@@ -394,7 +395,7 @@ func TestRealtime_Filtering(t *testing.T) {
 			Query: Query{
 				Collection: collectionName,
 				Filters: []Filter{
-					{Field: "age", Op: ">", Value: 20},
+					{Field: "age", Op: model.OpGt, Value: 20},
 				},
 			},
 			IncludeData: true,
@@ -469,7 +470,7 @@ func TestRealtime_Filtering(t *testing.T) {
 			Query: Query{
 				Collection: collectionName,
 				Filters: []Filter{
-					{Field: "age", Op: ">", Value: 20},
+					{Field: "age", Op: model.OpGt, Value: 20},
 				},
 			},
 			IncludeData: true,

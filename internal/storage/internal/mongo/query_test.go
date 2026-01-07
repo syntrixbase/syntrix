@@ -35,7 +35,7 @@ func TestMongoBackend_Query(t *testing.T) {
 	q1 := model.Query{
 		Collection: "users",
 		Filters: []model.Filter{
-			{Field: "age", Op: ">", Value: 28},
+			{Field: "age", Op: model.OpGt, Value: 28},
 		},
 	}
 	docs, err := backend.Query(ctx, tenant, q1)
@@ -46,8 +46,8 @@ func TestMongoBackend_Query(t *testing.T) {
 	q2 := model.Query{
 		Collection: "users",
 		Filters: []model.Filter{
-			{Field: "age", Op: ">", Value: 20},
-			{Field: "active", Op: "==", Value: true},
+			{Field: "age", Op: model.OpGt, Value: 20},
+			{Field: "active", Op: model.OpEq, Value: true},
 		},
 	}
 	docs, err = backend.Query(ctx, tenant, q2)
@@ -86,9 +86,9 @@ func TestMongoBackend_Query(t *testing.T) {
 	docs, err = backend.Query(ctx, tenant, model.Query{
 		Collection: "users",
 		Filters: []model.Filter{
-			{Field: "version", Op: ">=", Value: int64(1)},
-			{Field: "active", Op: "==", Value: true},
-			{Field: "name", Op: "in", Value: []string{"Alice", "Charlie"}},
+			{Field: "version", Op: model.OpGte, Value: int64(1)},
+			{Field: "active", Op: model.OpEq, Value: true},
+			{Field: "name", Op: model.OpIn, Value: []string{"Alice", "Charlie"}},
 		},
 	})
 	require.NoError(t, err)

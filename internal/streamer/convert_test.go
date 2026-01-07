@@ -59,13 +59,13 @@ func TestProtoToOperationType(t *testing.T) {
 // --- Domain to Proto conversions ---
 
 func TestFilterToProto(t *testing.T) {
-	result := filterToProto(Filter{
+	result := filterToProto(model.Filter{
 		Field: "status",
-		Op:    "eq",
+		Op:    model.OpEq,
 		Value: "active",
 	})
 	assert.Equal(t, "status", result.Field)
-	assert.Equal(t, "eq", result.Op)
+	assert.Equal(t, "==", result.Op)
 	assert.Equal(t, "active", result.Value.GetStringValue())
 }
 

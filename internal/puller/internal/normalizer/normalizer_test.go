@@ -534,3 +534,30 @@ func TestConvertBsonValue(t *testing.T) {
 		})
 	}
 }
+
+func TestNormalizer_FixTimestamps(t *testing.T) {
+	n := New()
+
+	now := time.Now()
+	pNow := primitive.NewDateTimeFromTime(now)
+
+	raw := makeRawEvent(
+		"insert",
+		1, 1,
+		bson.M{
+			"_id":        "t1",
+			"tenant_id":  "T",
+			"created_at": pNow,
+			"updated_at": now,
+		},
+		bson.M{"_id": "t1"},
+		"db", "coll",
+	)
+
+	evt, err := n.Normalize(raw)
+	assert.NoError(t, err)
+
+	// fixTimestamps logic converts them to int64
+	assert.Equal(t, now.UnixMilli(), evt.FullDocument.CreatedAt)
+	assert.Equal(t, now.UnixMilli(), evt.FullDocument.UpdatedAt)
+}

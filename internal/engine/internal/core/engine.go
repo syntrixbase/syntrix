@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/syntrixbase/syntrix/internal/csp"
 	"github.com/syntrixbase/syntrix/internal/helper"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
@@ -13,15 +12,13 @@ import (
 
 // Engine handles all business logic and coordinates with the storage backend.
 type Engine struct {
-	storage    storage.DocumentStore
-	cspService csp.Service
+	storage storage.DocumentStore
 }
 
-// New creates a new Query Engine instance with a CSP service.
-func New(storage storage.DocumentStore, cspService csp.Service) *Engine {
+// New creates a new Query Engine instance.
+func New(storage storage.DocumentStore) *Engine {
 	return &Engine{
-		storage:    storage,
-		cspService: cspService,
+		storage: storage,
 	}
 }
 
@@ -147,12 +144,6 @@ func (e *Engine) ExecuteQuery(ctx context.Context, tenant string, q model.Query)
 	}
 
 	return flatDocs, nil
-}
-
-// WatchCollection returns a channel of events for a collection.
-// Delegates to the CSP service for watching change streams.
-func (e *Engine) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
-	return e.cspService.Watch(ctx, tenant, collection, nil, storage.WatchOptions{})
 }
 
 // Pull handles replication pull requests.

@@ -72,7 +72,7 @@ func protoToOperationType(op pb.OperationType) OperationType {
 // --- Domain to Proto conversions ---
 
 // filtersToProto converts a slice of domain Filters to proto.
-func filtersToProto(filters []Filter) []*pb.Filter {
+func filtersToProto(filters []model.Filter) []*pb.Filter {
 	result := make([]*pb.Filter, 0, len(filters))
 	for _, f := range filters {
 		result = append(result, filterToProto(f))
@@ -81,10 +81,10 @@ func filtersToProto(filters []Filter) []*pb.Filter {
 }
 
 // filterToProto converts domain Filter to proto.
-func filterToProto(f Filter) *pb.Filter {
+func filterToProto(f model.Filter) *pb.Filter {
 	return &pb.Filter{
 		Field: f.Field,
-		Op:    f.Op,
+		Op:    string(f.Op),
 		Value: anyToProtoValue(f.Value),
 	}
 }

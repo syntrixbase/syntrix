@@ -13,7 +13,6 @@ import (
 
 	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/config"
-	csp_config "github.com/syntrixbase/syntrix/internal/csp/config"
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -35,7 +34,6 @@ var (
 type GlobalTestEnv struct {
 	APIURL    string
 	QueryURL  string
-	CSPURL    string
 	Manager   *services.Manager
 	MongoURI  string
 	DBName    string
@@ -153,10 +151,6 @@ match:
 	if err != nil {
 		return nil, fmt.Errorf("failed to get Query port: %w", err)
 	}
-	cspPort, err := getAvailablePort()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get CSP port: %w", err)
-	}
 
 	// Initialize the unified server
 	server.InitDefault(server.Config{
@@ -184,11 +178,7 @@ match:
 			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
 		},
 		Query: config.QueryConfig{
-			Port:          queryPort,
-			CSPServiceURL: fmt.Sprintf("http://localhost:%d", cspPort),
-		},
-		CSP: csp_config.Config{
-			Port: cspPort,
+			Port: queryPort,
 		},
 		Storage: config.StorageConfig{
 			Backends: map[string]config.BackendConfig{
@@ -254,7 +244,6 @@ match:
 	opts := services.Options{
 		RunAPI:              true,
 		RunQuery:            true,
-		RunCSP:              true,
 		RunTriggerEvaluator: natsAvailable,
 		RunTriggerWorker:    natsAvailable,
 		RunPuller:           true,
@@ -279,18 +268,13 @@ match:
 		mgrCancel()
 		return nil, fmt.Errorf("Query server failed to start: %w", err)
 	}
-	if err := waitForHealthWithTimeout(fmt.Sprintf("http://localhost:%d/health", cspPort), 30*time.Second); err != nil {
-		mgrCancel()
-		return nil, fmt.Errorf("CSP server failed to start: %w", err)
-	}
 
-	log.Printf("[Integration Test] Global environment started - API: %d, Query: %d, CSP: %d, DB: %s",
-		apiPort, queryPort, cspPort, dbName)
+	log.Printf("[Integration Test] Global environment started - API: %d, Query: %d, DB: %s",
+		apiPort, queryPort, dbName)
 
 	return &GlobalTestEnv{
 		APIURL:    fmt.Sprintf("http://localhost:%d", apiPort),
 		QueryURL:  fmt.Sprintf("http://localhost:%d", queryPort),
-		CSPURL:    fmt.Sprintf("http://localhost:%d", cspPort),
 		Manager:   manager,
 		MongoURI:  mongoURI,
 		DBName:    dbName,

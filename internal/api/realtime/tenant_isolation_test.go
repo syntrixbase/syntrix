@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
@@ -14,64 +14,72 @@ func TestHub_TenantIsolation(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	// Client A: Tenant A
 	clientA := &Client{
-		hub:           hub,
-		send:          make(chan BaseMessage, 10),
-		subscriptions: make(map[string]Subscription),
-		tenant:        "tenantA",
+		hub:            hub,
+		send:           make(chan BaseMessage, 10),
+		subscriptions:  make(map[string]Subscription),
+		streamerSubIDs: make(map[string]string),
+		tenant:         "tenantA",
 	}
 	clientA.subscriptions["subA"] = Subscription{
 		Query:       model.Query{Collection: "users"},
 		IncludeData: true,
 	}
+	// Simulate Streamer subscription mapping
 	hub.Register(clientA)
+	hub.RegisterSubscription("stream-sub-A", clientA, "subA")
 
 	// Client B: Tenant B
 	clientB := &Client{
-		hub:           hub,
-		send:          make(chan BaseMessage, 10),
-		subscriptions: make(map[string]Subscription),
-		tenant:        "tenantB",
+		hub:            hub,
+		send:           make(chan BaseMessage, 10),
+		subscriptions:  make(map[string]Subscription),
+		streamerSubIDs: make(map[string]string),
+		tenant:         "tenantB",
 	}
 	clientB.subscriptions["subB"] = Subscription{
 		Query:       model.Query{Collection: "users"},
 		IncludeData: true,
 	}
 	hub.Register(clientB)
+	hub.RegisterSubscription("stream-sub-B", clientB, "subB")
 
 	// Client C: Tenant A (Another client in Tenant A)
 	clientC := &Client{
-		hub:           hub,
-		send:          make(chan BaseMessage, 10),
-		subscriptions: make(map[string]Subscription),
-		tenant:        "tenantA",
+		hub:            hub,
+		send:           make(chan BaseMessage, 10),
+		subscriptions:  make(map[string]Subscription),
+		streamerSubIDs: make(map[string]string),
+		tenant:         "tenantA",
 	}
 	clientC.subscriptions["subC"] = Subscription{
 		Query:       model.Query{Collection: "users"},
 		IncludeData: true,
 	}
 	hub.Register(clientC)
+	hub.RegisterSubscription("stream-sub-C", clientC, "subC")
 
 	// Wait for registration
 	time.Sleep(5 * time.Millisecond)
 
 	// 1. Broadcast event for Tenant A
-	// The ID format "tenant:id" is used by determineEventTenant to extract tenant
-	evtA := storage.Event{
-		Type:     storage.EventCreate,
-		Id:       "tenantA:user1",
-		TenantID: "tenantA",
-		Document: &storage.StoredDoc{
-			Id:         "tenantA:user1",
+	// Streamer determines this matches A and C only
+	hub.BroadcastDelivery(&streamer.EventDelivery{
+		SubscriptionIDs: []string{"stream-sub-A", "stream-sub-C"},
+		Event: &streamer.Event{
+			Operation:  streamer.OperationInsert,
+			EventID:    "tenantA:user1",
+			Tenant:     "tenantA",
 			Collection: "users",
-			Data:       map[string]interface{}{"name": "User A"},
+			DocumentID: "user1",
+			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
+			Timestamp:  time.Now().UnixMilli(),
 		},
-	}
-	hub.Broadcast(evtA)
+	})
 
 	// Verify Client A received it
 	select {
@@ -98,17 +106,19 @@ func TestHub_TenantIsolation(t *testing.T) {
 	}
 
 	// 2. Broadcast event for Tenant B
-	evtB := storage.Event{
-		Type:     storage.EventCreate,
-		Id:       "tenantB:user2",
-		TenantID: "tenantB",
-		Document: &storage.StoredDoc{
-			Id:         "tenantB:user2",
+	// Streamer determines this matches B only
+	hub.BroadcastDelivery(&streamer.EventDelivery{
+		SubscriptionIDs: []string{"stream-sub-B"},
+		Event: &streamer.Event{
+			Operation:  streamer.OperationInsert,
+			EventID:    "tenantB:user2",
+			Tenant:     "tenantB",
 			Collection: "users",
-			Data:       map[string]interface{}{"name": "User B"},
+			DocumentID: "user2",
+			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
+			Timestamp:  time.Now().UnixMilli(),
 		},
-	}
-	hub.Broadcast(evtB)
+	})
 
 	// Verify Client B received it
 	select {
@@ -139,7 +149,7 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	// System Client: Has allowAllTenants = true
@@ -147,6 +157,7 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 		hub:             hub,
 		send:            make(chan BaseMessage, 10),
 		subscriptions:   make(map[string]Subscription),
+		streamerSubIDs:  make(map[string]string),
 		tenant:          "default", // Primary tenant
 		allowAllTenants: true,      // Can see all tenants
 	}
@@ -155,21 +166,24 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 		IncludeData: true,
 	}
 	hub.Register(sysClient)
+	hub.RegisterSubscription("stream-sub-Sys", sysClient, "subSys")
 
 	time.Sleep(5 * time.Millisecond)
 
 	// Broadcast event for Tenant A
-	evtA := storage.Event{
-		Type:     storage.EventCreate,
-		Id:       "tenantA:user1",
-		TenantID: "tenantA",
-		Document: &storage.StoredDoc{
-			Id:         "tenantA:user1",
+	// Streamer says SysClient matches
+	hub.BroadcastDelivery(&streamer.EventDelivery{
+		SubscriptionIDs: []string{"stream-sub-Sys"},
+		Event: &streamer.Event{
+			Operation:  streamer.OperationInsert,
+			EventID:    "tenantA:user1",
+			Tenant:     "tenantA",
 			Collection: "users",
-			Data:       map[string]interface{}{"name": "User A"},
+			DocumentID: "user1",
+			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
+			Timestamp:  time.Now().UnixMilli(),
 		},
-	}
-	hub.Broadcast(evtA)
+	})
 
 	// System client SHOULD receive it
 	select {
@@ -180,17 +194,19 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 	}
 
 	// Broadcast event for Tenant B
-	evtB := storage.Event{
-		Type:     storage.EventCreate,
-		Id:       "tenantB:user2",
-		TenantID: "tenantB",
-		Document: &storage.StoredDoc{
-			Id:         "tenantB:user2",
+	// Streamer says SysClient matches
+	hub.BroadcastDelivery(&streamer.EventDelivery{
+		SubscriptionIDs: []string{"stream-sub-Sys"},
+		Event: &streamer.Event{
+			Operation:  streamer.OperationInsert,
+			EventID:    "tenantB:user2",
+			Tenant:     "tenantB",
 			Collection: "users",
-			Data:       map[string]interface{}{"name": "User B"},
+			DocumentID: "user2",
+			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
+			Timestamp:  time.Now().UnixMilli(),
 		},
-	}
-	hub.Broadcast(evtB)
+	})
 
 	// System client SHOULD receive it
 	select {

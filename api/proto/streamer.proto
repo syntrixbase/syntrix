@@ -74,7 +74,7 @@ message SubscribeRequest {
 
   // Structured filters for type-safe matching.
   // All filters are ANDed together.
-  // For document ID match, use Filter(field="_id", op="eq", value=...).
+  // For document ID match, use Filter(field="_id", op="==", value=...).
   repeated Filter filters = 3;
 
   // Tenant identifier for multi-tenancy.

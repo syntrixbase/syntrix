@@ -13,6 +13,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
@@ -95,8 +96,8 @@ func TestService_Stream_SubscribeWithFilters(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", []Filter{
-		{Field: "status", Op: "eq", Value: "active"},
+	subID, err := stream.Subscribe("tenant1", "users", []model.Filter{
+		{Field: "status", Op: model.OpEq, Value: "active"},
 	})
 	require.NoError(t, err)
 	assert.NotEmpty(t, subID)
@@ -564,6 +565,7 @@ func TestService_ProcessEvent_NoMatchingSubscriptions(t *testing.T) {
 }
 
 func TestService_ProcessEvent_DeleteOperation(t *testing.T) {
+	t.Parallel()
 	s, err := NewService(ServiceConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
@@ -613,6 +615,7 @@ func (m *testPullerService) Subscribe(ctx context.Context, consumerID string, af
 }
 
 func TestStart_WithMockPuller(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -632,6 +635,7 @@ func TestStart_WithMockPuller(t *testing.T) {
 // Subscribe no longer returns an error. It returns a channel and handles reconnection internally.
 
 func TestStart_StandaloneMode(t *testing.T) {
+	t.Parallel()
 	// No puller configured - standalone mode
 	s, err := NewService(ServiceConfig{}, slog.Default())
 	require.NoError(t, err)
@@ -642,6 +646,7 @@ func TestStart_StandaloneMode(t *testing.T) {
 }
 
 func TestStart_WithPullerAddr(t *testing.T) {
+	t.Parallel()
 	// Test that Start creates a puller client from address.
 	// gRPC connection is lazy, so NewClient won't fail even if server doesn't exist.
 	s, err := NewService(ServiceConfig{
@@ -661,6 +666,7 @@ func TestStart_WithPullerAddr(t *testing.T) {
 }
 
 func TestConsumePullerEvents_ProcessEvent(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -690,6 +696,7 @@ func TestConsumePullerEvents_ProcessEvent(t *testing.T) {
 }
 
 func TestConsumePullerEvents_ContextDone(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -706,6 +713,7 @@ func TestConsumePullerEvents_ContextDone(t *testing.T) {
 }
 
 func TestConsumePullerEvents_ChannelClose(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -723,6 +731,7 @@ func TestConsumePullerEvents_ChannelClose(t *testing.T) {
 }
 
 func TestConsumePullerEvents_NilChange(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -744,6 +753,7 @@ func TestConsumePullerEvents_NilChange(t *testing.T) {
 }
 
 func TestConsumePullerEvents_ServiceStopped(t *testing.T) {
+	t.Parallel()
 	mockPuller := newTestPullerService()
 
 	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
@@ -763,6 +773,7 @@ func TestConsumePullerEvents_ServiceStopped(t *testing.T) {
 // The client will keep trying to reconnect in the background.
 
 func TestService_Subscribe_FilterCompileError(t *testing.T) {
+	t.Parallel()
 	// Test subscribe with invalid filter that causes compilation failure
 	s, err := NewService(ServiceConfig{}, slog.Default())
 	require.NoError(t, err)
@@ -772,8 +783,8 @@ func TestService_Subscribe_FilterCompileError(t *testing.T) {
 	defer stream.Close()
 
 	// Subscribe with an invalid operator that will fail filter compilation
-	_, err = stream.Subscribe("tenant1", "users", []Filter{
-		{Field: "status", Op: "invalid_operator", Value: "active"},
+	_, err = stream.Subscribe("tenant1", "users", []model.Filter{
+		{Field: "status", Op: model.FilterOp("invalid_operator"), Value: "active"},
 	})
 
 	// Should fail because the operator is invalid
@@ -782,6 +793,7 @@ func TestService_Subscribe_FilterCompileError(t *testing.T) {
 }
 
 func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
+	t.Parallel()
 	// Test subscribe error handling when manager returns non-nil error
 	// This tests the err != nil branch in subscribe()
 	s, err := NewService(ServiceConfig{}, slog.Default())
@@ -790,14 +802,15 @@ func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
 
 	// Test by calling subscribe directly with an invalid gateway (empty gatewayID)
 	// The manager should handle this gracefully
-	_, err = internal.subscribe("test-gateway", "tenant1", "users", []Filter{
-		{Field: "status", Op: "invalid_op", Value: "test"},
+	_, err = internal.subscribe("test-gateway", "tenant1", "users", []model.Filter{
+		{Field: "status", Op: model.FilterOp("invalid_op"), Value: "test"},
 	})
 
 	require.Error(t, err)
 }
 
 func TestService_ConsumePullerEvents_ServiceContextDone(t *testing.T) {
+	t.Parallel()
 	// Test that consumePullerEvents stops when service context is done
 	s, err := NewService(ServiceConfig{}, slog.Default())
 	require.NoError(t, err)

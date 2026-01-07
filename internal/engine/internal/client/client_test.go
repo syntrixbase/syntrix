@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -56,43 +55,6 @@ func TestClient_CreateDocument(t *testing.T) {
 	doc := model.Document{"id": "1", "collection": "test"}
 	err := client.CreateDocument(context.Background(), "default", doc)
 	assert.NoError(t, err)
-}
-
-func TestClient_WatchCollection(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, "/internal/v1/watch", r.URL.Path)
-		var req map[string]string
-		json.NewDecoder(r.Body).Decode(&req)
-		assert.Equal(t, "default", req["tenant"])
-
-		// Send two events then close
-		evt1 := storage.Event{Type: "create", Id: "test/1"}
-		evt2 := storage.Event{Type: "update", Id: "test/1"}
-
-		encoder := json.NewEncoder(w)
-		encoder.Encode(evt1)
-		w.(http.Flusher).Flush()
-
-		encoder.Encode(evt2)
-		w.(http.Flusher).Flush()
-	}))
-	defer ts.Close()
-
-	client := New(ts.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-
-	stream, err := client.WatchCollection(ctx, "default", "test")
-	assert.NoError(t, err)
-
-	var events []storage.Event
-	for evt := range stream {
-		events = append(events, evt)
-	}
-
-	assert.Len(t, events, 2)
-	assert.Equal(t, storage.EventCreate, events[0].Type)
-	assert.Equal(t, storage.EventUpdate, events[1].Type)
 }
 
 func TestClient_ErrorHandling(t *testing.T) {
@@ -227,18 +189,6 @@ func TestClient_ExecuteQuery_StatusError(t *testing.T) {
 	assert.Nil(t, res)
 }
 
-func TestClient_WatchCollection_StatusError(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-	}))
-	defer ts.Close()
-
-	client := New(ts.URL)
-	res, err := client.WatchCollection(context.Background(), "default", "c")
-	assert.Error(t, err)
-	assert.Nil(t, res)
-}
-
 func TestClient_post_EncodeError(t *testing.T) {
 	client := New("http://example.com")
 	_, err := client.post(context.Background(), "/x", make(chan int))
@@ -344,69 +294,6 @@ func TestClient_Push_Success(t *testing.T) {
 	res, err := client.Push(context.Background(), "default", storage.ReplicationPushRequest{Collection: "c"})
 	assert.NoError(t, err)
 	assert.Equal(t, &expected, res)
-}
-
-func TestClient_WatchCollection_CancelCloses(t *testing.T) {
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/internal/v1/watch", r.URL.Path)
-		var body map[string]interface{}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.Equal(t, "default", body["tenant"])
-		flusher, ok := w.(http.Flusher)
-		require.True(t, ok)
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("\n")) // allow client to start scanner
-		flusher.Flush()
-		<-r.Context().Done()
-	}))
-	defer ts.Close()
-
-	client := New(ts.URL)
-	ctx, cancel := context.WithCancel(context.Background())
-	stream, err := client.WatchCollection(ctx, "default", "c")
-	require.NoError(t, err)
-
-	cancel()
-
-	select {
-	case _, ok := <-stream:
-		if ok {
-			t.Fatal("expected channel to close on cancel")
-		}
-	case <-time.After(200 * time.Millisecond):
-		t.Fatal("stream did not close after cancel")
-	}
-}
-
-func TestClient_WatchCollection_InvalidJSONSkipped(t *testing.T) {
-	valid := storage.Event{Type: storage.EventCreate, Id: "c/1"}
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		require.Equal(t, "/internal/v1/watch", r.URL.Path)
-		var body map[string]interface{}
-		require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-		require.Equal(t, "default", body["tenant"])
-		flusher, ok := w.(http.Flusher)
-		require.True(t, ok)
-		_, _ = w.Write([]byte("not-json\n"))
-		flusher.Flush()
-		require.NoError(t, json.NewEncoder(w).Encode(valid))
-		flusher.Flush()
-	}))
-	defer ts.Close()
-
-	client := New(ts.URL)
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	stream, err := client.WatchCollection(ctx, "default", "c")
-	require.NoError(t, err)
-
-	var events []storage.Event
-	for evt := range stream {
-		events = append(events, evt)
-	}
-
-	require.Len(t, events, 1)
-	assert.Equal(t, valid, events[0])
 }
 
 func TestClient_Pull(t *testing.T) {
@@ -525,11 +412,6 @@ func TestClient_NetworkErrors(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("WatchCollection connection error", func(t *testing.T) {
-		_, err := client.WatchCollection(ctx, "default", "test")
-		assert.Error(t, err)
-	})
-
 	t.Run("Pull connection error", func(t *testing.T) {
 		_, err := client.Pull(ctx, "default", storage.ReplicationPullRequest{})
 		assert.Error(t, err)
@@ -537,27 +419,6 @@ func TestClient_NetworkErrors(t *testing.T) {
 
 	t.Run("Push connection error", func(t *testing.T) {
 		_, err := client.Push(ctx, "default", storage.ReplicationPushRequest{})
-		assert.Error(t, err)
-	})
-}
-
-func TestClient_WatchCollection_Errors(t *testing.T) {
-	t.Run("Bad Status Code", func(t *testing.T) {
-		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
-		}))
-		defer ts.Close()
-
-		client := New(ts.URL)
-		_, err := client.WatchCollection(context.Background(), "default", "test")
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "unexpected status code: 500")
-	})
-
-	t.Run("Invalid URL", func(t *testing.T) {
-		// Control character in URL to force NewRequest error
-		client := New("http://example.com" + string(byte(0x7f)))
-		_, err := client.WatchCollection(context.Background(), "default", "test")
 		assert.Error(t, err)
 	})
 }
@@ -636,49 +497,4 @@ func TestClient_ExecuteQuery_Errors(t *testing.T) {
 		_, err := client.ExecuteQuery(context.Background(), "default", model.Query{})
 		assert.Error(t, err)
 	})
-}
-
-func TestClient_WatchCollection_ContextCancelWhileSending(t *testing.T) {
-	// Create a server that streams events continuously
-	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		// Send many events to potentially fill the channel
-		for i := 0; i < 100; i++ {
-			evt := storage.Event{Id: "c/1", Type: storage.EventCreate}
-			data, _ := json.Marshal(evt)
-			w.Write(data)
-			w.Write([]byte("\n"))
-		}
-		if f, ok := w.(http.Flusher); ok {
-			f.Flush()
-		}
-		<-r.Context().Done()
-	}))
-	defer ts.Close()
-
-	client := New(ts.URL)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	ch, err := client.WatchCollection(ctx, "default", "c")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-
-	// Let some events through
-	time.Sleep(10 * time.Millisecond)
-
-	// Cancel context - should trigger ctx.Done() path in the goroutine
-	cancel()
-
-	// Drain remaining events with timeout
-	timeout := time.After(time.Second)
-	for {
-		select {
-		case _, ok := <-ch:
-			if !ok {
-				return // Channel closed, test passed
-			}
-		case <-timeout:
-			return // Timeout is acceptable
-		}
-	}
 }

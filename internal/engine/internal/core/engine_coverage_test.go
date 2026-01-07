@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -12,9 +11,9 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
-// newTestEngine creates an engine for tests that don't use WatchCollection
+// newTestEngine creates an engine for tests
 func newTestEngine(store storage.DocumentStore) *Engine {
-	return New(store, new(MockCSPService))
+	return New(store)
 }
 
 func TestEngine_ExecuteQuery(t *testing.T) {
@@ -32,7 +31,7 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 			query: model.Query{
 				Collection: "test",
 				Filters: []model.Filter{
-					{Field: "foo", Op: "==", Value: "bar"},
+					{Field: "foo", Op: model.OpEq, Value: "bar"},
 				},
 			},
 			mockSetup: func(m *MockStorageBackend) {
@@ -313,24 +312,6 @@ func TestReplaceDocument_GetAfterUpdateError(t *testing.T) {
 	_, err := engine.ReplaceDocument(context.Background(), "default", doc, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "get error")
-}
-
-func TestWatchCollection_EmptyCollection(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockCSP := new(MockCSPService)
-	engine := New(mockStorage, mockCSP)
-
-	eventCh := make(chan storage.Event)
-	close(eventCh)
-
-	// Watch with empty collection (watch all)
-	mockCSP.On("Watch", mock.Anything, "default", "", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
-
-	ch, err := engine.WatchCollection(context.Background(), "default", "")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-	<-ch
-	mockCSP.AssertExpectations(t)
 }
 
 func TestPull_QueryEmpty(t *testing.T) {
@@ -695,7 +676,7 @@ func TestDeleteDocument_WithPredicate(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	pred := model.Filters{{Field: "version", Op: "==", Value: int64(1)}}
+	pred := model.Filters{{Field: "version", Op: model.OpEq, Value: int64(1)}}
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", pred).Return(nil)
 
 	err := engine.DeleteDocument(context.Background(), "default", "col/doc1", pred)
@@ -718,7 +699,7 @@ func TestDeleteDocument_PreconditionFailed(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	pred := model.Filters{{Field: "version", Op: "==", Value: int64(1)}}
+	pred := model.Filters{{Field: "version", Op: model.OpEq, Value: int64(1)}}
 	mockStorage.On("Delete", mock.Anything, "default", "col/doc1", pred).Return(model.ErrPreconditionFailed)
 
 	err := engine.DeleteDocument(context.Background(), "default", "col/doc1", pred)
@@ -737,93 +718,6 @@ func TestDeleteDocument_StorageError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, storageErr, err)
 	mockStorage.AssertExpectations(t)
-}
-
-// ==================================================
-// WatchCollection Success Path Tests
-// ==================================================
-
-func TestWatchCollection_Success(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockCSP := new(MockCSPService)
-	engine := New(mockStorage, mockCSP)
-
-	// Create event channel
-	eventCh := make(chan storage.Event, 2)
-	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.StoredDoc{Id: "doc1", Collection: "col"}}
-	eventCh <- storage.Event{Type: storage.EventUpdate, Document: &storage.StoredDoc{Id: "doc2", Collection: "col"}}
-	close(eventCh)
-
-	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
-
-	ch, err := engine.WatchCollection(context.Background(), "default", "col")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-
-	// Read events from channel
-	received := make([]storage.Event, 0, 2)
-	for evt := range ch {
-		received = append(received, evt)
-	}
-
-	assert.Len(t, received, 2)
-	assert.Equal(t, "doc1", received[0].Document.Id)
-	assert.Equal(t, "col", received[0].Document.Collection)
-	assert.Equal(t, "doc2", received[1].Document.Id)
-	assert.Equal(t, "col", received[1].Document.Collection)
-	mockCSP.AssertExpectations(t)
-}
-
-func TestWatchCollection_ContextCancel(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockCSP := new(MockCSPService)
-	engine := New(mockStorage, mockCSP)
-
-	// Create a channel that won't close immediately
-	eventCh := make(chan storage.Event, 1)
-	eventCh <- storage.Event{Type: storage.EventCreate, Document: &storage.StoredDoc{Id: "doc1", Collection: "col"}}
-
-	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ch, err := engine.WatchCollection(ctx, "default", "col")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-
-	// Read the event
-	select {
-	case received := <-ch:
-		assert.Equal(t, "doc1", received.Document.Id)
-	case <-time.After(time.Second):
-		t.Fatal("timeout waiting for event")
-	}
-
-	// Cancel context
-	cancel()
-	close(eventCh)
-
-	// Channel should eventually close
-	select {
-	case _, ok := <-ch:
-		assert.False(t, ok, "channel should be closed")
-	case <-time.After(time.Second):
-		// This is acceptable - context cancel doesn't close read immediately
-	}
-	mockCSP.AssertExpectations(t)
-}
-
-func TestWatchCollection_Error(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockCSP := new(MockCSPService)
-	engine := New(mockStorage, mockCSP)
-
-	mockCSP.On("Watch", mock.Anything, "default", "col", nil, storage.WatchOptions{}).Return(nil, errors.New("watch error"))
-
-	ch, err := engine.WatchCollection(context.Background(), "default", "col")
-	assert.Error(t, err)
-	assert.Nil(t, ch)
-	assert.Contains(t, err.Error(), "watch error")
-	mockCSP.AssertExpectations(t)
 }
 
 // ==================================================
@@ -952,24 +846,6 @@ func TestExecuteQuery_CustomTenant(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, docs, 1)
 	mockStorage.AssertExpectations(t)
-}
-
-func TestWatchCollection_CustomTenant(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockCSP := new(MockCSPService)
-	engine := New(mockStorage, mockCSP)
-
-	eventCh := make(chan storage.Event)
-	close(eventCh)
-
-	mockCSP.On("Watch", mock.Anything, "custom-tenant", "col", nil, storage.WatchOptions{}).Return((<-chan storage.Event)(eventCh), nil)
-
-	ch, err := engine.WatchCollection(context.Background(), "custom-tenant", "col")
-	assert.NoError(t, err)
-	assert.NotNil(t, ch)
-	// Wait for channel to close
-	<-ch
-	mockCSP.AssertExpectations(t)
 }
 
 func TestPull_CustomTenant(t *testing.T) {
