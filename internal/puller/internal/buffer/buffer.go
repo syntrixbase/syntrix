@@ -140,11 +140,12 @@ func NewForBackend(basePath, backendName string, logger *slog.Logger) (*Buffer, 
 // Write stores an event and updates the checkpoint in the same batch.
 func (b *Buffer) Write(evt *events.StoreChangeEvent, token bson.Raw) error {
 	b.mu.RLock()
-	if b.closed {
-		b.mu.RUnlock()
+	closed := b.closed
+	b.mu.RUnlock()
+
+	if closed {
 		return fmt.Errorf("buffer is closed")
 	}
-	b.mu.RUnlock()
 
 	if len(token) == 0 {
 		return fmt.Errorf("checkpoint token is required")
@@ -165,6 +166,9 @@ func (b *Buffer) Write(evt *events.StoreChangeEvent, token bson.Raw) error {
 		token: append([]byte(nil), token...),
 	}
 
+	// Send to write channel. We use a select with closeCh to avoid blocking
+	// indefinitely if the buffer is being closed. However, we need to be
+	// careful about the race between closeCh closing and writeCh closing.
 	select {
 	case b.writeCh <- req:
 		return nil
@@ -487,15 +491,22 @@ func (b *Buffer) CountAfter(afterKey string) (int, error) {
 // Close closes the buffer.
 func (b *Buffer) Close() error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	if b.closed {
+		b.mu.Unlock()
 		return nil
 	}
 	b.closed = true
+	b.mu.Unlock()
 
-	close(b.closeCh)
+	// Close writeCh first to signal batcher to stop accepting new writes.
+	// The batcher will drain any remaining items in the channel before exiting.
 	close(b.writeCh)
+
+	// Now close closeCh to unblock any Write() calls that are waiting.
+	// Since writeCh is already closed, the batcher won't receive these anyway.
+	close(b.closeCh)
+
+	// Wait for batcher to finish flushing all pending writes.
 	b.batcherWG.Wait()
 
 	var closeErr error
