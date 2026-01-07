@@ -230,13 +230,19 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("doc-%d", i), evt.ChangeEvent.MgoDocId)
 		lastToken = evt.Progress
 	}
+	t.Logf("[DEBUG] Phase 1: Consumed 5 events, lastToken=%s", lastToken)
 
 	// 3. Stop Puller (Simulate Crash)
+	// Note: Some events may still be in transit from MongoDB change stream.
+	// The checkpoint saves the last written event's resume token, so on restart,
+	// the change stream will resume from that point and recover any missing events.
 	conn1.Close()
 	s1.Stop(ctx)
 	p1.Stop(ctx)
 
 	// 4. Restart Puller
+	// The puller will resume the change stream from the checkpoint and
+	// fetch any events that were in transit when we stopped.
 	p2, s2, c2, conn2 := startPuller()
 	defer func() {
 		conn2.Close()
@@ -245,6 +251,10 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	}()
 
 	// 5. Subscribe with last token
+	// The subscriber will:
+	// 1. Replay events from buffer (events already persisted)
+	// 2. Switch to live mode and receive new events (including doc-9 recovered via resume token)
+	t.Logf("[DEBUG] Subscribing with lastToken=%s", lastToken)
 	stream2, err := c2.Subscribe(ctx, &pullerv1.SubscribeRequest{
 		ConsumerId: "resilience-2",
 		After:      lastToken,
@@ -253,8 +263,12 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 
 	// 6. Consume remaining 5
 	for i := 5; i < 10; i++ {
+		t.Logf("[DEBUG] Waiting for event doc-%d...", i)
 		evt, err := stream2.Recv()
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatalf("[DEBUG] Failed to receive event doc-%d: %v", i, err)
+		}
+		t.Logf("[DEBUG] Received event: %s", evt.ChangeEvent.MgoDocId)
 		assert.Equal(t, fmt.Sprintf("doc-%d", i), evt.ChangeEvent.MgoDocId)
 	}
 }
