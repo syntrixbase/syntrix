@@ -415,6 +415,8 @@ func (p *Puller) BackendNames() []string {
 func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
 	var iters []events.Iterator
 
+	p.logger.Info("[DEBUG] Replay called", "after", after, "coalesce", coalesce)
+
 	for name, backend := range p.backends {
 		startID := ""
 		if after != nil {
@@ -429,8 +431,15 @@ func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce b
 					return nil, fmt.Errorf("invalid event ID %q for backend %q: %w", eventID, name, err)
 				}
 				startID = events.FormatBufferKey(ct, eventID)
+				p.logger.Info("[DEBUG] Replay backend", "backend", name, "eventID", eventID, "startID", startID)
 			}
 		}
+
+		// Debug: check buffer state before scan
+		count, _ := backend.buffer.Count()
+		first, _ := backend.buffer.First()
+		head, _ := backend.buffer.Head()
+		p.logger.Info("[DEBUG] Buffer state before ScanFrom", "backend", name, "count", count, "first", first, "head", head, "startID", startID)
 
 		iter, err := backend.buffer.ScanFrom(startID)
 		if err != nil {

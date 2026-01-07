@@ -244,12 +244,16 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 			}
 
 			// Replay loop
+			replayCount := 0
 			for iter.Next() {
 				evt := iter.Event()
+				replayCount++
+				s.logger.Info("[DEBUG] Replay iter.Next()", "replayCount", replayCount, "eventID", evt.EventID, "backend", evt.Backend, "clusterTime", evt.ClusterTime)
 
 				// Deduplication: check if event is already sent
 				// This is crucial if Replay restarts or if ScanFrom is inclusive
 				if !sub.ShouldSend(evt.Backend, evt.ClusterTime) {
+					s.logger.Info("[DEBUG] Skipping event (already sent)", "eventID", evt.EventID)
 					continue
 				}
 
@@ -259,6 +263,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 				}
 			}
 			iter.Close()
+			s.logger.Info("[DEBUG] Replay finished", "totalReplayCount", replayCount, "iterErr", iter.Err())
 
 			if err := iter.Err(); err != nil {
 				s.logger.Error("replay error", "error", err)
@@ -273,7 +278,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 
 			// Caught up
 			mode = "live"
-			s.logger.Info("subscriber caught up, switching to live mode", "consumerId", sub.ID)
+			s.logger.Info("subscriber caught up, switching to live mode", "consumerId", sub.ID, "replayedEvents", replayCount)
 			// Reset heartbeat ticker when entering live mode
 			heartbeatTicker.Reset(heartbeatInterval)
 
