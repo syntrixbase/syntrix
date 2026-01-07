@@ -687,19 +687,14 @@ func (b *Buffer) runBatcher() {
 		case <-ticker.C:
 			flush()
 		case <-b.closeCh:
-			for {
-				select {
-				case req, ok := <-b.writeCh:
-					if !ok {
-						flush()
-						return
-					}
-					pending = append(pending, req)
-				default:
-					flush()
-					return
-				}
+			// Drain remaining requests from writeCh until it's closed.
+			// Don't use default branch - wait for writeCh to be closed to ensure
+			// all pending writes are processed.
+			for req := range b.writeCh {
+				pending = append(pending, req)
 			}
+			flush()
+			return
 		}
 	}
 }
