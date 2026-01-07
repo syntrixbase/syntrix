@@ -100,7 +100,7 @@ func TestCompiler_CompileFilters(t *testing.T) {
 		{
 			name: "equality filter",
 			filters: []model.Filter{
-				{Field: "status", Op: "==", Value: "active"},
+				{Field: "status", Op: model.OpEq, Value: "active"},
 			},
 			doc:  map[string]interface{}{"status": "active"},
 			want: true,
@@ -108,7 +108,7 @@ func TestCompiler_CompileFilters(t *testing.T) {
 		{
 			name: "nested field filter",
 			filters: []model.Filter{
-				{Field: "user.role", Op: "==", Value: "admin"},
+				{Field: "user.role", Op: model.OpEq, Value: "admin"},
 			},
 			doc:  map[string]interface{}{"user": map[string]interface{}{"role": "admin"}},
 			want: true,
@@ -116,8 +116,8 @@ func TestCompiler_CompileFilters(t *testing.T) {
 		{
 			name: "multiple filters AND",
 			filters: []model.Filter{
-				{Field: "status", Op: "==", Value: "active"},
-				{Field: "priority", Op: ">", Value: int64(5)},
+				{Field: "status", Op: model.OpEq, Value: "active"},
+				{Field: "priority", Op: model.OpGt, Value: int64(5)},
 			},
 			doc:  map[string]interface{}{"status": "active", "priority": int64(10)},
 			want: true,
@@ -125,8 +125,8 @@ func TestCompiler_CompileFilters(t *testing.T) {
 		{
 			name: "multiple filters - one fails",
 			filters: []model.Filter{
-				{Field: "status", Op: "==", Value: "active"},
-				{Field: "priority", Op: ">", Value: int64(5)},
+				{Field: "status", Op: model.OpEq, Value: "active"},
+				{Field: "priority", Op: model.OpGt, Value: int64(5)},
 			},
 			doc:  map[string]interface{}{"status": "active", "priority": int64(3)},
 			want: false,
@@ -134,7 +134,7 @@ func TestCompiler_CompileFilters(t *testing.T) {
 		{
 			name: "in operator",
 			filters: []model.Filter{
-				{Field: "type", Op: "in", Value: []interface{}{"a", "b", "c"}},
+				{Field: "type", Op: model.OpIn, Value: []interface{}{"a", "b", "c"}},
 			},
 			doc:  map[string]interface{}{"type": "b"},
 			want: true,
@@ -168,37 +168,37 @@ func TestFilterToExpression(t *testing.T) {
 	}{
 		{
 			name:   "equality string",
-			filter: model.Filter{Field: "status", Op: "==", Value: "active"},
+			filter: model.Filter{Field: "status", Op: model.OpEq, Value: "active"},
 			want:   "doc['status'] == 'active'",
 		},
 		{
 			name:   "greater than int",
-			filter: model.Filter{Field: "count", Op: ">", Value: 5},
+			filter: model.Filter{Field: "count", Op: model.OpGt, Value: 5},
 			want:   "doc['count'] > 5",
 		},
 		{
 			name:   "greater than or equal",
-			filter: model.Filter{Field: "user.profile.age", Op: ">=", Value: 18},
+			filter: model.Filter{Field: "user.profile.age", Op: model.OpGte, Value: 18},
 			want:   "doc['user']['profile']['age'] >= 18",
 		},
 		{
 			name:   "less than",
-			filter: model.Filter{Field: "price", Op: "<", Value: 100},
+			filter: model.Filter{Field: "price", Op: model.OpLt, Value: 100},
 			want:   "doc['price'] < 100",
 		},
 		{
 			name:   "less than or equal",
-			filter: model.Filter{Field: "quantity", Op: "<=", Value: 50},
+			filter: model.Filter{Field: "quantity", Op: model.OpLte, Value: 50},
 			want:   "doc['quantity'] <= 50",
 		},
 		{
 			name:   "in operator",
-			filter: model.Filter{Field: "role", Op: "in", Value: []interface{}{"admin", "mod"}},
+			filter: model.Filter{Field: "role", Op: model.OpIn, Value: []interface{}{"admin", "mod"}},
 			want:   "doc['role'] in ['admin', 'mod']",
 		},
 		{
 			name:   "array-contains",
-			filter: model.Filter{Field: "tags", Op: "array-contains", Value: "important"},
+			filter: model.Filter{Field: "tags", Op: model.OpContains, Value: "important"},
 			want:   "'important' in doc['tags']",
 		},
 		{
@@ -277,7 +277,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "eq operator",
 			filters: []*pb.Filter{{
 				Field: "status",
-				Op:    "eq",
+				Op:    "==",
 				Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 			}},
 			doc:  map[string]interface{}{"status": "active"},
@@ -287,7 +287,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "ne operator",
 			filters: []*pb.Filter{{
 				Field: "status",
-				Op:    "ne",
+				Op:    "!=",
 				Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "deleted"}},
 			}},
 			doc:  map[string]interface{}{"status": "active"},
@@ -297,7 +297,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "gt operator",
 			filters: []*pb.Filter{{
 				Field: "count",
-				Op:    "gt",
+				Op:    ">",
 				Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 5}},
 			}},
 			doc:  map[string]interface{}{"count": int64(10)},
@@ -307,7 +307,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "gte operator",
 			filters: []*pb.Filter{{
 				Field: "count",
-				Op:    "gte",
+				Op:    ">=",
 				Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 10}},
 			}},
 			doc:  map[string]interface{}{"count": int64(10)},
@@ -317,7 +317,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "lt operator",
 			filters: []*pb.Filter{{
 				Field: "count",
-				Op:    "lt",
+				Op:    "<",
 				Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 20}},
 			}},
 			doc:  map[string]interface{}{"count": int64(10)},
@@ -327,7 +327,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "lte operator",
 			filters: []*pb.Filter{{
 				Field: "count",
-				Op:    "lte",
+				Op:    "<=",
 				Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 10}},
 			}},
 			doc:  map[string]interface{}{"count": int64(10)},
@@ -362,7 +362,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "nested field",
 			filters: []*pb.Filter{{
 				Field: "user.profile.name",
-				Op:    "eq",
+				Op:    "==",
 				Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "alice"}},
 			}},
 			doc:  map[string]interface{}{"user": map[string]interface{}{"profile": map[string]interface{}{"name": "alice"}}},
@@ -372,7 +372,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "bool value",
 			filters: []*pb.Filter{{
 				Field: "active",
-				Op:    "eq",
+				Op:    "==",
 				Value: &pb.Value{Kind: &pb.Value_BoolValue{BoolValue: true}},
 			}},
 			doc:  map[string]interface{}{"active": true},
@@ -382,7 +382,7 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			name: "double value",
 			filters: []*pb.Filter{{
 				Field: "score",
-				Op:    "gt",
+				Op:    ">",
 				Value: &pb.Value{Kind: &pb.Value_DoubleValue{DoubleValue: 3.5}},
 			}},
 			doc:  map[string]interface{}{"score": 4.0},
@@ -393,12 +393,12 @@ func TestCompiler_CompileProtoFilters(t *testing.T) {
 			filters: []*pb.Filter{
 				{
 					Field: "status",
-					Op:    "eq",
+					Op:    "==",
 					Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 				},
 				{
 					Field: "priority",
-					Op:    "gt",
+					Op:    ">",
 					Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 5}},
 				},
 			},
@@ -434,7 +434,7 @@ func TestProtoFilterToExpression_Errors(t *testing.T) {
 	t.Run("nil value", func(t *testing.T) {
 		_, err := protoFilterToExpression(&pb.Filter{
 			Field: "test",
-			Op:    "eq",
+			Op:    "==",
 			Value: nil,
 		})
 		require.Error(t, err)

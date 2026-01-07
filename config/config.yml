@@ -50,10 +50,7 @@ gateway:
 
 query:
   port: 8082
-  csp_service_url: "http://localhost:8083"
-
-csp:
-  port: 8083
+  # csp_service_url removed
 
 trigger:
   nats_url: "nats://localhost:4222"

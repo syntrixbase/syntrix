@@ -18,13 +18,13 @@ type Subscriber struct {
 }
 
 // IsExactMatch returns true if this subscription uses exact document ID matching.
-// An exact match is a single filter with field="_id" and op="eq".
+// An exact match is a single filter with field="_id" and op="==".
 func (s *Subscriber) IsExactMatch() bool {
 	if len(s.Filters) != 1 {
 		return false
 	}
 	f := s.Filters[0]
-	return f.Field == "_id" && f.Op == "eq"
+	return f.Field == "_id" && f.Op == "=="
 }
 
 // GetDocumentID returns the document ID for exact match subscriptions.

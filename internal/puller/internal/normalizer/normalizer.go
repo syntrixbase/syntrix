@@ -53,6 +53,9 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) 
 	// Convert full document
 	var fullDoc *storage.StoredDoc
 	if raw.FullDocument != nil {
+		// Pre-process raw.FullDocument to convert Dates to int64
+		fixTimestamps(raw.FullDocument)
+
 		// Marshal/Unmarshal to convert bson.M to storage.StoredDoc
 		data, err := bson.Marshal(raw.FullDocument)
 		if err != nil {
@@ -230,4 +233,19 @@ func convertUpdateDescription(m bson.M) *events.UpdateDescription {
 	}
 
 	return desc
+}
+
+// fixTimestamps converts Date/Time types to int64 milliseconds in known fields.
+// This allows uniform unmarshaling into storage.StoredDoc which expects int64.
+func fixTimestamps(doc bson.M) {
+	for _, field := range []string{"created_at", "updated_at"} {
+		if val, ok := doc[field]; ok {
+			switch v := val.(type) {
+			case primitive.DateTime:
+				doc[field] = int64(v)
+			case time.Time:
+				doc[field] = v.UnixMilli()
+			}
+		}
+	}
 }

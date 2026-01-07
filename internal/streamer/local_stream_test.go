@@ -4,12 +4,14 @@ import (
 	"context"
 	"io"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
 func TestLocalStream_Recv_ContextCanceled(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 
 	ls := &localStream{
 		ctx:      ctx,
@@ -25,7 +27,9 @@ func TestLocalStream_Recv_ContextCanceled(t *testing.T) {
 }
 
 func TestLocalStream_Recv_ClosedChannel(t *testing.T) {
-	ctx := context.Background()
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
 
 	ls := &localStream{
 		ctx:      ctx,

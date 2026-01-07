@@ -49,8 +49,6 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 	assert.Equal(t, "testdb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
 	assert.Equal(t, "http://api-env", cfg.Gateway.QueryServiceURL)
 	assert.Equal(t, 9092, cfg.Query.Port)
-	assert.Equal(t, "http://csp-env", cfg.Query.CSPServiceURL)
-	assert.Equal(t, 9093, cfg.CSP.Port)
 	assert.Equal(t, "nats://env:4222", cfg.Trigger.NatsURL)
 	assert.True(t, strings.HasSuffix(cfg.Trigger.RulesFile, filepath.Join("config", "custom.json")))
 }

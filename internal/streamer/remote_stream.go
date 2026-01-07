@@ -11,13 +11,14 @@ import (
 
 	"github.com/google/uuid"
 	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // subscriptionInfo stores subscription details for recovery on reconnect.
 type subscriptionInfo struct {
 	tenant     string
 	collection string
-	filters    []Filter
+	filters    []model.Filter
 }
 
 // remoteStream implements the Stream interface for remote gRPC communication
@@ -58,7 +59,7 @@ type remoteStream struct {
 
 // Subscribe creates a new subscription and returns the subscription ID.
 // The subscription is automatically restored on reconnection.
-func (rs *remoteStream) Subscribe(tenant, collection string, filters []Filter) (string, error) {
+func (rs *remoteStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
 	rs.ensureRecvLoop()
 
 	rs.closedMu.Lock()
@@ -444,9 +445,6 @@ func (rs *remoteStream) activityMonitor() {
 	}
 
 	checkInterval := rs.client.config.ActivityTimeout / 3
-	if checkInterval < time.Second {
-		checkInterval = time.Second
-	}
 	ticker := time.NewTicker(checkInterval)
 	defer ticker.Stop()
 

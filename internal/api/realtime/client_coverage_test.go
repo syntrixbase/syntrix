@@ -14,7 +14,7 @@ import (
 
 func TestClient_HandleMessage_Unauthenticated(t *testing.T) {
 	// Setup
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 	defer cancel()
@@ -91,7 +91,7 @@ func TestCheckAllowedOrigin_EmptyStringInConfig(t *testing.T) {
 
 func TestServeSSE_SendChannelClosed(t *testing.T) {
 	// Setup
-	hub := NewHub()
+	hub := NewTestHub()
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 

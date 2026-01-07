@@ -39,21 +39,21 @@ func mapField(field string) string {
 	}
 }
 
-func mapOp(op string) string {
+func mapOp(op model.FilterOp) string {
 	switch op {
-	case "==":
+	case model.OpEq:
 		return "$eq"
-	case "!=":
+	case model.OpNe:
 		return "$ne"
-	case ">":
+	case model.OpGt:
 		return "$gt"
-	case ">=":
+	case model.OpGte:
 		return "$gte"
-	case "<":
+	case model.OpLt:
 		return "$lt"
-	case "<=":
+	case model.OpLte:
 		return "$lte"
-	case "in":
+	case model.OpIn:
 		return "$in"
 	default:
 		return ""

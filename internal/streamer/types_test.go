@@ -25,29 +25,6 @@ func TestOperationType_String(t *testing.T) {
 	}
 }
 
-func TestFilter(t *testing.T) {
-	t.Run("basic filter fields", func(t *testing.T) {
-		f := Filter{
-			Field: "status",
-			Op:    "eq",
-			Value: "active",
-		}
-		assert.Equal(t, "status", f.Field)
-		assert.Equal(t, "eq", f.Op)
-		assert.Equal(t, "active", f.Value)
-	})
-
-	t.Run("id filter uses id not _id", func(t *testing.T) {
-		// Syntrix convention: use "id" not "_id"
-		f := Filter{
-			Field: "id",
-			Op:    "eq",
-			Value: "doc123",
-		}
-		assert.Equal(t, "id", f.Field)
-	})
-}
-
 func TestEvent(t *testing.T) {
 	t.Run("event with model.Document", func(t *testing.T) {
 		evt := Event{

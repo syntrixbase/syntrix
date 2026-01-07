@@ -74,11 +74,6 @@ func (tc *TestContext) QueryURL() string {
 	return tc.globalEnv.QueryURL
 }
 
-// CSPURL returns the CSP service URL
-func (tc *TestContext) CSPURL() string {
-	return tc.globalEnv.CSPURL
-}
-
 // RealtimeURL returns the Realtime URL (same as API URL)
 func (tc *TestContext) RealtimeURL() string {
 	return tc.globalEnv.APIURL

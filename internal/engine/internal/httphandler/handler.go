@@ -18,7 +18,6 @@ type Service interface {
 	PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error)
 	DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error
 	ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error)
-	WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error)
 	Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error)
 	Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error)
 }
@@ -68,7 +67,6 @@ func (h *Handler) routes() {
 	h.mux.HandleFunc("POST /internal/v1/document/patch", h.handlePatchDocument)
 	h.mux.HandleFunc("POST /internal/v1/document/delete", h.handleDeleteDocument)
 	h.mux.HandleFunc("POST /internal/v1/query/execute", h.handleExecuteQuery)
-	h.mux.HandleFunc("POST /internal/v1/watch", h.handleWatchCollection)
 	h.mux.HandleFunc("POST /internal/replication/v1/pull", h.handlePull)
 	h.mux.HandleFunc("POST /internal/replication/v1/push", h.handlePush)
 	h.mux.HandleFunc("GET /health", h.handleHealth)
@@ -206,46 +204,6 @@ func (h *Handler) handleExecuteQuery(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(docs)
-}
-
-func (h *Handler) handleWatchCollection(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Collection string `json:"collection"`
-		Tenant     string `json:"tenant"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	flusher.Flush()
-	tenant := tenantOrDefault(req.Tenant)
-	stream, err := h.service.WatchCollection(r.Context(), tenant, req.Collection)
-	if err != nil {
-		return
-	}
-	encoder := json.NewEncoder(w)
-	for {
-		select {
-		case <-r.Context().Done():
-			return
-		case evt, ok := <-stream:
-			if !ok {
-				return
-			}
-			if err := encoder.Encode(evt); err != nil {
-				return
-			}
-			flusher.Flush()
-		}
-	}
 }
 
 func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {

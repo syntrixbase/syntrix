@@ -47,7 +47,7 @@ The following operators are supported:
 {
   "collection": "posts",
   "filters": [
-    {"field": "tags", "op": "array-contains", "value": "news"}
+    {"field": "tags", "op": "contains", "value": "news"}
   ]
 }
 ```

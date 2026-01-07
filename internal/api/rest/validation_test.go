@@ -42,7 +42,7 @@ func TestValidateQuery(t *testing.T) {
 			model.Query{
 				Collection: "users",
 				Limit:      10,
-				Filters:    []model.Filter{{Field: "age", Op: ">", Value: 18}},
+				Filters:    []model.Filter{{Field: "age", Op: model.OpGt, Value: 18}},
 				OrderBy:    []model.Order{{Field: "age", Direction: "asc"}},
 			},
 			false,
@@ -64,7 +64,7 @@ func TestValidateQuery(t *testing.T) {
 		},
 		{
 			"empty filter field",
-			model.Query{Collection: "users", Filters: []model.Filter{{Field: "", Op: ">", Value: 18}}},
+			model.Query{Collection: "users", Filters: []model.Filter{{Field: "", Op: model.OpGt, Value: 18}}},
 			true,
 		},
 		{

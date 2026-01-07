@@ -23,6 +23,12 @@ func Default() Service {
 	return defaultService
 }
 
+// SetDefault sets the global default server instance.
+// This is primarily used for testing or custom initialization.
+func SetDefault(s Service) {
+	defaultService = s
+}
+
 // RegisterHTTP registers an HTTP handler with the default server.
 func RegisterHTTP(pattern string, handler http.Handler) {
 	if s := Default(); s != nil {

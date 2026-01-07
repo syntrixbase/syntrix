@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/identity"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -34,7 +34,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}
@@ -58,15 +58,15 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 
 	// Wait for registration and send a broadcast
 	time.Sleep(5 * time.Millisecond)
-	hub.Broadcast(storage.Event{
-		Type:     storage.EventCreate,
-		Id:       "users/1",
-		TenantID: "default",
-		Document: &storage.StoredDoc{
-			Fullpath:   "users/1",
+	hub.BroadcastDelivery(&streamer.EventDelivery{
+		SubscriptionIDs: []string{"sub-id"},
+		Event: &streamer.Event{
+			Operation:  streamer.OperationInsert,
 			Collection: "users",
-			TenantID:   "default",
-			Data:       map[string]interface{}{"name": "Alice"},
+			DocumentID: "1",
+			Tenant:     "default",
+			Document:   map[string]interface{}{"name": "Alice"},
+			Timestamp:  time.Now().UnixMilli(),
 		},
 	})
 
@@ -88,7 +88,7 @@ func TestServeSSE_UnsupportedFlusher(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}
@@ -109,7 +109,7 @@ func TestServeSSE_WriteError(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
@@ -132,7 +132,7 @@ func TestServeSSE_AuthMissing(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}
@@ -152,7 +152,7 @@ func TestServeSSE_OriginMissingWithCredentials(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}
@@ -172,7 +172,7 @@ func TestServeSSE_OriginDisallowed(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}
@@ -193,7 +193,7 @@ func TestServeSSE_CookieIgnored(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
-	hub := NewHub()
+	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
 	qs := &MockQueryService{}

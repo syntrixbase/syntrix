@@ -148,6 +148,7 @@ func TestRemoteStream_Subscribe_Closed(t *testing.T) {
 }
 
 func TestRemoteStream_Subscribe_ContextCanceled(t *testing.T) {
+	t.Parallel()
 	mockStream := &mockGRPCStreamClient{}
 	ctx, cancel := context.WithCancel(context.Background())
 	rs := &remoteStream{
@@ -172,6 +173,7 @@ func TestRemoteStream_Subscribe_ContextCanceled(t *testing.T) {
 }
 
 func TestRemoteStream_Unsubscribe(t *testing.T) {
+	t.Parallel()
 	mockStream := &mockGRPCStreamClient{}
 	rs := &remoteStream{
 		ctx:        context.Background(),

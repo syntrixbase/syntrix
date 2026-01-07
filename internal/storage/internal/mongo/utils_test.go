@@ -10,13 +10,13 @@ import (
 func TestMakeFilterBSON_FieldAndOpMapping(t *testing.T) {
 	t.Parallel()
 	filters := model.Filters{
-		{Field: "path", Op: "==", Value: "users/1"},
-		{Field: "collection", Op: "!=", Value: "users"},
-		{Field: "collectionHash", Op: "==", Value: "abc"},
-		{Field: "updatedAt", Op: ">", Value: int64(10)},
-		{Field: "createdAt", Op: "<=", Value: int64(5)},
-		{Field: "version", Op: "in", Value: []int{1, 2}},
-		{Field: "score", Op: ">=", Value: 90},
+		{Field: "path", Op: model.OpEq, Value: "users/1"},
+		{Field: "collection", Op: model.OpNe, Value: "users"},
+		{Field: "collectionHash", Op: model.OpEq, Value: "abc"},
+		{Field: "updatedAt", Op: model.OpGt, Value: int64(10)},
+		{Field: "createdAt", Op: model.OpLte, Value: int64(5)},
+		{Field: "version", Op: model.OpIn, Value: []int{1, 2}},
+		{Field: "score", Op: model.OpGte, Value: 90},
 	}
 
 	bsonFilter := makeFilterBSON(filters)

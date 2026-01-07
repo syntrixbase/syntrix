@@ -111,19 +111,21 @@ func filterToExpression(f model.Filter) (string, error) {
 	}
 
 	switch f.Op {
-	case "==":
+	case model.OpEq:
 		return fmt.Sprintf("%s == %s", field, valStr), nil
-	case ">":
+	case model.OpNe:
+		return fmt.Sprintf("%s != %s", field, valStr), nil
+	case model.OpGt:
 		return fmt.Sprintf("%s > %s", field, valStr), nil
-	case ">=":
+	case model.OpGte:
 		return fmt.Sprintf("%s >= %s", field, valStr), nil
-	case "<":
+	case model.OpLt:
 		return fmt.Sprintf("%s < %s", field, valStr), nil
-	case "<=":
+	case model.OpLte:
 		return fmt.Sprintf("%s <= %s", field, valStr), nil
-	case "in":
+	case model.OpIn:
 		return fmt.Sprintf("%s in %s", field, valStr), nil
-	case "array-contains":
+	case model.OpContains:
 		return fmt.Sprintf("%s in %s", valStr, field), nil
 	default:
 		return "", fmt.Errorf("unsupported operator: %s", f.Op)
@@ -204,17 +206,17 @@ func protoFilterToExpression(f *pb.Filter) (string, error) {
 	}
 
 	switch f.Op {
-	case "eq":
+	case "==":
 		return fmt.Sprintf("%s == %s", field, valStr), nil
-	case "ne":
+	case "!=":
 		return fmt.Sprintf("%s != %s", field, valStr), nil
-	case "gt":
+	case ">":
 		return fmt.Sprintf("%s > %s", field, valStr), nil
-	case "gte":
+	case ">=":
 		return fmt.Sprintf("%s >= %s", field, valStr), nil
-	case "lt":
+	case "<":
 		return fmt.Sprintf("%s < %s", field, valStr), nil
-	case "lte":
+	case "<=":
 		return fmt.Sprintf("%s <= %s", field, valStr), nil
 	case "in":
 		return fmt.Sprintf("%s in %s", field, valStr), nil

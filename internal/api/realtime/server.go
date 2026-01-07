@@ -7,11 +7,13 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 )
 
 type Server struct {
 	hub            *Hub
 	queryService   engine.Service
+	streamer       streamer.Service
 	dataCollection string
 	auth           identity.AuthN
 	cfg            Config
@@ -24,12 +26,13 @@ type Config struct {
 	EnableAuth     bool
 }
 
-func NewServer(qs engine.Service, dataCollection string, auth identity.AuthN, cfg Config) *Server {
+func NewServer(qs engine.Service, str streamer.Service, dataCollection string, auth identity.AuthN, cfg Config) *Server {
 	h := NewHub()
 	s := &Server{
 		hub:            h,
 		dataCollection: dataCollection,
 		queryService:   qs,
+		streamer:       str,
 		auth:           auth,
 		cfg:            cfg,
 	}
@@ -91,28 +94,31 @@ func tokenFromQueryParam(r *http.Request) string {
 func (s *Server) StartBackgroundTasks(ctx context.Context) error {
 	go s.hub.Run(ctx)
 
-	// Watch all collections
-	stream, err := s.queryService.WatchCollection(ctx, "", "")
+	// Stream from Streamer service
+	stream, err := s.streamer.Stream(ctx)
 	if err != nil {
 		return err
 	}
 
+	// Set the stream on the hub so subscriptions can be sent
+	s.hub.SetStream(stream)
+
 	go func() {
 		log.Println("[Realtime] Started watching change stream")
 		for {
-			select {
-			case <-ctx.Done():
-				log.Println("[Realtime] Context cancelled, stopping background tasks")
-				return
-			case evt, ok := <-stream:
-				if !ok {
-					log.Println("[Realtime] Change stream closed")
-					return
+			delivery, err := stream.Recv()
+			if err != nil {
+				// If context is done, we exit gracefully
+				select {
+				case <-ctx.Done():
+					log.Println("[Realtime] Context cancelled, stopping background tasks")
+				default:
+					log.Printf("[Realtime] Stream error: %v", err)
 				}
-				// Broadcast all events, let Hub filter by subscription
-				log.Printf("[Realtime] Broadcasting event type=%s id=%s", evt.Type, evt.Id)
-				s.hub.Broadcast(evt)
+				return
 			}
+
+			s.hub.BroadcastDelivery(delivery)
 		}
 	}()
 

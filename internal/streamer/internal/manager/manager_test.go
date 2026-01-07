@@ -14,7 +14,7 @@ import (
 func docIDFilter(docID string) []*pb.Filter {
 	return []*pb.Filter{{
 		Field: "_id",
-		Op:    "eq",
+		Op:    "==",
 		Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: docID}},
 	}}
 }
@@ -360,7 +360,7 @@ func TestManager_Subscribe_ExpressionMatch_NoCEL(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -380,7 +380,7 @@ func TestManager_Subscribe_ExpressionMatch_CompileError(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -400,7 +400,7 @@ func TestManager_Subscribe_ExpressionMatch_Success(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -420,7 +420,7 @@ func TestManager_Unsubscribe_ExpressionMatch(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -445,7 +445,7 @@ func TestSubscriber_GetDocumentID_NonString(t *testing.T) {
 	sub := &Subscriber{
 		Filters: []*pb.Filter{{
 			Field: "_id",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_IntValue{IntValue: 123}},
 		}},
 	}
@@ -458,7 +458,7 @@ func TestSubscriber_GetDocumentID_NilValue(t *testing.T) {
 	sub := &Subscriber{
 		Filters: []*pb.Filter{{
 			Field: "_id",
-			Op:    "eq",
+			Op:    "==",
 			Value: nil,
 		}},
 	}
@@ -479,7 +479,7 @@ func TestManager_EvaluateCEL_NilProgram(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -504,7 +504,7 @@ func TestManager_EvaluateCEL_ReturnsTrue(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -527,7 +527,7 @@ func TestManager_EvaluateCEL_ReturnsFalse(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -550,7 +550,7 @@ func TestManager_EvaluateCEL_ReturnsNonBool(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -573,7 +573,7 @@ func TestManager_EvaluateCEL_EvalError(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -595,7 +595,7 @@ func TestManager_MatchExpressions_NoMatchingTenant(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})
@@ -617,7 +617,7 @@ func TestManager_MatchExpressions_NoMatchingCollection(t *testing.T) {
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
-			Op:    "eq",
+			Op:    "==",
 			Value: &pb.Value{Kind: &pb.Value_StringValue{StringValue: "active"}},
 		}},
 	})

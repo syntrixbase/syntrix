@@ -3,6 +3,7 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -61,6 +62,7 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 		msg             BaseMessage
 		setupAuth       func(*MockAuthService)
 		setupQuery      func(*MockQueryService)
+		setupHub        func(*MockStreamerStream)
 		initialSubs     map[string]Subscription
 		expectedType    string
 		expectedPayload string // substring match
@@ -151,6 +153,9 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 				return BaseMessage{Type: TypeSubscribe, ID: "sub-err", Payload: b}
 			}(),
 			expectedType: TypeError,
+			setupHub: func(m *MockStreamerStream) {
+				m.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("", errors.New("compile error"))
+			},
 		},
 		{
 			name: "Subscribe_BadJSON",
@@ -179,6 +184,15 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			hub := NewHub()
+			mockStream := new(MockStreamerStream)
+			if tt.setupHub != nil {
+				tt.setupHub(mockStream)
+			} else {
+				mockStream.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("sub-id", nil).Maybe()
+			}
+			mockStream.On("Unsubscribe", mock.Anything).Return(nil).Maybe()
+			hub.SetStream(mockStream)
+
 			qs := new(MockQueryService)
 			// Default mock behavior for Pull if not specified
 			qs.On("Pull", mock.Anything, mock.Anything, mock.Anything).Return(&storage.ReplicationPullResponse{}, nil).Maybe()
@@ -198,7 +212,7 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 				hub:           hub,
 				queryService:  qs,
 				send:          make(chan BaseMessage, 10), // Buffer to catch multiple messages
-				subscriptions: make(map[string]Subscription),
+				subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string),
 				auth:          auth,
 				authenticated: true, // Default to true for non-auth tests
 			}

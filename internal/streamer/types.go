@@ -37,20 +37,6 @@ func (o OperationType) String() string {
 	}
 }
 
-// Filter represents a structured filter condition for subscription matching.
-// Operators: eq, ne, gt, lt, gte, lte, in, contains
-type Filter struct {
-	// Field is the field path to match (e.g., "id", "status", "nested.field").
-	// Use "id" for document ID matching (Syntrix convention, not "_id").
-	Field string
-
-	// Op is the comparison operator.
-	Op string
-
-	// Value is the value to compare against.
-	Value any
-}
-
 // Event represents a change event delivered to subscribers.
 type Event struct {
 	// EventID is the unique identifier for this event.

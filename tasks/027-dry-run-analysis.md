@@ -322,7 +322,7 @@ func modelFiltersToStreamerFilters(filters []model.Filter) []streamer.Filter {
     for i, f := range filters {
         result[i] = streamer.Filter{
             Field: f.Field,
-            Op:    modelOpToStreamerOp(f.Op),  // "==" -> "eq", etc.
+            Op:    modelOpToStreamerOp(f.Op),  // "==" -> "==", etc.
             Value: f.Value,
         }
     }
@@ -332,17 +332,17 @@ func modelFiltersToStreamerFilters(filters []model.Filter) []streamer.Filter {
 func modelOpToStreamerOp(op string) string {
     switch op {
     case "==":
-        return "eq"  // Verified: streamer supports "eq"
+        return "=="  // Verified: streamer supports "=="
     case "!=":
-        return "ne"  // Verified: streamer supports "ne"
+        return "!="  // Verified: streamer supports "!="
     case ">":
-        return "gt"  // Verified: streamer supports "gt"
+        return ">"  // Verified: streamer supports ">"
     case ">=":
-        return "gte" // Verified: streamer supports "gte"
+        return ">=" // Verified: streamer supports ">="
     case "<":
-        return "lt"  // Verified: streamer supports "lt"
+        return "<"  // Verified: streamer supports "<"
     case "<=":
-        return "lte" // Verified: streamer supports "lte"
+        return "<=" // Verified: streamer supports "<="
     case "in":
         return "in"  // Verified: streamer supports "in"
     case "array-contains":

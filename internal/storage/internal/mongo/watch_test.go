@@ -44,7 +44,7 @@ func TestMongoBackend_Watch(t *testing.T) {
 		// Update with version filter (optimistic locking test)
 		// doc.Version is int64(1) after NewStoredDoc
 		filters := model.Filters{
-			{Field: "version", Op: "==", Value: doc.Version}, // int64(1)
+			{Field: "version", Op: model.OpEq, Value: doc.Version}, // int64(1)
 		}
 		if err := backend.Update(context.Background(), tenant, "users/watcher", map[string]interface{}{"msg": "world"}, filters); err != nil {
 			errChan <- err

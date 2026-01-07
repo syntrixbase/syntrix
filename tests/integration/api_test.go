@@ -63,7 +63,7 @@ func TestAPIIntegration(t *testing.T) {
 	query := model.Query{
 		Collection: collection,
 		Filters: []model.Filter{
-			{Field: "name", Op: "==", Value: "Integration User"},
+			{Field: "name", Op: model.OpEq, Value: "Integration User"},
 		},
 	}
 	resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)

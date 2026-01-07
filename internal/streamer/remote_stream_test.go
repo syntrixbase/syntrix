@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
@@ -823,6 +824,7 @@ func TestRemoteStream_Reconnect_Success(t *testing.T) {
 
 // TestRemoteStream_Reconnect_WithSubscriptions tests reconnection with subscription recovery.
 func TestRemoteStream_Reconnect_WithSubscriptions(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -871,6 +873,7 @@ func TestRemoteStream_ResubscribeAll_Empty(t *testing.T) {
 
 // TestRemoteStream_ResubscribeAll_Success tests resubscribeAll with subscriptions.
 func TestRemoteStream_ResubscribeAll_Success(t *testing.T) {
+	t.Parallel()
 	mockStream := &mockGRPCStreamClient{}
 
 	rs := &remoteStream{
@@ -915,6 +918,7 @@ func TestRemoteStream_ResubscribeAll_SendError(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_ContextDone tests heartbeat loop exits on context done.
 func TestRemoteStream_HeartbeatLoop_ContextDone(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := &streamerClient{
@@ -949,6 +953,7 @@ func TestRemoteStream_HeartbeatLoop_ContextDone(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_StopChannel tests heartbeat loop exits on stop channel.
 func TestRemoteStream_HeartbeatLoop_StopChannel(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	client := &streamerClient{
@@ -984,6 +989,7 @@ func TestRemoteStream_HeartbeatLoop_StopChannel(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_SendsHeartbeat tests heartbeat is sent when connected.
 func TestRemoteStream_HeartbeatLoop_SendsHeartbeat(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1026,6 +1032,7 @@ func TestRemoteStream_HeartbeatLoop_SendsHeartbeat(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_SkipsWhenNotConnected tests heartbeat is skipped when not connected.
 func TestRemoteStream_HeartbeatLoop_SkipsWhenNotConnected(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1068,6 +1075,7 @@ func TestRemoteStream_HeartbeatLoop_SkipsWhenNotConnected(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_Closed tests heartbeat loop exits when stream is closed.
 func TestRemoteStream_HeartbeatLoop_Closed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	mockStream := &mockGRPCStreamClient{}
@@ -1104,6 +1112,7 @@ func TestRemoteStream_HeartbeatLoop_Closed(t *testing.T) {
 
 // TestRemoteStream_ActivityMonitor_ContextDone tests activity monitor exits on context done.
 func TestRemoteStream_ActivityMonitor_ContextDone(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	client := &streamerClient{
@@ -1138,6 +1147,7 @@ func TestRemoteStream_ActivityMonitor_ContextDone(t *testing.T) {
 
 // TestRemoteStream_ActivityMonitor_StopChannel tests activity monitor exits on stop channel.
 func TestRemoteStream_ActivityMonitor_StopChannel(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	client := &streamerClient{
@@ -1173,15 +1183,16 @@ func TestRemoteStream_ActivityMonitor_StopChannel(t *testing.T) {
 
 // TestRemoteStream_ActivityMonitor_DetectsStale tests activity monitor detects stale connection.
 func TestRemoteStream_ActivityMonitor_DetectsStale(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	mockStream := &mockGRPCStreamClient{}
 
-	// Use 3 seconds timeout -> checkInterval = 1s (the minimum)
+	// Use 200 milliseconds timeout -> checkInterval = 200ms (the minimum)
 	client := &streamerClient{
 		config: ClientConfig{
-			ActivityTimeout: 3 * time.Second,
+			ActivityTimeout: 200 * time.Millisecond,
 		},
 	}
 
@@ -1202,8 +1213,8 @@ func TestRemoteStream_ActivityMonitor_DetectsStale(t *testing.T) {
 	}()
 
 	// Wait for activity monitor to detect staleness and close stream
-	// checkInterval is 1s, so wait ~1.2s for at least one check
-	time.Sleep(1200 * time.Millisecond)
+	// checkInterval is 70ms, so wait ~100ms for at least one check
+	time.Sleep(100 * time.Millisecond)
 	cancel()
 
 	<-done
@@ -1218,6 +1229,7 @@ func TestRemoteStream_ActivityMonitor_DetectsStale(t *testing.T) {
 
 // TestRemoteStream_ActivityMonitor_SkipsWhenNotConnected tests activity monitor skips when not connected.
 func TestRemoteStream_ActivityMonitor_SkipsWhenNotConnected(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1261,6 +1273,7 @@ func TestRemoteStream_ActivityMonitor_SkipsWhenNotConnected(t *testing.T) {
 
 // TestRemoteStream_HeartbeatLoop_SendError tests heartbeat loop handles send error gracefully.
 func TestRemoteStream_HeartbeatLoop_SendError(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -1303,6 +1316,7 @@ func TestRemoteStream_HeartbeatLoop_SendError(t *testing.T) {
 
 // TestRemoteStream_Subscribe_StoresSubscriptionInfo tests that successful subscribe stores subscription info.
 func TestRemoteStream_Subscribe_StoresSubscriptionInfo(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -1340,7 +1354,7 @@ func TestRemoteStream_Subscribe_StoresSubscriptionInfo(t *testing.T) {
 		}
 	}()
 
-	filters := []Filter{{Field: "status", Op: "eq", Value: "active"}}
+	filters := []model.Filter{{Field: "status", Op: model.OpEq, Value: "active"}}
 	subID, err := rs.Subscribe("tenant1", "users", filters)
 
 	require.NoError(t, err)
@@ -1403,6 +1417,7 @@ func (m *mockDynamicServiceClient) Stream(ctx context.Context, opts ...grpc.Call
 
 // TestRemoteStream_Reconnect_ResubscribeFails tests reconnect handles resubscribe failure.
 func TestRemoteStream_Reconnect_ResubscribeFails(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 

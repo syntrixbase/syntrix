@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
@@ -57,14 +58,6 @@ func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q mo
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
-	args := m.Called(ctx, tenant, collection)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(<-chan storage.Event), args.Error(1)
-}
-
 func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	args := m.Called(ctx, tenant, req)
 	if args.Get(0) == nil {
@@ -79,4 +72,60 @@ func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.ReplicationPushResponse), args.Error(1)
+}
+
+// MockStreamerService mocks streamer.Service
+type MockStreamerService struct {
+	mock.Mock
+}
+
+var _ streamer.Service = &MockStreamerService{}
+
+func (m *MockStreamerService) Stream(ctx context.Context) (streamer.Stream, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(streamer.Stream), args.Error(1)
+}
+
+// MockStreamerStream mocks streamer.Stream
+type MockStreamerStream struct {
+	mock.Mock
+}
+
+var _ streamer.Stream = &MockStreamerStream{}
+
+func (m *MockStreamerStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
+	args := m.Called(tenant, collection, filters)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockStreamerStream) Unsubscribe(subscriptionID string) error {
+	args := m.Called(subscriptionID)
+	return args.Error(0)
+}
+
+func (m *MockStreamerStream) Recv() (*streamer.EventDelivery, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*streamer.EventDelivery), args.Error(1)
+}
+
+func (m *MockStreamerStream) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+// NewTestHub creates a hub with a mock stream attached.
+func NewTestHub() *Hub {
+	h := NewHub()
+	ms := new(MockStreamerStream)
+	// Default behaviors
+	ms.On("Subscribe", mock.Anything, mock.Anything, mock.Anything).Return("sub-id", nil).Maybe()
+	ms.On("Unsubscribe", mock.Anything).Return(nil).Maybe()
+	h.SetStream(ms)
+	return h
 }

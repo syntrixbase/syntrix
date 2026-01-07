@@ -76,7 +76,7 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 	query := model.Query{
 		Collection: collection,
 		Filters: []model.Filter{
-			{Field: "title", Op: "==", Value: "Secret Plan A"},
+			{Field: "title", Op: model.OpEq, Value: "Secret Plan A"},
 		},
 	}
 	resp = env.MakeRequest(t, "POST", "/api/v1/query", query, tokenB)

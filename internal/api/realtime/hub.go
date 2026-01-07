@@ -3,11 +3,14 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/streamer"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Hub maintains the set of active clients and broadcasts messages to the
@@ -17,7 +20,14 @@ type Hub struct {
 	clients map[*Client]bool
 
 	// Inbound messages from the clients.
-	broadcast chan storage.Event
+	broadcast chan *streamer.EventDelivery
+
+	// Subscription tracking
+	subscriptions   map[string]*SubscriptionInfo
+	subscriptionsMu sync.RWMutex
+
+	stream   streamer.Stream
+	streamMu sync.Mutex
 
 	// Register requests from the clients.
 	register chan *Client
@@ -31,12 +41,18 @@ type Hub struct {
 	runCtxMu sync.RWMutex
 }
 
+type SubscriptionInfo struct {
+	Client      *Client
+	ClientSubID string // Client's subscription ID (for protocol)
+}
+
 func NewHub() *Hub {
 	return &Hub{
-		broadcast:  make(chan storage.Event),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		clients:    make(map[*Client]bool),
+		broadcast:     make(chan *streamer.EventDelivery),
+		register:      make(chan *Client),
+		unregister:    make(chan *Client),
+		clients:       make(map[*Client]bool),
+		subscriptions: make(map[string]*SubscriptionInfo),
 	}
 }
 
@@ -59,93 +75,92 @@ func (h *Hub) Run(ctx context.Context) {
 				close(client.send)
 			}
 			h.mu.Unlock()
-		case message := <-h.broadcast:
-			h.mu.RLock()
-			for client := range h.clients {
-				client.mu.Lock()
-				msgTenant := determineEventTenant(message)
-				if !client.allowAllTenants {
-					if client.tenant == "" || msgTenant == "" || msgTenant != client.tenant {
-						client.mu.Unlock()
-						continue
-					}
-				}
+		case delivery := <-h.broadcast:
+			h.subscriptionsMu.RLock()
 
-				for subID, sub := range client.subscriptions {
-					// Determine collection from event
-					eventCollection := ""
-					if message.Document != nil {
-						eventCollection = message.Document.Collection
-					} else {
-						parts := strings.Split(message.Id, "/")
-						if len(parts) >= 2 {
-							eventCollection = parts[len(parts)-2]
-						}
-					}
+			// Convert to storage.Event for compatibility
+			storageEvt := eventDeliveryToStorageEvent(delivery)
 
-					if sub.Query.Collection == "" || eventCollection == sub.Query.Collection {
-						if sub.CelProgram != nil {
-							if message.Document == nil {
-								continue
-							}
-							out, _, err := sub.CelProgram.Eval(map[string]interface{}{
-								"doc": message.Document.Data,
-							})
-							if err != nil {
-								continue
-							}
-							if val, ok := out.Value().(bool); !ok || !val {
-								continue
-							}
-						}
-
+			// Route to matching subscriptions
+			for _, streamerSubID := range delivery.SubscriptionIDs {
+				if info, ok := h.subscriptions[streamerSubID]; ok {
+					// Send to client using clientSubID
+					info.Client.mu.Lock()
+					if sub, ok := info.Client.subscriptions[info.ClientSubID]; ok {
+						// Build event payload
 						var doc map[string]interface{}
 						if sub.IncludeData {
-							doc = flattenDocument(message.Document)
+							doc = flattenDocument(storageEvt.Document)
 						}
 
 						payload := EventPayload{
-							SubID: subID,
+							SubID: info.ClientSubID, // Use client's subscription ID
 							Delta: PublicEvent{
-								Type:      message.Type,
+								Type:      storageEvt.Type,
 								Document:  doc,
-								ID:        message.Id,
-								Timestamp: message.Timestamp,
+								ID:        storageEvt.Id,
+								Timestamp: storageEvt.Timestamp,
 							},
 						}
 						msg := BaseMessage{Type: TypeEvent, Payload: mustMarshal(payload)}
 
 						select {
-						case client.send <- msg:
+						case info.Client.send <- msg:
 						default:
 							select {
-							case client.send <- msg:
+							case info.Client.send <- msg:
 							case <-time.After(50 * time.Millisecond):
 							}
 						}
 					}
+					info.Client.mu.Unlock()
 				}
-				client.mu.Unlock()
 			}
-			h.mu.RUnlock()
+			h.subscriptionsMu.RUnlock()
 		}
 	}
 }
 
-func determineEventTenant(evt storage.Event) string {
-	if evt.TenantID != "" {
-		return evt.TenantID
+func (h *Hub) RegisterSubscription(streamerSubID string, client *Client, clientSubID string) {
+	h.subscriptionsMu.Lock()
+	h.subscriptions[streamerSubID] = &SubscriptionInfo{
+		Client:      client,
+		ClientSubID: clientSubID,
 	}
-	if evt.Document != nil && evt.Document.TenantID != "" {
-		return evt.Document.TenantID
-	}
-	if evt.Before != nil && evt.Before.TenantID != "" {
-		return evt.Before.TenantID
-	}
-	return ""
+	h.subscriptionsMu.Unlock()
 }
 
-func (h *Hub) Broadcast(event storage.Event) {
+func (h *Hub) UnregisterSubscription(streamerSubID string) {
+	h.subscriptionsMu.Lock()
+	delete(h.subscriptions, streamerSubID)
+	h.subscriptionsMu.Unlock()
+}
+
+func (h *Hub) SetStream(s streamer.Stream) {
+	h.streamMu.Lock()
+	h.stream = s
+	h.streamMu.Unlock()
+}
+
+func (h *Hub) SubscribeToStream(tenant, collection string, filters []model.Filter) (string, error) {
+	h.streamMu.Lock()
+	defer h.streamMu.Unlock()
+	if h.stream == nil {
+		return "", fmt.Errorf("stream not initialized")
+	}
+	return h.stream.Subscribe(tenant, collection, filters)
+}
+
+func (h *Hub) UnsubscribeFromStream(subID string) error {
+	h.streamMu.Lock()
+	defer h.streamMu.Unlock()
+	if h.stream == nil {
+		return fmt.Errorf("stream not initialized")
+	}
+	return h.stream.Unsubscribe(subID)
+}
+
+func (h *Hub) BroadcastDelivery(delivery *streamer.EventDelivery) {
 	select {
 	case <-h.Done():
 		return
@@ -153,7 +168,7 @@ func (h *Hub) Broadcast(event storage.Event) {
 	}
 
 	select {
-	case h.broadcast <- event:
+	case h.broadcast <- delivery:
 	case <-h.Done():
 	}
 }
@@ -217,6 +232,55 @@ func (h *Hub) Done() <-chan struct{} {
 		return nil
 	}
 	return h.runCtx.Done()
+}
+
+func eventDeliveryToStorageEvent(delivery *streamer.EventDelivery) storage.Event {
+	evt := storage.Event{
+		Id:        fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
+		TenantID:  delivery.Event.Tenant,
+		Type:      operationToEventType(delivery.Event.Operation),
+		Timestamp: delivery.Event.Timestamp,
+	}
+
+	if delivery.Event.Document != nil {
+		// Convert model.Document to storage.StoredDoc
+		evt.Document = documentToStoredDoc(delivery.Event.Document, delivery.Event.Collection)
+	}
+
+	return evt
+}
+
+func operationToEventType(op streamer.OperationType) storage.EventType {
+	switch op {
+	case streamer.OperationInsert:
+		return storage.EventCreate
+	case streamer.OperationUpdate:
+		return storage.EventUpdate
+	case streamer.OperationDelete:
+		return storage.EventDelete
+	default:
+		return ""
+	}
+}
+
+func documentToStoredDoc(doc model.Document, collection string) *storage.StoredDoc {
+	// Extract system fields
+	id := doc.GetID()
+	version := doc.GetVersion()
+	updatedAt, _ := doc["updatedAt"].(int64)
+	createdAt, _ := doc["createdAt"].(int64)
+
+	// Build Fullpath
+	fullpath := fmt.Sprintf("%s/%s", collection, id)
+
+	return &storage.StoredDoc{
+		Fullpath:   fullpath,
+		Collection: collection,
+		Data:       doc, // model.Document is map[string]interface{}
+		Version:    version,
+		UpdatedAt:  updatedAt,
+		CreatedAt:  createdAt,
+	}
 }
 
 func (h *Hub) shutdownClients() {

@@ -2,12 +2,10 @@ package httphandler
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -190,7 +188,7 @@ func TestHandler_DeleteDocument_PreconditionFailed(t *testing.T) {
 	path := "test/1"
 	mockService.On("DeleteDocument", mock.Anything, "default", path, mock.AnythingOfType("model.Filters")).Return(model.ErrPreconditionFailed)
 
-	reqBody, _ := json.Marshal(map[string]interface{}{"path": path, "tenant": "default", "pred": []model.Filter{{Field: "version", Op: "==", Value: float64(1)}}})
+	reqBody, _ := json.Marshal(map[string]interface{}{"path": path, "tenant": "default", "pred": []model.Filter{{Field: "version", Op: model.OpEq, Value: float64(1)}}})
 	req := httptest.NewRequest("POST", "/internal/v1/document/delete", bytes.NewBuffer(reqBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
@@ -474,17 +472,6 @@ func TestHandler_ExecuteQuery_Error(t *testing.T) {
 	mockService.AssertExpectations(t)
 }
 
-func TestHandler_WatchCollection_InvalidBody(t *testing.T) {
-	handler, _ := setupTestHandler()
-
-	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBufferString("invalid json"))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-}
-
 // NonFlusherWriter is a ResponseWriter that does not implement http.Flusher
 type NonFlusherWriter struct {
 	code int
@@ -502,55 +489,6 @@ func (w *NonFlusherWriter) Write(b []byte) (int, error) {
 
 func (w *NonFlusherWriter) WriteHeader(code int) {
 	w.code = code
-}
-
-func TestHandler_WatchCollection_NoFlusher(t *testing.T) {
-	handler, _ := setupTestHandler()
-
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
-	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
-	w := &NonFlusherWriter{}
-
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusInternalServerError, w.code)
-}
-
-func TestHandler_WatchCollection_ServiceError(t *testing.T) {
-	handler, mockService := setupTestHandler()
-
-	mockService.On("WatchCollection", mock.Anything, "default", "test").Return(nil, assert.AnError)
-
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
-	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	// Should return 200 OK with headers set before error, then exit
-	assert.Equal(t, http.StatusOK, w.Code)
-	mockService.AssertExpectations(t)
-}
-
-func TestHandler_WatchCollection_StreamEvents(t *testing.T) {
-	handler, mockService := setupTestHandler()
-
-	// Create a channel that will send events
-	eventChan := make(chan storage.Event, 2)
-	eventChan <- storage.Event{Type: storage.EventCreate, Id: "1"}
-	close(eventChan) // Close to end the stream
-
-	mockService.On("WatchCollection", mock.Anything, "default", "test").Return((<-chan storage.Event)(eventChan), nil)
-
-	reqBody, _ := json.Marshal(map[string]string{"collection": "test", "tenant": "default"})
-	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
-	w := httptest.NewRecorder()
-
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Contains(t, w.Body.String(), `"type":"create"`)
-	mockService.AssertExpectations(t)
 }
 
 func TestHandler_Pull_InvalidBody(t *testing.T) {
@@ -630,41 +568,4 @@ func TestTenantOrDefault(t *testing.T) {
 		result := tenantOrDefault(tc.input)
 		assert.Equal(t, tc.expected, result)
 	}
-}
-
-func TestHandler_WatchCollection_ContextCancel(t *testing.T) {
-	handler, mockService := setupTestHandler()
-
-	// Create a channel that blocks
-	eventChan := make(chan storage.Event)
-	mockService.On("WatchCollection", mock.Anything, "default", "test").Return((<-chan storage.Event)(eventChan), nil)
-
-	reqBody, _ := json.Marshal(map[string]interface{}{"collection": "test", "tenant": "default"})
-	ctx, cancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest("POST", "/internal/v1/watch", bytes.NewBuffer(reqBody))
-	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	// Start the handler in a goroutine
-	done := make(chan struct{})
-	go func() {
-		handler.ServeHTTP(w, req)
-		close(done)
-	}()
-
-	// Wait briefly then cancel context
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-
-	// Handler should exit
-	select {
-	case <-done:
-		// Good
-	case <-time.After(2 * time.Second):
-		t.Fatal("Handler did not exit after context cancel")
-	}
-
-	close(eventChan)
-	mockService.AssertExpectations(t)
 }

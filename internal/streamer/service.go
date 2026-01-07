@@ -16,6 +16,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	celengine "github.com/syntrixbase/syntrix/internal/streamer/internal/cel"
 	"github.com/syntrixbase/syntrix/internal/streamer/internal/manager"
+	"github.com/syntrixbase/syntrix/pkg/model"
 	"google.golang.org/grpc"
 )
 
@@ -255,6 +256,7 @@ func (s *streamerService) ProcessEvent(event events.SyntrixChangeEvent) error {
 
 	doc := helper.FlattenStorageDocument(event.Document)
 	matches := s.manager.Match(event.TenantID, event.Document.Collection, doc.GetID(), doc)
+
 	if len(matches) == 0 {
 		return nil
 	}
@@ -317,7 +319,7 @@ var _ subscriptionHandler = (*streamerService)(nil)
 // --- subscriptionHandler implementation ---
 
 // subscribe implements subscriptionHandler for localStream.
-func (s *streamerService) subscribe(gatewayID, tenant, collection string, filters []Filter) (string, error) {
+func (s *streamerService) subscribe(gatewayID, tenant, collection string, filters []model.Filter) (string, error) {
 	subID := uuid.New().String()
 	protoReq := &pb.SubscribeRequest{
 		SubscriptionId: subID,
