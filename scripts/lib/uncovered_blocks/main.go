@@ -13,7 +13,7 @@ var maxOutputBlocks = 40
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Println("Usage: go run uncovered_blocks.go <coverage_file> [print_description or not] [print_line_count]")
+		fmt.Println("Usage: go run ./ <coverage_file> [print_description or not] [print_line_count]")
 		os.Exit(1)
 	}
 
