@@ -1,12 +1,12 @@
-package engine
+package query
 
 import (
 	"context"
 	"net/http"
 
-	"github.com/syntrixbase/syntrix/internal/engine/internal/client"
-	"github.com/syntrixbase/syntrix/internal/engine/internal/core"
-	"github.com/syntrixbase/syntrix/internal/engine/internal/httphandler"
+	"github.com/syntrixbase/syntrix/internal/query/internal/client"
+	"github.com/syntrixbase/syntrix/internal/query/internal/core"
+	"github.com/syntrixbase/syntrix/internal/query/internal/httphandler"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )

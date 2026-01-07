@@ -10,8 +10,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity/config"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/google/cel-go/cel"
@@ -32,10 +32,10 @@ type ruleEngine struct {
 	rules      *RuleSet
 	celEnv     *cel.Env
 	programMap sync.Map // map[string]cel.Program
-	query      engine.Service
+	query      query.Service
 }
 
-func NewEngine(cfg config.AuthZConfig, q engine.Service) (Engine, error) {
+func NewEngine(cfg config.AuthZConfig, q query.Service) (Engine, error) {
 	// Define CEL environment
 	env, err := cel.NewEnv(
 		cel.Declarations(
@@ -271,10 +271,10 @@ func structToMap(v interface{}) map[string]interface{} {
 }
 
 type authzLib struct {
-	query engine.Service
+	query query.Service
 }
 
-func newAuthzLib(q engine.Service) *authzLib {
+func newAuthzLib(q query.Service) *authzLib {
 	return &authzLib{query: q}
 }
 

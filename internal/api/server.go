@@ -5,8 +5,8 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/api/rest"
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/query"
 )
 
 // Server is a route registrar for the API layer.
@@ -17,7 +17,7 @@ type Server struct {
 }
 
 // NewServer creates a new API Server (route registrar).
-func NewServer(engine engine.Service, auth identity.AuthN, authz identity.AuthZ, rt *realtime.Server) *Server {
+func NewServer(engine query.Service, auth identity.AuthN, authz identity.AuthZ, rt *realtime.Server) *Server {
 	return &Server{
 		rest:     rest.NewHandler(engine, auth, authz),
 		realtime: rt,

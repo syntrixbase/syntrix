@@ -1,10 +1,10 @@
 package identity
 
 import (
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity/config"
 	"github.com/syntrixbase/syntrix/internal/identity/internal/authn"
 	"github.com/syntrixbase/syntrix/internal/identity/internal/authz"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
@@ -31,6 +31,6 @@ func NewAuthN(cfg config.AuthNConfig, users storage.UserStore, revocations stora
 }
 
 // NewAuthZ creates a new authorization engine.
-func NewAuthZ(cfg config.AuthZConfig, qs engine.Service) (AuthZ, error) {
+func NewAuthZ(cfg config.AuthZConfig, qs query.Service) (AuthZ, error) {
 	return authz.NewEngine(cfg, qs)
 }

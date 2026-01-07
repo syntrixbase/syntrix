@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
@@ -232,7 +232,7 @@ func (s *TestServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.mux.ServeHTTP(w, r)
 }
 
-func createTestServer(engine engine.Service, auth identity.AuthN, authz identity.AuthZ) *TestServer {
+func createTestServer(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *TestServer {
 	if auth == nil {
 		auth = new(MockAuthService)
 	}

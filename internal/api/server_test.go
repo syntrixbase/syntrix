@@ -9,16 +9,16 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
-	"github.com/syntrixbase/syntrix/internal/engine"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/identity/types"
+	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 // Mocks
 type MockQueryService struct {
 	mock.Mock
-	engine.Service
+	query.Service
 }
 
 func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
