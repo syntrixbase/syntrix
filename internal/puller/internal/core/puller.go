@@ -344,6 +344,13 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 		}
 		evt.Backend = backend.name
 
+		logger.Debug("Puller: received event from mongo",
+			"eventID", evt.EventID,
+			"op", evt.OpType,
+			"backend", evt.Backend,
+			"docID", evt.MgoDocID,
+		)
+
 		// Check for gaps
 		backend.gapDetector.RecordEvent(evt)
 
@@ -351,6 +358,7 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 			logger.Error("failed to write event to buffer", "error", err)
 			continue
 		}
+		logger.Debug("Puller: buffered event", "eventID", evt.EventID)
 
 		// Handle event after it is persisted
 		p.invokeHandlerWithBackpressure(ctx, backend, evt)
@@ -364,6 +372,8 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 }
 
 func (p *Puller) invokeHandlerWithBackpressure(ctx context.Context, backend *Backend, evt *events.StoreChangeEvent) {
+	p.logger.Debug("Puller: broadcasting event", "eventID", evt.EventID)
+
 	// Broadcast to subscribers
 	p.subs.Broadcast(evt)
 
@@ -415,7 +425,7 @@ func (p *Puller) BackendNames() []string {
 func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce bool) (events.Iterator, error) {
 	var iters []events.Iterator
 
-	p.logger.Info("[DEBUG] Replay called", "after", after, "coalesce", coalesce)
+	p.logger.Info("Replay called", "after", after, "coalesce", coalesce)
 
 	for name, backend := range p.backends {
 		startID := ""
@@ -431,7 +441,7 @@ func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce b
 					return nil, fmt.Errorf("invalid event ID %q for backend %q: %w", eventID, name, err)
 				}
 				startID = events.FormatBufferKey(ct, eventID)
-				p.logger.Info("[DEBUG] Replay backend", "backend", name, "eventID", eventID, "startID", startID)
+				p.logger.Debug("[DEBUG] Replay backend", "backend", name, "eventID", eventID, "startID", startID)
 			}
 		}
 
@@ -439,7 +449,7 @@ func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce b
 		count, _ := backend.buffer.Count()
 		first, _ := backend.buffer.First()
 		head, _ := backend.buffer.Head()
-		p.logger.Info("[DEBUG] Buffer state before ScanFrom", "backend", name, "count", count, "first", first, "head", head, "startID", startID)
+		p.logger.Info("Buffer state before ScanFrom", "backend", name, "count", count, "first", first, "head", head, "startID", startID)
 
 		iter, err := backend.buffer.ScanFrom(startID)
 		if err != nil {

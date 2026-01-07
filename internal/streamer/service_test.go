@@ -3,6 +3,7 @@ package streamer
 import (
 	"context"
 	"log/slog"
+	"os"
 	"testing"
 	"time"
 
@@ -13,6 +14,12 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
 )
+
+var testLogger = slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
+
+func init() {
+	slog.SetDefault(testLogger)
+}
 
 // testStoredDoc creates a StoredDoc with all required fields for testing.
 // Note: StoredDoc.Id is MongoDB's _id (tenant:hash format), NOT the user document ID.
