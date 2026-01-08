@@ -20,9 +20,21 @@ type Client struct {
 	client pb.QueryServiceClient
 }
 
+// newClientFunc is the function used to create a gRPC client connection.
+// This is a package-level variable to allow testing.
+var newClientFunc = grpc.NewClient
+
 // New creates a new Query Service gRPC Client.
 func New(address string) (*Client, error) {
-	conn, err := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	return NewWithOptions(address)
+}
+
+// NewWithOptions creates a new Query Service gRPC Client with additional options.
+func NewWithOptions(address string, opts ...grpc.DialOption) (*Client, error) {
+	defaultOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	allOpts := append(defaultOpts, opts...)
+
+	conn, err := newClientFunc(address, allOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to query service: %w", err)
 	}

@@ -140,6 +140,22 @@ func TestNew_Success(t *testing.T) {
 	}
 }
 
+func TestNew_Error(t *testing.T) {
+	// Save original function and restore after test
+	originalFunc := newClientFunc
+	defer func() { newClientFunc = originalFunc }()
+
+	// Mock the grpc.NewClient function to return an error
+	newClientFunc = func(target string, opts ...grpc.DialOption) (*grpc.ClientConn, error) {
+		return nil, assert.AnError
+	}
+
+	client, err := New("localhost:50051")
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "failed to connect to query service")
+}
+
 func newTestClient(mockClient *MockQueryServiceClient) *Client {
 	return &Client{
 		client: mockClient,
