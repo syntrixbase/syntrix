@@ -1,6 +1,7 @@
 # User & Admin Console
 
-**Date:** December 18, 2025
+**Date:** December 18, 2025  
+**Updated:** January 7, 2026  
 **Topic:** Web console for end-users and admins
 
 ## 1. Scope
@@ -11,27 +12,27 @@
 
 ## 2. Capabilities
 
-### End-user
+### 2.1 End-user
 
 - Auth: login via JWT (same auth service as core), respect rate limits/lockout defined in identity doc.
 - Data: list/read/update documents the user is allowed to access; operations routed through normal API with rule checks.
 - Profile: view/update own profile data (non-secret fields only).
 
-### Admin (in addition to above)
+### 2.2 Admin (in addition to above)
 
 - Rules: list versions, dry-run upload, activate staged, rollback.
 - Users: list, create, enable/disable, admin-rotate password.
 - Health/audit: view admin audit log, rule generation lag, JWKS fetch errors (read-only).
 - Note: key rotation UI deferred (per 007_2).
 
-### 2.1 Safety defaults
+### 2.3 Safety defaults
 
 - Serve admin surface on a distinct domain/subdomain; enforce HTTPS + optional mTLS for admin routes.
 - Default IP allowlist for admin endpoints; user-facing surface remains public with rate limits.
 - Hide admin controls fully for non-admins; avoid client-side-only gating for sensitive actions.
 - All API calls use Authorization header (no cookies); enforce CORS to the allowed origins set.
 
-### 2.2 Admin session handling
+### 2.4 Admin session handling
 
 - Admin access tokens should be short-lived; prefer no refresh tokens in the browser. If refresh is required, keep it in memory (not localStorage) and rotate with overlap window per 7.2 of identity doc.
 - Idle timeout (e.g., 15–30 minutes) with explicit re-auth; display countdown to avoid surprise logouts.
@@ -78,30 +79,176 @@
 
 ## 3. Architecture
 
-- Single SPA (e.g., React) with role-based feature flags.
+### 3.1 Technology Stack
+
+| Layer | Technology | Rationale |
+|-------|------------|-----------|
+| Framework | React 18 + TypeScript | Type safety, ecosystem |
+| Build | Vite | Fast dev, optimized builds |
+| Styling | TailwindCSS | Utility-first, consistent design |
+| State | Zustand | Lightweight, TypeScript-friendly |
+| Routing | React Router v6 | Standard SPA routing |
+| HTTP | Fetch + custom hooks | Native, no extra deps |
+| Icons | Lucide React | Consistent, tree-shakeable |
+
+### 3.2 High-Level Design
+
+- Single SPA with role-based feature flags.
 - Backend: reuse public API for data access; reuse admin API for admin ops; served over HTTPS.
 - AuthZ: JWT with roles (`admin`), gateway enforces; optional mTLS for admin actions.
 - CSRF: token in Authorization header; no cookies; CORS locked down.
 
-## 4. Endpoints Used
+### 3.3 Project Structure
 
-- User data: standard `/api/v1/...` CRUD/query; subject to rules.
-- Auth: `/auth/v1/login`, `/auth/v1/logout`, `/auth/v1/refresh`, `/auth/v1/password`.
-- Admin (admins only): `/admin/rules` (list/push/rollback), `/admin/users` (list/create/patch), `/admin/health`.
+```
+console/
+├── index.html
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+├── tailwind.config.js
+└── src/
+    ├── main.tsx
+    ├── App.tsx
+    ├── api/
+    │   ├── client.ts         # HTTP client with auth
+    │   ├── auth.ts           # Auth endpoints
+    │   ├── documents.ts      # Document CRUD
+    │   ├── admin.ts          # Admin endpoints
+    │   └── types.ts          # API types
+    ├── components/
+    │   ├── ui/               # Reusable UI components
+    │   │   ├── Button.tsx
+    │   │   ├── Input.tsx
+    │   │   ├── Table.tsx
+    │   │   ├── Modal.tsx
+    │   │   ├── Toast.tsx
+    │   │   └── Loading.tsx
+    │   ├── layout/
+    │   │   ├── Sidebar.tsx
+    │   │   ├── Header.tsx
+    │   │   └── Layout.tsx
+    │   └── features/
+    │       ├── auth/
+    │       ├── data-browser/
+    │       ├── users/
+    │       ├── rules/
+    │       └── monitoring/
+    ├── hooks/
+    │   ├── useAuth.ts
+    │   ├── useApi.ts
+    │   └── useToast.ts
+    ├── stores/
+    │   ├── authStore.ts
+    │   └── uiStore.ts
+    ├── pages/
+    │   ├── Login.tsx
+    │   ├── Dashboard.tsx
+    │   ├── DataBrowser.tsx
+    │   ├── Users.tsx
+    │   ├── Rules.tsx
+    │   └── Monitoring.tsx
+    └── utils/
+        ├── token.ts
+        └── format.ts
+```
 
-## 5. UX & Safety
+## 4. Feature Modules
+
+### 4.1 Data Browser
+- Collection tree navigator (sidebar)
+- Document list with pagination
+- Document viewer (JSON pretty-print)
+- Document editor (JSON with validation)
+- Create/Update/Delete operations
+- Search and filter support
+
+### 4.2 Rules Management
+- Current rules viewer with syntax highlighting
+- Rules editor with CEL validation hints
+- Push with dry-run option
+- Version history list
+- Rollback capability
+
+### 4.3 User Management
+- User list with search/filter
+- User detail view
+- Enable/disable toggle
+- Role assignment
+- Create new user form
+
+### 4.4 Monitoring Dashboard
+- System health status
+- Active realtime connections count
+- Recent trigger executions
+- Error rate metrics
+- Rule reload status
+
+### 4.5 Realtime Inspector
+- Active subscriptions list
+- Live event stream viewer
+- Connection diagnostics
+- Subscription test tool
+
+### 4.6 Trigger Management
+- Trigger configuration viewer
+- Execution history
+- Manual trigger test
+- Error logs
+
+## 5. API Integration
+
+### 5.1 Endpoints Used
+
+| Feature | Endpoint | Method | Auth |
+|---------|----------|--------|------|
+| Login | `/auth/v1/login` | POST | None |
+| Refresh | `/auth/v1/refresh` | POST | Refresh Token |
+| Logout | `/auth/v1/logout` | POST | Access Token |
+| Query Data | `/api/v1/query` | POST | Access Token |
+| Get Document | `/api/v1/{path}` | GET | Access Token |
+| Create Document | `/api/v1/{path}` | POST | Access Token |
+| Update Document | `/api/v1/{path}` | PATCH | Access Token |
+| Delete Document | `/api/v1/{path}` | DELETE | Access Token |
+| List Users | `/admin/users` | GET | Admin Token |
+| Update User | `/admin/users/{id}` | PATCH | Admin Token |
+| Get Rules | `/admin/rules` | GET | Admin Token |
+| Push Rules | `/admin/rules/push` | POST | Admin Token |
+| Health Check | `/health` | GET | None |
+| Admin Health | `/admin/health` | GET | Admin Token |
+
+### 5.2 Token Management
+
+```typescript
+// Auto-refresh before expiry
+const TOKEN_REFRESH_BUFFER = 60 * 1000; // 1 minute before expiry
+
+function scheduleRefresh(expiresIn: number) {
+  const refreshAt = expiresIn * 1000 - TOKEN_REFRESH_BUFFER;
+  setTimeout(async () => {
+    await refreshToken();
+  }, refreshAt);
+}
+```
+
+## 6. UX & Safety
 
 - End-users never see secrets or password_hash; only allowed fields per rules.
 - Admin actions require confirmation; dry-run before activate; pagination and filters for lists.
 - Clear role indicator in UI; hide admin controls for non-admins.
+- Loading states and progress indicators for all async operations.
+- Toast notifications for success/error feedback.
+- Keyboard shortcuts for power users (Cmd+K search).
 
-## 6. Security & Ops
+## 7. Security & Ops
 
 - HTTPS only; consider separate domain/subdomain for admin entry; optional IP allowlist for admin.
 - Rate limit admin mutations; audit all admin actions (who/when/what/result, client cert if present).
 - Size limits aligned with rule upload caps (e.g., 256 KB). No secret storage in UI.
+- Token stored in memory with sessionStorage fallback; auto-refresh before expiry.
+- Session timeout warning displayed 5 minutes before expiry.
 
-## 7. Future
+## 8. Future (Phase 3+)
 
 - SSO/IdP integration for both user and admin.
 - Tenant-aware views once multi-tenant exists.

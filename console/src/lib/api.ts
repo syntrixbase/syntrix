@@ -1,0 +1,209 @@
+import axios, { type AxiosInstance, type AxiosError, type AxiosResponse, type InternalAxiosRequestConfig } from 'axios';
+
+// API Base URL - defaults to same origin for production
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+
+// Create axios instance
+export const api: AxiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000,
+});
+
+// Request interceptor to add auth token
+api.interceptors.request.use(
+  (config: InternalAxiosRequestConfig) => {
+    const token = localStorage.getItem('token');
+    if (token && config.headers) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error: AxiosError) => {
+    return Promise.reject(error);
+  }
+);
+
+// Response interceptor to handle errors
+api.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  (error: AxiosError) => {
+    if (error.response?.status === 401) {
+      // Clear token from localStorage
+      localStorage.removeItem('token');
+      // Clear auth-storage (Zustand persist key)
+      localStorage.removeItem('auth-storage');
+      // Only redirect if not already on login page
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Auth API endpoints
+export interface LoginRequest {
+  username: string;
+  password: string;
+  tenant?: string;
+}
+
+export interface LoginResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
+export interface SignupRequest {
+  username: string;
+  password: string;
+  tenant?: string;
+}
+
+export const authApi = {
+  login: async (data: LoginRequest): Promise<{ token: string; refreshToken?: string }> => {
+    const response = await api.post<LoginResponse>('/auth/v1/login', {
+      ...data,
+      tenant: data.tenant || 'default',
+    });
+    // Backend returns access_token/refresh_token, normalize naming
+    return { 
+      token: response.data.access_token,
+      refreshToken: response.data.refresh_token,
+    };
+  },
+
+  refresh: async (refreshToken: string): Promise<{ token: string; refreshToken?: string }> => {
+    const response = await api.post<RefreshResponse>('/auth/v1/refresh', {
+      refresh_token: refreshToken,
+    });
+    return {
+      token: response.data.access_token,
+      refreshToken: response.data.refresh_token,
+    };
+  },
+
+  signup: async (data: SignupRequest): Promise<void> => {
+    await api.post('/auth/v1/signup', {
+      ...data,
+      tenant: data.tenant || 'default',
+    });
+  },
+
+  logout: async (): Promise<void> => {
+    await api.post('/auth/v1/logout');
+  },
+
+  me: async () => {
+    const response = await api.get('/auth/v1/me');
+    return response.data;
+  },
+};
+
+// Data API endpoints
+export interface QueryRequest {
+  collection: string;
+  filter?: Record<string, unknown>;
+  limit?: number;
+  offset?: number;
+}
+
+export interface Document {
+  id: string;
+  [key: string]: unknown;
+}
+
+export const dataApi = {
+  query: async (request: QueryRequest): Promise<Document[]> => {
+    const response = await api.post('/api/v1/query', request);
+    return response.data.documents || [];
+  },
+
+  create: async (collection: string, data: Record<string, unknown>): Promise<Document> => {
+    const response = await api.post(`/api/v1/${collection}`, data);
+    return response.data;
+  },
+
+  update: async (collection: string, id: string, data: Record<string, unknown>): Promise<Document> => {
+    const response = await api.put(`/api/v1/${collection}/${id}`, data);
+    return response.data;
+  },
+
+  delete: async (collection: string, id: string): Promise<void> => {
+    await api.delete(`/api/v1/${collection}/${id}`);
+  },
+
+  get: async (collection: string, id: string): Promise<Document> => {
+    const response = await api.get(`/api/v1/${collection}/${id}`);
+    return response.data;
+  },
+};
+
+// Admin API endpoints
+export interface User {
+  id: string;
+  username: string;
+  role: string;
+  tenant: string;
+  created_at?: string;
+}
+
+export interface TriggerRule {
+  id: string;
+  name: string;
+  collection: string;
+  event_type: string;
+  enabled: boolean;
+  config: Record<string, unknown>;
+}
+
+export const adminApi = {
+  // User management
+  listUsers: async (): Promise<User[]> => {
+    const response = await api.get('/admin/users');
+    return response.data.users || [];
+  },
+
+  createUser: async (data: { username: string; password: string; role: string }): Promise<User> => {
+    const response = await api.post('/admin/users', data);
+    return response.data;
+  },
+
+  updateUser: async (id: string, data: Partial<User>): Promise<User> => {
+    const response = await api.put(`/admin/users/${id}`, data);
+    return response.data;
+  },
+
+  deleteUser: async (id: string): Promise<void> => {
+    await api.delete(`/admin/users/${id}`);
+  },
+
+  // Trigger rules
+  listRules: async (): Promise<TriggerRule[]> => {
+    const response = await api.get('/admin/rules');
+    return response.data.rules || [];
+  },
+
+  createRule: async (data: Omit<TriggerRule, 'id'>): Promise<TriggerRule> => {
+    const response = await api.post('/admin/rules', data);
+    return response.data;
+  },
+
+  updateRule: async (id: string, data: Partial<TriggerRule>): Promise<TriggerRule> => {
+    const response = await api.put(`/admin/rules/${id}`, data);
+    return response.data;
+  },
+
+  deleteRule: async (id: string): Promise<void> => {
+    await api.delete(`/admin/rules/${id}`);
+  },
+};
