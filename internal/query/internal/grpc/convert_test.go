@@ -88,7 +88,7 @@ func TestModelDocToProto(t *testing.T) {
 		assert.Nil(t, result)
 	})
 
-	t.Run("full document", func(t *testing.T) {
+	t.Run("full document with float64 types", func(t *testing.T) {
 		doc := model.Document{
 			"id":         "user1",
 			"collection": "users",
@@ -105,6 +105,8 @@ func TestModelDocToProto(t *testing.T) {
 		assert.Equal(t, "user1", result.Id)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, int64(5), result.Version)
+		assert.Equal(t, int64(1704067200000), result.UpdatedAt)
+		assert.Equal(t, int64(1704067100000), result.CreatedAt)
 
 		// Check user data is properly serialized (excludes system fields)
 		var data map[string]interface{}
@@ -116,6 +118,43 @@ func TestModelDocToProto(t *testing.T) {
 		assert.Nil(t, data["id"])
 		assert.Nil(t, data["collection"])
 		assert.Nil(t, data["version"])
+	})
+
+	t.Run("document with int64 types", func(t *testing.T) {
+		doc := model.Document{
+			"id":         "user2",
+			"collection": "users",
+			"version":    int64(10),
+			"updatedAt":  int64(1704067300000),
+			"createdAt":  int64(1704067200000),
+			"deleted":    true,
+			"status":     "active",
+		}
+
+		result := modelDocToProto(doc)
+
+		assert.Equal(t, "user2", result.Id)
+		assert.Equal(t, int64(10), result.Version)
+		assert.Equal(t, int64(1704067300000), result.UpdatedAt)
+		assert.Equal(t, int64(1704067200000), result.CreatedAt)
+		assert.True(t, result.Deleted)
+	})
+
+	t.Run("document with int types", func(t *testing.T) {
+		doc := model.Document{
+			"id":         "user3",
+			"collection": "users",
+			"version":    int(15),
+			"updatedAt":  int(1704067400000),
+			"createdAt":  int(1704067300000),
+		}
+
+		result := modelDocToProto(doc)
+
+		assert.Equal(t, "user3", result.Id)
+		assert.Equal(t, int64(15), result.Version)
+		assert.Equal(t, int64(1704067400000), result.UpdatedAt)
+		assert.Equal(t, int64(1704067300000), result.CreatedAt)
 	})
 }
 
@@ -301,6 +340,20 @@ func TestQueryConversions(t *testing.T) {
 }
 
 func TestPullRequestConversions(t *testing.T) {
+	t.Run("pullRequestToProto", func(t *testing.T) {
+		req := storage.ReplicationPullRequest{
+			Collection: "users",
+			Checkpoint: 12345,
+			Limit:      100,
+		}
+
+		result := pullRequestToProto(req)
+
+		assert.Equal(t, "users", result.Collection)
+		assert.Equal(t, int64(12345), result.Checkpoint)
+		assert.Equal(t, int32(100), result.Limit)
+	})
+
 	t.Run("protoToPullRequest", func(t *testing.T) {
 		proto := &pb.PullRequest{
 			Tenant:     "tenant1",
@@ -343,6 +396,38 @@ func TestPullRequestConversions(t *testing.T) {
 }
 
 func TestPushRequestConversions(t *testing.T) {
+	t.Run("pushChangeToProto with baseVersion", func(t *testing.T) {
+		baseVersion := int64(5)
+		change := storage.ReplicationPushChange{
+			Doc: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "Alice"},
+			},
+			BaseVersion: &baseVersion,
+		}
+
+		result := pushChangeToProto(change)
+
+		assert.Equal(t, "doc1", result.Document.Id)
+		assert.Equal(t, int64(5), result.BaseVersion)
+	})
+
+	t.Run("pushChangeToProto without baseVersion", func(t *testing.T) {
+		change := storage.ReplicationPushChange{
+			Doc: &storage.StoredDoc{
+				Id:         "doc2",
+				Collection: "users",
+			},
+			BaseVersion: nil,
+		}
+
+		result := pushChangeToProto(change)
+
+		assert.Equal(t, "doc2", result.Document.Id)
+		assert.Equal(t, int64(-1), result.BaseVersion) // nil becomes -1
+	})
+
 	t.Run("protoToPushRequest", func(t *testing.T) {
 		data, _ := json.Marshal(map[string]interface{}{"name": "test"})
 		baseVersion := int64(5)

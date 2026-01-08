@@ -2,12 +2,11 @@ package query
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
@@ -84,20 +83,12 @@ func TestNewClient(t *testing.T) {
 	var _ Service = client
 }
 
-func TestNewHTTPHandler(t *testing.T) {
+func TestNewGRPCServer(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	service := NewService(mockStore)
-	handler := NewHTTPHandler(service)
+	grpcServer := NewGRPCServer(service)
 
-	assert.NotNil(t, handler)
-	// Verify that it implements http.Handler
-	var _ http.Handler = handler
-
-	// Test that the handler responds to health check
-	req := httptest.NewRequest("GET", "/health", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, req)
-
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, "OK", w.Body.String())
+	assert.NotNil(t, grpcServer)
+	// Verify that it implements pb.QueryServiceServer
+	var _ pb.QueryServiceServer = grpcServer
 }

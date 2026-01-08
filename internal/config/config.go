@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	api "github.com/syntrixbase/syntrix/internal/api/config"
@@ -24,13 +23,8 @@ type Config struct {
 	Identity   identity.Config           `yaml:"identity"`
 	Deployment services.DeploymentConfig `yaml:"deployment"`
 	Gateway    api.GatewayConfig         `yaml:"gateway"`
-	Query      QueryConfig               `yaml:"query"`
 	Trigger    trigger.Config            `yaml:"trigger"`
 	Puller     puller.Config             `yaml:"puller"`
-}
-
-type QueryConfig struct {
-	Port int `yaml:"port"`
 }
 
 type StorageConfig struct {
@@ -123,12 +117,9 @@ func LoadConfig() *Config {
 				},
 			},
 		},
-		Identity: identity.DefaultConfig(),
-		Server:   server.DefaultConfig(),
-		Gateway:  api.DefaultGatewayConfig(),
-		Query: QueryConfig{
-			Port: 8082,
-		},
+		Identity:   identity.DefaultConfig(),
+		Server:     server.DefaultConfig(),
+		Gateway:    api.DefaultGatewayConfig(),
 		Trigger:    trigger.DefaultConfig(),
 		Deployment: services.DefaultDeploymentConfig(),
 		Puller:     puller.DefaultConfig(),
@@ -143,12 +134,6 @@ func LoadConfig() *Config {
 	// 4. Override with Env Vars
 	if val := os.Getenv("GATEWAY_QUERY_SERVICE_URL"); val != "" {
 		cfg.Gateway.QueryServiceURL = val
-	}
-
-	if val := os.Getenv("QUERY_PORT"); val != "" {
-		if port, err := strconv.Atoi(val); err == nil {
-			cfg.Query.Port = port
-		}
 	}
 
 	if val := os.Getenv("MONGO_URI"); val != "" {

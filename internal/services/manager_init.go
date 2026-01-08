@@ -6,9 +6,9 @@ import (
 	"log"
 	"log/slog"
 	"net"
-	"net/http"
 	"strconv"
 
+	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	"github.com/syntrixbase/syntrix/internal/api"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
@@ -88,7 +88,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 	if m.opts.RunQuery {
 		queryService = m.createQueryService()
 		if !m.opts.ForceQueryClient {
-			m.initQueryHTTPServer(queryService)
+			m.initQueryGRPCServer(queryService)
 		}
 	}
 
@@ -159,14 +159,12 @@ func (m *Manager) createQueryService() query.Service {
 	return service
 }
 
-// initQueryHTTPServer creates an HTTP server for the query service.
+// initQueryGRPCServer registers the query service with the unified gRPC server.
 // In standalone mode, this is not called since query service runs in-process.
-func (m *Manager) initQueryHTTPServer(service query.Service) {
-	m.servers = append(m.servers, &http.Server{
-		Addr:    listenAddr(m.opts.ListenHost, m.cfg.Query.Port),
-		Handler: query.NewHTTPHandler(service),
-	})
-	m.serverNames = append(m.serverNames, "Query Service")
+func (m *Manager) initQueryGRPCServer(service query.Service) {
+	grpcServer := query.NewGRPCServer(service)
+	server.Default().RegisterGRPCService(&pb.QueryService_ServiceDesc, grpcServer)
+	log.Println("Registered Query Service (gRPC)")
 }
 
 func (m *Manager) initAPIServer(queryService query.Service) error {

@@ -1,12 +1,10 @@
 package integration
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/syntrixbase/syntrix/pkg/model"
 
@@ -39,8 +37,8 @@ func TestAPIIntegration(t *testing.T) {
 
 	docID := createdDoc["id"].(string)
 
-	// Verify via Internal Query Service (Microservices check)
-	verifyInternalQuery(t, env, collection, docID, "Integration User")
+	// Note: Internal Query Service verification removed - Query now uses gRPC
+	// The document is already verified via the API gateway which uses the local query service
 
 	// 4. Scenario: Get Document
 	fetchedDoc := env.GetDocument(t, collection, docID, token)
@@ -115,20 +113,4 @@ func TestAPIIntegration(t *testing.T) {
 	// Verify Delete
 	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
-}
-
-func verifyInternalQuery(t *testing.T, env *ServiceEnv, collection, docID, expectedName string) {
-	client := &http.Client{Timeout: 5 * time.Second}
-	docPath := fmt.Sprintf("%s/%s", collection, docID)
-	queryReqBody, _ := json.Marshal(map[string]string{"path": docPath})
-	queryResp, err := client.Post(fmt.Sprintf("%s/internal/v1/document/get", env.QueryURL), "application/json", bytes.NewBuffer(queryReqBody))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, queryResp.StatusCode)
-
-	var fetchedDoc map[string]interface{}
-	err = json.NewDecoder(queryResp.Body).Decode(&fetchedDoc)
-	require.NoError(t, err)
-	queryResp.Body.Close()
-
-	assert.Equal(t, expectedName, fetchedDoc["name"])
 }
