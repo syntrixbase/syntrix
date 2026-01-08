@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net"
-	"strconv"
 
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
@@ -63,7 +61,11 @@ func (m *Manager) Init(ctx context.Context) error {
 // All services run in a single process without HTTP inter-service communication.
 func (m *Manager) initStandalone(ctx context.Context) error {
 	// Create Streamer service for local access
-	m.streamerService = m.createStreamerService()
+	streamerSvc, err := m.createStreamerService()
+	if err != nil {
+		return err
+	}
+	m.streamerService = streamerSvc
 	slog.Info("Initialized Streamer Service (local)")
 
 	// Create query service
@@ -278,7 +280,7 @@ func (m *Manager) initGateway() error {
 
 // createStreamerService creates a Streamer service for standalone mode.
 // In standalone mode, it uses the local Puller service directly.
-func (m *Manager) createStreamerService() streamer.StreamerServer {
+func (m *Manager) createStreamerService() (streamer.StreamerServer, error) {
 	cfg := streamer.DefaultServiceConfig()
 
 	var opts []streamer.ServiceConfigOption
@@ -293,19 +295,10 @@ func (m *Manager) createStreamerService() streamer.StreamerServer {
 
 	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
 	if err != nil {
-		slog.Error("Failed to create streamer service", "error", err)
-		panic(err)
+		return nil, fmt.Errorf("failed to create streamer service: %w", err)
 	}
 
-	return svc
-}
-
-func listenAddr(host string, port int) string {
-	if host == "" {
-		return fmt.Sprintf(":%d", port)
-	}
-
-	return net.JoinHostPort(host, strconv.Itoa(port))
+	return svc, nil
 }
 
 func (m *Manager) initTriggerServices(ctx context.Context) error {

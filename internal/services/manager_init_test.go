@@ -162,16 +162,6 @@ func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 	// API routes are now registered directly to the unified server
 }
 
-func TestListenAddr_WithHost(t *testing.T) {
-	addr := listenAddr("localhost", 8080)
-	assert.Equal(t, "localhost:8080", addr)
-}
-
-func TestListenAddr_EmptyHost(t *testing.T) {
-	addr := listenAddr("", 8080)
-	assert.Equal(t, ":8080", addr)
-}
-
 func TestManager_InitTriggerServices_NATSFailure(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
@@ -725,12 +715,14 @@ func TestManager_createStreamerService(t *testing.T) {
 		mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 		// Case 1: No Puller Service (already nil)
-		svc1 := mgr.createStreamerService()
+		svc1, err1 := mgr.createStreamerService()
+		assert.NoError(t, err1)
 		assert.NotNil(t, svc1)
 
 		// Case 2: With Puller Service
 		mgr.pullerService = &mockPullerService{}
-		svc2 := mgr.createStreamerService()
+		svc2, err2 := mgr.createStreamerService()
+		assert.NoError(t, err2)
 		assert.NotNil(t, svc2)
 		done <- true
 	}()
