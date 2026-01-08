@@ -23,7 +23,12 @@ func FlattenStorageDocument(doc *storetypes.StoredDoc) model.Document {
 	for k, v := range doc.Data {
 		out[k] = v
 	}
-	out.SetID(extractIDFromFullpath(doc.Fullpath))
+	// Prefer ID from Data, fallback to extracting from Fullpath
+	if id, ok := doc.Data["id"].(string); ok && id != "" {
+		out.SetID(id)
+	} else {
+		out.SetID(extractIDFromFullpath(doc.Fullpath))
+	}
 	out.SetCollection(doc.Collection)
 	out["version"] = doc.Version
 	out["updatedAt"] = doc.UpdatedAt

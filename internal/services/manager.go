@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"net/http"
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
@@ -27,6 +26,7 @@ const (
 type Options struct {
 	RunAPI              bool
 	RunQuery            bool
+	RunStreamer         bool
 	RunTriggerEvaluator bool
 	RunTriggerWorker    bool
 	RunPuller           bool
@@ -40,7 +40,6 @@ type Options struct {
 
 type triggerService interface {
 	Start(ctx context.Context) error
-	LoadTriggers(triggers []*trigger.Trigger) error
 }
 
 type triggerConsumer interface {
@@ -48,23 +47,24 @@ type triggerConsumer interface {
 }
 
 type Manager struct {
-	cfg             *config.Config
-	opts            Options
-	servers         []*http.Server
-	serverNames     []string
-	storageFactory  storage.StorageFactory
-	docStore        storage.DocumentStore
-	userStore       storage.UserStore
-	revocationStore storage.TokenRevocationStore
+	cfg  *config.Config
+	opts Options
+
+	storageFactory     storage.StorageFactory
+	storageFactoryOnce sync.Once
+	storageFactoryErr  error
+
 	authService     identity.AuthN
 	rtServer        *realtime.Server
-	streamerService streamer.StreamerServer
+	streamerService streamer.StreamerServer // local Streamer service (when RunStreamer=true)
+	streamerClient  streamer.Service        // remote Streamer client (for Gateway in distributed mode)
 	triggerConsumer triggerConsumer
 	triggerService  triggerService
 	natsProvider    trigger.NATSProvider
 	pullerService   puller.LocalService
 	pullerGRPC      *puller.GRPCServer
-	wg              sync.WaitGroup
+
+	wg sync.WaitGroup
 }
 
 func NewManager(cfg *config.Config, opts Options) *Manager {

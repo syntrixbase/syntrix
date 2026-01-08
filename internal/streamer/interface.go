@@ -5,8 +5,10 @@ package streamer
 import (
 	"context"
 
+	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/pkg/model"
+	"google.golang.org/grpc"
 )
 
 // Service is the Streamer service interface.
@@ -81,4 +83,27 @@ type subscriptionHandler interface {
 
 	// unsubscribe removes a subscription by ID.
 	unsubscribe(subscriptionID string) error
+}
+
+// grpcServerAdapter adapts StreamerServer to pb.StreamerServiceServer.
+// This bridges the internal Service interface with the gRPC proto interface.
+type grpcServerAdapter struct {
+	pb.UnimplementedStreamerServiceServer
+	service *streamerService
+}
+
+// Stream implements pb.StreamerServiceServer.Stream by delegating to GRPCStream.
+func (a *grpcServerAdapter) Stream(stream grpc.BidiStreamingServer[pb.GatewayMessage, pb.StreamerMessage]) error {
+	return a.service.GRPCStream(stream)
+}
+
+// NewGRPCServer creates a gRPC server for the Streamer service.
+// The server implements pb.StreamerServiceServer and wraps the StreamerServer interface.
+func NewGRPCServer(srv StreamerServer) pb.StreamerServiceServer {
+	// Type assert to get the concrete service implementation
+	svc, ok := srv.(*streamerService)
+	if !ok {
+		panic("NewGRPCServer requires a *streamerService instance")
+	}
+	return &grpcServerAdapter{service: svc}
 }

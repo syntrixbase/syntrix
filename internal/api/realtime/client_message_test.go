@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -169,7 +170,7 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 
@@ -199,7 +200,7 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 
@@ -406,7 +407,7 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, Config{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
 	}))
 	defer server.Close()
 

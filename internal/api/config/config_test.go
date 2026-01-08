@@ -9,7 +9,9 @@ import (
 func TestDefaultGatewayConfig(t *testing.T) {
 	cfg := DefaultGatewayConfig()
 
-	assert.Equal(t, "http://localhost:8080", cfg.QueryServiceURL)
+	assert.Equal(t, "localhost:50051", cfg.QueryServiceURL)
+	assert.Equal(t, "localhost:50051", cfg.PullerServiceURL)
+	assert.Equal(t, "localhost:50051", cfg.StreamerServiceURL)
 	assert.Equal(t, []string{"http://localhost:8080", "http://localhost:3000", "http://localhost:5173"}, cfg.Realtime.AllowedOrigins)
 	assert.True(t, cfg.Realtime.AllowDevOrigin)
 	assert.True(t, cfg.Realtime.EnableAuth)

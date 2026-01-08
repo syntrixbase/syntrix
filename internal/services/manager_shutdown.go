@@ -2,38 +2,42 @@ package services
 
 import (
 	"context"
-	"log"
+	"io"
+	"log/slog"
 
 	"github.com/syntrixbase/syntrix/internal/server"
 )
 
 func (m *Manager) Shutdown(ctx context.Context) {
+	// Close streamer client if using remote connection
+	if m.streamerClient != nil {
+		if closer, ok := m.streamerClient.(io.Closer); ok {
+			slog.Info("Closing Streamer gRPC client...")
+			if err := closer.Close(); err != nil {
+				slog.Error("Error closing Streamer client", "error", err)
+			}
+		}
+	}
+
 	// Close storage providers if initialized
 	if m.storageFactory != nil {
 		defer func() {
 			if err := m.storageFactory.Close(); err != nil {
-				log.Printf("Error closing storage factory: %v", err)
+				slog.Error("Error closing storage factory", "error", err)
 			}
 		}()
 	}
 
-	for i, srv := range m.servers {
-		log.Printf("Stopping %s...", m.serverNames[i])
-		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("Error shutting down %s: %v", m.serverNames[i], err)
-		}
-	}
-
 	// Stop Unified Server Service
 	if s := server.Default(); s != nil {
-		log.Println("Stopping Unified Server Service...")
+		slog.Info("Stopping Unified Server Service...")
 		if err := s.Stop(ctx); err != nil {
-			log.Printf("Error stopping Unified Server Service: %v", err)
+			slog.Error("Error stopping Unified Server Service", "error", err)
 		}
 	}
 
 	// Wait for background tasks (Trigger Watcher, Consumer)
-	log.Println("Waiting for background tasks to finish...")
+	slog.Info("Waiting for background tasks to finish...")
 	done := make(chan struct{})
 	go func() {
 		m.wg.Wait()
@@ -42,30 +46,28 @@ func (m *Manager) Shutdown(ctx context.Context) {
 
 	select {
 	case <-done:
-		log.Println("Background tasks finished.")
+		slog.Info("Background tasks finished")
 	case <-ctx.Done():
-		log.Println("Timeout waiting for background tasks.")
+		slog.Warn("Timeout waiting for background tasks")
 	}
 
 	// Close NATS provider (handles both connection and any embedded server)
 	if m.natsProvider != nil {
-		log.Println("Closing NATS provider...")
+		slog.Info("Closing NATS provider...")
 		m.natsProvider.Close()
 	}
 
-	// Stop Puller gRPC Server
+	// Shutdown Puller gRPC Service
 	if m.pullerGRPC != nil {
-		log.Println("Stopping Puller gRPC Server...")
-		if err := m.pullerGRPC.Stop(ctx); err != nil {
-			log.Printf("Error stopping Puller gRPC Server: %v", err)
-		}
+		slog.Info("Shutting down Puller gRPC Service...")
+		m.pullerGRPC.Shutdown()
 	}
 
 	// Stop Change Stream Puller
 	if m.pullerService != nil {
-		log.Println("Stopping Change Stream Puller...")
+		slog.Info("Stopping Change Stream Puller...")
 		if err := m.pullerService.Stop(ctx); err != nil {
-			log.Printf("Error stopping Change Stream Puller: %v", err)
+			slog.Error("Error stopping Change Stream Puller", "error", err)
 		}
 	}
 }

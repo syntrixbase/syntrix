@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 )
 
 func TestTokenFromQueryParam_TableDriven(t *testing.T) {
@@ -42,7 +43,7 @@ func TestServer_HandleWS_TableDriven(t *testing.T) {
 	t.Parallel()
 	mockQS := new(MockQueryService)
 	mockStreamer := new(MockStreamerService)
-	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, Config{EnableAuth: true})
+	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, api_config.RealtimeConfig{EnableAuth: true})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
@@ -89,7 +90,8 @@ func TestServer_HandleSSE_TableDriven(t *testing.T) {
 	t.Parallel()
 	mockQS := new(MockQueryService)
 	mockStreamer := new(MockStreamerService)
-	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, Config{EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
+	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, api_config.RealtimeConfig{
+		EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
 
 	// Setup Hub Stream
 	ms := new(MockStreamerStream)

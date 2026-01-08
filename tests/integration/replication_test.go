@@ -67,11 +67,39 @@ func TestReplication_FullFlow(t *testing.T) {
 	line := readLine()
 	assert.Equal(t, ": connected\n", line)
 
-	// Wait for subscription
-	time.Sleep(50 * time.Millisecond)
+	// Wait for subscription to be registered
+	time.Sleep(100 * time.Millisecond)
 
-	// 2. Push a Document
+	// 2. Setup event listener BEFORE Push (events are async and may arrive quickly)
+	done := make(chan bool)
 	docID := "doc-1"
+	go func() {
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return
+			}
+			if strings.HasPrefix(line, "data: ") {
+				dataStr := strings.TrimPrefix(line, "data: ")
+				dataStr = strings.TrimSpace(dataStr)
+
+				var msg realtime.BaseMessage
+				err = json.Unmarshal([]byte(dataStr), &msg)
+				if err == nil && msg.Type == realtime.TypeEvent {
+					var eventPayload realtime.EventPayload
+					if err := json.Unmarshal(msg.Payload, &eventPayload); err == nil {
+						// Check if it matches our document
+						if eventPayload.Delta.Document["id"] == docID {
+							done <- true
+							return
+						}
+					}
+				}
+			}
+		}
+	}()
+
+	// 3. Push a Document
 	docData := map[string]interface{}{
 		"id":      docID,
 		"msg":     "hello replication",
@@ -107,34 +135,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	conflicts := pushResult["conflicts"].([]interface{})
 	assert.Empty(t, conflicts)
 
-	// 3. Verify Realtime Event
-	done := make(chan bool)
-	go func() {
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				return
-			}
-			if strings.HasPrefix(line, "data: ") {
-				dataStr := strings.TrimPrefix(line, "data: ")
-				dataStr = strings.TrimSpace(dataStr)
-
-				var msg realtime.BaseMessage
-				err = json.Unmarshal([]byte(dataStr), &msg)
-				if err == nil && msg.Type == realtime.TypeEvent {
-					var eventPayload realtime.EventPayload
-					if err := json.Unmarshal(msg.Payload, &eventPayload); err == nil {
-						// Check if it matches our document
-						if eventPayload.Delta.Document["id"] == docID {
-							done <- true
-							return
-						}
-					}
-				}
-			}
-		}
-	}()
-
+	// 4. Wait for Realtime Event
 	select {
 	case <-done:
 		// Success
@@ -142,7 +143,7 @@ func TestReplication_FullFlow(t *testing.T) {
 		t.Fatal("Timeout waiting for SSE event")
 	}
 
-	// 4. Pull to verify storage
+	// 5. Pull to verify storage
 	pullURL := fmt.Sprintf("%s/replication/v1/pull?collection=%s&checkpoint=0", env.APIURL, collectionName)
 	pullReq, err := http.NewRequest("GET", pullURL, nil)
 	require.NoError(t, err)

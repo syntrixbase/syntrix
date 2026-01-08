@@ -13,7 +13,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 type mockSubscribeServer struct {
@@ -36,83 +35,81 @@ func (m *mockSubscribeServer) Send(evt *pullerv1.PullerEvent) error {
 	return nil
 }
 
-func TestServer_StartStop(t *testing.T) {
+func TestServer_InitShutdown(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{
-		Address:        ":0", // Random port
 		MaxConnections: 10,
 	}
 
 	source := &mockEventSource{}
 	srv := NewServer(cfg, source, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// Init server
+	srv.Init()
 
-	// Start server in goroutine
-	go func() {
-		if err := srv.Start(ctx); err != nil {
-			// t.Errorf("Start failed: %v", err)
-		}
-	}()
+	// Verify handler was set
+	if source.handler == nil {
+		t.Error("Expected handler to be set after Init")
+	}
 
-	// Wait for start
-	time.Sleep(100 * time.Millisecond)
+	// Shutdown server
+	srv.Shutdown()
+}
 
-	// Stop server
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer stopCancel()
-	srv.Stop(stopCtx)
+func TestServer_Init_AlreadyInitialized(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{}
+	srv := NewServer(cfg, &mockEventSource{}, nil)
+
+	// Init first time
+	srv.Init()
+
+	// Init second time should be idempotent
+	srv.Init()
+
+	// Should not panic or cause issues
+	srv.Shutdown()
 }
 
 func TestServer_Subscribe(t *testing.T) {
 	t.Parallel()
-	port := "8098"
 	cfg := config.GRPCConfig{
-		Address:        ":" + port,
 		MaxConnections: 10,
 	}
 
 	source := &mockEventSource{}
 	srv := NewServer(cfg, source, nil)
+	srv.Init()
+	defer srv.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
+	// Create mock stream
+	eventReceived := make(chan *pullerv1.PullerEvent, 1)
+	stream := &mockSubscribeServer{
+		ctx: ctx,
+		sendFunc: func(evt *pullerv1.PullerEvent) error {
+			eventReceived <- evt
+			return nil
+		},
+	}
+
+	// Run Subscribe in background
+	errChan := make(chan error)
 	go func() {
-		_ = srv.Start(ctx)
+		errChan <- srv.Subscribe(&pullerv1.SubscribeRequest{ConsumerId: "test-consumer"}, stream)
 	}()
 
+	// Wait for subscriber to be added
 	time.Sleep(100 * time.Millisecond)
-
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer stopCancel()
-	defer srv.Stop(stopCtx)
-
-	// Connect with client
-	conn, err := grpc.NewClient("localhost:"+port, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		t.Fatalf("Failed to connect: %v", err)
-	}
-	defer conn.Close()
-
-	client := pullerv1.NewPullerServiceClient(conn)
-
-	// Subscribe
-	stream, err := client.Subscribe(ctx, &pullerv1.SubscribeRequest{
-		ConsumerId: "test-consumer",
-	})
-	if err != nil {
-		t.Fatalf("Subscribe failed: %v", err)
-	}
 
 	// Send an event via source handler
-	time.Sleep(100 * time.Millisecond)
-
 	if source.handler != nil {
 		evt := &events.StoreChangeEvent{
 			EventID: "evt-1",
 			MgoColl: "users",
+			Backend: "backend1",
 		}
 		_ = source.handler(ctx, "backend1", evt)
 	} else {
@@ -120,50 +117,13 @@ func TestServer_Subscribe(t *testing.T) {
 	}
 
 	// Receive event
-	resp, err := stream.Recv()
-	if err != nil {
-		t.Fatalf("Recv failed: %v", err)
-	}
-
-	if resp.ChangeEvent.EventId != "evt-1" {
-		t.Errorf("Expected event ID evt-1, got %s", resp.ChangeEvent.EventId)
-	}
-}
-
-func TestServer_Start_AlreadyRunning(t *testing.T) {
-	t.Parallel()
-	cfg := config.GRPCConfig{Address: ":0"}
-	srv := NewServer(cfg, &mockEventSource{}, nil)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Start first time
-	go func() {
-		_ = srv.Start(ctx)
-	}()
-	time.Sleep(100 * time.Millisecond)
-
-	// Start second time
-	err := srv.Start(ctx)
-	if err == nil {
-		t.Error("Expected error when starting already running server")
-	}
-
-	// Cleanup
-	stopCtx, stopCancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer stopCancel()
-	srv.Stop(stopCtx)
-}
-
-func TestServer_Start_ListenError(t *testing.T) {
-	t.Parallel()
-	cfg := config.GRPCConfig{Address: "256.256.256.256:9999"} // Invalid IP
-	srv := NewServer(cfg, &mockEventSource{}, nil)
-
-	err := srv.Start(context.Background())
-	if err == nil {
-		t.Error("Expected error for invalid address")
+	select {
+	case resp := <-eventReceived:
+		if resp.ChangeEvent.EventId != "evt-1" {
+			t.Errorf("Expected event ID evt-1, got %s", resp.ChangeEvent.EventId)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("Timeout waiting for event")
 	}
 }
 
@@ -222,28 +182,8 @@ func TestServer_Subscribe_SubscriberClosed(t *testing.T) {
 
 	time.Sleep(100 * time.Millisecond)
 
-	// Close subscriber manually (simulate eviction or shutdown)
-	// Since we don't have direct access to the subscriber created inside Subscribe,
-	// we can trigger it by closing the server or context, but that hits ctx.Done().
-	// Wait, s.subs.Add(sub) adds it to the set.
-	// If we can access s.subs, we can close it.
-	// But s.subs is private.
-
-	// However, we can simulate the condition that causes sub.Done() to be closed.
-	// Subscriber.Close() closes the Done channel.
-	// Subscriber.Close() is called when it's removed from the set? No.
-
-	// Actually, looking at the code, sub.Done() is closed when sub.Close() is called.
-	// Who calls sub.Close()?
-	// Usually the SubscriberSet when stopping, or if we evict it.
-
-	// Let's try to trigger the nil event case first, it's easier.
+	// Send nil event to events channel
 	srv.eventChan <- nil
-
-	// Now trigger context cancellation to exit
-	// But we want to hit sub.Done().
-
-	// If we can't easily hit sub.Done(), let's focus on nil event and convert error.
 }
 
 func TestServer_Subscribe_NilEvent(t *testing.T) {
@@ -392,30 +332,17 @@ func TestServer_Subscribe_SubscriberClosed_Live(t *testing.T) {
 	}
 }
 
-func TestServer_Stop_ForceStop(t *testing.T) {
+func TestServer_Shutdown_NotInitialized(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{
-		Address:        ":0",
 		MaxConnections: 10,
 	}
 
 	source := &mockEventSource{}
 	srv := NewServer(cfg, source, nil)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	go func() {
-		_ = srv.Start(ctx)
-	}()
-
-	time.Sleep(100 * time.Millisecond)
-
-	// Use an already cancelled context to force Stop
-	stopCtx, stopCancel := context.WithCancel(context.Background())
-	stopCancel() // Cancel immediately to trigger force stop
-
-	srv.Stop(stopCtx)
+	// Shutdown without Init should be safe
+	srv.Shutdown()
 }
 
 func TestServer_processEvents_ChannelClosed(t *testing.T) {
@@ -712,5 +639,14 @@ func TestServer_Subscribe_HeartbeatError(t *testing.T) {
 		}
 	case <-time.After(3 * time.Second):
 		t.Fatal("Timeout waiting for Subscribe to return")
+	}
+}
+
+func TestServer_SubscriberCount(t *testing.T) {
+	t.Parallel()
+	srv := NewServer(config.GRPCConfig{}, &mockEventSource{}, nil)
+
+	if srv.SubscriberCount() != 0 {
+		t.Errorf("Expected 0 subscribers, got %d", srv.SubscriberCount())
 	}
 }

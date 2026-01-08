@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/storage"
@@ -83,7 +84,7 @@ type Client struct {
 	hub          *Hub
 	queryService query.Service
 	auth         identity.AuthN
-	cfg          Config
+	cfg          api_config.RealtimeConfig
 
 	// The websocket connection.
 	conn *websocket.Conn
@@ -400,7 +401,7 @@ func hasCredentials(r *http.Request) bool {
 	return r.Header.Get("Authorization") != ""
 }
 
-func checkAllowedOrigin(origin string, reqHost string, cfg Config, credentialed bool) error {
+func checkAllowedOrigin(origin string, reqHost string, cfg api_config.RealtimeConfig, credentialed bool) error {
 	if origin == "" {
 		if credentialed && !cfg.AllowDevOrigin {
 			return errors.New("origin required when using credentials")
@@ -440,7 +441,7 @@ func checkAllowedOrigin(origin string, reqHost string, cfg Config, credentialed 
 }
 
 // ServeReplicationStream handles websocket requests from the peer.
-func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
+func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.RealtimeConfig, w http.ResponseWriter, r *http.Request) {
 	r = r.WithContext(r.Context())
 
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -477,7 +478,7 @@ func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http
 }
 
 // ServeSSE handles Server-Sent Events requests.
-func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg Config, w http.ResponseWriter, r *http.Request) {
+func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.RealtimeConfig, w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	origin := r.Header.Get("Origin")

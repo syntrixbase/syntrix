@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,47 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
+
+// testGRPCServer wraps a gRPC server with the Puller service for testing.
+type testGRPCServer struct {
+	grpcServer   *grpc.Server
+	pullerServer *pullergrpc.Server
+	listener     net.Listener
+	port         int
+}
+
+// newTestGRPCServer creates a test gRPC server with the Puller service registered.
+func newTestGRPCServer(t *testing.T, pullerCore *core.Puller, logger *slog.Logger) *testGRPCServer {
+	port := getFreePort(t)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	require.NoError(t, err)
+
+	grpcCfg := config.GRPCConfig{
+		MaxConnections: 10,
+	}
+	pullerServer := pullergrpc.NewServer(grpcCfg, pullerCore, logger)
+
+	grpcServer := grpc.NewServer()
+	pullerv1.RegisterPullerServiceServer(grpcServer, pullerServer)
+
+	// Initialize the puller server event handler
+	pullerServer.Init()
+
+	// Start serving in background
+	go grpcServer.Serve(lis)
+
+	return &testGRPCServer{
+		grpcServer:   grpcServer,
+		pullerServer: pullerServer,
+		listener:     lis,
+		port:         port,
+	}
+}
+
+func (s *testGRPCServer) Stop() {
+	s.pullerServer.Shutdown()
+	s.grpcServer.GracefulStop()
+}
 
 func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *pullergrpc.Server, pullerv1.PullerServiceClient, func()) {
 	// Setup MongoDB connection
@@ -83,24 +125,18 @@ func setupIntegrationEnv(t *testing.T) (*mongo.Collection, *core.Puller, *puller
 	require.NoError(t, err)
 
 	// 3. Start gRPC Server
-	grpcPort := getFreePort(t)
-	grpcCfg := config.GRPCConfig{
-		Address:        fmt.Sprintf(":%d", grpcPort),
-		MaxConnections: 10,
-	}
-	grpcServer := pullergrpc.NewServer(grpcCfg, pullerCore, logger)
-	err = grpcServer.Start(context.Background())
-	require.NoError(t, err)
+	grpcTestServer := newTestGRPCServer(t, pullerCore, logger)
+	grpcServer := grpcTestServer.pullerServer
 
 	// 4. Connect gRPC Client
-	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%d", grpcPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%d", grpcTestServer.port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 
 	grpcClient := pullerv1.NewPullerServiceClient(conn)
 
 	cleanup := func() {
 		conn.Close()
-		grpcServer.Stop(context.Background())
+		grpcTestServer.Stop()
 		pullerCore.Stop(context.Background())
 		_ = client.Database(dbName).Drop(context.Background())
 		_ = client.Disconnect(context.Background())
@@ -164,7 +200,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	coll := mongoClient.Database(dbName).Collection(collName)
 
 	// Helper to start puller
-	startPuller := func() (*core.Puller, *pullergrpc.Server, pullerv1.PullerServiceClient, *grpc.ClientConn) {
+	startPuller := func() (*core.Puller, *testGRPCServer, pullerv1.PullerServiceClient, *grpc.ClientConn) {
 		cfg := config.Config{
 			Buffer: config.BufferConfig{
 				Path:          bufferPath,
@@ -193,20 +229,13 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 		err = p.Start(ctx)
 		require.NoError(t, err)
 
-		grpcPort := getFreePort(t)
-		grpcCfg := config.GRPCConfig{
-			Address:        fmt.Sprintf(":%d", grpcPort),
-			MaxConnections: 10,
-		}
-		s := pullergrpc.NewServer(grpcCfg, p, logger)
-		err = s.Start(ctx)
-		require.NoError(t, err)
+		grpcTestServer := newTestGRPCServer(t, p, logger)
 
-		conn, err := grpc.NewClient(fmt.Sprintf("localhost:%d", grpcPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
+		conn, err := grpc.NewClient(fmt.Sprintf("localhost:%d", grpcTestServer.port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		require.NoError(t, err)
 		c := pullerv1.NewPullerServiceClient(conn)
 
-		return p, s, c, conn
+		return p, grpcTestServer, c, conn
 	}
 
 	// 1. Start Puller
@@ -237,7 +266,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	// The checkpoint saves the last written event's resume token, so on restart,
 	// the change stream will resume from that point and recover any missing events.
 	conn1.Close()
-	s1.Stop(ctx)
+	s1.Stop()
 	p1.Stop(ctx)
 
 	// 4. Restart Puller
@@ -246,7 +275,7 @@ func TestPuller_FullCycle_Resilience(t *testing.T) {
 	p2, s2, c2, conn2 := startPuller()
 	defer func() {
 		conn2.Close()
-		s2.Stop(ctx)
+		s2.Stop()
 		p2.Stop(ctx)
 	}()
 

@@ -12,4 +12,5 @@ Index of task planning documents for Syntrix.
 - [x] [025.2026-01-03-coverage-improvement.md](025.2026-01-03-coverage-improvement.md) - Coverage Improvement Report
 - [x] [026.2026-01-04-api-server-integration.md](026.2026-01-04-api-server-integration.md) - API Server Integration into Unified Server Layer. Status: Completed.
 - [027.2026-01-05-streamer-service-implementation.md](027.2026-01-05-streamer-service-implementation.md) — Streamer Service Implementation (Replace CSP). Status: Planned. Depends on: Puller.
-- [032.2026-01-08-query-grpc-migration.md](032.2026-01-08-query-grpc-migration.md) — Query Service gRPC Migration. Status: Pending.
+- [x] [032.2026-01-08-query-grpc-migration.md](032.2026-01-08-query-grpc-migration.md) — Query Service gRPC Migration. Status: Completed.
+- [033.2026-01-08-unified-grpc-server.md](033.2026-01-08-unified-grpc-server.md) — Unified gRPC Server Migration (Puller & Streamer). Status: Pending.

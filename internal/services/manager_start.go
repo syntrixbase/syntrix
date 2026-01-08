@@ -2,42 +2,30 @@ package services
 
 import (
 	"context"
-	"log"
-	"net/http"
+	"log/slog"
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/server"
 )
 
 func (m *Manager) Start(bgCtx context.Context) {
-	for i, srv := range m.servers {
-		m.wg.Add(1)
-		go func(s *http.Server, name string) {
-			defer m.wg.Done()
-			log.Printf("%s listening on %s", name, s.Addr)
-			if err := s.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Printf("%s error: %v", name, err)
-			}
-		}(srv, m.serverNames[i])
-	}
-
 	// Start Unified Server Service
 	if s := server.Default(); s != nil {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
-			log.Println("Starting Unified Server Service...")
+			slog.Info("Starting Unified Server Service...")
 			if err := s.Start(bgCtx); err != nil {
-				log.Printf("Unified Server Service error: %v", err)
+				slog.Error("Unified Server Service error", "error", err)
 			}
 		}()
 	}
 
-	// Start Streamer Service
+	// Start Streamer Service (only for local service, not when using gRPC client)
 	if m.streamerService != nil {
 		go func() {
 			if err := m.streamerService.Start(bgCtx); err != nil {
-				log.Printf("Failed to start Streamer Service: %v", err)
+				slog.Error("Failed to start Streamer Service", "error", err)
 			}
 		}()
 	}
@@ -60,7 +48,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 				if err := m.rtServer.StartBackgroundTasks(bgCtx); err != nil {
 					// Log every 10th attempt to reduce noise
 					if (i+1)%10 == 0 {
-						log.Printf("Attempt %d/%d: Failed to start realtime background tasks: %v", i+1, maxRetries, err)
+						slog.Warn("Failed to start realtime background tasks", "attempt", i+1, "max_attempts", maxRetries, "error", err)
 					}
 
 					// Wait with context check
@@ -71,10 +59,10 @@ func (m *Manager) Start(bgCtx context.Context) {
 						continue
 					}
 				}
-				log.Println("Realtime background tasks started successfully")
+				slog.Info("Realtime background tasks started successfully")
 				return
 			}
-			log.Println("CRITICAL: Failed to start realtime background tasks after multiple attempts")
+			slog.Error("Failed to start realtime background tasks after multiple attempts")
 		}()
 	}
 
@@ -84,7 +72,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 		go func() {
 			defer m.wg.Done()
 			if err := m.triggerService.Start(bgCtx); err != nil {
-				log.Printf("Failed to start trigger watcher: %v", err)
+				slog.Error("Failed to start trigger watcher", "error", err)
 			}
 		}()
 	}
@@ -94,26 +82,24 @@ func (m *Manager) Start(bgCtx context.Context) {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
-			log.Println("Starting Trigger Consumer...")
+			slog.Info("Starting Trigger Consumer...")
 			if err := m.triggerConsumer.Start(bgCtx); err != nil {
-				log.Printf("Trigger Consumer stopped with error: %v", err)
+				slog.Error("Trigger Consumer stopped with error", "error", err)
 			}
 		}()
 	}
 
 	// Start Change Stream Puller
 	if m.opts.RunPuller {
-		log.Println("Starting Change Stream Puller...")
+		slog.Info("Starting Change Stream Puller...")
 		if err := m.pullerService.Start(bgCtx); err != nil {
-			log.Printf("Failed to start Change Stream Puller: %v", err)
+			slog.Error("Failed to start Change Stream Puller", "error", err)
 		}
 
-		// Start gRPC Server if configured
+		// Initialize gRPC Server event handler (server is registered with unified server)
 		if m.pullerGRPC != nil {
-			log.Println("Starting Puller gRPC Server...")
-			if err := m.pullerGRPC.Start(bgCtx); err != nil {
-				log.Printf("Failed to start Puller gRPC Server: %v", err)
-			}
+			slog.Info("Initializing Puller gRPC Service...")
+			m.pullerGRPC.Init()
 		}
 	}
 }

@@ -160,9 +160,9 @@ func TestManager_Init_RouterWiring(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Verify Stores are initialized and wired correctly
-	assert.NotNil(t, mgr.docStore)
-	assert.NotNil(t, mgr.userStore)
-	assert.NotNil(t, mgr.revocationStore)
+	assert.NotNil(t, mgr.storageFactory.Document())
+	assert.NotNil(t, mgr.storageFactory.User())
+	assert.NotNil(t, mgr.storageFactory.Revocation())
 
 	// Verify Stores route to the mocked stores
 	// Since we use RoutedStore, we can't directly compare equality of the store object itself easily
@@ -171,6 +171,6 @@ func TestManager_Init_RouterWiring(t *testing.T) {
 	// To be more rigorous, we could call a method and see if it hits the mock.
 
 	mockDocStore.On("Get", mock.Anything, "default", "test").Return(&types.StoredDoc{}, nil)
-	_, _ = mgr.docStore.Get(context.Background(), "default", "test")
+	_, _ = mgr.storageFactory.Document().Get(context.Background(), "default", "test")
 	mockDocStore.AssertCalled(t, "Get", mock.Anything, "default", "test")
 }

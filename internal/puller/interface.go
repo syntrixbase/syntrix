@@ -40,6 +40,7 @@ import (
 	"context"
 	"log/slog"
 
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/client"
@@ -140,8 +141,17 @@ func StartHealthServer(ctx context.Context, addr string, checker *HealthChecker)
 	return health.StartServer(ctx, addr, checker)
 }
 
-// NewGRPCServer creates a new gRPC server for the puller service.
-func NewGRPCServer(cfg config.GRPCConfig, svc LocalService, logger *slog.Logger) *GRPCServer {
+// NewGRPCServer creates a gRPC server for the Puller service.
+// The server implements pullerv1.PullerServiceServer and wraps the LocalService interface.
+// Call Init() on the returned server after registering it with the unified gRPC server.
+func NewGRPCServer(cfg config.GRPCConfig, svc LocalService, logger *slog.Logger) pullerv1.PullerServiceServer {
+	return pullergrpc.NewServer(cfg, svc, logger)
+}
+
+// NewGRPCServerWithInit creates a gRPC server and returns the concrete type
+// for access to Init() and Shutdown() methods.
+// Use this when you need to manage the server lifecycle.
+func NewGRPCServerWithInit(cfg config.GRPCConfig, svc LocalService, logger *slog.Logger) *GRPCServer {
 	return pullergrpc.NewServer(cfg, svc, logger)
 }
 

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
@@ -27,35 +28,6 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 	"google.golang.org/grpc"
 )
-
-func TestManager_Start_Shutdown_WithServer(t *testing.T) {
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{})
-
-	calls := atomic.Int32{}
-	addr := freeAddr()
-	server := &http.Server{Addr: addr, Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		calls.Add(1)
-		w.WriteHeader(http.StatusNoContent)
-	})}
-	mgr.servers = append(mgr.servers, server)
-	mgr.serverNames = append(mgr.serverNames, "test-server")
-
-	bgCtx, bgCancel := context.WithCancel(context.Background())
-	defer bgCancel()
-
-	mgr.Start(bgCtx)
-	assert.NoError(t, waitForServer(addr, 500*time.Millisecond))
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), time.Second)
-	defer shutdownCancel()
-
-	mgr.Shutdown(shutdownCtx)
-
-	err := waitForServer(addr, 200*time.Millisecond)
-	assert.Error(t, err)
-	assert.GreaterOrEqual(t, calls.Load(), int32(1))
-}
 
 type MockQueryService struct {
 	mock.Mock
@@ -180,7 +152,7 @@ func TestManager_Start_PullerAndGRPC(t *testing.T) {
 
 	pullerSvc := &stubPullerService{}
 	mgr.pullerService = pullerSvc
-	mgr.pullerGRPC = puller.NewGRPCServer(puller_config.GRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
+	mgr.pullerGRPC = puller.NewGRPCServerWithInit(puller_config.GRPCConfig{MaxConnections: 10}, pullerSvc, nil)
 
 	bgCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -319,7 +291,7 @@ func TestManager_Start_AllServices(t *testing.T) {
 	// 3. Mock Realtime Server
 	mockQuery := new(MockQueryService)
 	mockAuth := new(MockAuthService)
-	rtCfg := realtime.Config{EnableAuth: false}
+	rtCfg := api_config.RealtimeConfig{EnableAuth: false}
 	// We need to pass the real realtime.Server to manager
 	rtSrv := realtime.NewServer(mockQuery, mockStreamer, "data", mockAuth, rtCfg)
 	mgr.rtServer = rtSrv
@@ -496,7 +468,7 @@ func TestManager_Start_RealtimeRetry(t *testing.T) {
 
 	mockQuery := new(MockQueryService)
 	mockAuth := new(MockAuthService)
-	rtCfg := realtime.Config{EnableAuth: false}
+	rtCfg := api_config.RealtimeConfig{EnableAuth: false}
 	rtSrv := realtime.NewServer(mockQuery, mockStreamer, "data", mockAuth, rtCfg)
 	mgr.rtServer = rtSrv
 

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"net/http"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -89,24 +89,6 @@ func TestManager_Shutdown_StorageError(t *testing.T) {
 	mockFactory.AssertExpectations(t)
 }
 
-func TestManager_Shutdown_ServerShutdownError(t *testing.T) {
-	// Create a manager with a server
-	mgr := &Manager{
-		serverNames: []string{"test-server"},
-	}
-
-	// Create a server
-	srv := &http.Server{Addr: ":0"}
-	mgr.servers = []*http.Server{srv}
-
-	// Shutdown with cancelled context to trigger error (hopefully)
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-
-	// Should not panic
-	mgr.Shutdown(ctx)
-}
-
 func TestManager_Shutdown_Timeout(t *testing.T) {
 	mgr := &Manager{}
 	mgr.wg.Add(1) // Simulate a running task that never finishes
@@ -136,10 +118,51 @@ func TestManager_Shutdown_PullerAndNATS(t *testing.T) {
 	pullerSvc := &stubPullerService{}
 	mgr.natsProvider = np
 	mgr.pullerService = pullerSvc
-	mgr.pullerGRPC = puller.NewGRPCServer(puller_config.GRPCConfig{Address: "127.0.0.1:0"}, pullerSvc, nil)
+	mgr.pullerGRPC = puller.NewGRPCServerWithInit(puller_config.GRPCConfig{MaxConnections: 10}, pullerSvc, nil)
 
 	mgr.Shutdown(context.Background())
 
 	assert.True(t, np.closed)
 	assert.Equal(t, int32(1), pullerSvc.stopCount.Load())
+}
+
+// mockStreamerClient implements streamer.Service and io.Closer
+type mockStreamerClient struct {
+	closed    bool
+	closeErr  error
+	streamErr error
+}
+
+func (m *mockStreamerClient) Stream(ctx context.Context) (streamer.Stream, error) {
+	return nil, m.streamErr
+}
+
+func (m *mockStreamerClient) Close() error {
+	m.closed = true
+	return m.closeErr
+}
+
+func TestManager_Shutdown_StreamerClient(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	mockClient := &mockStreamerClient{}
+	mgr.streamerClient = mockClient
+
+	mgr.Shutdown(context.Background())
+
+	assert.True(t, mockClient.closed)
+}
+
+func TestManager_Shutdown_StreamerClientError(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	mockClient := &mockStreamerClient{closeErr: errors.New("close error")}
+	mgr.streamerClient = mockClient
+
+	// Should not panic, just log the error
+	mgr.Shutdown(context.Background())
+
+	assert.True(t, mockClient.closed)
 }

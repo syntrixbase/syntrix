@@ -45,7 +45,6 @@ func (m *mockIterator) Close() error                    { return nil }
 func TestNewServer(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{
-		Address:        ":50051",
 		MaxConnections: 100,
 	}
 
@@ -71,7 +70,7 @@ func TestNewServer(t *testing.T) {
 	}
 }
 
-func TestServer_SubscriberCount(t *testing.T) {
+func TestServer_SubscriberCount_WithAdd(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
@@ -182,27 +181,24 @@ func TestServer_ConvertEvent(t *testing.T) {
 	}
 }
 
-func TestServer_Stop_NotRunning(t *testing.T) {
+func TestServer_Shutdown_NotInitialized_Noop(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
-	ctx := context.Background()
-	err := server.Stop(ctx)
-	if err != nil {
-		t.Errorf("Stop() error = %v, want nil", err)
-	}
+	// Shutdown before Init should be safe (noop)
+	server.Shutdown()
 }
 
-func TestServer_Stop_Running(t *testing.T) {
+func TestServer_Shutdown_Initialized(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{}
 	source := &mockEventSource{}
 	server := NewServer(cfg, source, nil)
 
-	// Simulate running state
-	server.running = true
+	// Init the server
+	server.Init()
 
 	// Add some subscribers
 	sub1 := core.NewSubscriber("consumer-1", nil, false, 100)
@@ -210,43 +206,12 @@ func TestServer_Stop_Running(t *testing.T) {
 	server.subs.Add(sub1)
 	server.subs.Add(sub2)
 
-	ctx := context.Background()
-	err := server.Stop(ctx)
-	if err != nil {
-		t.Errorf("Stop() error = %v, want nil", err)
-	}
-
-	// Verify running is now false
-	if server.running {
-		t.Error("running should be false after Stop()")
-	}
+	// Shutdown
+	server.Shutdown()
 
 	// Verify subscribers were closed
 	if server.subs.Count() != 0 {
 		t.Errorf("subscriber count = %d, want 0", server.subs.Count())
-	}
-}
-
-func TestServer_Stop_WithTimeout(t *testing.T) {
-	t.Parallel()
-	cfg := config.GRPCConfig{}
-	source := &mockEventSource{}
-	server := NewServer(cfg, source, nil)
-
-	// Simulate running state but no grpc server (nil)
-	server.running = true
-	server.grpcServer = nil
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-
-	err := server.Stop(ctx)
-	if err != nil {
-		t.Errorf("Stop() error = %v, want nil", err)
-	}
-
-	if server.running {
-		t.Error("running should be false after Stop()")
 	}
 }
 

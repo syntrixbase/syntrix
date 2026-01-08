@@ -7,6 +7,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/internal/evaluator"
 	"github.com/syntrixbase/syntrix/internal/trigger/internal/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/internal/watcher"
@@ -19,6 +20,7 @@ var (
 	newTaskConsumer  = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
 		return pubsub.NewTaskConsumer(nc, w, streamName, numWorkers, metrics, opts...)
 	}
+	loadTriggersFromFile = trigger.LoadTriggersFromFile
 )
 
 // FactoryOption configures the factory.
@@ -68,6 +70,13 @@ func WithStreamName(name string) FactoryOption {
 	}
 }
 
+// WithRulesFile sets the trigger rules file path for the factory.
+func WithRulesFile(path string) FactoryOption {
+	return func(f *defaultTriggerFactory) {
+		f.rulesFile = path
+	}
+}
+
 // defaultTriggerFactory implements TriggerFactory.
 type defaultTriggerFactory struct {
 	store        storage.DocumentStore
@@ -79,6 +88,7 @@ type defaultTriggerFactory struct {
 	metrics      types.Metrics
 	secrets      worker.SecretProvider
 	streamName   string
+	rulesFile    string
 }
 
 // NewFactory creates a new TriggerFactory.
@@ -121,11 +131,24 @@ func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
 		pub = p
 	}
 
-	return &defaultTriggerEngine{
+	engine := &defaultTriggerEngine{
 		evaluator: eval,
 		watcher:   w,
 		publisher: pub,
-	}, nil
+	}
+
+	// Load trigger rules from file if configured
+	if f.rulesFile != "" {
+		triggers, err := loadTriggersFromFile(f.rulesFile)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load trigger rules from %s: %w", f.rulesFile, err)
+		}
+		if err := engine.LoadTriggers(triggers); err != nil {
+			return nil, fmt.Errorf("failed to load triggers: %w", err)
+		}
+	}
+
+	return engine, nil
 }
 
 // Consumer returns a new TaskConsumer.

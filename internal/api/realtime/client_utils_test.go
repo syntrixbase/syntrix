@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
@@ -80,34 +81,34 @@ func TestHasCredentials(t *testing.T) {
 
 func TestCheckAllowedOrigin(t *testing.T) {
 	// Case 1: Empty origin, no credentials -> Allowed
-	assert.NoError(t, checkAllowedOrigin("", "host", Config{}, false))
+	assert.NoError(t, checkAllowedOrigin("", "host", api_config.RealtimeConfig{}, false))
 
 	// Case 2: Empty origin, credentials, dev allowed -> Allowed
-	assert.NoError(t, checkAllowedOrigin("", "host", Config{AllowDevOrigin: true}, true))
+	assert.NoError(t, checkAllowedOrigin("", "host", api_config.RealtimeConfig{AllowDevOrigin: true}, true))
 
 	// Case 3: Empty origin, credentials, dev not allowed -> Error
-	assert.Error(t, checkAllowedOrigin("", "host", Config{AllowDevOrigin: false}, true))
+	assert.Error(t, checkAllowedOrigin("", "host", api_config.RealtimeConfig{AllowDevOrigin: false}, true))
 
 	// Case 4: Invalid URL -> Error
-	assert.Error(t, checkAllowedOrigin(":", "host", Config{}, false))
+	assert.Error(t, checkAllowedOrigin(":", "host", api_config.RealtimeConfig{}, false))
 
 	// Case 5: Same host -> Allowed
-	assert.NoError(t, checkAllowedOrigin("http://host:8080", "host:8080", Config{}, false))
+	assert.NoError(t, checkAllowedOrigin("http://host:8080", "host:8080", api_config.RealtimeConfig{}, false))
 
 	// Case 6: Dev origin (localhost) allowed
-	assert.NoError(t, checkAllowedOrigin("http://localhost:3000", "host", Config{AllowDevOrigin: true}, false))
+	assert.NoError(t, checkAllowedOrigin("http://localhost:3000", "host", api_config.RealtimeConfig{AllowDevOrigin: true}, false))
 
 	// Case 7: Dev origin (127.0.0.1) allowed
-	assert.NoError(t, checkAllowedOrigin("http://127.0.0.1:3000", "host", Config{AllowDevOrigin: true}, false))
+	assert.NoError(t, checkAllowedOrigin("http://127.0.0.1:3000", "host", api_config.RealtimeConfig{AllowDevOrigin: true}, false))
 
 	// Case 8: Dev origin not allowed
-	assert.Error(t, checkAllowedOrigin("http://localhost:3000", "host", Config{AllowDevOrigin: false}, false))
+	assert.Error(t, checkAllowedOrigin("http://localhost:3000", "host", api_config.RealtimeConfig{AllowDevOrigin: false}, false))
 
 	// Case 9: Allowed origins list match
-	assert.NoError(t, checkAllowedOrigin("http://example.com", "host", Config{AllowedOrigins: []string{"http://example.com"}}, false))
+	assert.NoError(t, checkAllowedOrigin("http://example.com", "host", api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}, false))
 
 	// Case 10: Allowed origins list mismatch
-	assert.Error(t, checkAllowedOrigin("http://other.com", "host", Config{AllowedOrigins: []string{"http://example.com"}}, false))
+	assert.Error(t, checkAllowedOrigin("http://other.com", "host", api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}, false))
 }
 
 func TestTenantFromContext(t *testing.T) {

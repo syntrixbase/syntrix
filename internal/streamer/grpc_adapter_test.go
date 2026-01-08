@@ -645,3 +645,65 @@ func TestGRPCAdapter_Subscribe_ManagerError(t *testing.T) {
 	assert.False(t, resp2.Success)
 	assert.NotEmpty(t, resp2.Error)
 }
+
+// --- NewGRPCServer and grpcServerAdapter Tests ---
+
+func TestNewGRPCServer(t *testing.T) {
+	t.Parallel()
+	s, err := NewService(ServiceConfig{}, slog.Default())
+	require.NoError(t, err)
+
+	grpcServer := NewGRPCServer(s)
+	assert.NotNil(t, grpcServer)
+}
+
+func TestNewGRPCServer_PanicOnNonStreamerService(t *testing.T) {
+	t.Parallel()
+	// Create a mock that implements StreamerServer but is not *streamerService
+	mockServer := &mockStreamerServer{}
+
+	assert.Panics(t, func() {
+		NewGRPCServer(mockServer)
+	})
+}
+
+// mockStreamerServer is a mock StreamerServer for testing NewGRPCServer panic.
+type mockStreamerServer struct{}
+
+func (m *mockStreamerServer) Stream(ctx context.Context) (Stream, error) {
+	return nil, nil
+}
+
+func (m *mockStreamerServer) Start(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockStreamerServer) Stop(ctx context.Context) error {
+	return nil
+}
+
+func TestGRPCServerAdapter_Stream(t *testing.T) {
+	t.Parallel()
+	s, err := NewService(ServiceConfig{}, slog.Default())
+	require.NoError(t, err)
+
+	grpcServer := NewGRPCServer(s)
+	require.NotNil(t, grpcServer)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockStream := &mockBidiStream{ctx: ctx}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- grpcServer.Stream(mockStream)
+	}()
+
+	// Cancel to stop the stream
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+
+	err = <-done
+	assert.ErrorIs(t, err, context.Canceled)
+}
