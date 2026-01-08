@@ -2,11 +2,11 @@ package query
 
 import (
 	"context"
-	"net/http"
 
+	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	"github.com/syntrixbase/syntrix/internal/query/internal/client"
 	"github.com/syntrixbase/syntrix/internal/query/internal/core"
-	"github.com/syntrixbase/syntrix/internal/query/internal/httphandler"
+	"github.com/syntrixbase/syntrix/internal/query/internal/grpc"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
@@ -29,16 +29,16 @@ func NewService(store storage.DocumentStore) Service {
 	return core.New(store)
 }
 
-// NewClient creates a new remote Query Service client (HTTP client).
+// NewClient creates a new remote Query Service client (gRPC client).
 // Use this when the query service is running remotely.
-func NewClient(baseURL string) Service {
-	return client.New(baseURL)
+func NewClient(address string) (Service, error) {
+	return client.New(address)
 }
 
-// NewHTTPHandler creates an HTTP handler for the Query Service.
-// The handler exposes the Service interface over HTTP.
-func NewHTTPHandler(s Service) http.Handler {
-	return httphandler.New(s)
+// NewGRPCServer creates a gRPC server for the Query Service.
+// The server implements pb.QueryServiceServer and wraps the Service interface.
+func NewGRPCServer(s Service) pb.QueryServiceServer {
+	return grpc.NewServer(s)
 }
 
 // ============================================================================

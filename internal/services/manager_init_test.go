@@ -230,6 +230,9 @@ func TestManager_Init_RunQueryPath(t *testing.T) {
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
 
+	// Initialize a fresh server instance
+	server.InitDefault(server.DefaultConfig(), nil)
+
 	fakeDocStore := &fakeDocumentStore{}
 	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 		return &fakeStorageFactory{
@@ -238,14 +241,14 @@ func TestManager_Init_RunQueryPath(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Query.Port = 0
+	cfg.Server.GRPCPort = 0
 	mgr := NewManager(cfg, Options{RunQuery: true})
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.docStore)
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Query Service", mgr.serverNames[0])
+	// Query service now uses unified gRPC server, not separate HTTP server
+	// So mgr.servers is empty - the service is registered on server.Default()
 }
 
 func TestManager_Init_RunRealtimePath(t *testing.T) {
@@ -525,7 +528,6 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
-	cfg.Query.Port = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
@@ -549,16 +551,18 @@ func TestManager_createQueryService(t *testing.T) {
 	assert.NotNil(t, service)
 }
 
-func TestManager_initQueryHTTPServer(t *testing.T) {
+func TestManager_initQueryGRPCServer(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Query.Port = 0
+	cfg.Server.GRPCPort = 0
 	mgr := NewManager(cfg, Options{})
 
-	mockService := &stubQueryService{}
-	mgr.initQueryHTTPServer(mockService)
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
 
-	assert.Len(t, mgr.servers, 1)
-	assert.Equal(t, "Query Service", mgr.serverNames[0])
+	mockService := &stubQueryService{}
+	mgr.initQueryGRPCServer(mockService)
+	// gRPC server registration doesn't add to m.servers, it uses the unified server
+	// Just verify it doesn't panic
 }
 
 func TestManager_initStandalone_APIServerError(t *testing.T) {

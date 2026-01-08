@@ -147,15 +147,15 @@ match:
 	if err != nil {
 		return nil, fmt.Errorf("failed to get API port: %w", err)
 	}
-	queryPort, err := getAvailablePort()
+	grpcPort, err := getAvailablePort()
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Query port: %w", err)
+		return nil, fmt.Errorf("failed to get gRPC port: %w", err)
 	}
 
 	// Initialize the unified server
 	server.InitDefault(server.Config{
 		HTTPPort: apiPort,
-		GRPCPort: 0, // Not used in tests
+		GRPCPort: grpcPort, // Query service uses gRPC now
 	}, nil)
 
 	// Check if NATS is available
@@ -173,12 +173,10 @@ match:
 	cfg := &config.Config{
 		Server: server.Config{
 			HTTPPort: apiPort,
+			GRPCPort: grpcPort,
 		},
 		Gateway: api_config.GatewayConfig{
-			QueryServiceURL: fmt.Sprintf("http://localhost:%d", queryPort),
-		},
-		Query: config.QueryConfig{
-			Port: queryPort,
+			QueryServiceURL: fmt.Sprintf("localhost:%d", grpcPort),
 		},
 		Storage: config.StorageConfig{
 			Backends: map[string]config.BackendConfig{
@@ -264,17 +262,14 @@ match:
 		mgrCancel()
 		return nil, fmt.Errorf("API server failed to start: %w", err)
 	}
-	if err := waitForHealthWithTimeout(fmt.Sprintf("http://localhost:%d/health", queryPort), 30*time.Second); err != nil {
-		mgrCancel()
-		return nil, fmt.Errorf("Query server failed to start: %w", err)
-	}
+	// Query service now uses unified gRPC server, no separate health check needed
 
-	log.Printf("[Integration Test] Global environment started - API: %d, Query: %d, DB: %s",
-		apiPort, queryPort, dbName)
+	log.Printf("[Integration Test] Global environment started - API: %d, gRPC: %d, DB: %s",
+		apiPort, grpcPort, dbName)
 
 	return &GlobalTestEnv{
 		APIURL:    fmt.Sprintf("http://localhost:%d", apiPort),
-		QueryURL:  fmt.Sprintf("http://localhost:%d", queryPort),
+		QueryURL:  fmt.Sprintf("localhost:%d", grpcPort),
 		Manager:   manager,
 		MongoURI:  mongoURI,
 		DBName:    dbName,

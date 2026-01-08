@@ -1,214 +1,217 @@
 package client
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"net/http"
 
+	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 )
 
-// Client is a remote client for the Query Service.
+// Client is a gRPC client for the Query Service.
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	conn   *grpc.ClientConn
+	client pb.QueryServiceClient
 }
 
-// New creates a new Query Service Client.
-func New(baseURL string) *Client {
+// newClientFunc is the function used to create a gRPC client connection.
+// This is a package-level variable to allow testing.
+var newClientFunc = grpc.NewClient
+
+// New creates a new Query Service gRPC Client.
+func New(address string) (*Client, error) {
+	return NewWithOptions(address)
+}
+
+// NewWithOptions creates a new Query Service gRPC Client with additional options.
+func NewWithOptions(address string, opts ...grpc.DialOption) (*Client, error) {
+	defaultOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	allOpts := append(defaultOpts, opts...)
+
+	conn, err := newClientFunc(address, allOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to query service: %w", err)
+	}
+
 	return &Client{
-		baseURL:    baseURL,
-		httpClient: &http.Client{},
-	}
+		conn:   conn,
+		client: pb.NewQueryServiceClient(conn),
+	}, nil
 }
 
-func (c *Client) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
-	reqBody := map[string]string{"path": path, "tenant": tenant}
-	resp, err := c.post(ctx, "/internal/v1/document/get", reqBody)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, model.ErrNotFound
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var doc model.Document
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		return nil, err
-	}
-	return doc, nil
-}
-
-func (c *Client) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
-	reqBody := map[string]interface{}{
-		"data":   doc,
-		"tenant": tenant,
-	}
-	resp, err := c.post(ctx, "/internal/v1/document/create", reqBody)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+// Close closes the gRPC connection.
+func (c *Client) Close() error {
+	if c.conn != nil {
+		return c.conn.Close()
 	}
 	return nil
 }
 
-func (c *Client) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	reqBody := map[string]interface{}{
-		"data":   data,
-		"pred":   pred,
-		"tenant": tenant,
-	}
-	resp, err := c.post(ctx, "/internal/v1/document/replace", reqBody)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-	}
-
-	var doc model.Document
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		return nil, err
-	}
-	return doc, nil
-}
-
-func (c *Client) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	resp, err := c.post(ctx, "/internal/v1/document/patch", map[string]interface{}{
-		"data":   data,
-		"pred":   pred,
-		"tenant": tenant,
+// GetDocument retrieves a document by path.
+func (c *Client) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+	resp, err := c.client.GetDocument(ctx, &pb.GetDocumentRequest{
+		Tenant: tenant,
+		Path:   path,
 	})
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return nil, model.ErrNotFound
-	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, statusToError(err)
 	}
 
-	var doc model.Document
-	if err := json.NewDecoder(resp.Body).Decode(&doc); err != nil {
-		return nil, err
-	}
-	return doc, nil
+	return protoToModelDoc(resp.Document), nil
 }
 
-func (c *Client) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
-	reqBody := map[string]interface{}{"path": path, "pred": pred, "tenant": tenant}
-	resp, err := c.post(ctx, "/internal/v1/document/delete", reqBody)
+// CreateDocument creates a new document.
+func (c *Client) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+	_, err := c.client.CreateDocument(ctx, &pb.CreateDocumentRequest{
+		Tenant:   tenant,
+		Document: modelDocToProto(doc),
+	})
 	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusNotFound {
-		return model.ErrNotFound
-	}
-	if resp.StatusCode == http.StatusPreconditionFailed {
-		return model.ErrPreconditionFailed
-	}
-	if resp.StatusCode != http.StatusNoContent {
-		return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return statusToError(err)
 	}
 	return nil
 }
 
-func (c *Client) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
-	reqBody := map[string]interface{}{
-		"query":  q,
-		"tenant": tenant,
-	}
-	resp, err := c.post(ctx, "/internal/v1/query/execute", reqBody)
+// ReplaceDocument replaces a document with optional filters.
+func (c *Client) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	resp, err := c.client.ReplaceDocument(ctx, &pb.ReplaceDocumentRequest{
+		Tenant:   tenant,
+		Document: modelDocToProto(data),
+		Filters:  filtersToProto(pred),
+	})
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, statusToError(err)
 	}
 
-	var docs []model.Document
-	if err := json.NewDecoder(resp.Body).Decode(&docs); err != nil {
-		return nil, err
+	return protoToModelDoc(resp.Document), nil
+}
+
+// PatchDocument partially updates a document with optional filters.
+func (c *Client) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+	resp, err := c.client.PatchDocument(ctx, &pb.PatchDocumentRequest{
+		Tenant:   tenant,
+		Document: modelDocToProto(data),
+		Filters:  filtersToProto(pred),
+	})
+	if err != nil {
+		return nil, statusToError(err)
+	}
+
+	return protoToModelDoc(resp.Document), nil
+}
+
+// DeleteDocument removes a document by path with optional filters.
+func (c *Client) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+	_, err := c.client.DeleteDocument(ctx, &pb.DeleteDocumentRequest{
+		Tenant:  tenant,
+		Path:    path,
+		Filters: filtersToProto(pred),
+	})
+	if err != nil {
+		return statusToError(err)
+	}
+	return nil
+}
+
+// ExecuteQuery executes a query and returns matching documents.
+func (c *Client) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+	resp, err := c.client.ExecuteQuery(ctx, &pb.ExecuteQueryRequest{
+		Tenant: tenant,
+		Query:  queryToProto(q),
+	})
+	if err != nil {
+		return nil, statusToError(err)
+	}
+
+	docs := make([]model.Document, 0, len(resp.Documents))
+	for _, d := range resp.Documents {
+		docs = append(docs, protoToModelDoc(d))
 	}
 	return docs, nil
 }
 
+// Pull retrieves documents for replication.
 func (c *Client) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
-	reqBody := map[string]interface{}{
-		"request": req,
-		"tenant":  tenant,
-	}
-	resp, err := c.post(ctx, "/internal/replication/v1/pull", reqBody)
+	resp, err := c.client.Pull(ctx, &pb.PullRequest{
+		Tenant:     tenant,
+		Collection: req.Collection,
+		Checkpoint: req.Checkpoint,
+		Limit:      int32(req.Limit),
+	})
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, statusToError(err)
 	}
 
-	var result storage.ReplicationPullResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	docs := make([]*storage.StoredDoc, 0, len(resp.Documents))
+	for _, d := range resp.Documents {
+		docs = append(docs, protoToStoredDoc(d))
 	}
-	return &result, nil
+
+	return &storage.ReplicationPullResponse{
+		Documents:  docs,
+		Checkpoint: resp.Checkpoint,
+	}, nil
 }
 
+// Push sends documents for replication.
 func (c *Client) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	reqBody := map[string]interface{}{
-		"request": req,
-		"tenant":  tenant,
+	changes := make([]*pb.PushChange, 0, len(req.Changes))
+	for _, change := range req.Changes {
+		changes = append(changes, pushChangeToProto(change))
 	}
-	resp, err := c.post(ctx, "/internal/replication/v1/push", reqBody)
+
+	resp, err := c.client.Push(ctx, &pb.PushRequest{
+		Tenant:     tenant,
+		Collection: req.Collection,
+		Changes:    changes,
+	})
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("unexpected status code: %d", resp.StatusCode)
+		return nil, statusToError(err)
 	}
 
-	var result storage.ReplicationPushResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, err
+	conflicts := make([]*storage.StoredDoc, 0, len(resp.Conflicts))
+	for _, d := range resp.Conflicts {
+		conflicts = append(conflicts, protoToStoredDoc(d))
 	}
-	return &result, nil
+
+	return &storage.ReplicationPushResponse{
+		Conflicts: conflicts,
+	}, nil
 }
 
-func (c *Client) post(ctx context.Context, endpoint string, body interface{}) (*http.Response, error) {
-	jsonData, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
+// ============================================================================
+// Error handling
+// ============================================================================
+
+// statusToError converts gRPC status to domain errors.
+func statusToError(err error) error {
+	if err == nil {
+		return nil
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", c.baseURL+endpoint, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return nil, err
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
 
-	return c.httpClient.Do(req)
+	switch st.Code() {
+	case codes.NotFound:
+		return model.ErrNotFound
+	case codes.FailedPrecondition:
+		return model.ErrPreconditionFailed
+	case codes.AlreadyExists:
+		return model.ErrExists
+	case codes.InvalidArgument:
+		return model.ErrInvalidQuery
+	case codes.PermissionDenied:
+		return model.ErrPermissionDenied
+	default:
+		return errors.New(st.Message())
+	}
 }
