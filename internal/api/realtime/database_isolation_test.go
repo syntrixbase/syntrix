@@ -23,7 +23,7 @@ func TestHub_DatabaseIsolation(t *testing.T) {
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		database:         "databaseA",
+		database:       "databaseA",
 	}
 	clientA.subscriptions["subA"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -39,7 +39,7 @@ func TestHub_DatabaseIsolation(t *testing.T) {
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		database:         "databaseB",
+		database:       "databaseB",
 	}
 	clientB.subscriptions["subB"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -54,7 +54,7 @@ func TestHub_DatabaseIsolation(t *testing.T) {
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		database:         "databaseA",
+		database:       "databaseA",
 	}
 	clientC.subscriptions["subC"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -73,7 +73,7 @@ func TestHub_DatabaseIsolation(t *testing.T) {
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
 			EventID:    "databaseA:user1",
-			Database:     "databaseA",
+			Database:   "databaseA",
 			Collection: "users",
 			DocumentID: "user1",
 			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
@@ -112,7 +112,7 @@ func TestHub_DatabaseIsolation(t *testing.T) {
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
 			EventID:    "databaseB:user2",
-			Database:     "databaseB",
+			Database:   "databaseB",
 			Collection: "users",
 			DocumentID: "user2",
 			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
@@ -154,10 +154,10 @@ func TestHub_SystemRole_CrossDatabaseAccess(t *testing.T) {
 
 	// System Client: Has allowAllDatabases = true
 	sysClient := &Client{
-		hub:             hub,
-		send:            make(chan BaseMessage, 10),
-		subscriptions:   make(map[string]Subscription),
-		streamerSubIDs:  make(map[string]string),
+		hub:               hub,
+		send:              make(chan BaseMessage, 10),
+		subscriptions:     make(map[string]Subscription),
+		streamerSubIDs:    make(map[string]string),
 		database:          "default", // Primary database
 		allowAllDatabases: true,      // Can see all databases
 	}
@@ -177,7 +177,7 @@ func TestHub_SystemRole_CrossDatabaseAccess(t *testing.T) {
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
 			EventID:    "databaseA:user1",
-			Database:     "databaseA",
+			Database:   "databaseA",
 			Collection: "users",
 			DocumentID: "user1",
 			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
@@ -200,7 +200,7 @@ func TestHub_SystemRole_CrossDatabaseAccess(t *testing.T) {
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
 			EventID:    "databaseB:user2",
-			Database:     "databaseB",
+			Database:   "databaseB",
 			Collection: "users",
 			DocumentID: "user2",
 			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
