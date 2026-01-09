@@ -74,7 +74,7 @@ func TestNewServer_WithRealtime(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{EnableAuth: true})
+	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{})
 
 	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
 	assert.NotNil(t, server)
@@ -124,7 +124,7 @@ func TestServer_RegisterRoutes_WithRealtime(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{EnableAuth: true})
+	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{})
 	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
 
 	mux := http.NewServeMux()

@@ -96,11 +96,12 @@ func TestServeSSE_SendChannelClosed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 
-	cfg := api_config.RealtimeConfig{
-		EnableAuth: false,
-	}
+	cfg := api_config.RealtimeConfig{}
 
 	req := httptest.NewRequest("GET", "/sse", nil)
+	// Add tenant to context since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), identity.ContextKeyTenant, "test-tenant")
+	req = req.WithContext(reqCtx)
 	w := httptest.NewRecorder()
 
 	// We need to run ServeSSE in a goroutine because it blocks

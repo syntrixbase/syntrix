@@ -423,6 +423,9 @@ func TestServeSSE_HubClosed(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	req := httptest.NewRequest("GET", "/", nil)
+	// Add tenant to context since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), identity.ContextKeyTenant, "test-tenant")
+	req = req.WithContext(reqCtx)
 	w := httptest.NewRecorder()
 
 	ServeSSE(hub, nil, nil, api_config.RealtimeConfig{}, w, req)
@@ -462,6 +465,9 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	w := &FailWriter{ResponseWriter: rec}
 
 	req := httptest.NewRequest("GET", "/", nil)
+	// Add tenant to context since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), identity.ContextKeyTenant, "test-tenant")
+	req = req.WithContext(reqCtx)
 
 	// We need to make Write fail ONLY when sending data, not headers.
 	// ServeSSE writes headers first.
@@ -551,6 +557,8 @@ func TestServeSSE_Heartbeat(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
 	ctx2, cancel2 := context.WithCancel(context.Background())
+	// Add tenant to context since SSE requires authentication
+	ctx2 = context.WithValue(ctx2, identity.ContextKeyTenant, "test-tenant")
 	req = req.WithContext(ctx2)
 
 	done := make(chan struct{})

@@ -10,7 +10,6 @@ type GatewayConfig struct {
 type RealtimeConfig struct {
 	AllowedOrigins []string `yaml:"allowed_origins"`
 	AllowDevOrigin bool     `yaml:"allow_dev_origin"`
-	EnableAuth     bool     `yaml:"enable_auth"`
 }
 
 func DefaultGatewayConfig() GatewayConfig {
@@ -21,7 +20,6 @@ func DefaultGatewayConfig() GatewayConfig {
 		Realtime: RealtimeConfig{
 			AllowedOrigins: []string{"http://localhost:8080", "http://localhost:3000", "http://localhost:5173"},
 			AllowDevOrigin: true,
-			EnableAuth:     true,
 		},
 	}
 }
