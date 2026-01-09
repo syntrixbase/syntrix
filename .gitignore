@@ -10,7 +10,6 @@
 /bin/
 
 node_modules/
-/api/gen
 
 # Test binary
 *.test

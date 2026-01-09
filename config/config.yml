@@ -48,10 +48,6 @@ gateway:
     transport: "both"
     per_message_deflate: true
 
-query:
-  port: 8082
-  # csp_service_url removed
-
 trigger:
   nats_url: "nats://localhost:4222"
   rules_file: "triggers.example.json"

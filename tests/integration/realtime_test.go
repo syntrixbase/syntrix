@@ -99,12 +99,18 @@ func TestRealtime_FullFlow(t *testing.T) {
 	err = ws.WriteJSON(unsubMsg)
 	require.NoError(t, err)
 
-	// Read Unsubscribe Ack
+	// Read Unsubscribe Ack (may need to skip events that arrive before the ack)
 	ws.SetReadDeadline(time.Now().Add(5 * time.Second))
 	var unsubAckMsg BaseMessage
-	err = ws.ReadJSON(&unsubAckMsg)
-	require.NoError(t, err)
-	assert.Equal(t, TypeUnsubscribeAck, unsubAckMsg.Type)
+	for {
+		err = ws.ReadJSON(&unsubAckMsg)
+		require.NoError(t, err)
+		if unsubAckMsg.Type == TypeUnsubscribeAck {
+			break
+		}
+		// Skip any events that arrive before the unsubscribe ack
+		t.Logf("Skipping message type=%s while waiting for unsubscribe_ack", unsubAckMsg.Type)
+	}
 	assert.Equal(t, "unsub-1", unsubAckMsg.ID)
 
 	// Wait a bit

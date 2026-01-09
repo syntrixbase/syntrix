@@ -176,7 +176,9 @@ match:
 			GRPCPort: grpcPort,
 		},
 		Gateway: api_config.GatewayConfig{
-			QueryServiceURL: fmt.Sprintf("localhost:%d", grpcPort),
+			QueryServiceURL:    fmt.Sprintf("localhost:%d", grpcPort),
+			PullerServiceURL:   fmt.Sprintf("localhost:%d", grpcPort),
+			StreamerServiceURL: fmt.Sprintf("localhost:%d", grpcPort),
 		},
 		Storage: config.StorageConfig{
 			Backends: map[string]config.BackendConfig{
@@ -226,7 +228,7 @@ match:
 		},
 		Puller: puller_config.Config{
 			Backends: []puller_config.PullerBackendConfig{
-				{Name: "default"},
+				{Name: "default", Collections: []string{"documents"}},
 			},
 			Cleaner: puller_config.CleanerConfig{
 				Interval:  1 * time.Minute,
@@ -240,12 +242,13 @@ match:
 	}
 
 	opts := services.Options{
+		Mode:                services.ModeDistributed, // Services communicate via gRPC even in same process
 		RunAPI:              true,
 		RunQuery:            true,
+		RunStreamer:         true, // Run Streamer service locally
 		RunTriggerEvaluator: natsAvailable,
 		RunTriggerWorker:    natsAvailable,
 		RunPuller:           true,
-		ListenHost:          "localhost",
 	}
 
 	manager := services.NewManager(cfg, opts)
@@ -264,7 +267,7 @@ match:
 	}
 	// Query service now uses unified gRPC server, no separate health check needed
 
-	log.Printf("[Integration Test] Global environment started - API: %d, gRPC: %d, DB: %s",
+	log.Printf("[Integration Test] Global environment started (Distributed Mode) - API: %d, gRPC: %d, DB: %s",
 		apiPort, grpcPort, dbName)
 
 	return &GlobalTestEnv{

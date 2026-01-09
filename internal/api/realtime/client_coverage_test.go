@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
@@ -76,7 +77,7 @@ func TestHasSystemRole_NoSystemRole(t *testing.T) {
 }
 
 func TestCheckAllowedOrigin_EmptyStringInConfig(t *testing.T) {
-	cfg := Config{
+	cfg := api_config.RealtimeConfig{
 		AllowedOrigins: []string{"http://example.com", ""}, // Contains empty string
 	}
 
@@ -95,7 +96,7 @@ func TestServeSSE_SendChannelClosed(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	go hub.Run(ctx)
 
-	cfg := Config{
+	cfg := api_config.RealtimeConfig{
 		EnableAuth: false,
 	}
 

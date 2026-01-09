@@ -61,7 +61,6 @@ func TestNewHealthChecker_WithLogger(t *testing.T) {
 func TestNewGRPCServer(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{
-		Address:        ":50051",
 		MaxConnections: 100,
 	}
 	svc := NewService(config.Config{}, nil)
@@ -75,7 +74,6 @@ func TestNewGRPCServer(t *testing.T) {
 func TestNewGRPCServer_WithLogger(t *testing.T) {
 	t.Parallel()
 	cfg := config.GRPCConfig{
-		Address:        ":50051",
 		MaxConnections: 100,
 	}
 	svc := NewService(config.Config{}, nil)
@@ -128,4 +126,35 @@ func TestStartHealthServer(t *testing.T) {
 	go func() {
 		_ = StartHealthServer(ctx, ":0", hc)
 	}()
+}
+
+func TestNewGRPCServerWithInit(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{
+		MaxConnections: 100,
+	}
+	svc := NewService(config.Config{}, nil)
+
+	server := NewGRPCServerWithInit(cfg, svc, nil)
+	if server == nil {
+		t.Fatal("NewGRPCServerWithInit() returned nil")
+	}
+
+	// Verify Init and Shutdown methods exist and work
+	server.Init()
+	server.Shutdown()
+}
+
+func TestNewGRPCServerWithInit_WithLogger(t *testing.T) {
+	t.Parallel()
+	cfg := config.GRPCConfig{
+		MaxConnections: 100,
+	}
+	svc := NewService(config.Config{}, nil)
+	logger := slog.Default()
+
+	server := NewGRPCServerWithInit(cfg, svc, logger)
+	if server == nil {
+		t.Fatal("NewGRPCServerWithInit() with logger returned nil")
+	}
 }

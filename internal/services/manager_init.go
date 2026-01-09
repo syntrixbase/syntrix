@@ -3,12 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
-	"net"
-	"strconv"
 
+	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/api"
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
@@ -34,82 +33,100 @@ var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (stora
 }
 
 func (m *Manager) Init(ctx context.Context) error {
-	if err := m.initStorage(ctx); err != nil {
-		return err
-	}
-
+	// Common infrastructure initialization
 	if err := m.initAuthService(ctx); err != nil {
 		return err
 	}
 
 	// Initialize Unified Server Service
-	// Note: We ignore port conflicts for now as we are transitioning.
-	// Existing services will continue to run on their own ports.
 	server.InitDefault(m.cfg.Server, nil)
 
-	if m.opts.RunPuller {
-		if err := m.initPullerService(ctx); err != nil {
-			return err
-		}
-	}
-
-	// Standalone mode: all services run in-process without HTTP inter-service communication
+	// Mode-specific initialization
 	if m.opts.Mode == ModeStandalone {
 		return m.initStandalone(ctx)
 	}
-
-	// Distributed mode: services communicate via HTTP
 	return m.initDistributed(ctx)
 }
 
 // initStandalone initializes services for standalone deployment mode.
 // All services run in a single process without HTTP inter-service communication.
 func (m *Manager) initStandalone(ctx context.Context) error {
+	// Initialize Puller service (local only, no gRPC)
+	if m.opts.RunPuller {
+		if err := m.initPullerService(ctx); err != nil {
+			return err
+		}
+	}
+
 	// Create Streamer service for local access
-	m.streamerService = m.createStreamerService()
-	log.Println("Initialized Streamer Service (local)")
+	streamerSvc, err := m.createStreamerService()
+	if err != nil {
+		return err
+	}
+	m.streamerService = streamerSvc
+	slog.Info("Initialized Streamer Service (local)")
 
 	// Create query service
-	queryService := m.createQueryService()
+	queryService, err := m.createQueryService(ctx)
+	if err != nil {
+		return err
+	}
 
 	// API server is the only HTTP server in standalone mode
 	if err := m.initAPIServer(queryService); err != nil {
 		return err
 	}
 
+	// Initialize trigger services with embedded NATS if configured
+	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
+		useEmbeddedNATS := m.cfg.Deployment.Standalone.EmbeddedNATS
+		if err := m.initTriggerServices(ctx, useEmbeddedNATS); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 // initDistributed initializes services for distributed deployment mode.
-// Services communicate via HTTP and can run on separate machines.
+// Services communicate via gRPC and can run on separate machines.
+// Key principle: In distributed mode, ALWAYS use gRPC clients for inter-service
+// communication, never direct in-process calls.
 func (m *Manager) initDistributed(ctx context.Context) error {
-	var queryService query.Service
-
-	if m.opts.RunQuery {
-		queryService = m.createQueryService()
-		if !m.opts.ForceQueryClient {
-			m.initQueryGRPCServer(queryService)
+	// Initialize Puller service and register gRPC server
+	if m.opts.RunPuller {
+		if err := m.initPullerService(ctx); err != nil {
+			return err
 		}
+		m.initPullerGRPCServer()
 	}
 
-	if m.opts.RunAPI {
-		if queryService == nil {
-			var err error
-			queryService, err = query.NewClient(m.cfg.Gateway.QueryServiceURL)
-			if err != nil {
-				return fmt.Errorf("failed to create query client: %w", err)
-			}
+	// Initialize local Query service and register gRPC server
+	if m.opts.RunQuery {
+		queryService, err := m.createQueryService(ctx)
+		if err != nil {
+			return err
 		}
-		// Initialize Streamer Service for Realtime
-		m.streamerService = m.createStreamerService()
+		m.initQueryGRPCServer(queryService)
+	}
 
-		if err := m.initAPIServer(queryService); err != nil {
+	// Initialize local Streamer service and register gRPC server
+	if m.opts.RunStreamer {
+		if err := m.initStreamerService(); err != nil {
 			return err
 		}
 	}
 
+	// Initialize API Gateway - uses gRPC clients to connect to remote services
+	if m.opts.RunAPI {
+		if err := m.initGateway(); err != nil {
+			return err
+		}
+	}
+
+	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServices(); err != nil {
+		if err := m.initTriggerServices(ctx, false); err != nil {
 			return err
 		}
 	}
@@ -117,23 +134,23 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 	return nil
 }
 
-func (m *Manager) initStorage(ctx context.Context) error {
-	if !(m.opts.RunQuery || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker) {
-		return nil
+func (m *Manager) getStorageFactory(ctx context.Context) (storage.StorageFactory, error) {
+	if !(m.opts.RunQuery || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker || m.opts.RunPuller) {
+		return nil, nil
 	}
 
-	var err error
-	m.storageFactory, err = storageFactoryFactory(ctx, m.cfg)
-	if err != nil {
-		return fmt.Errorf("failed to initialize storage factory: %w", err)
+	m.storageFactoryOnce.Do(func() {
+		m.storageFactory, m.storageFactoryErr = storageFactoryFactory(ctx, m.cfg)
+		if m.storageFactoryErr == nil {
+			slog.Info("Connected to Storage successfully")
+		}
+	})
+
+	if m.storageFactoryErr != nil {
+		return nil, fmt.Errorf("failed to initialize storage factory: %w", m.storageFactoryErr)
 	}
 
-	m.docStore = m.storageFactory.Document()
-	m.userStore = m.storageFactory.User()
-	m.revocationStore = m.storageFactory.Revocation()
-
-	log.Println("Connected to Storage successfully.")
-	return nil
+	return m.storageFactory, nil
 }
 
 func (m *Manager) initAuthService(ctx context.Context) error {
@@ -141,22 +158,31 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 		return nil
 	}
 
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
 	var authErr error
-	m.authService, authErr = identity.NewAuthN(m.cfg.Identity.AuthN, m.userStore, m.revocationStore)
+	m.authService, authErr = identity.NewAuthN(m.cfg.Identity.AuthN, sf.User(), sf.Revocation())
 	if authErr != nil {
 		return fmt.Errorf("failed to create auth service: %w", authErr)
 	}
 
-	log.Println("Initialized Auth Service")
+	slog.Info("Initialized Auth Service")
 	return nil
 }
 
 // createQueryService creates a query engine service.
 // This separates service creation from HTTP server setup for standalone mode support.
-func (m *Manager) createQueryService() query.Service {
-	service := query.NewService(m.docStore)
-	log.Println("Initialized Local Query Engine")
-	return service
+func (m *Manager) createQueryService(ctx context.Context) (query.Service, error) {
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return nil, err
+	}
+	service := query.NewService(sf.Document())
+	slog.Info("Initialized Local Query Engine")
+	return service, nil
 }
 
 // initQueryGRPCServer registers the query service with the unified gRPC server.
@@ -164,7 +190,7 @@ func (m *Manager) createQueryService() query.Service {
 func (m *Manager) initQueryGRPCServer(service query.Service) {
 	grpcServer := query.NewGRPCServer(service)
 	server.Default().RegisterGRPCService(&pb.QueryService_ServiceDesc, grpcServer)
-	log.Println("Registered Query Service (gRPC)")
+	slog.Info("Registered Query Service (gRPC)")
 }
 
 func (m *Manager) initAPIServer(queryService query.Service) error {
@@ -177,16 +203,21 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 			return fmt.Errorf("failed to create authz engine: %w", err)
 		}
 
-		log.Printf("Loaded authorization rules from %s", m.cfg.Identity.AuthZ.RulesFile)
+		slog.Info("Loaded authorization rules", "file", m.cfg.Identity.AuthZ.RulesFile)
+	}
+
+	// Determine which Streamer interface to use
+	// In distributed mode, use the gRPC client; in standalone mode, use local service
+	var streamerSvc streamer.Service
+	if m.streamerClient != nil {
+		streamerSvc = m.streamerClient
+	} else {
+		streamerSvc = m.streamerService
 	}
 
 	// Always initialize realtime server as part of gateway
-	rtCfg := realtime.Config{
-		AllowedOrigins: m.cfg.Gateway.Realtime.AllowedOrigins,
-		AllowDevOrigin: m.cfg.Gateway.Realtime.AllowDevOrigin,
-		EnableAuth:     m.cfg.Gateway.Realtime.EnableAuth,
-	}
-	m.rtServer = realtime.NewServer(queryService, m.streamerService, m.cfg.Storage.Topology.Document.DataCollection, m.authService, rtCfg)
+	m.rtServer = realtime.NewServer(queryService, streamerSvc, m.cfg.Storage.Topology.Document.DataCollection,
+		m.authService, m.cfg.Gateway.Realtime)
 
 	// Register API routes to the unified server
 	apiServer := api.NewServer(queryService, m.authService, authzEngine, m.rtServer)
@@ -195,34 +226,94 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 	return nil
 }
 
-// createStreamerService creates a Streamer service for local access.
-func (m *Manager) createStreamerService() streamer.StreamerServer {
+// initStreamerService creates a local Streamer service and registers it with the gRPC server.
+// This is called when RunStreamer=true in distributed mode.
+func (m *Manager) initStreamerService() error {
 	cfg := streamer.DefaultServiceConfig()
-	// TODO: Load from m.cfg if available
-
 	var opts []streamer.ServiceConfigOption
-	if m.pullerService != nil {
-		opts = append(opts, streamer.WithPullerClient(m.pullerService))
+
+	// In distributed mode, Streamer always connects to Puller via gRPC
+	if m.cfg.Gateway.PullerServiceURL != "" {
+		pullerClient, err := puller.NewClient(m.cfg.Gateway.PullerServiceURL, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create Puller gRPC client: %w", err)
+		}
+		opts = append(opts, streamer.WithPullerClient(pullerClient))
+		slog.Info("Streamer using remote Puller service", "url", m.cfg.Gateway.PullerServiceURL)
+	} else {
+		slog.Warn("Streamer running without Puller - realtime events will not be available")
 	}
 
 	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
 	if err != nil {
-		log.Fatalf("Failed to create streamer service: %v", err)
+		return fmt.Errorf("failed to create streamer service: %w", err)
 	}
-	return svc
+	m.streamerService = svc
+
+	// Register with unified gRPC server
+	grpcServer := streamer.NewGRPCServer(svc)
+	server.Default().RegisterGRPCService(&streamerv1.StreamerService_ServiceDesc, grpcServer)
+	slog.Info("Registered Streamer Service (gRPC)")
+
+	return nil
 }
 
-func listenAddr(host string, port int) string {
-	if host == "" {
-		return fmt.Sprintf(":%d", port)
+// initGateway initializes the API Gateway with gRPC clients for remote services.
+// In distributed mode, Gateway always connects to Query and Streamer via gRPC clients.
+func (m *Manager) initGateway() error {
+	// Create Query gRPC client
+	queryClient, err := query.NewClient(m.cfg.Gateway.QueryServiceURL)
+	if err != nil {
+		return fmt.Errorf("failed to create Query gRPC client: %w", err)
+	}
+	slog.Info("Gateway using remote Query service", "url", m.cfg.Gateway.QueryServiceURL)
+
+	// Create Streamer gRPC client
+	streamerCfg := streamer.DefaultClientConfig()
+	streamerCfg.StreamerAddr = m.cfg.Gateway.StreamerServiceURL
+	streamerClient, err := streamer.NewClient(streamerCfg, slog.Default())
+	if err != nil {
+		return fmt.Errorf("failed to create Streamer gRPC client: %w", err)
+	}
+	m.streamerClient = streamerClient
+	slog.Info("Gateway using remote Streamer service", "url", m.cfg.Gateway.StreamerServiceURL)
+
+	// Initialize API server with gRPC clients
+	if err := m.initAPIServer(queryClient); err != nil {
+		return err
 	}
 
-	return net.JoinHostPort(host, strconv.Itoa(port))
+	return nil
 }
 
-func (m *Manager) initTriggerServices() error {
-	// Create NATS provider based on deployment mode
-	if m.opts.Mode == ModeStandalone && m.cfg.Deployment.Standalone.EmbeddedNATS {
+// createStreamerService creates a Streamer service for standalone mode.
+// In standalone mode, it uses the local Puller service directly.
+func (m *Manager) createStreamerService() (streamer.StreamerServer, error) {
+	cfg := streamer.DefaultServiceConfig()
+
+	var opts []streamer.ServiceConfigOption
+
+	// Use local Puller service in standalone mode
+	if m.pullerService != nil {
+		opts = append(opts, streamer.WithPullerClient(m.pullerService))
+		slog.Info("Streamer using local Puller service")
+	} else {
+		slog.Warn("Streamer running without Puller - realtime events will not be available")
+	}
+
+	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streamer service: %w", err)
+	}
+
+	return svc, nil
+}
+
+// initTriggerServices initializes trigger evaluator and worker services.
+// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
+func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
+	// Create NATS provider based on parameter
+	if useEmbeddedNATS {
 		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
 	} else {
 		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
@@ -239,8 +330,16 @@ func (m *Manager) initTriggerServices() error {
 	if m.pullerService != nil {
 		opts = append(opts, triggerengine.WithPuller(m.pullerService))
 	}
+	if m.cfg.Trigger.RulesFile != "" {
+		opts = append(opts, triggerengine.WithRulesFile(m.cfg.Trigger.RulesFile))
+	}
 
-	factory, err := triggerFactoryFactory(m.docStore, nc, m.authService, opts...)
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	factory, err := triggerFactoryFactory(sf.Document(), nc, m.authService, opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create trigger factory: %w", err)
 	}
@@ -252,20 +351,7 @@ func (m *Manager) initTriggerServices() error {
 		}
 		m.triggerService = engine
 
-		rulesFile := m.cfg.Trigger.RulesFile
-		if rulesFile != "" {
-			triggers, err := trigger.LoadTriggersFromFile(rulesFile)
-			if err != nil {
-				log.Printf("[Warning] Failed to load trigger rules from %s: %v", rulesFile, err)
-			} else {
-				if err := m.triggerService.LoadTriggers(triggers); err != nil {
-					return fmt.Errorf("failed to load triggers: %w", err)
-				}
-				log.Printf("Loaded %d triggers from %s", len(triggers), rulesFile)
-			}
-		}
-
-		log.Println("Initialized Trigger Evaluator Service")
+		slog.Info("Initialized Trigger Evaluator Service")
 	}
 
 	if m.opts.RunTriggerWorker {
@@ -275,21 +361,28 @@ func (m *Manager) initTriggerServices() error {
 		}
 		m.triggerConsumer = cons
 
-		log.Println("Initialized Trigger Worker Service")
+		slog.Info("Initialized Trigger Worker Service")
 	}
 
 	return nil
 }
 
+// initPullerService creates the Puller service and adds backends.
+// Does NOT register gRPC server - that's done separately in distributed mode.
 func (m *Manager) initPullerService(ctx context.Context) error {
-	log.Println("Initializing Change Stream Puller Service...")
+	slog.Info("Initializing Change Stream Puller Service...")
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
 
 	// 1. Create Puller Service
 	m.pullerService = puller.NewService(m.cfg.Puller, nil) // Logger is nil for now
 
 	// 2. Add Backends
 	for _, backendCfg := range m.cfg.Puller.Backends {
-		client, dbName, err := m.storageFactory.GetMongoClient(backendCfg.Name)
+		client, dbName, err := sf.GetMongoClient(backendCfg.Name)
 		if err != nil {
 			return fmt.Errorf("failed to get mongo client for backend %s: %w", backendCfg.Name, err)
 		}
@@ -297,13 +390,16 @@ func (m *Manager) initPullerService(ctx context.Context) error {
 		if err := m.pullerService.AddBackend(backendCfg.Name, client, dbName, backendCfg); err != nil {
 			return fmt.Errorf("failed to add backend %s: %w", backendCfg.Name, err)
 		}
-		log.Printf("- Added backend: %s (db: %s)", backendCfg.Name, dbName)
-	}
-
-	// 3. Initialize gRPC Server (if distributed mode)
-	if m.opts.Mode == ModeDistributed {
-		m.pullerGRPC = puller.NewGRPCServer(m.cfg.Puller.GRPC, m.pullerService, nil)
+		slog.Info("Added puller backend", "name", backendCfg.Name, "database", dbName)
 	}
 
 	return nil
+}
+
+// initPullerGRPCServer registers the Puller service with the unified gRPC server.
+func (m *Manager) initPullerGRPCServer() {
+	grpcServer := puller.NewGRPCServerWithInit(m.cfg.Puller.GRPC, m.pullerService, nil)
+	m.pullerGRPC = grpcServer
+	server.Default().RegisterGRPCService(&pullerv1.PullerService_ServiceDesc, grpcServer)
+	slog.Info("Registered Puller Service (gRPC)")
 }

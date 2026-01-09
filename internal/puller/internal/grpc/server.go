@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net"
 	"sync"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -27,13 +25,13 @@ type EventSource interface {
 }
 
 // Server implements the PullerService gRPC interface.
+// It is designed to be registered with a unified gRPC server.
 type Server struct {
 	pullerv1.UnimplementedPullerServiceServer
 
 	cfg         config.GRPCConfig
 	eventSource EventSource
 	logger      *slog.Logger
-	grpcServer  *grpc.Server
 	subs        *core.SubscriberManager
 
 	// eventChan receives events from the puller for broadcasting
@@ -46,11 +44,13 @@ type Server struct {
 	// mu protects server state
 	mu sync.RWMutex
 
-	// running indicates if the server is running
-	running bool
+	// initialized indicates if the event processing loop is running
+	initialized bool
 }
 
-// NewServer creates a new gRPC server.
+// NewServer creates a new Puller gRPC service implementation.
+// The returned server implements pullerv1.PullerServiceServer and should be
+// registered with a gRPC server using pullerv1.RegisterPullerServiceServer.
 func NewServer(cfg config.GRPCConfig, eventSource EventSource, logger *slog.Logger) *Server {
 	if logger == nil {
 		logger = slog.Default()
@@ -73,29 +73,16 @@ func NewServer(cfg config.GRPCConfig, eventSource EventSource, logger *slog.Logg
 	}
 }
 
-// Start starts the gRPC server.
-func (s *Server) Start(ctx context.Context) error {
+// Init initializes the server by setting up the event handler and starting
+// the event processing loop. This must be called after registering the server
+// with a gRPC server and before the unified server starts.
+func (s *Server) Init() {
 	s.mu.Lock()
-	if s.running {
+	if s.initialized {
 		s.mu.Unlock()
-		return fmt.Errorf("server already running")
+		return
 	}
-
-	// Create gRPC server with options
-	opts := []grpc.ServerOption{
-		grpc.MaxConcurrentStreams(uint32(s.cfg.MaxConnections)),
-	}
-	s.grpcServer = grpc.NewServer(opts...)
-	pullerv1.RegisterPullerServiceServer(s.grpcServer, s)
-
-	// Start listening
-	lis, err := net.Listen("tcp", s.cfg.Address)
-	if err != nil {
-		s.mu.Unlock()
-		return fmt.Errorf("failed to listen on %s: %w", s.cfg.Address, err)
-	}
-
-	s.running = true
+	s.initialized = true
 	s.mu.Unlock()
 
 	// Set up event handler to receive events from puller
@@ -112,19 +99,10 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	})
 
-	s.logger.Info("gRPC server starting", "address", s.cfg.Address)
+	s.logger.Info("Puller gRPC service initialized")
 
 	// Start event processing loop
 	go s.processEvents()
-
-	// Serve in a goroutine
-	go func() {
-		if err := s.grpcServer.Serve(lis); err != nil {
-			s.logger.Error("gRPC server error", "error", err)
-		}
-	}()
-
-	return nil
 }
 
 // processEvents reads events from the channel and broadcasts them to subscribers.
@@ -142,13 +120,14 @@ func (s *Server) processEvents() {
 	}
 }
 
-// Stop stops the gRPC server gracefully.
-func (s *Server) Stop(ctx context.Context) error {
+// Shutdown gracefully shuts down the server, closing all subscribers.
+// This should be called when the unified server is stopping.
+func (s *Server) Shutdown() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.running {
-		return nil
+	if !s.initialized {
+		return
 	}
 
 	// Signal shutdown
@@ -157,26 +136,7 @@ func (s *Server) Stop(ctx context.Context) error {
 	// Close all subscribers
 	s.subs.CloseAll()
 
-	// Stop gRPC server
-	if s.grpcServer != nil {
-		// Create a channel to signal graceful stop completion
-		done := make(chan struct{})
-		go func() {
-			s.grpcServer.GracefulStop()
-			close(done)
-		}()
-
-		select {
-		case <-done:
-			s.logger.Info("gRPC server stopped gracefully")
-		case <-ctx.Done():
-			s.grpcServer.Stop()
-			s.logger.Warn("gRPC server force stopped")
-		}
-	}
-
-	s.running = false
-	return nil
+	s.logger.Info("Puller gRPC service shut down")
 }
 
 // Subscribe implements the PullerService Subscribe RPC.

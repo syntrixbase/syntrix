@@ -32,9 +32,9 @@ type Config struct {
 }
 
 // GRPCConfig holds gRPC server configuration.
+// Note: Address is no longer used as Puller registers with the unified gRPC server.
 type GRPCConfig struct {
-	Address        string `yaml:"address"`
-	MaxConnections int    `yaml:"max_connections"`
+	MaxConnections int `yaml:"max_connections"`
 	// ChannelSize is the size of the subscriber channel.
 	// Defaults to 10000 if not set.
 	ChannelSize int `yaml:"channel_size"`
@@ -112,7 +112,6 @@ type HealthConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		GRPC: GRPCConfig{
-			Address:           ":50051",
 			MaxConnections:    100,
 			HeartbeatInterval: 30 * time.Second,
 		},
@@ -153,10 +152,6 @@ func DefaultConfig() Config {
 
 // Validate validates the PullerConfig.
 func (c *Config) Validate() error {
-	if c.GRPC.Address == "" {
-		return errors.New("puller.grpc.address is required")
-	}
-
 	if c.GRPC.MaxConnections <= 0 {
 		return errors.New("puller.grpc.max_connections must be positive")
 	}

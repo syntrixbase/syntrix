@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 
@@ -39,7 +40,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, AllowDevOrigin: false, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, AllowDevOrigin: false, EnableAuth: true}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -93,7 +94,7 @@ func TestServeSSE_UnsupportedFlusher(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 
 	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
 	req.Header.Set("Authorization", "Bearer good")
@@ -113,7 +114,7 @@ func TestServeSSE_WriteError(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 	original := sseHeartbeatInterval
 	sseHeartbeatInterval = 20 * time.Millisecond
 	defer func() { sseHeartbeatInterval = original }()
@@ -137,7 +138,7 @@ func TestServeSSE_AuthMissing(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 
 	req := httptest.NewRequest("GET", "/realtime/sse", nil)
 	req.Header.Set("Origin", "http://example.com")
@@ -157,7 +158,7 @@ func TestServeSSE_OriginMissingWithCredentials(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 
 	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
 	req.Header.Set("Authorization", "Bearer good")
@@ -177,7 +178,7 @@ func TestServeSSE_OriginDisallowed(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 
 	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
 	req.Header.Set("Authorization", "Bearer good")
@@ -198,7 +199,7 @@ func TestServeSSE_CookieIgnored(t *testing.T) {
 
 	qs := &MockQueryService{}
 	auth := &mockAuthService{}
-	cfg := Config{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
+	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}, EnableAuth: true}
 
 	reqCtx, reqCancel := context.WithCancel(context.Background())
 	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(reqCtx, identity.ContextKeyTenant, "default"))

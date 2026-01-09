@@ -29,14 +29,6 @@ func TestManager_AuthServiceGetter(t *testing.T) {
 	assert.Nil(t, mgr.AuthService())
 }
 
-func TestNewManager_DefaultListenHost(t *testing.T) {
-	t.Parallel()
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{})
-
-	assert.Equal(t, "localhost", mgr.opts.ListenHost)
-}
-
 func TestManager_Init_StorageError(t *testing.T) {
 	t.Parallel()
 	cfg := config.LoadConfig()
@@ -100,10 +92,8 @@ func TestManager_InitAuthService_GenerateKey(t *testing.T) {
 	}()
 
 	// We need to init storage first because initAuthService depends on it
-	err := mgr.initStorage(context.Background())
-	assert.NoError(t, err)
 
-	err = mgr.initAuthService(context.Background())
+	err := mgr.initAuthService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.authService)
 
@@ -128,7 +118,7 @@ func TestManager_InitAPIServer_WithRules(t *testing.T) {
 
 	err := mgr.initAPIServer(querySvc)
 	assert.NoError(t, err)
-	// API routes are now registered directly to the unified server, not added to m.servers
+	// API routes are now registered directly to the unified server
 }
 
 func TestManager_InitAPIServer_NoRules(t *testing.T) {
@@ -145,7 +135,7 @@ func TestManager_InitAPIServer_NoRules(t *testing.T) {
 
 	err := mgr.initAPIServer(querySvc)
 	assert.NoError(t, err)
-	// API routes are now registered directly to the unified server, not added to m.servers
+	// API routes are now registered directly to the unified server
 }
 
 func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
@@ -161,17 +151,7 @@ func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 	err := mgr.initAPIServer(&stubQueryService{})
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.rtServer)
-	// API routes are now registered directly to the unified server, not added to m.servers
-}
-
-func TestListenAddr_WithHost(t *testing.T) {
-	addr := listenAddr("localhost", 8080)
-	assert.Equal(t, "localhost:8080", addr)
-}
-
-func TestListenAddr_EmptyHost(t *testing.T) {
-	addr := listenAddr("", 8080)
-	assert.Equal(t, ":8080", addr)
+	// API routes are now registered directly to the unified server
 }
 
 func TestManager_InitTriggerServices_NATSFailure(t *testing.T) {
@@ -179,7 +159,7 @@ func TestManager_InitTriggerServices_NATSFailure(t *testing.T) {
 	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
 	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
 
-	err := mgr.initTriggerServices()
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.Error(t, err)
 }
 
@@ -190,11 +170,9 @@ func TestManager_InitStorage_SkipsWhenNoServices(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	err := mgr.initStorage(ctx)
+	sf, err := mgr.getStorageFactory(ctx)
 	assert.NoError(t, err)
-	assert.Nil(t, mgr.storageFactory)
-	assert.Nil(t, mgr.docStore)
-	assert.Nil(t, mgr.userStore)
+	assert.Nil(t, sf)
 }
 
 func TestManager_Init_RunAuthPath(t *testing.T) {
@@ -246,9 +224,10 @@ func TestManager_Init_RunQueryPath(t *testing.T) {
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
-	assert.NotNil(t, mgr.docStore)
+	assert.NotNil(t, mgr.storageFactory)
+	assert.Equal(t, fakeDocStore, mgr.storageFactory.Document())
 	// Query service now uses unified gRPC server, not separate HTTP server
-	// So mgr.servers is empty - the service is registered on server.Default()
+	// The service is registered on server.Default()
 }
 
 func TestManager_Init_RunRealtimePath(t *testing.T) {
@@ -264,39 +243,53 @@ func TestManager_Init_RunRealtimePath(t *testing.T) {
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.rtServer)
-	// API routes are now registered directly to the unified server, not added to m.servers
+	// API routes are now registered directly to the unified server
 }
 
 func TestManager_initPullerService_Success(t *testing.T) {
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"primary": "db_primary"},
+		client:   &mongo.Client{},
+	}
+
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
 	cfg := config.LoadConfig()
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "primary"}}
 
-	mgr := NewManager(cfg, Options{Mode: ModeDistributed})
-	mgr.storageFactory = &stubStorageFactory{
-		dbByName: map[string]string{"primary": "db_primary"},
-		client:   &mongo.Client{},
-	}
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunPuller: true})
 
 	err := mgr.initPullerService(context.Background())
 	assert.NoError(t, err)
 	names := mgr.pullerService.BackendNames()
 	assert.Len(t, names, 1)
 	assert.Equal(t, "primary", names[0])
-	assert.NotNil(t, mgr.pullerGRPC)
+	// Note: pullerGRPC is nil here because initPullerService no longer registers gRPC.
+	// gRPC registration is done separately by initPullerGRPCServer() in initDistributed().
+	assert.Nil(t, mgr.pullerGRPC)
 }
 
 func TestManager_initPullerService_GetMongoError(t *testing.T) {
+	fakeSF := &stubStorageFactory{
+		errByName: map[string]error{"missing": errors.New("no backend")},
+		client:    &mongo.Client{},
+	}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
 	cfg := config.LoadConfig()
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "missing"}}
 
-	mgr := NewManager(cfg, Options{})
-	mgr.storageFactory = &stubStorageFactory{
-		errByName: map[string]error{"missing": errors.New("no backend")},
-		client:    &mongo.Client{},
-	}
-	mgr.pullerService = &stubPullerService{}
+	mgr := NewManager(cfg, Options{RunPuller: true})
 
 	err := mgr.initPullerService(context.Background())
 	assert.Error(t, err)
@@ -506,10 +499,9 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
 	// In standalone mode, the Unified Server (server.Default()) handles all HTTP routing.
-	// No separate HTTP servers are added to m.servers since API routes are registered
+	// No separate HTTP servers are needed since API routes are registered
 	// directly to the unified server mux.
-	assert.Len(t, mgr.servers, 0)
-	assert.NotNil(t, mgr.docStore)
+	assert.NotNil(t, mgr.storageFactory)
 }
 
 func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
@@ -538,16 +530,24 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	assert.NoError(t, err)
 	// In standalone mode, CSP and Query services run in-process without separate HTTP servers.
 	// The Unified Server (server.Default()) handles all HTTP routing.
-	// No separate HTTP servers are added to m.servers.
-	assert.Len(t, mgr.servers, 0)
 }
 
 func TestManager_createQueryService(t *testing.T) {
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{})
-	mgr.docStore = &fakeDocumentStore{}
+	fakeDocStore := &fakeDocumentStore{}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
 
-	service := mgr.createQueryService()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	service, err := mgr.createQueryService(context.Background())
+	assert.NoError(t, err)
 	assert.NotNil(t, service)
 }
 
@@ -561,7 +561,7 @@ func TestManager_initQueryGRPCServer(t *testing.T) {
 
 	mockService := &stubQueryService{}
 	mgr.initQueryGRPCServer(mockService)
-	// gRPC server registration doesn't add to m.servers, it uses the unified server
+	// gRPC server registration uses the unified server
 	// Just verify it doesn't panic
 }
 
@@ -705,15 +705,18 @@ func TestManager_createStreamerService(t *testing.T) {
 	go func() {
 		cfg := config.LoadConfig()
 		// Disable Mongo/Backends for this unit test requiring no IO
-		mgr := NewManager(cfg, Options{})
+		// Use ModeStandalone to avoid gRPC registration
+		mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 		// Case 1: No Puller Service (already nil)
-		svc1 := mgr.createStreamerService()
+		svc1, err1 := mgr.createStreamerService()
+		assert.NoError(t, err1)
 		assert.NotNil(t, svc1)
 
 		// Case 2: With Puller Service
 		mgr.pullerService = &mockPullerService{}
-		svc2 := mgr.createStreamerService()
+		svc2, err2 := mgr.createStreamerService()
+		assert.NoError(t, err2)
 		assert.NotNil(t, svc2)
 		done <- true
 	}()
@@ -722,4 +725,259 @@ func TestManager_createStreamerService(t *testing.T) {
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("TestManager_createStreamerService timed out")
 	}
+}
+
+func TestManager_initStreamerService(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.GRPCPort = 0
+	cfg.Gateway.PullerServiceURL = "localhost:50051"
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunStreamer: true})
+
+	err := mgr.initStreamerService()
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerService)
+}
+
+func TestManager_initStreamerService_NoPuller(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.GRPCPort = 0
+	cfg.Gateway.PullerServiceURL = "" // No Puller URL configured
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunStreamer: true})
+
+	err := mgr.initStreamerService()
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerService)
+}
+
+func TestManager_initGateway(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Gateway.QueryServiceURL = "localhost:50051"
+	cfg.Gateway.StreamerServiceURL = "localhost:50051"
+	cfg.Identity.AuthZ.RulesFile = ""
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	err := mgr.initGateway()
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerClient)
+	assert.NotNil(t, mgr.rtServer)
+}
+
+func TestManager_initDistributed_RunStreamer(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.GRPCPort = 0
+	cfg.Gateway.PullerServiceURL = "localhost:50051"
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunStreamer: true})
+
+	err := mgr.initDistributed(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerService)
+}
+
+func TestManager_initDistributed_RunQueryAndStreamer(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.GRPCPort = 0
+	cfg.Gateway.PullerServiceURL = "localhost:50051"
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:        ModeDistributed,
+		RunQuery:    true,
+		RunStreamer: true,
+	})
+
+	err := mgr.initDistributed(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerService)
+}
+
+func TestManager_initDistributed_AllServices(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.GRPCPort = 0
+	cfg.Server.HTTPPort = 0
+	cfg.Gateway.QueryServiceURL = "localhost:50051"
+	cfg.Gateway.PullerServiceURL = "localhost:50051"
+	cfg.Gateway.StreamerServiceURL = "localhost:50051"
+	cfg.Identity.AuthZ.RulesFile = ""
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:        ModeDistributed,
+		RunQuery:    true,
+		RunStreamer: true,
+		RunAPI:      true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.streamerService) // Local Streamer service
+	assert.NotNil(t, mgr.streamerClient)  // Gateway uses client
+	assert.NotNil(t, mgr.rtServer)
+}
+
+func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	// Configure NATS to fail connection
+	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
+
+	mgr := NewManager(cfg, Options{
+		Mode:                ModeStandalone,
+		RunAPI:              true,
+		RunTriggerEvaluator: true,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	err := mgr.Init(ctx)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to connect to NATS")
+}
+
+func TestManager_initStandalone_WithPuller(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"default": "test_db"},
+		client:   &mongo.Client{},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Buffer.Path = t.TempDir()
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.pullerService)
+	// In standalone mode, pullerGRPC should be nil (no gRPC registration)
+	assert.Nil(t, mgr.pullerGRPC)
+}
+
+func TestManager_initStandalone_PullerError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return nil, errors.New("storage error")
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.Error(t, err)
+}
+
+func TestManager_initPullerGRPCServer(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Server.GRPCPort = 0
+	cfg.Puller.Buffer.Path = t.TempDir()
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeDistributed,
+		RunPuller: true,
+	})
+
+	// Create a minimal puller service
+	mgr.pullerService = puller.NewService(cfg.Puller, nil)
+
+	// Call initPullerGRPCServer
+	mgr.initPullerGRPCServer()
+
+	assert.NotNil(t, mgr.pullerGRPC)
 }

@@ -8,10 +8,6 @@ import (
 func TestDefaultPullerConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	if cfg.GRPC.Address != ":50051" {
-		t.Errorf("GRPC.Address = %q, want %q", cfg.GRPC.Address, ":50051")
-	}
-
 	if cfg.GRPC.MaxConnections != 100 {
 		t.Errorf("GRPC.MaxConnections = %d, want %d", cfg.GRPC.MaxConnections, 100)
 	}
@@ -65,12 +61,6 @@ func TestPullerConfig_Validate(t *testing.T) {
 			name:    "valid default config",
 			modify:  func(c *Config) {},
 			wantErr: false,
-		},
-		{
-			name:    "empty grpc address",
-			modify:  func(c *Config) { c.GRPC.Address = "" },
-			wantErr: true,
-			errMsg:  "grpc.address",
 		},
 		{
 			name:    "zero max connections",

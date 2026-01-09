@@ -116,9 +116,9 @@ func TestServer_StateMachine_HappyPath(t *testing.T) {
 	}
 	server := NewServer(cfg, source, nil)
 
-	// Start the server to initialize the event loop
-	server.Start(context.Background())
-	defer server.Stop(context.Background())
+	// Init the server to start the event loop
+	server.Init()
+	defer server.Shutdown()
 
 	// Mock Stream
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -205,9 +205,9 @@ func TestServer_StateMachine_LiveDowngrade(t *testing.T) {
 	}
 	server := NewServer(cfg, source, nil)
 
-	// Start the server to initialize the event loop
-	server.Start(context.Background())
-	defer server.Stop(context.Background())
+	// Init the server to start the event loop
+	server.Init()
+	defer server.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -307,8 +307,8 @@ func TestServer_Boundary_EmptyReplay(t *testing.T) {
 		},
 	}
 	server := NewServer(cfg, source, nil)
-	server.Start(context.Background())
-	defer server.Stop(context.Background())
+	server.Init()
+	defer server.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -348,8 +348,8 @@ func TestServer_Boundary_ImmediateCancel(t *testing.T) {
 	cfg := config.GRPCConfig{ChannelSize: 100}
 	source := &controllableEventSource{}
 	server := NewServer(cfg, source, nil)
-	server.Start(context.Background())
-	defer server.Stop(context.Background())
+	server.Init()
+	defer server.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	cancel() // Cancel immediately
@@ -377,8 +377,8 @@ func TestServer_Boundary_SendError(t *testing.T) {
 		},
 	}
 	server := NewServer(cfg, source, nil)
-	server.Start(context.Background())
-	defer server.Stop(context.Background())
+	server.Init()
+	defer server.Shutdown()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

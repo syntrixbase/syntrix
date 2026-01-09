@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/streamer"
@@ -16,17 +17,10 @@ type Server struct {
 	streamer       streamer.Service
 	dataCollection string
 	auth           identity.AuthN
-	cfg            Config
+	cfg            config.RealtimeConfig
 }
 
-// Config controls realtime auth and CORS behavior.
-type Config struct {
-	AllowedOrigins []string
-	AllowDevOrigin bool
-	EnableAuth     bool
-}
-
-func NewServer(qs query.Service, str streamer.Service, dataCollection string, auth identity.AuthN, cfg Config) *Server {
+func NewServer(qs query.Service, str streamer.Service, dataCollection string, auth identity.AuthN, cfg config.RealtimeConfig) *Server {
 	h := NewHub()
 	s := &Server{
 		hub:            h,

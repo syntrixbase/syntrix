@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -400,7 +401,7 @@ func TestServeWs_HubClosed(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, nil, nil, Config{}, w, r)
+		ServeWs(hub, nil, nil, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer s.Close()
 
@@ -424,7 +425,7 @@ func TestServeSSE_HubClosed(t *testing.T) {
 	req := httptest.NewRequest("GET", "/", nil)
 	w := httptest.NewRecorder()
 
-	ServeSSE(hub, nil, nil, Config{}, w, req)
+	ServeSSE(hub, nil, nil, api_config.RealtimeConfig{}, w, req)
 
 	// Should return immediately
 }
@@ -474,7 +475,7 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		ServeSSE(hub, nil, nil, Config{}, w, req)
+		ServeSSE(hub, nil, nil, api_config.RealtimeConfig{}, w, req)
 		close(done)
 	}()
 
@@ -554,7 +555,7 @@ func TestServeSSE_Heartbeat(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		ServeSSE(hub, nil, nil, Config{}, rec, req)
+		ServeSSE(hub, nil, nil, api_config.RealtimeConfig{}, rec, req)
 		close(done)
 	}()
 

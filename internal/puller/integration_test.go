@@ -85,14 +85,23 @@ func TestPuller_GRPC_Integration(t *testing.T) {
 
 	// 3. Start gRPC Server
 	grpcPort := getFreePort(t)
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	require.NoError(t, err)
+
 	grpcCfg := config.GRPCConfig{
-		Address:        fmt.Sprintf(":%d", grpcPort),
 		MaxConnections: 10,
 	}
-	grpcServer := pullergrpc.NewServer(grpcCfg, pullerCore, logger)
-	err = grpcServer.Start(context.Background())
-	require.NoError(t, err)
-	defer grpcServer.Stop(context.Background())
+	pullerServer := pullergrpc.NewServer(grpcCfg, pullerCore, logger)
+
+	grpcServer := grpc.NewServer()
+	pullerv1.RegisterPullerServiceServer(grpcServer, pullerServer)
+	pullerServer.Init()
+
+	go grpcServer.Serve(lis)
+	defer func() {
+		pullerServer.Shutdown()
+		grpcServer.GracefulStop()
+	}()
 
 	// 4. Connect gRPC Client
 	conn, err := grpc.NewClient(fmt.Sprintf("localhost:%d", grpcPort), grpc.WithTransportCredentials(insecure.NewCredentials()))
