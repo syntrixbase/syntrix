@@ -20,6 +20,7 @@ This is the business layer Document type, visible to the API.
   "version": 0,                // Shadow field, server-written; client input ignored
   "updatedAt": 1700000000000,  // Shadow field, server-written; client input ignored
   "createdAt": 1700000000000,  // Shadow field, server-written; client input ignored
+  "deleted": false,            // Soft delete marker
   /* other user fields */
 }
 ```
@@ -128,5 +129,56 @@ Response (204 No Content)
 {
   "documents": [ ... ],
   "nextCursor": "cursor-string-for-next-page"
+}
+```
+
+### 1.3 Trigger API
+
+Internal API for trigger webhooks to access data.
+
+#### Batch Get Documents
+
+`POST /trigger/v1/get`
+
+Batch document reads by concrete paths.
+
+#### Query Documents
+
+`POST /trigger/v1/query`
+
+Single query (same shape as public query API).
+
+#### Write Documents
+
+`POST /trigger/v1/write`
+
+One or more write ops in a single request.
+
+## 2. Usage Examples
+
+### 2.1 Chat Message (REST)
+
+**Create a message:**
+
+```bash
+POST /api/v1/rooms/room-123/messages
+{
+  "senderId": "user-alice",
+  "text": "Hello everyone!",
+  "timestamp": 1678888888000
+}
+```
+
+**Query recent messages:**
+
+```bash
+POST /api/v1/query
+{
+  "collection": "rooms/room-123/messages",
+  "filters": [
+    {"field": "timestamp", "op": ">", "value": 1678880000000}
+  ],
+  "orderBy": [{"field": "timestamp", "direction": "desc"}],
+  "limit": 50
 }
 ```
