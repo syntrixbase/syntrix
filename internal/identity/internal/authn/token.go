@@ -108,18 +108,18 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 	now := time.Now()
 	jti := uuid.New().String()
 
-	tenantID := user.TenantID
-	if tenantID == "" {
-		tenantID = model.DefaultTenantID
+	databaseID := user.DatabaseID
+	if databaseID == "" {
+		databaseID = model.DefaultDatabaseID
 	}
 
 	// Access Token
 	accessClaims := Claims{
-		Username: user.Username,
-		Roles:    user.Roles,
-		Disabled: user.Disabled,
-		TenantID: tenantID,
-		UserID:   user.ID,
+		Username:   user.Username,
+		Roles:      user.Roles,
+		Disabled:   user.Disabled,
+		DatabaseID: databaseID,
+		UserID:     user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
@@ -139,9 +139,9 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 
 	// Refresh Token
 	refreshClaims := Claims{
-		Username: user.Username,
-		TenantID: tenantID,
-		UserID:   user.ID,
+		Username:   user.Username,
+		DatabaseID: databaseID,
+		UserID:     user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.refreshTTL)),
@@ -169,10 +169,10 @@ func (s *TokenService) GenerateSystemToken(serviceName string) (string, error) {
 	jti := uuid.New().String()
 
 	claims := Claims{
-		Username: "system:" + serviceName,
-		TenantID: model.DefaultTenantID,
-		UserID:   "system:" + serviceName,
-		Roles:    []string{"system", "service:" + serviceName},
+		Username:   "system:" + serviceName,
+		DatabaseID: model.DefaultDatabaseID,
+		UserID:     "system:" + serviceName,
+		Roles:      []string{"system", "service:" + serviceName},
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   "system:" + serviceName,
 			ExpiresAt: jwt.NewNumericDate(now.Add(s.accessTTL)),
@@ -199,8 +199,8 @@ func (s *TokenService) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		if claims.TenantID == "" {
-			return nil, errors.New("missing tenant ID in token claims")
+		if claims.DatabaseID == "" {
+			return nil, errors.New("missing database ID in token claims")
 		}
 		return claims, nil
 	}

@@ -61,14 +61,14 @@ func TestSignIn_ErrorPaths(t *testing.T) {
 			Username:     "user",
 			PasswordHash: "invalid-hash",
 			PasswordAlgo: "bcrypt",
-			TenantID:     "default",
+			DatabaseID:   "default",
 		}
 		mockStorage.On("GetUserByUsername", mock.Anything, "default", "user").Return(user, nil).Once()
 
 		_, err := svc.SignIn(context.Background(), LoginRequest{
-			TenantID: "default",
-			Username: "user",
-			Password: "password",
+			DatabaseID: "default",
+			Username:   "user",
+			Password:   "password",
 		})
 		assert.Error(t, err)
 	})
@@ -90,7 +90,7 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 		mockStorage.On("GetUserByUsername", mock.Anything, "default", "user").Return(nil, ErrUserNotFound).Once()
 		mockStorage.On("CreateUser", mock.Anything, "default", mock.Anything).Return(nil).Once()
 		pair, err := svc.SignUp(context.Background(), SignupRequest{
-			TenantID: "default", Username: "user", Password: "password123456",
+			DatabaseID: "default", Username: "user", Password: "password123456",
 		})
 		require.NoError(t, err)
 		return pair.RefreshToken
@@ -102,7 +102,7 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 
 		// Mock successful checks but failed revocation
 		mockStorage.On("IsRevoked", mock.Anything, "default", mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockStorage.On("GetUserByID", mock.Anything, "default", mock.Anything).Return(&User{ID: "u1", TenantID: "default"}, nil).Once()
+		mockStorage.On("GetUserByID", mock.Anything, "default", mock.Anything).Return(&User{ID: "u1", DatabaseID: "default"}, nil).Once()
 		mockStorage.On("RevokeToken", mock.Anything, "default", mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
 
 		_, err := svc.Refresh(context.Background(), RefreshRequest{RefreshToken: token})

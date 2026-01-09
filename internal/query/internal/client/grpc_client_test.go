@@ -175,7 +175,7 @@ func TestClient_GetDocument(t *testing.T) {
 			},
 		}, nil)
 
-		doc, err := client.GetDocument(context.Background(), "tenant1", "users/doc1")
+		doc, err := client.GetDocument(context.Background(), "database1", "users/doc1")
 		assert.NoError(t, err)
 		assert.Equal(t, "doc1", doc["id"])
 		assert.Equal(t, "Alice", doc["name"])
@@ -188,7 +188,7 @@ func TestClient_GetDocument(t *testing.T) {
 
 		mockClient.On("GetDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.NotFound, "not found"))
 
-		_, err := client.GetDocument(context.Background(), "tenant1", "users/doc1")
+		_, err := client.GetDocument(context.Background(), "database1", "users/doc1")
 		assert.ErrorIs(t, err, model.ErrNotFound)
 	})
 }
@@ -200,7 +200,7 @@ func TestClient_CreateDocument(t *testing.T) {
 
 		mockClient.On("CreateDocument", mock.Anything, mock.Anything).Return(&pb.CreateDocumentResponse{}, nil)
 
-		err := client.CreateDocument(context.Background(), "tenant1", model.Document{
+		err := client.CreateDocument(context.Background(), "database1", model.Document{
 			"id":   "doc1",
 			"name": "Alice",
 		})
@@ -214,7 +214,7 @@ func TestClient_CreateDocument(t *testing.T) {
 
 		mockClient.On("CreateDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.AlreadyExists, "already exists"))
 
-		err := client.CreateDocument(context.Background(), "tenant1", model.Document{"id": "doc1"})
+		err := client.CreateDocument(context.Background(), "database1", model.Document{"id": "doc1"})
 		assert.ErrorIs(t, err, model.ErrExists)
 	})
 }
@@ -232,7 +232,7 @@ func TestClient_ReplaceDocument(t *testing.T) {
 			},
 		}, nil)
 
-		doc, err := client.ReplaceDocument(context.Background(), "tenant1",
+		doc, err := client.ReplaceDocument(context.Background(), "database1",
 			model.Document{"id": "doc1", "name": "Bob"},
 			model.Filters{{Field: "version", Op: "eq", Value: int64(1)}},
 		)
@@ -248,7 +248,7 @@ func TestClient_ReplaceDocument(t *testing.T) {
 
 		mockClient.On("ReplaceDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "version mismatch"))
 
-		_, err := client.ReplaceDocument(context.Background(), "tenant1", model.Document{}, nil)
+		_, err := client.ReplaceDocument(context.Background(), "database1", model.Document{}, nil)
 		assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 	})
 }
@@ -266,7 +266,7 @@ func TestClient_PatchDocument(t *testing.T) {
 			},
 		}, nil)
 
-		doc, err := client.PatchDocument(context.Background(), "tenant1",
+		doc, err := client.PatchDocument(context.Background(), "database1",
 			model.Document{"age": 30},
 			nil,
 		)
@@ -282,7 +282,7 @@ func TestClient_PatchDocument(t *testing.T) {
 
 		mockClient.On("PatchDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.NotFound, "not found"))
 
-		_, err := client.PatchDocument(context.Background(), "tenant1", model.Document{}, nil)
+		_, err := client.PatchDocument(context.Background(), "database1", model.Document{}, nil)
 		assert.ErrorIs(t, err, model.ErrNotFound)
 	})
 }
@@ -294,7 +294,7 @@ func TestClient_DeleteDocument(t *testing.T) {
 
 		mockClient.On("DeleteDocument", mock.Anything, mock.Anything).Return(&pb.DeleteDocumentResponse{}, nil)
 
-		err := client.DeleteDocument(context.Background(), "tenant1", "users/doc1", nil)
+		err := client.DeleteDocument(context.Background(), "database1", "users/doc1", nil)
 		assert.NoError(t, err)
 		mockClient.AssertExpectations(t)
 	})
@@ -305,7 +305,7 @@ func TestClient_DeleteDocument(t *testing.T) {
 
 		mockClient.On("DeleteDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "precondition failed"))
 
-		err := client.DeleteDocument(context.Background(), "tenant1", "users/doc1",
+		err := client.DeleteDocument(context.Background(), "database1", "users/doc1",
 			model.Filters{{Field: "version", Op: "eq", Value: int64(1)}},
 		)
 		assert.ErrorIs(t, err, model.ErrPreconditionFailed)
@@ -324,7 +324,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 			},
 		}, nil)
 
-		docs, err := client.ExecuteQuery(context.Background(), "tenant1", model.Query{
+		docs, err := client.ExecuteQuery(context.Background(), "database1", model.Query{
 			Collection: "users",
 			Limit:      10,
 		})
@@ -343,7 +343,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 			Documents: []*pb.Document{},
 		}, nil)
 
-		docs, err := client.ExecuteQuery(context.Background(), "tenant1", model.Query{
+		docs, err := client.ExecuteQuery(context.Background(), "database1", model.Query{
 			Collection: "users",
 		})
 		assert.NoError(t, err)
@@ -356,7 +356,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 
 		mockClient.On("ExecuteQuery", mock.Anything, mock.Anything).Return(nil, status.Error(codes.InvalidArgument, "invalid query"))
 
-		_, err := client.ExecuteQuery(context.Background(), "tenant1", model.Query{})
+		_, err := client.ExecuteQuery(context.Background(), "database1", model.Query{})
 		assert.ErrorIs(t, err, model.ErrInvalidQuery)
 	})
 
@@ -370,7 +370,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 			},
 		}, nil)
 
-		docs, err := client.ExecuteQuery(context.Background(), "tenant1", model.Query{
+		docs, err := client.ExecuteQuery(context.Background(), "database1", model.Query{
 			Collection: "users",
 			Filters: model.Filters{
 				{Field: "age", Op: "gte", Value: 18},
@@ -399,7 +399,7 @@ func TestClient_Pull(t *testing.T) {
 			Checkpoint: 123456789,
 		}, nil)
 
-		resp, err := client.Pull(context.Background(), "tenant1", storage.ReplicationPullRequest{
+		resp, err := client.Pull(context.Background(), "database1", storage.ReplicationPullRequest{
 			Collection: "users",
 			Checkpoint: 0,
 			Limit:      100,
@@ -422,7 +422,7 @@ func TestClient_Pull(t *testing.T) {
 			Checkpoint: 987654321,
 		}, nil)
 
-		resp, err := client.Pull(context.Background(), "tenant1", storage.ReplicationPullRequest{
+		resp, err := client.Pull(context.Background(), "database1", storage.ReplicationPullRequest{
 			Collection: "users",
 			Checkpoint: 100,
 		})
@@ -437,7 +437,7 @@ func TestClient_Pull(t *testing.T) {
 
 		mockClient.On("Pull", mock.Anything, mock.Anything).Return(nil, status.Error(codes.Internal, "internal error"))
 
-		_, err := client.Pull(context.Background(), "tenant1", storage.ReplicationPullRequest{})
+		_, err := client.Pull(context.Background(), "database1", storage.ReplicationPullRequest{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "internal error")
 	})
@@ -453,7 +453,7 @@ func TestClient_Push(t *testing.T) {
 		}, nil)
 
 		baseVersion := int64(1)
-		resp, err := client.Push(context.Background(), "tenant1", storage.ReplicationPushRequest{
+		resp, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{
 			Collection: "users",
 			Changes: []storage.ReplicationPushChange{
 				{
@@ -483,7 +483,7 @@ func TestClient_Push(t *testing.T) {
 			},
 		}, nil)
 
-		resp, err := client.Push(context.Background(), "tenant1", storage.ReplicationPushRequest{
+		resp, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{
 			Collection: "users",
 			Changes: []storage.ReplicationPushChange{
 				{
@@ -507,7 +507,7 @@ func TestClient_Push(t *testing.T) {
 
 		mockClient.On("Push", mock.Anything, mock.Anything).Return(nil, status.Error(codes.PermissionDenied, "permission denied"))
 
-		_, err := client.Push(context.Background(), "tenant1", storage.ReplicationPushRequest{})
+		_, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{})
 		assert.ErrorIs(t, err, model.ErrPermissionDenied)
 	})
 
@@ -521,7 +521,7 @@ func TestClient_Push(t *testing.T) {
 
 		v1 := int64(1)
 		v2 := int64(5)
-		resp, err := client.Push(context.Background(), "tenant1", storage.ReplicationPushRequest{
+		resp, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{
 			Collection: "users",
 			Changes: []storage.ReplicationPushChange{
 				{Doc: &storage.StoredDoc{Id: "doc1"}, BaseVersion: &v1},

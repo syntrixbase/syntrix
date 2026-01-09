@@ -7,11 +7,12 @@
 package streamerv1
 
 import (
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
+
+	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
+	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (
@@ -79,8 +80,8 @@ type StreamerEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique event identifier.
 	EventId string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
 	// Collection name.
 	Collection string `protobuf:"bytes,3,opt,name=collection,proto3" json:"collection,omitempty"`
 	// Document identifier.
@@ -133,9 +134,9 @@ func (x *StreamerEvent) GetEventId() string {
 	return ""
 }
 
-func (x *StreamerEvent) GetTenant() string {
+func (x *StreamerEvent) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -384,8 +385,8 @@ type SubscribeRequest struct {
 	// All filters are ANDed together.
 	// For document ID match, use Filter(field="_id", op="==", value=...).
 	Filters []*Filter `protobuf:"bytes,3,rep,name=filters,proto3" json:"filters,omitempty"`
-	// Tenant identifier for multi-tenancy.
-	Tenant        string `protobuf:"bytes,4,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier for multi-database.
+	Database      string `protobuf:"bytes,4,opt,name=database,proto3" json:"database,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -441,9 +442,9 @@ func (x *SubscribeRequest) GetFilters() []*Filter {
 	return nil
 }
 
-func (x *SubscribeRequest) GetTenant() string {
+func (x *SubscribeRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -959,10 +960,10 @@ var File_streamer_proto protoreflect.FileDescriptor
 
 const file_streamer_proto_rawDesc = "" +
 	"\n" +
-	"\x0estreamer.proto\x12\x13syntrix.streamer.v1\"\x88\x02\n" +
+	"\x0estreamer.proto\x12\x13syntrix.streamer.v1\"\x8c\x02\n" +
 	"\rStreamerEvent\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x16\n" +
-	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x1e\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x03 \x01(\tR\n" +
 	"collection\x12\x1f\n" +
@@ -980,14 +981,14 @@ const file_streamer_proto_rawDesc = "" +
 	"\bdelivery\x18\x01 \x01(\v2\".syntrix.streamer.v1.EventDeliveryH\x00R\bdelivery\x12H\n" +
 	"\rheartbeat_ack\x18\x02 \x01(\v2!.syntrix.streamer.v1.HeartbeatAckH\x00R\fheartbeatAck\x12W\n" +
 	"\x12subscribe_response\x18\x03 \x01(\v2&.syntrix.streamer.v1.SubscribeResponseH\x00R\x11subscribeResponseB\t\n" +
-	"\apayload\"\xaa\x01\n" +
+	"\apayload\"\xae\x01\n" +
 	"\x10SubscribeRequest\x12'\n" +
 	"\x0fsubscription_id\x18\x01 \x01(\tR\x0esubscriptionId\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x02 \x01(\tR\n" +
 	"collection\x125\n" +
-	"\afilters\x18\x03 \x03(\v2\x1b.syntrix.streamer.v1.FilterR\afilters\x12\x16\n" +
-	"\x06tenant\x18\x04 \x01(\tR\x06tenant\"`\n" +
+	"\afilters\x18\x03 \x03(\v2\x1b.syntrix.streamer.v1.FilterR\afilters\x12\x1a\n" +
+	"\bdatabase\x18\x04 \x01(\tR\bdatabase\"`\n" +
 	"\x06Filter\x12\x14\n" +
 	"\x05field\x18\x01 \x01(\tR\x05field\x12\x0e\n" +
 	"\x02op\x18\x02 \x01(\tR\x02op\x120\n" +

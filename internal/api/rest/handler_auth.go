@@ -18,8 +18,8 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignUp(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, identity.ErrTenantRequired) {
-			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Tenant is required")
+		if errors.Is(err, identity.ErrDatabaseRequired) {
+			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Signup failed")
@@ -50,8 +50,8 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Account is locked")
 			return
 		}
-		if errors.Is(err, identity.ErrTenantRequired) {
-			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Tenant is required")
+		if errors.Is(err, identity.ErrDatabaseRequired) {
+			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Login failed")

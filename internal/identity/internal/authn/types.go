@@ -21,7 +21,7 @@ const (
 	ContextKeyUsername = identtypes.ContextKeyUsername
 	ContextKeyRoles    = identtypes.ContextKeyRoles
 	ContextKeyClaims   = identtypes.ContextKeyClaims
-	ContextKeyTenant   = identtypes.ContextKeyTenant
+	ContextKeyDatabase = identtypes.ContextKeyDatabase
 )
 
 // Keep storage alias for store interfaces.

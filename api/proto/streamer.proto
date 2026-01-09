@@ -26,8 +26,8 @@ message StreamerEvent {
   // Unique event identifier.
   string event_id = 1;
 
-  // Tenant identifier.
-  string tenant = 2;
+  // Database identifier.
+  string database = 2;
 
   // Collection name.
   string collection = 3;
@@ -77,8 +77,8 @@ message SubscribeRequest {
   // For document ID match, use Filter(field="_id", op="==", value=...).
   repeated Filter filters = 3;
 
-  // Tenant identifier for multi-tenancy.
-  string tenant = 4;
+  // Database identifier for multi-database.
+  string database = 4;
 }
 
 // Filter defines a single match condition.

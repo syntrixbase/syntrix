@@ -33,10 +33,10 @@ func TestAuthorized_GetDocumentError(t *testing.T) {
 	req, _ := http.NewRequest("PUT", "/api/v1/col/doc", nil)
 	req.SetPathValue("path", "col/doc")
 
-	// Add tenant to context so tenantOrError passes (though authorized doesn't call it directly,
-	// it uses r.Context() for GetDocument which usually needs tenant, but here we mock it with "default")
+	// Add database to context so databaseOrError passes (though authorized doesn't call it directly,
+	// it uses r.Context() for GetDocument which usually needs database, but here we mock it with "default")
 	// Wait, authorized calls h.engine.GetDocument(r.Context(), "default", path) directly.
-	// So we don't need tenant in context for this specific call in authorized.
+	// So we don't need database in context for this specific call in authorized.
 
 	rr := httptest.NewRecorder()
 	target(rr, req)

@@ -85,7 +85,7 @@ func (e *defaultTriggerEngine) Start(ctx context.Context) error {
 
 					task := &trigger.DeliveryTask{
 						TriggerID:   t.ID,
-						Tenant:      t.Tenant,
+						Database:    t.Database,
 						Event:       string(evt.Type),
 						Collection:  collection,
 						DocumentID:  documentID,

@@ -423,8 +423,8 @@ func TestServeSSE_HubClosed(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	req := httptest.NewRequest("GET", "/", nil)
-	// Add tenant to context since SSE requires authentication
-	reqCtx := context.WithValue(req.Context(), identity.ContextKeyTenant, "test-tenant")
+	// Add database to context since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), identity.ContextKeyDatabase, "test-database")
 	req = req.WithContext(reqCtx)
 	w := httptest.NewRecorder()
 
@@ -465,8 +465,8 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	w := &FailWriter{ResponseWriter: rec}
 
 	req := httptest.NewRequest("GET", "/", nil)
-	// Add tenant to context since SSE requires authentication
-	reqCtx := context.WithValue(req.Context(), identity.ContextKeyTenant, "test-tenant")
+	// Add database to context since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), identity.ContextKeyDatabase, "test-database")
 	req = req.WithContext(reqCtx)
 
 	// We need to make Write fail ONLY when sending data, not headers.
@@ -522,7 +522,7 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 				Collection: "test",
 				DocumentID: "1",
 				Document:   model.Document{"id": "1", "collection": "test", "a": 1},
-				Tenant:     "default",
+				Database:   "default",
 			},
 		}
 	} else {
@@ -557,8 +557,8 @@ func TestServeSSE_Heartbeat(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	// Add tenant to context since SSE requires authentication
-	ctx2 = context.WithValue(ctx2, identity.ContextKeyTenant, "test-tenant")
+	// Add database to context since SSE requires authentication
+	ctx2 = context.WithValue(ctx2, identity.ContextKeyDatabase, "test-database")
 	req = req.WithContext(ctx2)
 
 	done := make(chan struct{})

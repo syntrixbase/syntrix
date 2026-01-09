@@ -18,58 +18,58 @@ type MockService struct {
 	mock.Mock
 }
 
-func (m *MockService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
-	args := m.Called(ctx, tenant, path)
+func (m *MockService) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
+	args := m.Called(ctx, database, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
-	args := m.Called(ctx, tenant, doc)
+func (m *MockService) CreateDocument(ctx context.Context, database string, doc model.Document) error {
+	args := m.Called(ctx, database, doc)
 	return args.Error(0)
 }
 
-func (m *MockService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, tenant, data, pred)
+func (m *MockService) ReplaceDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, database, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, tenant, data, pred)
+func (m *MockService) PatchDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, database, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
-	args := m.Called(ctx, tenant, path, pred)
+func (m *MockService) DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error {
+	args := m.Called(ctx, database, path, pred)
 	return args.Error(0)
 }
 
-func (m *MockService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
-	args := m.Called(ctx, tenant, q)
+func (m *MockService) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	args := m.Called(ctx, database, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
-	args := m.Called(ctx, tenant, req)
+func (m *MockService) Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+	args := m.Called(ctx, database, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.ReplicationPullResponse), args.Error(1)
 }
 
-func (m *MockService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	args := m.Called(ctx, tenant, req)
+func (m *MockService) Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+	args := m.Called(ctx, database, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -86,11 +86,11 @@ func TestServer_GetDocument(t *testing.T) {
 			"collection": "users",
 			"name":       "Alice",
 		}
-		mockSvc.On("GetDocument", mock.Anything, "tenant1", "users/user1").Return(expectedDoc, nil)
+		mockSvc.On("GetDocument", mock.Anything, "database1", "users/user1").Return(expectedDoc, nil)
 
 		resp, err := server.GetDocument(context.Background(), &pb.GetDocumentRequest{
-			Tenant: "tenant1",
-			Path:   "users/user1",
+			Database: "database1",
+			Path:     "users/user1",
 		})
 
 		assert.NoError(t, err)
@@ -103,11 +103,11 @@ func TestServer_GetDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("GetDocument", mock.Anything, "tenant1", "users/missing").Return(nil, model.ErrNotFound)
+		mockSvc.On("GetDocument", mock.Anything, "database1", "users/missing").Return(nil, model.ErrNotFound)
 
 		resp, err := server.GetDocument(context.Background(), &pb.GetDocumentRequest{
-			Tenant: "tenant1",
-			Path:   "users/missing",
+			Database: "database1",
+			Path:     "users/missing",
 		})
 
 		assert.Nil(t, resp)
@@ -123,10 +123,10 @@ func TestServer_CreateDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("CreateDocument", mock.Anything, "tenant1", mock.AnythingOfType("model.Document")).Return(nil)
+		mockSvc.On("CreateDocument", mock.Anything, "database1", mock.AnythingOfType("model.Document")).Return(nil)
 
 		resp, err := server.CreateDocument(context.Background(), &pb.CreateDocumentRequest{
-			Tenant: "tenant1",
+			Database: "database1",
 			Document: &pb.Document{
 				Id:         "user1",
 				Collection: "users",
@@ -142,10 +142,10 @@ func TestServer_CreateDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("CreateDocument", mock.Anything, "tenant1", mock.AnythingOfType("model.Document")).Return(model.ErrExists)
+		mockSvc.On("CreateDocument", mock.Anything, "database1", mock.AnythingOfType("model.Document")).Return(model.ErrExists)
 
 		resp, err := server.CreateDocument(context.Background(), &pb.CreateDocumentRequest{
-			Tenant:   "tenant1",
+			Database: "database1",
 			Document: &pb.Document{Id: "user1"},
 		})
 
@@ -162,10 +162,10 @@ func TestServer_ReplaceDocument(t *testing.T) {
 		server := NewServer(mockSvc)
 
 		resultDoc := model.Document{"id": "user1", "name": "Updated"}
-		mockSvc.On("ReplaceDocument", mock.Anything, "tenant1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(resultDoc, nil)
+		mockSvc.On("ReplaceDocument", mock.Anything, "database1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(resultDoc, nil)
 
 		resp, err := server.ReplaceDocument(context.Background(), &pb.ReplaceDocumentRequest{
-			Tenant:   "tenant1",
+			Database: "database1",
 			Document: &pb.Document{Id: "user1"},
 		})
 
@@ -178,10 +178,10 @@ func TestServer_ReplaceDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("ReplaceDocument", mock.Anything, "tenant1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(nil, model.ErrPreconditionFailed)
+		mockSvc.On("ReplaceDocument", mock.Anything, "database1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(nil, model.ErrPreconditionFailed)
 
 		resp, err := server.ReplaceDocument(context.Background(), &pb.ReplaceDocumentRequest{
-			Tenant:   "tenant1",
+			Database: "database1",
 			Document: &pb.Document{Id: "user1"},
 		})
 
@@ -198,10 +198,10 @@ func TestServer_PatchDocument(t *testing.T) {
 		server := NewServer(mockSvc)
 
 		resultDoc := model.Document{"id": "user1", "name": "Patched"}
-		mockSvc.On("PatchDocument", mock.Anything, "tenant1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(resultDoc, nil)
+		mockSvc.On("PatchDocument", mock.Anything, "database1", mock.AnythingOfType("model.Document"), mock.AnythingOfType("model.Filters")).Return(resultDoc, nil)
 
 		resp, err := server.PatchDocument(context.Background(), &pb.PatchDocumentRequest{
-			Tenant:   "tenant1",
+			Database: "database1",
 			Document: &pb.Document{Id: "user1"},
 		})
 
@@ -215,11 +215,11 @@ func TestServer_DeleteDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("DeleteDocument", mock.Anything, "tenant1", "users/user1", mock.AnythingOfType("model.Filters")).Return(nil)
+		mockSvc.On("DeleteDocument", mock.Anything, "database1", "users/user1", mock.AnythingOfType("model.Filters")).Return(nil)
 
 		resp, err := server.DeleteDocument(context.Background(), &pb.DeleteDocumentRequest{
-			Tenant: "tenant1",
-			Path:   "users/user1",
+			Database: "database1",
+			Path:     "users/user1",
 		})
 
 		assert.NoError(t, err)
@@ -230,11 +230,11 @@ func TestServer_DeleteDocument(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("DeleteDocument", mock.Anything, "tenant1", "users/missing", mock.AnythingOfType("model.Filters")).Return(model.ErrNotFound)
+		mockSvc.On("DeleteDocument", mock.Anything, "database1", "users/missing", mock.AnythingOfType("model.Filters")).Return(model.ErrNotFound)
 
 		resp, err := server.DeleteDocument(context.Background(), &pb.DeleteDocumentRequest{
-			Tenant: "tenant1",
-			Path:   "users/missing",
+			Database: "database1",
+			Path:     "users/missing",
 		})
 
 		assert.Nil(t, resp)
@@ -253,10 +253,10 @@ func TestServer_ExecuteQuery(t *testing.T) {
 			{"id": "doc1", "name": "First"},
 			{"id": "doc2", "name": "Second"},
 		}
-		mockSvc.On("ExecuteQuery", mock.Anything, "tenant1", mock.AnythingOfType("model.Query")).Return(docs, nil)
+		mockSvc.On("ExecuteQuery", mock.Anything, "database1", mock.AnythingOfType("model.Query")).Return(docs, nil)
 
 		resp, err := server.ExecuteQuery(context.Background(), &pb.ExecuteQueryRequest{
-			Tenant: "tenant1",
+			Database: "database1",
 			Query: &pb.Query{
 				Collection: "docs",
 				Limit:      10,
@@ -271,11 +271,11 @@ func TestServer_ExecuteQuery(t *testing.T) {
 		mockSvc := new(MockService)
 		server := NewServer(mockSvc)
 
-		mockSvc.On("ExecuteQuery", mock.Anything, "tenant1", mock.AnythingOfType("model.Query")).Return(nil, model.ErrInvalidQuery)
+		mockSvc.On("ExecuteQuery", mock.Anything, "database1", mock.AnythingOfType("model.Query")).Return(nil, model.ErrInvalidQuery)
 
 		resp, err := server.ExecuteQuery(context.Background(), &pb.ExecuteQueryRequest{
-			Tenant: "tenant1",
-			Query:  &pb.Query{Collection: ""},
+			Database: "database1",
+			Query:    &pb.Query{Collection: ""},
 		})
 
 		assert.Nil(t, resp)
@@ -296,10 +296,10 @@ func TestServer_Pull(t *testing.T) {
 			},
 			Checkpoint: 12345,
 		}
-		mockSvc.On("Pull", mock.Anything, "tenant1", mock.Anything).Return(pullResp, nil)
+		mockSvc.On("Pull", mock.Anything, "database1", mock.Anything).Return(pullResp, nil)
 
 		resp, err := server.Pull(context.Background(), &pb.PullRequest{
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			Checkpoint: 0,
 			Limit:      100,
@@ -319,10 +319,10 @@ func TestServer_Push(t *testing.T) {
 		pushResp := &storage.ReplicationPushResponse{
 			Conflicts: nil,
 		}
-		mockSvc.On("Push", mock.Anything, "tenant1", mock.Anything).Return(pushResp, nil)
+		mockSvc.On("Push", mock.Anything, "database1", mock.Anything).Return(pushResp, nil)
 
 		resp, err := server.Push(context.Background(), &pb.PushRequest{
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			Changes:    []*pb.PushChange{},
 		})

@@ -724,7 +724,7 @@ func TestDeleteDocument_StorageError(t *testing.T) {
 // Additional Edge Case Tests
 // ==================================================
 
-func TestGetDocument_CustomTenant(t *testing.T) {
+func TestGetDocument_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
@@ -734,39 +734,39 @@ func TestGetDocument_CustomTenant(t *testing.T) {
 		Data:       map[string]interface{}{"foo": "bar"},
 		Version:    1,
 	}
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(doc, nil)
+	mockStorage.On("Get", mock.Anything, "custom-database", "col/doc1").Return(doc, nil)
 
-	result, err := engine.GetDocument(context.Background(), "custom-tenant", "col/doc1")
+	result, err := engine.GetDocument(context.Background(), "custom-database", "col/doc1")
 	assert.NoError(t, err)
 	assert.Equal(t, "bar", result["foo"])
 	mockStorage.AssertExpectations(t)
 }
 
-func TestCreateDocument_CustomTenant(t *testing.T) {
+func TestCreateDocument_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	mockStorage.On("Create", mock.Anything, "custom-tenant", mock.Anything).Return(nil)
+	mockStorage.On("Create", mock.Anything, "custom-database", mock.Anything).Return(nil)
 
 	doc := model.Document{"collection": "col", "id": "doc1", "foo": "bar"}
-	err := engine.CreateDocument(context.Background(), "custom-tenant", doc)
+	err := engine.CreateDocument(context.Background(), "custom-database", doc)
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestReplaceDocument_CustomTenant(t *testing.T) {
+func TestReplaceDocument_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
 	// ReplaceDocument calls Get first to check if doc exists
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
+	mockStorage.On("Get", mock.Anything, "custom-database", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Version:    1,
 	}, nil).Once()
-	mockStorage.On("Update", mock.Anything, "custom-tenant", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
+	mockStorage.On("Update", mock.Anything, "custom-database", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
 	// After update, Get is called again to return updated doc
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
+	mockStorage.On("Get", mock.Anything, "custom-database", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Data:       map[string]interface{}{"foo": "bar"},
@@ -774,18 +774,18 @@ func TestReplaceDocument_CustomTenant(t *testing.T) {
 	}, nil).Once()
 
 	doc := model.Document{"collection": "col", "id": "doc1", "foo": "bar"}
-	_, err := engine.ReplaceDocument(context.Background(), "custom-tenant", doc, nil)
+	_, err := engine.ReplaceDocument(context.Background(), "custom-database", doc, nil)
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestPatchDocument_CustomTenant(t *testing.T) {
+func TestPatchDocument_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
 	// PatchDocument calls Patch then Get
-	mockStorage.On("Patch", mock.Anything, "custom-tenant", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(&storage.StoredDoc{
+	mockStorage.On("Patch", mock.Anything, "custom-database", "col/doc1", mock.Anything, model.Filters(nil)).Return(nil)
+	mockStorage.On("Get", mock.Anything, "custom-database", "col/doc1").Return(&storage.StoredDoc{
 		Fullpath:   "col/doc1",
 		Collection: "col",
 		Data:       map[string]interface{}{"foo": "bar", "baz": "qux"},
@@ -793,7 +793,7 @@ func TestPatchDocument_CustomTenant(t *testing.T) {
 	}, nil)
 
 	doc := model.Document{"collection": "col", "id": "doc1", "baz": "qux"}
-	_, err := engine.PatchDocument(context.Background(), "custom-tenant", doc, nil)
+	_, err := engine.PatchDocument(context.Background(), "custom-database", doc, nil)
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
@@ -816,18 +816,18 @@ func TestPatchDocument_GetAfterPatchError(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
-func TestDeleteDocument_CustomTenant(t *testing.T) {
+func TestDeleteDocument_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
-	mockStorage.On("Delete", mock.Anything, "custom-tenant", "col/doc1", model.Filters(nil)).Return(nil)
+	mockStorage.On("Delete", mock.Anything, "custom-database", "col/doc1", model.Filters(nil)).Return(nil)
 
-	err := engine.DeleteDocument(context.Background(), "custom-tenant", "col/doc1", nil)
+	err := engine.DeleteDocument(context.Background(), "custom-database", "col/doc1", nil)
 	assert.NoError(t, err)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestExecuteQuery_CustomTenant(t *testing.T) {
+func TestExecuteQuery_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
@@ -839,16 +839,16 @@ func TestExecuteQuery_CustomTenant(t *testing.T) {
 			Version:    1,
 		},
 	}
-	mockStorage.On("Query", mock.Anything, "custom-tenant", mock.Anything).Return(storedDocs, nil)
+	mockStorage.On("Query", mock.Anything, "custom-database", mock.Anything).Return(storedDocs, nil)
 
 	query := model.Query{Collection: "col"}
-	docs, err := engine.ExecuteQuery(context.Background(), "custom-tenant", query)
+	docs, err := engine.ExecuteQuery(context.Background(), "custom-database", query)
 	assert.NoError(t, err)
 	assert.Len(t, docs, 1)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestPull_CustomTenant(t *testing.T) {
+func TestPull_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
@@ -861,20 +861,20 @@ func TestPull_CustomTenant(t *testing.T) {
 			UpdatedAt:  200,
 		},
 	}
-	mockStorage.On("Query", mock.Anything, "custom-tenant", mock.Anything).Return(storedDocs, nil)
+	mockStorage.On("Query", mock.Anything, "custom-database", mock.Anything).Return(storedDocs, nil)
 
 	req := storage.ReplicationPullRequest{
 		Collection: "col",
 		Checkpoint: 100,
 		Limit:      10,
 	}
-	resp, err := engine.Pull(context.Background(), "custom-tenant", req)
+	resp, err := engine.Pull(context.Background(), "custom-database", req)
 	assert.NoError(t, err)
 	assert.Len(t, resp.Documents, 1)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestPush_CustomTenant(t *testing.T) {
+func TestPush_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	engine := newTestEngine(mockStorage)
 
@@ -890,10 +890,10 @@ func TestPush_CustomTenant(t *testing.T) {
 		},
 	}
 
-	mockStorage.On("Get", mock.Anything, "custom-tenant", "col/doc1").Return(nil, model.ErrNotFound)
-	mockStorage.On("Create", mock.Anything, "custom-tenant", mock.Anything).Return(nil)
+	mockStorage.On("Get", mock.Anything, "custom-database", "col/doc1").Return(nil, model.ErrNotFound)
+	mockStorage.On("Create", mock.Anything, "custom-database", mock.Anything).Return(nil)
 
-	resp, err := engine.Push(context.Background(), "custom-tenant", req)
+	resp, err := engine.Push(context.Background(), "custom-database", req)
 	assert.NoError(t, err)
 	assert.Empty(t, resp.Conflicts)
 	mockStorage.AssertExpectations(t)

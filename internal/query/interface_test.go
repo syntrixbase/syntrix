@@ -16,44 +16,44 @@ type MockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *MockDocumentStore) Get(ctx context.Context, tenant, path string) (*storage.StoredDoc, error) {
-	args := m.Called(ctx, tenant, path)
+func (m *MockDocumentStore) Get(ctx context.Context, database, path string) (*storage.StoredDoc, error) {
+	args := m.Called(ctx, database, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.StoredDoc), args.Error(1)
 }
 
-func (m *MockDocumentStore) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
-	args := m.Called(ctx, tenant, doc)
+func (m *MockDocumentStore) Create(ctx context.Context, database string, doc storage.StoredDoc) error {
+	args := m.Called(ctx, database, doc)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
-	args := m.Called(ctx, tenant, path, data, pred)
+func (m *MockDocumentStore) Update(ctx context.Context, database, path string, data map[string]interface{}, pred model.Filters) error {
+	args := m.Called(ctx, database, path, data, pred)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Patch(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
-	args := m.Called(ctx, tenant, path, data, pred)
+func (m *MockDocumentStore) Patch(ctx context.Context, database, path string, data map[string]interface{}, pred model.Filters) error {
+	args := m.Called(ctx, database, path, data, pred)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
-	args := m.Called(ctx, tenant, path, pred)
+func (m *MockDocumentStore) Delete(ctx context.Context, database, path string, pred model.Filters) error {
+	args := m.Called(ctx, database, path, pred)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
-	args := m.Called(ctx, tenant, q)
+func (m *MockDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*storage.StoredDoc, error) {
+	args := m.Called(ctx, database, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
 }
 
-func (m *MockDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
-	args := m.Called(ctx, tenant, collection, resumeToken, opts)
+func (m *MockDocumentStore) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+	args := m.Called(ctx, database, collection, resumeToken, opts)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

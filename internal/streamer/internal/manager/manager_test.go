@@ -24,7 +24,7 @@ func TestManager_Subscribe_ExactMatch(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc123"),
 	})
@@ -37,7 +37,7 @@ func TestManager_Subscribe_ExactMatch(t *testing.T) {
 	sub, ok := m.GetSubscription("sub1")
 	require.True(t, ok)
 	assert.Equal(t, "gw1", sub.GatewayID)
-	assert.Equal(t, "tenant1", sub.Tenant)
+	assert.Equal(t, "database1", sub.Database)
 	assert.Equal(t, "users", sub.Collection)
 	assert.Equal(t, "doc123", sub.GetDocumentID())
 	assert.True(t, sub.IsExactMatch())
@@ -48,7 +48,7 @@ func TestManager_Subscribe_CollectionLevel(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		// No Filters = collection-level subscription
 	})
@@ -69,7 +69,7 @@ func TestManager_Subscribe_DuplicateID(t *testing.T) {
 	// First subscription
 	resp1, _ := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	require.True(t, resp1.Success)
@@ -77,7 +77,7 @@ func TestManager_Subscribe_DuplicateID(t *testing.T) {
 	// Duplicate ID
 	resp2, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "orders",
 	})
 
@@ -92,7 +92,7 @@ func TestManager_Unsubscribe(t *testing.T) {
 	// Subscribe
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc123"),
 	})
@@ -120,18 +120,18 @@ func TestManager_UnregisterGateway(t *testing.T) {
 	// Add multiple subscriptions for the same gateway
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "orders",
 	})
 	// Another gateway
 	m.Subscribe("gw2", &pb.SubscribeRequest{
 		SubscriptionId: "sub3",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 
@@ -155,25 +155,25 @@ func TestManager_Match_ExactDocumentID(t *testing.T) {
 	// Subscribe to specific document
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc123"),
 	})
 	m.Subscribe("gw2", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc456"),
 	})
 
 	// Match doc123
-	result := m.Match("tenant1", "users", "doc123", nil)
+	result := m.Match("database1", "users", "doc123", nil)
 	require.Len(t, result, 1)
 	assert.Contains(t, result["gw1"], "sub1")
 	assert.NotContains(t, result, "gw2")
 
 	// Match doc456
-	result = m.Match("tenant1", "users", "doc456", nil)
+	result = m.Match("database1", "users", "doc456", nil)
 	require.Len(t, result, 1)
 	assert.Contains(t, result["gw2"], "sub2")
 }
@@ -184,19 +184,19 @@ func TestManager_Match_CollectionLevel(t *testing.T) {
 	// Collection-level subscription
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	// Document-specific subscription
 	m.Subscribe("gw2", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc123"),
 	})
 
 	// Match any doc in users collection
-	result := m.Match("tenant1", "users", "anyDoc", nil)
+	result := m.Match("database1", "users", "anyDoc", nil)
 
 	// Collection-level subscription matches
 	assert.Contains(t, result["gw1"], "sub1")
@@ -205,32 +205,32 @@ func TestManager_Match_CollectionLevel(t *testing.T) {
 	assert.Empty(t, result["gw2"])
 
 	// Match doc123 - both should match
-	result = m.Match("tenant1", "users", "doc123", nil)
+	result = m.Match("database1", "users", "doc123", nil)
 	assert.Contains(t, result["gw1"], "sub1")
 	assert.Contains(t, result["gw2"], "sub2")
 }
 
-func TestManager_Match_TenantIsolation(t *testing.T) {
+func TestManager_Match_DatabaseIsolation(t *testing.T) {
 	m := New()
 
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	m.Subscribe("gw2", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant2",
+		Database:       "database2",
 		Collection:     "users",
 	})
 
-	// Match tenant1
-	result := m.Match("tenant1", "users", "doc1", nil)
+	// Match database1
+	result := m.Match("database1", "users", "doc1", nil)
 	require.Len(t, result, 1)
 	assert.Contains(t, result["gw1"], "sub1")
 
-	// Match tenant2
-	result = m.Match("tenant2", "users", "doc1", nil)
+	// Match database2
+	result = m.Match("database2", "users", "doc1", nil)
 	require.Len(t, result, 1)
 	assert.Contains(t, result["gw2"], "sub2")
 }
@@ -240,18 +240,18 @@ func TestManager_Stats(t *testing.T) {
 
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters:        docIDFilter("doc1"),
 	})
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	m.Subscribe("gw2", &pb.SubscribeRequest{
 		SubscriptionId: "sub3",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "orders",
 	})
 
@@ -356,7 +356,7 @@ func TestManager_Subscribe_ExpressionMatch_NoCEL(t *testing.T) {
 	// Subscribe with filter that is NOT an exact match
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -376,7 +376,7 @@ func TestManager_Subscribe_ExpressionMatch_CompileError(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -396,7 +396,7 @@ func TestManager_Subscribe_ExpressionMatch_Success(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -416,7 +416,7 @@ func TestManager_Unsubscribe_ExpressionMatch(t *testing.T) {
 	// Subscribe with expression filter
 	m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -475,7 +475,7 @@ func TestManager_EvaluateCEL_NilProgram(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -487,7 +487,7 @@ func TestManager_EvaluateCEL_NilProgram(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Match should not include this subscription (nil program returns false)
-	matches := m.Match("tenant1", "users", "doc1", map[string]interface{}{
+	matches := m.Match("database1", "users", "doc1", map[string]interface{}{
 		"status": "active",
 	})
 	assert.Empty(t, matches["gw1"])
@@ -500,7 +500,7 @@ func TestManager_EvaluateCEL_ReturnsTrue(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -512,7 +512,7 @@ func TestManager_EvaluateCEL_ReturnsTrue(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Match should include this subscription
-	matches := m.Match("tenant1", "users", "doc1", map[string]interface{}{})
+	matches := m.Match("database1", "users", "doc1", map[string]interface{}{})
 	assert.Contains(t, matches["gw1"], "sub1")
 }
 
@@ -523,7 +523,7 @@ func TestManager_EvaluateCEL_ReturnsFalse(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -535,7 +535,7 @@ func TestManager_EvaluateCEL_ReturnsFalse(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Match should NOT include this subscription
-	matches := m.Match("tenant1", "users", "doc1", map[string]interface{}{})
+	matches := m.Match("database1", "users", "doc1", map[string]interface{}{})
 	assert.Empty(t, matches["gw1"])
 }
 
@@ -546,7 +546,7 @@ func TestManager_EvaluateCEL_ReturnsNonBool(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -558,7 +558,7 @@ func TestManager_EvaluateCEL_ReturnsNonBool(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Match should NOT include this subscription (non-bool result)
-	matches := m.Match("tenant1", "users", "doc1", map[string]interface{}{})
+	matches := m.Match("database1", "users", "doc1", map[string]interface{}{})
 	assert.Empty(t, matches["gw1"])
 }
 
@@ -569,7 +569,7 @@ func TestManager_EvaluateCEL_EvalError(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -581,17 +581,17 @@ func TestManager_EvaluateCEL_EvalError(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Match should NOT include this subscription (eval error)
-	matches := m.Match("tenant1", "users", "doc1", map[string]interface{}{})
+	matches := m.Match("database1", "users", "doc1", map[string]interface{}{})
 	assert.Empty(t, matches["gw1"])
 }
 
-func TestManager_MatchExpressions_NoMatchingTenant(t *testing.T) {
+func TestManager_MatchExpressions_NoMatchingDatabase(t *testing.T) {
 	celCompiler := &programCELCompiler{program: createTestProgram(true)}
 	m := New(WithCELCompiler(celCompiler))
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -602,8 +602,8 @@ func TestManager_MatchExpressions_NoMatchingTenant(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, resp.Success)
 
-	// Different tenant - matchExpressions should return early
-	matches := m.Match("tenant2", "users", "doc1", map[string]interface{}{})
+	// Different database - matchExpressions should return early
+	matches := m.Match("database2", "users", "doc1", map[string]interface{}{})
 	assert.Empty(t, matches)
 }
 
@@ -613,7 +613,7 @@ func TestManager_MatchExpressions_NoMatchingCollection(t *testing.T) {
 
 	resp, err := m.Subscribe("gw1", &pb.SubscribeRequest{
 		SubscriptionId: "sub1",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 		Filters: []*pb.Filter{{
 			Field: "status",
@@ -625,6 +625,6 @@ func TestManager_MatchExpressions_NoMatchingCollection(t *testing.T) {
 	assert.True(t, resp.Success)
 
 	// Different collection - matchExpressions should return early
-	matches := m.Match("tenant1", "orders", "doc1", map[string]interface{}{})
+	matches := m.Match("database1", "orders", "doc1", map[string]interface{}{})
 	assert.Empty(t, matches)
 }

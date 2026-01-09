@@ -2,7 +2,7 @@
   {
     "triggerId": "on-user-message",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/messages",
     "events": ["create"],
     "condition": "event.document.data.role == 'user'",
@@ -19,7 +19,7 @@
   {
     "triggerId": "on-new-task",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/tasks",
     "events": ["create"],
     "condition": "event.document.data.type == 'agent'",
@@ -37,7 +37,7 @@
   {
     "triggerId": "on-sub-agent-message",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/sub-agents/*/messages",
     "events": ["create"],
     "condition": "event.document.data.role == 'user' || event.document.data.role == 'tool'",
@@ -55,7 +55,7 @@
   {
     "triggerId": "on-sub-agent-tool",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/sub-agents/*/tool-calls",
     "events": ["create"],
     "condition": "event.document.data.status == 'pending'",
@@ -72,7 +72,7 @@
   {
     "triggerId": "on-task-completed",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/tasks",
     "events": ["update"],
     "condition": "event.document.data.status == 'success'",
@@ -90,7 +90,7 @@
   {
     "triggerId": "on-task-waiting",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/tasks",
     "events": ["update"],
     "condition": "event.document.data.status == 'waiting'",
@@ -107,7 +107,7 @@
   {
     "triggerId": "on-first-message-title",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users/*/orch-chats/*/messages",
     "events": ["create"],
     "condition": "event.document.data.role == 'user'",

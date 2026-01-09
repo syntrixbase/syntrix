@@ -69,12 +69,12 @@ func TestTokenService_ErrorPaths(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("ValidateToken_MissingTenantID", func(t *testing.T) {
+	t.Run("ValidateToken_MissingDatabaseID", func(t *testing.T) {
 		keyFile := getTestKeyPath(t)
 		cfg := config.AuthNConfig{PrivateKeyFile: keyFile}
 		ts, _ := NewTokenService(cfg)
 
-		// Manually create a token with missing TenantID
+		// Manually create a token with missing DatabaseID
 		claims := Claims{
 			Username: "user",
 			UserID:   "u1",
@@ -82,14 +82,14 @@ func TestTokenService_ErrorPaths(t *testing.T) {
 				Subject: "u1",
 			},
 		}
-		// TenantID is empty by default
+		// DatabaseID is empty by default
 
 		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 		tokenString, _ := token.SignedString(ts.privateKey)
 
 		_, err := ts.ValidateToken(tokenString)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing tenant ID")
+		assert.Contains(t, err.Error(), "missing database ID")
 	})
 }
 
@@ -139,7 +139,7 @@ func TestTokenService_GenerateTokenPair_SigningError(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, ts.RefreshOverlap())
 }
 
-func TestTokenService_GenerateTokenPair_DefaultTenant(t *testing.T) {
+func TestTokenService_GenerateTokenPair_DefaultDatabase(t *testing.T) {
 	keyFile := getTestKeyPath(t)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: keyFile,
@@ -147,13 +147,13 @@ func TestTokenService_GenerateTokenPair_DefaultTenant(t *testing.T) {
 	}
 	ts, _ := NewTokenService(cfg)
 
-	user := &User{ID: "u1", Username: "user"} // Empty TenantID
+	user := &User{ID: "u1", Username: "user"} // Empty DatabaseID
 	pair, err := ts.GenerateTokenPair(user)
 	require.NoError(t, err)
 
 	claims, err := ts.ValidateToken(pair.AccessToken)
 	require.NoError(t, err)
-	assert.Equal(t, "default", claims.TenantID)
+	assert.Equal(t, "default", claims.DatabaseID)
 }
 
 func TestLoadPrivateKey_DecodeError(t *testing.T) {

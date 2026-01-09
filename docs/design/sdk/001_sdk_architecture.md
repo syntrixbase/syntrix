@@ -1,7 +1,7 @@
 # TypeScript Client SDK Architecture
 
 **Date:** December 27, 2025
-**Status:** Architecture finalized; realtime auth (WS/SSE) and tenant-aware login updated
+**Status:** Architecture finalized; realtime auth (WS/SSE) and database-aware login updated
 
 **Related:** [003_authentication.md](003_authentication.md) defines the shared auth surface used by HTTP clients, replication, and realtime. Client specifics: [004_syntrix_client.md](004_syntrix_client.md), [005_trigger_client.md](005_trigger_client.md).
 
@@ -15,7 +15,7 @@ The Syntrix TypeScript SDK follows a "Semantic Separation, Shared Abstraction" p
 
 ### 2.1 Semantic Separation
 
-- **SyntrixClient (Standard)** — Target: external applications (Web, Mobile, Backend); Auth: user/long-lived tokens, tenant-aware; Transport: REST `/api/v1/...`; Semantics: HTTP-style (404 -> null).
+- **SyntrixClient (Standard)** — Target: external applications (Web, Mobile, Backend); Auth: user/long-lived tokens, database-aware; Transport: REST `/api/v1/...`; Semantics: HTTP-style (404 -> null).
 - **TriggerClient (Trigger)** — Target: trigger workers (serverless/container); Auth: ephemeral `preIssuedToken` scoped to the trigger event; Transport: Trigger RPC `/api/v1/trigger/...`; Capabilities: privileged atomic `batch()`.
 
 ### 2.2 Interface-Based Polymorphism
@@ -46,8 +46,8 @@ Internal details live under `src/internal` and are marked `/** @internal */`, ke
 
 ### 2.5 Realtime Auth & Transports (WS + SSE)
 
-- Why: Realtime must honor the same tenant-aware auth as REST; browsers may need SSE in constrained environments.
-- How: WS sends Bearer on HTTP upgrade and a frame-level `auth`; on auth errors, a single token refresh is attempted then surfaced. SSE uses Authorization header only, rejects query tokens, and applies the same tenant scoping.
+- Why: Realtime must honor the same database-aware auth as REST; browsers may need SSE in constrained environments.
+- How: WS sends Bearer on HTTP upgrade and a frame-level `auth`; on auth errors, a single token refresh is attempted then surfaced. SSE uses Authorization header only, rejects query tokens, and applies the same database scoping.
 
 ## 3. Architecture
 
@@ -90,7 +90,7 @@ pkg/syntrix-client-ts/src/
 
 ### 4.2 Auth
 
-- AuthConfig carries `tenantId`; login accepts `tenantId` and derives `/auth/v1/login`.
+- AuthConfig carries `databaseId`; login accepts `databaseId` and derives `/auth/v1/login`.
 - Token refresh serialized; hooks for refresh/error callbacks.
 - Realtime WS retries auth once after refresh; SSE relies on header-only auth.
 

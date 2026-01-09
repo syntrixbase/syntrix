@@ -88,9 +88,9 @@ match:
 	backend := factory.Document()
 
 	docs := []storage.StoredDoc{
-		{Id: storage.CalculateTenantID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
-		{Id: storage.CalculateTenantID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
-		{Id: storage.CalculateTenantID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
+		{Id: storage.CalculateDatabaseID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
+		{Id: storage.CalculateDatabaseID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
+		{Id: storage.CalculateDatabaseID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
 	}
 	for _, d := range docs {
 		err := backend.Create(ctx, "default", d)
@@ -118,7 +118,7 @@ match:
 
 	// 4. Test Scenarios
 
-	// Scenario 1: Public Access (Token required for tenant context)
+	// Scenario 1: Public Access (Token required for database context)
 	t.Run("Public Access", func(t *testing.T) {
 		token := env.GetToken(t, "user-public", "user")
 		require.NotEmpty(t, token)
@@ -127,7 +127,7 @@ match:
 		assert.Equal(t, http.StatusOK, code)
 	})
 
-	// Scenario 2: Private Access (No Token) -> Deny (missing tenant)
+	// Scenario 2: Private Access (No Token) -> Deny (missing database)
 	t.Run("Private Access No Token", func(t *testing.T) {
 		code := makeRequest("GET", "/api/v1/private/doc1", "", nil)
 		assert.Equal(t, http.StatusForbidden, code)

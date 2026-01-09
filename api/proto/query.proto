@@ -39,11 +39,11 @@ service QueryService {
 // Document represents a stored document.
 // The document data is stored as JSON bytes for flexibility.
 message Document {
-  // Unique document identifier (tenant_id:hash(fullpath)).
+  // Unique document identifier (database_id:hash(fullpath)).
   string id = 1;
 
-  // Tenant identifier.
-  string tenant_id = 2;
+  // Database identifier.
+  string database_id = 2;
 
   // Full pathname of the document.
   string fullpath = 3;
@@ -121,8 +121,8 @@ message Query {
 // ============================================================================
 
 message GetDocumentRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Document path.
   string path = 2;
@@ -138,8 +138,8 @@ message GetDocumentResponse {
 // ============================================================================
 
 message CreateDocumentRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Document to create.
   Document document = 2;
@@ -154,8 +154,8 @@ message CreateDocumentResponse {
 // ============================================================================
 
 message ReplaceDocumentRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Document with new data.
   Document document = 2;
@@ -174,8 +174,8 @@ message ReplaceDocumentResponse {
 // ============================================================================
 
 message PatchDocumentRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Document with partial data to merge.
   Document document = 2;
@@ -194,8 +194,8 @@ message PatchDocumentResponse {
 // ============================================================================
 
 message DeleteDocumentRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Document path.
   string path = 2;
@@ -213,8 +213,8 @@ message DeleteDocumentResponse {
 // ============================================================================
 
 message ExecuteQueryRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Query specification.
   Query query = 2;
@@ -230,8 +230,8 @@ message ExecuteQueryResponse {
 // ============================================================================
 
 message PullRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Target collection.
   string collection = 2;
@@ -265,8 +265,8 @@ message PushChange {
 }
 
 message PushRequest {
-  // Tenant identifier.
-  string tenant = 1;
+  // Database identifier.
+  string database = 1;
 
   // Target collection.
   string collection = 2;

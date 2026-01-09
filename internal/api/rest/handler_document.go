@@ -49,12 +49,12 @@ func (h *Handler) handleGetDocument(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
-	doc, err := h.engine.GetDocument(r.Context(), tenant, path)
+	doc, err := h.engine.GetDocument(r.Context(), database, path)
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -88,17 +88,17 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 	path := collection + "/" + data.GetID()
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.engine.CreateDocument(r.Context(), tenant, data); err != nil {
+	if err := h.engine.CreateDocument(r.Context(), database, data); err != nil {
 		writeStorageError(w, err)
 		return
 	}
 
-	doc, err := h.engine.GetDocument(r.Context(), tenant, path)
+	doc, err := h.engine.GetDocument(r.Context(), database, path)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to retrieve created document")
 		return
@@ -141,12 +141,12 @@ func (h *Handler) handleReplaceDocument(w http.ResponseWriter, r *http.Request) 
 	data.Doc.SetID(docID)
 	data.Doc.SetCollection(collection)
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
-	doc, err := h.engine.ReplaceDocument(r.Context(), tenant, data.Doc, data.IfMatch)
+	doc, err := h.engine.ReplaceDocument(r.Context(), database, data.Doc, data.IfMatch)
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -193,12 +193,12 @@ func (h *Handler) handlePatchDocument(w http.ResponseWriter, r *http.Request) {
 
 	data.Doc.SetID(docID)
 	data.Doc.SetCollection(collection)
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
-	doc, err := h.engine.PatchDocument(r.Context(), tenant, data.Doc, data.IfMatch)
+	doc, err := h.engine.PatchDocument(r.Context(), database, data.Doc, data.IfMatch)
 	if err != nil {
 		writeStorageError(w, err)
 		return
@@ -225,12 +225,12 @@ func (h *Handler) handleDeleteDocument(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
-	if err := h.engine.DeleteDocument(r.Context(), tenant, path, data.IfMatch); err != nil {
+	if err := h.engine.DeleteDocument(r.Context(), database, path, data.IfMatch); err != nil {
 		writeStorageError(w, err)
 		return
 	}

@@ -25,7 +25,7 @@ func TestConvertEvent(t *testing.T) {
 			input: &pullerv1.PullerEvent{
 				ChangeEvent: &pullerv1.ChangeEvent{
 					EventId:   "evt-123",
-					Tenant:    "tenant-1",
+					Database:  "database-1",
 					MgoColl:   "users",
 					MgoDocId:  "doc-1",
 					OpType:    "insert",
@@ -35,12 +35,12 @@ func TestConvertEvent(t *testing.T) {
 			},
 			expected: &events.PullerEvent{
 				Change: &events.StoreChangeEvent{
-					EventID:   "evt-123",
-					TenantID:  "tenant-1",
-					MgoColl:   "users",
-					MgoDocID:  "doc-1",
-					OpType:    events.StoreOperationType("insert"),
-					Timestamp: 1234567890,
+					EventID:    "evt-123",
+					DatabaseID: "database-1",
+					MgoColl:    "users",
+					MgoDocID:   "doc-1",
+					OpType:     events.StoreOperationType("insert"),
+					Timestamp:  1234567890,
 				},
 				Progress: "p1",
 			},
@@ -50,7 +50,7 @@ func TestConvertEvent(t *testing.T) {
 			input: &pullerv1.PullerEvent{
 				ChangeEvent: &pullerv1.ChangeEvent{
 					EventId:  "evt-456",
-					Tenant:   "tenant-2",
+					Database: "database-2",
 					MgoColl:  "orders",
 					MgoDocId: "doc-2",
 					OpType:   "update",
@@ -63,11 +63,11 @@ func TestConvertEvent(t *testing.T) {
 			},
 			expected: &events.PullerEvent{
 				Change: &events.StoreChangeEvent{
-					EventID:  "evt-456",
-					TenantID: "tenant-2",
-					MgoColl:  "orders",
-					MgoDocID: "doc-2",
-					OpType:   events.StoreOperationType("update"),
+					EventID:    "evt-456",
+					DatabaseID: "database-2",
+					MgoColl:    "orders",
+					MgoDocID:   "doc-2",
+					OpType:     events.StoreOperationType("update"),
 					ClusterTime: events.ClusterTime{
 						T: 100,
 						I: 5,
@@ -179,8 +179,8 @@ func TestConvertEvent(t *testing.T) {
 			if change.EventID != expChange.EventID {
 				t.Errorf("EventID = %v, want %v", change.EventID, expChange.EventID)
 			}
-			if change.TenantID != expChange.TenantID {
-				t.Errorf("TenantID = %v, want %v", change.TenantID, expChange.TenantID)
+			if change.DatabaseID != expChange.DatabaseID {
+				t.Errorf("DatabaseID = %v, want %v", change.DatabaseID, expChange.DatabaseID)
 			}
 			if change.MgoColl != expChange.MgoColl {
 				t.Errorf("MgoColl = %v, want %v", change.MgoColl, expChange.MgoColl)

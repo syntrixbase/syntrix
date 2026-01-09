@@ -10,20 +10,20 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
-func TestHub_TenantIsolation(t *testing.T) {
+func TestHub_DatabaseIsolation(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
 	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
-	// Client A: Tenant A
+	// Client A: Database A
 	clientA := &Client{
 		hub:            hub,
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		tenant:         "tenantA",
+		database:       "databaseA",
 	}
 	clientA.subscriptions["subA"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -33,13 +33,13 @@ func TestHub_TenantIsolation(t *testing.T) {
 	hub.Register(clientA)
 	hub.RegisterSubscription("stream-sub-A", clientA, "subA")
 
-	// Client B: Tenant B
+	// Client B: Database B
 	clientB := &Client{
 		hub:            hub,
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		tenant:         "tenantB",
+		database:       "databaseB",
 	}
 	clientB.subscriptions["subB"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -48,13 +48,13 @@ func TestHub_TenantIsolation(t *testing.T) {
 	hub.Register(clientB)
 	hub.RegisterSubscription("stream-sub-B", clientB, "subB")
 
-	// Client C: Tenant A (Another client in Tenant A)
+	// Client C: Database A (Another client in Database A)
 	clientC := &Client{
 		hub:            hub,
 		send:           make(chan BaseMessage, 10),
 		subscriptions:  make(map[string]Subscription),
 		streamerSubIDs: make(map[string]string),
-		tenant:         "tenantA",
+		database:       "databaseA",
 	}
 	clientC.subscriptions["subC"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -66,14 +66,14 @@ func TestHub_TenantIsolation(t *testing.T) {
 	// Wait for registration
 	time.Sleep(5 * time.Millisecond)
 
-	// 1. Broadcast event for Tenant A
+	// 1. Broadcast event for Database A
 	// Streamer determines this matches A and C only
 	hub.BroadcastDelivery(&streamer.EventDelivery{
 		SubscriptionIDs: []string{"stream-sub-A", "stream-sub-C"},
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
-			EventID:    "tenantA:user1",
-			Tenant:     "tenantA",
+			EventID:    "databaseA:user1",
+			Database:   "databaseA",
 			Collection: "users",
 			DocumentID: "user1",
 			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
@@ -100,19 +100,19 @@ func TestHub_TenantIsolation(t *testing.T) {
 	// Verify Client B did NOT receive it
 	select {
 	case <-clientB.send:
-		t.Fatal("Client B should NOT have received the event for Tenant A")
+		t.Fatal("Client B should NOT have received the event for Database A")
 	default:
 		// OK
 	}
 
-	// 2. Broadcast event for Tenant B
+	// 2. Broadcast event for Database B
 	// Streamer determines this matches B only
 	hub.BroadcastDelivery(&streamer.EventDelivery{
 		SubscriptionIDs: []string{"stream-sub-B"},
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
-			EventID:    "tenantB:user2",
-			Tenant:     "tenantB",
+			EventID:    "databaseB:user2",
+			Database:   "databaseB",
 			Collection: "users",
 			DocumentID: "user2",
 			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
@@ -131,7 +131,7 @@ func TestHub_TenantIsolation(t *testing.T) {
 	// Verify Client A did NOT receive it
 	select {
 	case <-clientA.send:
-		t.Fatal("Client A should NOT have received the event for Tenant B")
+		t.Fatal("Client A should NOT have received the event for Database B")
 	default:
 		// OK
 	}
@@ -139,27 +139,27 @@ func TestHub_TenantIsolation(t *testing.T) {
 	// Verify Client C did NOT receive it
 	select {
 	case <-clientC.send:
-		t.Fatal("Client C should NOT have received the event for Tenant B")
+		t.Fatal("Client C should NOT have received the event for Database B")
 	default:
 		// OK
 	}
 }
 
-func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
+func TestHub_SystemRole_CrossDatabaseAccess(t *testing.T) {
 	hubCtx, hubCancel := context.WithCancel(context.Background())
 	defer hubCancel()
 
 	hub := NewTestHub()
 	go hub.Run(hubCtx)
 
-	// System Client: Has allowAllTenants = true
+	// System Client: Has allowAllDatabases = true
 	sysClient := &Client{
-		hub:             hub,
-		send:            make(chan BaseMessage, 10),
-		subscriptions:   make(map[string]Subscription),
-		streamerSubIDs:  make(map[string]string),
-		tenant:          "default", // Primary tenant
-		allowAllTenants: true,      // Can see all tenants
+		hub:               hub,
+		send:              make(chan BaseMessage, 10),
+		subscriptions:     make(map[string]Subscription),
+		streamerSubIDs:    make(map[string]string),
+		database:          "default", // Primary database
+		allowAllDatabases: true,      // Can see all databases
 	}
 	sysClient.subscriptions["subSys"] = Subscription{
 		Query:       model.Query{Collection: "users"},
@@ -170,14 +170,14 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 
 	time.Sleep(5 * time.Millisecond)
 
-	// Broadcast event for Tenant A
+	// Broadcast event for Database A
 	// Streamer says SysClient matches
 	hub.BroadcastDelivery(&streamer.EventDelivery{
 		SubscriptionIDs: []string{"stream-sub-Sys"},
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
-			EventID:    "tenantA:user1",
-			Tenant:     "tenantA",
+			EventID:    "databaseA:user1",
+			Database:   "databaseA",
 			Collection: "users",
 			DocumentID: "user1",
 			Document:   map[string]interface{}{"name": "User A", "id": "user1"},
@@ -190,17 +190,17 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 	case msg := <-sysClient.send:
 		assert.Equal(t, TypeEvent, msg.Type)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("System client should see event from Tenant A")
+		t.Fatal("System client should see event from Database A")
 	}
 
-	// Broadcast event for Tenant B
+	// Broadcast event for Database B
 	// Streamer says SysClient matches
 	hub.BroadcastDelivery(&streamer.EventDelivery{
 		SubscriptionIDs: []string{"stream-sub-Sys"},
 		Event: &streamer.Event{
 			Operation:  streamer.OperationInsert,
-			EventID:    "tenantB:user2",
-			Tenant:     "tenantB",
+			EventID:    "databaseB:user2",
+			Database:   "databaseB",
 			Collection: "users",
 			DocumentID: "user2",
 			Document:   map[string]interface{}{"name": "User B", "id": "user2"},
@@ -213,6 +213,6 @@ func TestHub_SystemRole_CrossTenantAccess(t *testing.T) {
 	case msg := <-sysClient.send:
 		assert.Equal(t, TypeEvent, msg.Type)
 	case <-time.After(100 * time.Millisecond):
-		t.Fatal("System client should see event from Tenant B")
+		t.Fatal("System client should see event from Database B")
 	}
 }

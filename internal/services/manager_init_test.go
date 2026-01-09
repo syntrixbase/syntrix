@@ -300,25 +300,25 @@ type fakeDocumentStore struct {
 	retention time.Duration
 }
 
-func (f *fakeDocumentStore) Get(ctx context.Context, tenant, path string) (*storage.StoredDoc, error) {
+func (f *fakeDocumentStore) Get(ctx context.Context, database, path string) (*storage.StoredDoc, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
+func (f *fakeDocumentStore) Create(ctx context.Context, database string, doc storage.StoredDoc) error {
 	return nil
 }
-func (f *fakeDocumentStore) Update(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeDocumentStore) Update(ctx context.Context, database, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Patch(ctx context.Context, tenant, path string, data map[string]interface{}, pred model.Filters) error {
+func (f *fakeDocumentStore) Patch(ctx context.Context, database, path string, data map[string]interface{}, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Delete(ctx context.Context, tenant, path string, pred model.Filters) error {
+func (f *fakeDocumentStore) Delete(ctx context.Context, database, path string, pred model.Filters) error {
 	return nil
 }
-func (f *fakeDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
+func (f *fakeDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*storage.StoredDoc, error) {
 	return nil, nil
 }
-func (f *fakeDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+func (f *fakeDocumentStore) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	return nil, nil
 }
 func (f *fakeDocumentStore) Close(ctx context.Context) error { return nil }
@@ -328,31 +328,31 @@ type fakeAuthStore struct {
 	ensureCalled bool
 }
 
-func (f *fakeAuthStore) CreateUser(ctx context.Context, tenant string, user *storage.User) error {
+func (f *fakeAuthStore) CreateUser(ctx context.Context, database string, user *storage.User) error {
 	return nil
 }
-func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, tenant, username string) (*storage.User, error) {
+func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, database, username string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) GetUserByID(ctx context.Context, tenant, id string) (*storage.User, error) {
+func (f *fakeAuthStore) GetUserByID(ctx context.Context, database, id string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*storage.User, error) {
+func (f *fakeAuthStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*storage.User, error) {
 	return nil, nil
 }
-func (f *fakeAuthStore) UpdateUser(ctx context.Context, tenant string, user *storage.User) error {
+func (f *fakeAuthStore) UpdateUser(ctx context.Context, database string, user *storage.User) error {
 	return nil
 }
-func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, tenant, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, database, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeToken(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) RevokeToken(ctx context.Context, database, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, tenant, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, database, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) IsRevoked(ctx context.Context, tenant, jti string, gracePeriod time.Duration) (bool, error) {
+func (f *fakeAuthStore) IsRevoked(ctx context.Context, database, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
 func (f *fakeAuthStore) EnsureIndexes(ctx context.Context) error {

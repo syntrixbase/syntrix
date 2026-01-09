@@ -23,7 +23,7 @@ import (
 // Local definition of DeliveryTask for black-box testing
 type DeliveryTask struct {
 	TriggerID  string                 `json:"triggerId"`
-	Tenant     string                 `json:"tenant"`
+	Database   string                 `json:"database"`
 	Event      string                 `json:"event"`
 	Collection string                 `json:"collection"`
 	DocumentID string                 `json:"documentId"`
@@ -90,7 +90,7 @@ func TestTriggerIntegration(t *testing.T) {
 	rulesFile := filepath.Join(tmpDir, "triggers.yaml")
 	rulesContent := fmt.Sprintf(`
 - triggerId: "integration-test-trigger"
-  tenant: "test-tenant"
+  database: "test-database"
   collection: "users"
   events: ["create"]
   condition: "event.document.age >= 18"

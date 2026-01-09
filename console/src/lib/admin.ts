@@ -3,7 +3,7 @@ import { api } from './api'
 // User type from backend (sensitive fields are redacted by server)
 export interface User {
   id: string
-  tenantId: string
+  databaseId: string
   username: string
   createdAt: string
   updatedAt: string

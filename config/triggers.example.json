@@ -2,7 +2,7 @@
   {
     "triggerId": "example-trigger",
     "version": "1.0",
-    "tenant": "default",
+    "database": "default",
     "collection": "users",
     "events": ["create", "update"],
     "condition": "event.document.data.age >= 18",

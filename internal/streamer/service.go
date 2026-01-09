@@ -250,12 +250,12 @@ func (s *streamerService) ProcessEvent(event events.SyntrixChangeEvent) error {
 	}
 
 	s.logger.Debug("Streamer: processing event",
-		"tenantID", event.TenantID,
+		"databaseID", event.DatabaseID,
 		"collection", event.Document.Collection,
 	)
 
 	doc := helper.FlattenStorageDocument(event.Document)
-	matches := s.manager.Match(event.TenantID, event.Document.Collection, doc.GetID(), doc)
+	matches := s.manager.Match(event.DatabaseID, event.Document.Collection, doc.GetID(), doc)
 
 	if len(matches) == 0 {
 		return nil
@@ -319,11 +319,11 @@ var _ subscriptionHandler = (*streamerService)(nil)
 // --- subscriptionHandler implementation ---
 
 // subscribe implements subscriptionHandler for localStream.
-func (s *streamerService) subscribe(gatewayID, tenant, collection string, filters []model.Filter) (string, error) {
+func (s *streamerService) subscribe(gatewayID, database, collection string, filters []model.Filter) (string, error) {
 	subID := uuid.New().String()
 	protoReq := &pb.SubscribeRequest{
 		SubscriptionId: subID,
-		Tenant:         tenant,
+		Database:       database,
 		Collection:     collection,
 		Filters:        filtersToProto(filters),
 	}

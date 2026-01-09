@@ -12,7 +12,7 @@ import (
 type Subscriber struct {
 	ID         string
 	GatewayID  string
-	Tenant     string
+	Database   string
 	Collection string
 	Filters    []*pb.Filter // Structured filters from proto
 }

@@ -45,7 +45,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	ctx = context.WithValue(ctx, identity.ContextKeyTenant, "default")
+	ctx = context.WithValue(ctx, identity.ContextKeyDatabase, "default")
 	req := httptest.NewRequest("GET", "/realtime/sse?collection=users", nil).WithContext(ctx)
 	req.Header.Set("Authorization", "Bearer good")
 	req.Header.Set("Origin", "http://example.com")
@@ -65,7 +65,7 @@ func TestServeSSE_BroadcastFlow(t *testing.T) {
 			Operation:  streamer.OperationInsert,
 			Collection: "users",
 			DocumentID: "1",
-			Tenant:     "default",
+			Database:   "default",
 			Document:   map[string]interface{}{"name": "Alice"},
 			Timestamp:  time.Now().UnixMilli(),
 		},
@@ -96,7 +96,7 @@ func TestServeSSE_UnsupportedFlusher(t *testing.T) {
 	auth := &mockAuthService{}
 	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}
 
-	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
+	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyDatabase, "default"))
 	req.Header.Set("Authorization", "Bearer good")
 	req.Header.Set("Origin", "http://example.com")
 	w := &noFlushWriter{h: make(http.Header), b: &strings.Builder{}, c: http.StatusOK}
@@ -119,7 +119,7 @@ func TestServeSSE_WriteError(t *testing.T) {
 	sseHeartbeatInterval = 20 * time.Millisecond
 	defer func() { sseHeartbeatInterval = original }()
 
-	req := httptest.NewRequest("GET", "/realtime/sse?collection=users", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
+	req := httptest.NewRequest("GET", "/realtime/sse?collection=users", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyDatabase, "default"))
 	req.Header.Set("Authorization", "Bearer good")
 	req.Header.Set("Origin", "http://example.com")
 	errRec := &errorWriter{ResponseRecorder: httptest.NewRecorder()}
@@ -160,7 +160,7 @@ func TestServeSSE_OriginMissingWithCredentials(t *testing.T) {
 	auth := &mockAuthService{}
 	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}
 
-	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
+	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyDatabase, "default"))
 	req.Header.Set("Authorization", "Bearer good")
 	w := httptest.NewRecorder()
 
@@ -180,7 +180,7 @@ func TestServeSSE_OriginDisallowed(t *testing.T) {
 	auth := &mockAuthService{}
 	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}
 
-	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyTenant, "default"))
+	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(context.Background(), identity.ContextKeyDatabase, "default"))
 	req.Header.Set("Authorization", "Bearer good")
 	req.Header.Set("Origin", "http://bad.com")
 	w := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestServeSSE_CookieIgnored(t *testing.T) {
 	cfg := api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}
 
 	reqCtx, reqCancel := context.WithCancel(context.Background())
-	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(reqCtx, identity.ContextKeyTenant, "default"))
+	req := httptest.NewRequest("GET", "/realtime/sse", nil).WithContext(context.WithValue(reqCtx, identity.ContextKeyDatabase, "default"))
 	req.Header.Set("Authorization", "Bearer good")
 	req.Header.Set("Origin", "http://example.com")
 	req.Header.Set("Cookie", "a=b")

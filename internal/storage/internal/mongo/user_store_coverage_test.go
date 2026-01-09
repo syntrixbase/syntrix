@@ -15,7 +15,7 @@ func TestUserStore_CreateUser_EmptyID(t *testing.T) {
 	defer teardown()
 
 	ctx := context.Background()
-	tenant := "default"
+	database := "default"
 
 	user := &types.User{
 		ID:           "", // Empty ID to trigger generation logic
@@ -25,15 +25,15 @@ func TestUserStore_CreateUser_EmptyID(t *testing.T) {
 		UpdatedAt:    time.Now(),
 	}
 
-	err := s.CreateUser(ctx, tenant, user)
+	err := s.CreateUser(ctx, database, user)
 	require.NoError(t, err)
 
 	// Verify ID was generated
 	assert.NotEmpty(t, user.ID)
-	assert.Contains(t, user.ID, tenant+":")
+	assert.Contains(t, user.ID, database+":")
 
 	// Verify we can fetch it
-	fetched, err := s.GetUserByUsername(ctx, tenant, "autoiduser")
+	fetched, err := s.GetUserByUsername(ctx, database, "autoiduser")
 	require.NoError(t, err)
 	assert.Equal(t, user.ID, fetched.ID)
 }

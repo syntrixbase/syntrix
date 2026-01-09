@@ -31,7 +31,7 @@ func (m *mockStreamerStream) Stream(ctx context.Context) (streamer.Stream, error
 	return m, nil
 }
 
-func (m *mockStreamerStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
+func (m *mockStreamerStream) Subscribe(database, collection string, filters []model.Filter) (string, error) {
 	return "sub-id", nil
 }
 
@@ -61,28 +61,28 @@ func (m *mockStreamerStream) Close() error {
 
 type stubQuery struct{}
 
-func (m *stubQuery) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+func (m *stubQuery) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
 	return nil, nil
 }
-func (m *stubQuery) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+func (m *stubQuery) CreateDocument(ctx context.Context, database string, doc model.Document) error {
 	return nil
 }
-func (m *stubQuery) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *stubQuery) ReplaceDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *stubQuery) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+func (m *stubQuery) PatchDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
 	return nil, nil
 }
-func (m *stubQuery) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+func (m *stubQuery) DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error {
 	return nil
 }
-func (m *stubQuery) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+func (m *stubQuery) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
 	return nil, nil
 }
-func (m *stubQuery) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (m *stubQuery) Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	return nil, nil
 }
-func (m *stubQuery) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (m *stubQuery) Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	return nil, nil
 }
 

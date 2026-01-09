@@ -100,20 +100,20 @@ func TestResolvePath(t *testing.T) {
 }
 
 func TestValidate(t *testing.T) {
-	// Case 1: Missing default tenant
+	// Case 1: Missing default database
 	cfg := &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{},
+			Databases: map[string]DatabaseConfig{},
 		},
 	}
 	err := cfg.Validate()
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "storage.tenants.default is required")
+	assert.Contains(t, err.Error(), "storage.databases.default is required")
 
-	// Case 2: Tenant references unknown backend
+	// Case 2: Database references unknown backend
 	cfg = &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {Backend: "unknown_backend"},
 			},
 			Backends: map[string]BackendConfig{
@@ -128,7 +128,7 @@ func TestValidate(t *testing.T) {
 	// Case 3: Valid config
 	cfg = &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
 			Backends: map[string]BackendConfig{
@@ -142,7 +142,7 @@ func TestValidate(t *testing.T) {
 	// Case 4: Invalid deployment mode
 	cfg = &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
 			Backends: map[string]BackendConfig{
@@ -160,7 +160,7 @@ func TestValidate(t *testing.T) {
 	// Case 5: Valid standalone mode
 	cfg = &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
 			Backends: map[string]BackendConfig{
@@ -177,7 +177,7 @@ func TestValidate(t *testing.T) {
 	// Case 6: Valid distributed mode
 	cfg = &Config{
 		Storage: StorageConfig{
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
 			Backends: map[string]BackendConfig{

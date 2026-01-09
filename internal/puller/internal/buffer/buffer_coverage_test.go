@@ -201,11 +201,11 @@ func TestBuffer_Write_Atomicity(t *testing.T) {
 	}
 
 	evt := &events.StoreChangeEvent{
-		EventID:  "evt-atomicity",
-		TenantID: "tenant-1",
-		MgoColl:  "testcoll",
-		MgoDocID: "doc-1",
-		OpType:   events.StoreOperationInsert,
+		EventID:    "evt-atomicity",
+		DatabaseID: "database-1",
+		MgoColl:    "testcoll",
+		MgoDocID:   "doc-1",
+		OpType:     events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
@@ -276,11 +276,11 @@ func TestBuffer_ScanFrom_Bounds(t *testing.T) {
 	evts := make([]*events.StoreChangeEvent, 3)
 	for i := 0; i < 3; i++ {
 		evts[i] = &events.StoreChangeEvent{
-			EventID:  string(rune('A' + i)), // A, B, C
-			TenantID: "tenant-1",
-			MgoColl:  "testcoll",
-			MgoDocID: "doc-1",
-			OpType:   events.StoreOperationInsert,
+			EventID:    string(rune('A' + i)), // A, B, C
+			DatabaseID: "database-1",
+			MgoColl:    "testcoll",
+			MgoDocID:   "doc-1",
+			OpType:     events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1000 + i),
 				I: 1,

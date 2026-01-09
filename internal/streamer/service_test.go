@@ -23,9 +23,9 @@ func init() {
 }
 
 // testStoredDoc creates a StoredDoc with all required fields for testing.
-// Note: StoredDoc.Id is MongoDB's _id (tenant:hash format), NOT the user document ID.
+// Note: StoredDoc.Id is MongoDB's _id (database:hash format), NOT the user document ID.
 // The user document ID comes from Fullpath (collection/docID) and should also be in Data["id"].
-func testStoredDoc(collection, docID, tenant string, data map[string]interface{}) *storage.StoredDoc {
+func testStoredDoc(collection, docID, database string, data map[string]interface{}) *storage.StoredDoc {
 	// Ensure data has the user document ID
 	if data == nil {
 		data = make(map[string]interface{})
@@ -34,7 +34,7 @@ func testStoredDoc(collection, docID, tenant string, data map[string]interface{}
 
 	return &storage.StoredDoc{
 		Id:         "_id_" + docID, // MongoDB _id (not the user document ID)
-		TenantID:   tenant,
+		DatabaseID: database,
 		Collection: collection,
 		Fullpath:   collection + "/" + docID, // User document ID is extracted from here
 		Data:       data,
@@ -43,13 +43,13 @@ func testStoredDoc(collection, docID, tenant string, data map[string]interface{}
 
 // testSyntrixEvent creates a SyntrixChangeEvent for testing.
 // This is the business-layer event that ProcessEvent expects.
-func testSyntrixEvent(eventID, tenant, collection, docID string, eventType events.EventType, data map[string]interface{}) events.SyntrixChangeEvent {
+func testSyntrixEvent(eventID, database, collection, docID string, eventType events.EventType, data map[string]interface{}) events.SyntrixChangeEvent {
 	return events.SyntrixChangeEvent{
-		Id:        eventID,
-		TenantID:  tenant,
-		Type:      eventType,
-		Document:  testStoredDoc(collection, docID, tenant, data),
-		Timestamp: time.Now().UnixMilli(),
+		Id:         eventID,
+		DatabaseID: database,
+		Type:       eventType,
+		Document:   testStoredDoc(collection, docID, database, data),
+		Timestamp:  time.Now().UnixMilli(),
 	}
 }
 
@@ -83,7 +83,7 @@ func TestService_Stream_Subscribe(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, subID)
 }
@@ -96,7 +96,7 @@ func TestService_Stream_SubscribeWithFilters(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", []model.Filter{
+	subID, err := stream.Subscribe("database1", "users", []model.Filter{
 		{Field: "status", Op: model.OpEq, Value: "active"},
 	})
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func TestService_ProcessEvent_NoSubscriptions(t *testing.T) {
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, nil))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, nil))
 	require.NoError(t, err)
 }
 
@@ -121,10 +121,10 @@ func TestService_ProcessEvent_WithSubscription(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 
 	delivery, err := stream.Recv()
@@ -132,7 +132,7 @@ func TestService_ProcessEvent_WithSubscription(t *testing.T) {
 	require.NotNil(t, delivery)
 	assert.Equal(t, []string{subID}, delivery.SubscriptionIDs)
 	assert.Equal(t, "evt1", delivery.Event.EventID)
-	assert.Equal(t, "tenant1", delivery.Event.Tenant)
+	assert.Equal(t, "database1", delivery.Event.Database)
 	assert.Equal(t, "users", delivery.Event.Collection)
 	assert.Equal(t, "doc1", delivery.Event.DocumentID)
 	assert.Equal(t, OperationInsert, delivery.Event.Operation)
@@ -148,10 +148,10 @@ func TestService_ProcessEvent_MultipleStreams(t *testing.T) {
 	defer stream1.Close()
 	defer stream2.Close()
 
-	subID1, _ := stream1.Subscribe("tenant1", "users", nil)
-	subID2, _ := stream2.Subscribe("tenant1", "users", nil)
+	subID1, _ := stream1.Subscribe("database1", "users", nil)
+	subID2, _ := stream2.Subscribe("database1", "users", nil)
 
-	internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 
 	msg1, err := stream1.Recv()
 	require.NoError(t, err)
@@ -181,12 +181,12 @@ func TestService_SubscribeWithManager(t *testing.T) {
 	stream, _ := s.Stream(context.Background())
 	defer stream.Close()
 
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	resp, err := internal.manager.Subscribe("test-gw", &pb.SubscribeRequest{
 		SubscriptionId: "sub2",
-		Tenant:         "tenant1",
+		Database:       "database1",
 		Collection:     "users",
 	})
 	require.NoError(t, err)
@@ -209,7 +209,7 @@ func TestService_Stream_Unsubscribe(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	err = stream.Unsubscribe(subID)
@@ -226,7 +226,7 @@ func TestService_Stream_CloseAndSubscribe(t *testing.T) {
 	err = stream.Close()
 	require.NoError(t, err)
 
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.Error(t, err)
 }
 
@@ -241,7 +241,7 @@ func TestService_Stream_ContextCancel(t *testing.T) {
 	cancel()
 	time.Sleep(10 * time.Millisecond)
 
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.Error(t, err)
 }
 
@@ -268,20 +268,20 @@ func TestService_ProcessEventJSON(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	// ProcessEventJSON expects PullerEvent format (wrapper with change_event and progress)
 	jsonData := []byte(`{
 		"change_event": {
 			"eventId": "evt1",
-			"tenant": "tenant1",
+			"database": "database1",
 			"mgoColl": "users",
 			"mgoDocId": "doc1",
 			"opType": "insert",
 			"fullDoc": {
 				"id": "_id_doc1",
-				"tenantId": "tenant1",
+				"databaseId": "database1",
 				"collection": "users",
 				"fullpath": "users/doc1",
 				"data": {"id": "doc1", "name": "Alice"}
@@ -318,7 +318,7 @@ func TestService_ProcessEventJSON_TransformError(t *testing.T) {
 	jsonData := []byte(`{
 		"change_event": {
 			"eventId": "evt1",
-			"tenant": "tenant1",
+			"database": "database1",
 			"mgoColl": "users",
 			"mgoDocId": "doc1",
 			"opType": "unknown_operation"
@@ -340,7 +340,7 @@ func TestService_ProcessEventJSON_DeleteIgnored(t *testing.T) {
 	jsonData := []byte(`{
 		"change_event": {
 			"eventId": "evt1",
-			"tenant": "tenant1",
+			"database": "database1",
 			"mgoColl": "users",
 			"mgoDocId": "doc1",
 			"opType": "delete"
@@ -388,10 +388,10 @@ func TestService_Recv_WithEvent(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 
 	delivery, err := stream.Recv()
@@ -409,12 +409,12 @@ func TestService_ProcessEvent_Timeout(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	// Fill up the outgoing channel to cause timeout
 	for i := 0; i < 1100; i++ {
-		internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+		internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	}
 	// Just ensure no panic, timeout behavior is timing-dependent
 }
@@ -442,7 +442,7 @@ func TestService_Subscribe_Error(t *testing.T) {
 	defer stream.Close()
 
 	// Subscribe without filters - should succeed
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, subID)
 }
@@ -457,16 +457,16 @@ func TestService_MultipleSubscriptions(t *testing.T) {
 	defer stream.Close()
 
 	// Create multiple subscriptions
-	subID1, err := stream.Subscribe("tenant1", "users", nil)
+	subID1, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
-	subID2, err := stream.Subscribe("tenant1", "orders", nil)
+	subID2, err := stream.Subscribe("database1", "orders", nil)
 	require.NoError(t, err)
 
 	assert.NotEqual(t, subID1, subID2)
 
 	// Send an event that matches the first subscription
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 
 	delivery, err := stream.Recv()
@@ -487,11 +487,11 @@ func TestService_RecvWithFilters(t *testing.T) {
 	defer stream.Close()
 
 	// Subscribe without filters for simplicity
-	subID, err := stream.Subscribe("tenant1", "users", nil)
+	subID, err := stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	// Send event
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 
 	delivery, err := stream.Recv()
@@ -509,11 +509,11 @@ func TestService_RecvNoMatch(t *testing.T) {
 	defer stream.Close()
 
 	// Subscribe to a different collection - should not match
-	_, err = stream.Subscribe("tenant1", "orders", nil)
+	_, err = stream.Subscribe("database1", "orders", nil)
 	require.NoError(t, err)
 
 	// Send event to users collection (not orders)
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 
 	// Should timeout since no match
@@ -542,7 +542,7 @@ func TestService_Close_CancelsContext(t *testing.T) {
 	require.NoError(t, err)
 
 	// Subscribe first
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	// Close should work
@@ -550,7 +550,7 @@ func TestService_Close_CancelsContext(t *testing.T) {
 	require.NoError(t, err)
 
 	// Subsequent operations should fail
-	_, err = stream.Subscribe("tenant2", "orders", nil)
+	_, err = stream.Subscribe("database2", "orders", nil)
 	require.Error(t, err)
 }
 
@@ -560,7 +560,7 @@ func TestService_ProcessEvent_NoMatchingSubscriptions(t *testing.T) {
 	internal := getInternalService(s)
 
 	// No streams connected - event should just be discarded
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
+	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
 	require.NoError(t, err)
 }
 
@@ -574,13 +574,13 @@ func TestService_ProcessEvent_DeleteOperation(t *testing.T) {
 	require.NoError(t, err)
 	defer stream.Close()
 
-	_, err = stream.Subscribe("tenant1", "users", nil)
+	_, err = stream.Subscribe("database1", "users", nil)
 	require.NoError(t, err)
 
 	// Delete event: SyntrixChangeEvent with EventDelete type
 	// Note: Delete events without document are skipped by ProcessEvent (nil check)
 	// So we test with a document that has Deleted=true
-	deleteEvent := testSyntrixEvent("evt1", "tenant1", "users", "doc1", events.EventDelete, nil)
+	deleteEvent := testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventDelete, nil)
 	deleteEvent.Document.Deleted = true
 	err = internal.ProcessEvent(deleteEvent)
 	require.NoError(t, err)
@@ -783,7 +783,7 @@ func TestService_Subscribe_FilterCompileError(t *testing.T) {
 	defer stream.Close()
 
 	// Subscribe with an invalid operator that will fail filter compilation
-	_, err = stream.Subscribe("tenant1", "users", []model.Filter{
+	_, err = stream.Subscribe("database1", "users", []model.Filter{
 		{Field: "status", Op: model.FilterOp("invalid_operator"), Value: "active"},
 	})
 
@@ -802,7 +802,7 @@ func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
 
 	// Test by calling subscribe directly with an invalid gateway (empty gatewayID)
 	// The manager should handle this gracefully
-	_, err = internal.subscribe("test-gateway", "tenant1", "users", []model.Filter{
+	_, err = internal.subscribe("test-gateway", "database1", "users", []model.Filter{
 		{Field: "status", Op: model.FilterOp("invalid_op"), Value: "test"},
 	})
 

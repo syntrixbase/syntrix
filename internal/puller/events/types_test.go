@@ -89,15 +89,15 @@ func TestClusterTime_PrimitiveConversion(t *testing.T) {
 func TestChangeEvent_JSON(t *testing.T) {
 	evt := &StoreChangeEvent{
 		EventID:     "evt-123",
-		TenantID:    "tenant-abc",
+		DatabaseID:  "database-abc",
 		MgoColl:     "users",
 		MgoDocID:    "doc-456",
 		OpType:      StoreOperationInsert,
 		ClusterTime: ClusterTime{T: 1735567890, I: 1},
 		Timestamp:   1735567890000,
 		FullDocument: &storage.StoredDoc{
-			Id:       "doc-456",
-			TenantID: "tenant-abc",
+			Id:         "doc-456",
+			DatabaseID: "database-abc",
 		},
 	}
 
@@ -109,8 +109,8 @@ func TestChangeEvent_JSON(t *testing.T) {
 
 	// Check JSON field names (should use short names)
 	jsonStr := string(data)
-	if !contains(jsonStr, `"tenant"`) {
-		t.Errorf("JSON should contain 'tenant', got: %s", jsonStr)
+	if !contains(jsonStr, `"database"`) {
+		t.Errorf("JSON should contain 'database', got: %s", jsonStr)
 	}
 	if !contains(jsonStr, `"mgoDocId"`) {
 		t.Errorf("JSON should contain 'mgoDocId', got: %s", jsonStr)
@@ -134,8 +134,8 @@ func TestChangeEvent_JSON(t *testing.T) {
 	if decoded.EventID != evt.EventID {
 		t.Errorf("EventID = %q, want %q", decoded.EventID, evt.EventID)
 	}
-	if decoded.TenantID != evt.TenantID {
-		t.Errorf("TenantID = %q, want %q", decoded.TenantID, evt.TenantID)
+	if decoded.DatabaseID != evt.DatabaseID {
+		t.Errorf("DatabaseID = %q, want %q", decoded.DatabaseID, evt.DatabaseID)
 	}
 	if decoded.OpType != evt.OpType {
 		t.Errorf("OpType = %q, want %q", decoded.OpType, evt.OpType)

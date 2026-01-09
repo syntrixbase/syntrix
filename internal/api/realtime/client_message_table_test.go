@@ -101,13 +101,13 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 				return BaseMessage{Type: TypeAuth, ID: "req-ok", Payload: payload}
 			}(),
 			setupAuth: func(m *MockAuthService) {
-				m.On("ValidateToken", "good").Return(&identity.Claims{TenantID: "default"}, nil)
+				m.On("ValidateToken", "good").Return(&identity.Claims{DatabaseID: "default"}, nil)
 			},
 			expectedType: TypeAuthAck,
 			checkClient: func(t *testing.T, c *Client) {
 				assert.True(t, c.authenticated)
-				assert.Equal(t, "default", c.tenant)
-				assert.False(t, c.allowAllTenants)
+				assert.Equal(t, "default", c.database)
+				assert.False(t, c.allowAllDatabases)
 			},
 		},
 		{
@@ -117,12 +117,12 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 				return BaseMessage{Type: TypeAuth, ID: "req-sys", Payload: payload}
 			}(),
 			setupAuth: func(m *MockAuthService) {
-				m.On("ValidateToken", "system").Return(&identity.Claims{TenantID: "default", Roles: []string{"system"}}, nil)
+				m.On("ValidateToken", "system").Return(&identity.Claims{DatabaseID: "default", Roles: []string{"system"}}, nil)
 			},
 			expectedType: TypeAuthAck,
 			checkClient: func(t *testing.T, c *Client) {
 				assert.True(t, c.authenticated)
-				assert.True(t, c.allowAllTenants)
+				assert.True(t, c.allowAllDatabases)
 			},
 		},
 		{

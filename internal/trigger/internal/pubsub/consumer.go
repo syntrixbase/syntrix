@@ -319,10 +319,10 @@ func (c *natsConsumer) processMsg(ctx context.Context, msg jetstream.Msg) error 
 
 	err := c.worker.ProcessTask(taskCtx, &task)
 	if err != nil {
-		c.metrics.IncConsumeFailure(task.Tenant, task.Collection, err.Error())
+		c.metrics.IncConsumeFailure(task.Database, task.Collection, err.Error())
 	} else {
-		c.metrics.IncConsumeSuccess(task.Tenant, task.Collection, task.SubjectHashed)
+		c.metrics.IncConsumeSuccess(task.Database, task.Collection, task.SubjectHashed)
 	}
-	c.metrics.ObserveConsumeLatency(task.Tenant, task.Collection, time.Since(start))
+	c.metrics.ObserveConsumeLatency(task.Database, task.Collection, time.Since(start))
 	return err
 }

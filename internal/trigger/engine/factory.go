@@ -26,10 +26,10 @@ var (
 // FactoryOption configures the factory.
 type FactoryOption func(*defaultTriggerFactory)
 
-// WithTenant sets the tenant for the factory.
-func WithTenant(tenant string) FactoryOption {
+// WithDatabase sets the database for the factory.
+func WithDatabase(database string) FactoryOption {
 	return func(f *defaultTriggerFactory) {
-		f.tenant = tenant
+		f.database = database
 	}
 }
 
@@ -83,7 +83,7 @@ type defaultTriggerFactory struct {
 	nats         *nats.Conn
 	auth         identity.AuthN
 	puller       puller.Service
-	tenant       string
+	database     string
 	startFromNow bool
 	metrics      types.Metrics
 	secrets      worker.SecretProvider
@@ -97,7 +97,7 @@ func NewFactory(store storage.DocumentStore, nats *nats.Conn, auth identity.Auth
 		store:      store,
 		nats:       nats,
 		auth:       auth,
-		tenant:     "default",
+		database:   "default",
 		metrics:    &types.NoopMetrics{},
 		streamName: "TRIGGERS",
 	}
@@ -118,7 +118,7 @@ func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
 		return nil, fmt.Errorf("failed to create evaluator: %w", err)
 	}
 
-	w := watcher.NewWatcher(f.puller, f.store, f.tenant, watcher.WatcherOptions{
+	w := watcher.NewWatcher(f.puller, f.store, f.database, watcher.WatcherOptions{
 		StartFromNow: f.startFromNow,
 	})
 

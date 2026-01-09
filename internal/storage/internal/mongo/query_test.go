@@ -16,7 +16,7 @@ func TestMongoBackend_Query(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	tenant := "default"
+	database := "default"
 
 	// Seed data
 	users := []map[string]interface{}{
@@ -26,8 +26,8 @@ func TestMongoBackend_Query(t *testing.T) {
 	}
 
 	for _, u := range users {
-		doc := types.NewStoredDoc(tenant, "users", u["name"].(string), u)
-		err := backend.Create(ctx, tenant, doc)
+		doc := types.NewStoredDoc(database, "users", u["name"].(string), u)
+		err := backend.Create(ctx, database, doc)
 		require.NoError(t, err)
 	}
 
@@ -38,7 +38,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "age", Op: model.OpGt, Value: 28},
 		},
 	}
-	docs, err := backend.Query(ctx, tenant, q1)
+	docs, err := backend.Query(ctx, database, q1)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2) // Alice (30), Charlie (35)
 
@@ -50,7 +50,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "active", Op: model.OpEq, Value: true},
 		},
 	}
-	docs, err = backend.Query(ctx, tenant, q2)
+	docs, err = backend.Query(ctx, database, q2)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2) // Alice, Bob
 
@@ -61,7 +61,7 @@ func TestMongoBackend_Query(t *testing.T) {
 			{Field: "age", Direction: "desc"},
 		},
 	}
-	docs, err = backend.Query(ctx, tenant, q3)
+	docs, err = backend.Query(ctx, database, q3)
 	require.NoError(t, err)
 	assert.Len(t, docs, 3)
 	assert.Equal(t, "Charlie", docs[0].Data["name"])
@@ -76,14 +76,14 @@ func TestMongoBackend_Query(t *testing.T) {
 		},
 		Limit: 2,
 	}
-	docs, err = backend.Query(ctx, tenant, q4)
+	docs, err = backend.Query(ctx, database, q4)
 	require.NoError(t, err)
 	assert.Len(t, docs, 2)
 	assert.Equal(t, "Bob", docs[0].Data["name"])
 	assert.Equal(t, "Alice", docs[1].Data["name"])
 
 	// Test 5: Field mapping (version and custom) with multi-filter and IN
-	docs, err = backend.Query(ctx, tenant, model.Query{
+	docs, err = backend.Query(ctx, database, model.Query{
 		Collection: "users",
 		Filters: []model.Filter{
 			{Field: "version", Op: model.OpGte, Value: int64(1)},

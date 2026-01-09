@@ -145,21 +145,21 @@ func withTimeout(next http.HandlerFunc, timeout time.Duration) http.HandlerFunc 
 	}
 }
 
-func (h *Handler) getTenantId(r *http.Request) (string, error) {
-	if tenant, ok := r.Context().Value(ContextKeyTenant).(string); ok && tenant != "" {
-		return tenant, nil
+func (h *Handler) getDatabaseId(r *http.Request) (string, error) {
+	if database, ok := r.Context().Value(ContextKeyDatabase).(string); ok && database != "" {
+		return database, nil
 	}
 
-	return "", identity.ErrTenantRequired
+	return "", identity.ErrDatabaseRequired
 }
 
-func (h *Handler) tenantOrError(w http.ResponseWriter, r *http.Request) (string, bool) {
-	tenant, err := h.getTenantId(r)
+func (h *Handler) databaseOrError(w http.ResponseWriter, r *http.Request) (string, bool) {
+	database, err := h.getDatabaseId(r)
 	if err != nil {
-		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Tenant identification required")
+		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Database identification required")
 		return "", false
 	}
-	return tenant, true
+	return database, true
 }
 
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
@@ -317,7 +317,7 @@ func claimsToMap(claims *identity.Claims) map[string]interface{} {
 
 	return map[string]interface{}{
 		"sub":      claims.Subject,
-		"tid":      claims.TenantID,
+		"tid":      claims.DatabaseID,
 		"oid":      claims.UserID,
 		"username": claims.Username,
 		"roles":    append([]string{}, claims.Roles...),

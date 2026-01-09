@@ -37,7 +37,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 			raw: makeRawEvent(
 				"insert",
 				1234567890, 1,
-				bson.M{"_id": "doc1", "tenant_id": "tenant-1", "fullpath": "/path"},
+				bson.M{"_id": "doc1", "database_id": "database-1", "fullpath": "/path"},
 				bson.M{"_id": "doc1"},
 				"testdb", "testcoll",
 			),
@@ -52,8 +52,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				if evt.MgoColl != "testcoll" {
 					t.Errorf("MgoColl = %s, want testcoll", evt.MgoColl)
 				}
-				if evt.TenantID != "tenant-1" {
-					t.Errorf("TenantID = %s, want tenant-1", evt.TenantID)
+				if evt.DatabaseID != "database-1" {
+					t.Errorf("DatabaseID = %s, want database-1", evt.DatabaseID)
 				}
 				if evt.FullDocument == nil {
 					t.Error("FullDocument should not be nil")
@@ -67,7 +67,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 			raw: makeRawEvent(
 				"update",
 				1234567890, 2,
-				bson.M{"_id": "doc2", "tenant_id": "tenant-2", "fullpath": "/path2"},
+				bson.M{"_id": "doc2", "database_id": "database-2", "fullpath": "/path2"},
 				bson.M{"_id": "doc2"},
 				"testdb", "testcoll",
 			),
@@ -76,8 +76,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				if evt.OpType != events.StoreOperationUpdate {
 					t.Errorf("OpType = %s, want update", evt.OpType)
 				}
-				if evt.TenantID != "tenant-2" {
-					t.Errorf("TenantID = %s, want tenant-2", evt.TenantID)
+				if evt.DatabaseID != "database-2" {
+					t.Errorf("DatabaseID = %s, want database-2", evt.DatabaseID)
 				}
 			},
 		},
@@ -110,8 +110,8 @@ func TestNormalizer_Normalize(t *testing.T) {
 				if evt.FullDocument != nil {
 					t.Error("FullDocument should be nil for delete")
 				}
-				if evt.TenantID != "" {
-					t.Errorf("TenantID should be empty for delete, got %s", evt.TenantID)
+				if evt.DatabaseID != "" {
+					t.Errorf("DatabaseID should be empty for delete, got %s", evt.DatabaseID)
 				}
 			},
 		},
@@ -133,7 +133,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 				return makeRawEvent(
 					"insert",
 					1234567890, 1,
-					bson.M{"_id": oid, "tenant_id": "t1", "fullpath": "/p"},
+					bson.M{"_id": oid, "database_id": "t1", "fullpath": "/p"},
 					bson.M{"_id": oid},
 					"testdb", "testcoll",
 				)
@@ -151,7 +151,7 @@ func TestNormalizer_Normalize(t *testing.T) {
 				raw := makeRawEvent(
 					"insert",
 					1234567890, 1,
-					bson.M{"_id": "doc1", "tenant_id": "t1", "fullpath": "/p"},
+					bson.M{"_id": "doc1", "database_id": "t1", "fullpath": "/p"},
 					bson.M{"_id": "doc1"},
 					"testdb", "testcoll",
 				)
@@ -190,7 +190,7 @@ func TestNormalizer_UpdateDescription(t *testing.T) {
 		OperationType: "update",
 		ClusterTime:   primitive.Timestamp{T: 1234567890, I: 1},
 		DocumentKey:   bson.M{"_id": "doc1"},
-		FullDocument:  bson.M{"_id": "doc1", "tenant_id": "t1", "fullpath": "/p"},
+		FullDocument:  bson.M{"_id": "doc1", "database_id": "t1", "fullpath": "/p"},
 		UpdateDescription: bson.M{
 			"updatedFields": bson.M{"name": "updated"},
 			"removedFields": bson.A{"oldField"},
@@ -545,10 +545,10 @@ func TestNormalizer_FixTimestamps(t *testing.T) {
 		"insert",
 		1, 1,
 		bson.M{
-			"_id":        "t1",
-			"tenant_id":  "T",
-			"created_at": pNow,
-			"updated_at": now,
+			"_id":         "t1",
+			"database_id": "T",
+			"created_at":  pNow,
+			"updated_at":  now,
 		},
 		bson.M{"_id": "t1"},
 		"db", "coll",

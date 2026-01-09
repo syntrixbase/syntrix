@@ -11,19 +11,19 @@ import (
 	"github.com/syntrixbase/syntrix/internal/identity"
 )
 
-func TestTenantFromContextMust(t *testing.T) {
-	// Case 1: Tenant present
-	ctx := context.WithValue(context.Background(), identity.ContextKeyTenant, "t1")
+func TestDatabaseFromContextMust(t *testing.T) {
+	// Case 1: Database present
+	ctx := context.WithValue(context.Background(), identity.ContextKeyDatabase, "t1")
 	w := httptest.NewRecorder()
-	tenant := tenantFromContextMust(ctx, w)
-	assert.Equal(t, "t1", tenant)
+	database := databaseFromContextMust(ctx, w)
+	assert.Equal(t, "t1", database)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Case 2: Tenant missing
+	// Case 2: Database missing
 	ctx2 := context.Background()
 	w2 := httptest.NewRecorder()
-	tenant2 := tenantFromContextMust(ctx2, w2)
-	assert.Equal(t, "", tenant2)
+	database2 := databaseFromContextMust(ctx2, w2)
+	assert.Equal(t, "", database2)
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
 
@@ -111,35 +111,35 @@ func TestCheckAllowedOrigin(t *testing.T) {
 	assert.Error(t, checkAllowedOrigin("http://other.com", "host", api_config.RealtimeConfig{AllowedOrigins: []string{"http://example.com"}}, false))
 }
 
-func TestTenantFromContext(t *testing.T) {
+func TestDatabaseFromContext(t *testing.T) {
 	// Case 1: Nil context
-	tenant, allowAll := tenantFromContext(nil)
-	assert.Equal(t, "", tenant)
+	database, allowAll := databaseFromContext(nil)
+	assert.Equal(t, "", database)
 	assert.False(t, allowAll)
 
-	// Case 2: Tenant in context
-	ctx1 := context.WithValue(context.Background(), identity.ContextKeyTenant, "tenant1")
-	tenant, allowAll = tenantFromContext(ctx1)
-	assert.Equal(t, "tenant1", tenant)
+	// Case 2: Database in context
+	ctx1 := context.WithValue(context.Background(), identity.ContextKeyDatabase, "database1")
+	database, allowAll = databaseFromContext(ctx1)
+	assert.Equal(t, "database1", database)
 	assert.False(t, allowAll)
 
-	// Case 3: Tenant in claims
-	claims := &identity.Claims{TenantID: "tenant2"}
+	// Case 3: Database in claims
+	claims := &identity.Claims{DatabaseID: "database2"}
 	ctx2 := context.WithValue(context.Background(), identity.ContextKeyClaims, claims)
-	tenant, allowAll = tenantFromContext(ctx2)
-	assert.Equal(t, "tenant2", tenant)
+	database, allowAll = databaseFromContext(ctx2)
+	assert.Equal(t, "database2", database)
 	assert.False(t, allowAll)
 
-	// Case 4: Tenant in both (ContextKeyTenant takes precedence)
-	ctx3 := context.WithValue(ctx2, identity.ContextKeyTenant, "tenant1")
-	tenant, allowAll = tenantFromContext(ctx3)
-	assert.Equal(t, "tenant1", tenant)
+	// Case 4: Database in both (ContextKeyDatabase takes precedence)
+	ctx3 := context.WithValue(ctx2, identity.ContextKeyDatabase, "database1")
+	database, allowAll = databaseFromContext(ctx3)
+	assert.Equal(t, "database1", database)
 	assert.False(t, allowAll)
 
 	// Case 5: System role
-	claimsSystem := &identity.Claims{TenantID: "tenant3", Roles: []string{"system"}}
+	claimsSystem := &identity.Claims{DatabaseID: "database3", Roles: []string{"system"}}
 	ctx4 := context.WithValue(context.Background(), identity.ContextKeyClaims, claimsSystem)
-	tenant, allowAll = tenantFromContext(ctx4)
-	assert.Equal(t, "tenant3", tenant)
+	database, allowAll = databaseFromContext(ctx4)
+	assert.Equal(t, "database3", database)
 	assert.True(t, allowAll)
 }

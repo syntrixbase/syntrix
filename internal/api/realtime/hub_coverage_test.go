@@ -41,7 +41,7 @@ func TestHub_BroadcastDelivery_Coverage(t *testing.T) {
 		delivery := &streamer.EventDelivery{
 			Event: &streamer.Event{
 				Operation: streamer.OperationInsert,
-				Tenant:    "t1",
+				Database:  "t1",
 				Document:  model.Document{"id": "d1"},
 			},
 		}
@@ -125,7 +125,7 @@ func TestHub_Broadcast_ClientBlocked_Coverage(t *testing.T) {
 			SubscriptionIDs: []string{"ssub1"},
 			Event: &streamer.Event{
 				Operation:  streamer.OperationInsert,
-				Tenant:     "t1",
+				Database:   "t1",
 				Document:   model.Document{"id": "d1"},
 				Collection: "test",
 			},

@@ -16,44 +16,44 @@ type MockDocumentStore struct {
 	mock.Mock
 }
 
-func (m *MockDocumentStore) Create(ctx context.Context, tenant string, doc storage.StoredDoc) error {
-	args := m.Called(ctx, tenant, doc)
+func (m *MockDocumentStore) Create(ctx context.Context, database string, doc storage.StoredDoc) error {
+	args := m.Called(ctx, database, doc)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Get(ctx context.Context, tenant, id string) (*storage.StoredDoc, error) {
-	args := m.Called(ctx, tenant, id)
+func (m *MockDocumentStore) Get(ctx context.Context, database, id string) (*storage.StoredDoc, error) {
+	args := m.Called(ctx, database, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.StoredDoc), args.Error(1)
 }
 
-func (m *MockDocumentStore) Update(ctx context.Context, tenant, id string, data map[string]interface{}, filters model.Filters) error {
-	args := m.Called(ctx, tenant, id, data, filters)
+func (m *MockDocumentStore) Update(ctx context.Context, database, id string, data map[string]interface{}, filters model.Filters) error {
+	args := m.Called(ctx, database, id, data, filters)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Patch(ctx context.Context, tenant, id string, data map[string]interface{}, pred model.Filters) error {
-	args := m.Called(ctx, tenant, id, data, pred)
+func (m *MockDocumentStore) Patch(ctx context.Context, database, id string, data map[string]interface{}, pred model.Filters) error {
+	args := m.Called(ctx, database, id, data, pred)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Delete(ctx context.Context, tenant, id string, pred model.Filters) error {
-	args := m.Called(ctx, tenant, id, pred)
+func (m *MockDocumentStore) Delete(ctx context.Context, database, id string, pred model.Filters) error {
+	args := m.Called(ctx, database, id, pred)
 	return args.Error(0)
 }
 
-func (m *MockDocumentStore) Query(ctx context.Context, tenant string, q model.Query) ([]*storage.StoredDoc, error) {
-	args := m.Called(ctx, tenant, q)
+func (m *MockDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*storage.StoredDoc, error) {
+	args := m.Called(ctx, database, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
 }
 
-func (m *MockDocumentStore) Watch(ctx context.Context, tenant, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
-	args := m.Called(ctx, tenant, collection, resumeToken, opts)
+func (m *MockDocumentStore) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
+	args := m.Called(ctx, database, collection, resumeToken, opts)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -81,22 +81,22 @@ func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, af
 func TestNewWatcher(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 	assert.NotNil(t, w)
 }
 
 func TestWatch_WithCheckpoint(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
 	checkpointDoc := &storage.StoredDoc{
 		Data: map[string]interface{}{"token": "resume-token"},
 	}
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(checkpointDoc, nil)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(checkpointDoc, nil)
 
 	ch := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "resume-token").Return((<-chan *events.PullerEvent)(ch))
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-database1", "resume-token").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
@@ -107,7 +107,7 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-doc1",
-				TenantID:     "tenant1",
+				DatabaseID:   "database1",
 				OpType:       events.StoreOperationInsert,
 				MgoDocID:     "doc1",
 				FullDocument: &storage.StoredDoc{Id: "doc1"},
@@ -129,13 +129,13 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
 
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(nil, model.ErrNotFound)
 
 	ch := make(chan *events.PullerEvent)
 	// Expect empty string for resume token
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch))
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-database1", "").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
@@ -145,34 +145,34 @@ func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 	mockPuller.AssertExpectations(t)
 }
 
-func TestWatch_FilterTenant(t *testing.T) {
+func TestWatch_FilterDatabase(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
 
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(nil, model.ErrNotFound)
 
 	ch := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(ch))
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-database1", "").Return((<-chan *events.PullerEvent)(ch))
 
 	eventCh, err := w.Watch(context.Background())
 	assert.NoError(t, err)
 
 	go func() {
-		// Wrong tenant
+		// Wrong database
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-wrong",
-				TenantID:     "tenant2",
+				DatabaseID:   "database2",
 				OpType:       events.StoreOperationInsert,
 				FullDocument: &storage.StoredDoc{Id: "wrong"},
 			},
 		}
-		// Correct tenant
+		// Correct database
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-doc1",
-				TenantID:     "tenant1",
+				DatabaseID:   "database1",
 				OpType:       events.StoreOperationInsert,
 				MgoDocID:     "doc1",
 				FullDocument: &storage.StoredDoc{Id: "doc1"},
@@ -191,9 +191,9 @@ func TestWatch_FilterTenant(t *testing.T) {
 func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: false})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: false})
 
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(nil, model.ErrNotFound)
 
 	_, err := w.Watch(context.Background())
 	assert.Error(t, err)
@@ -204,9 +204,9 @@ func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 func TestSaveCheckpoint_Update(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
-	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(nil)
+	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1", mock.Anything, mock.Anything).Return(nil)
 
 	err := w.SaveCheckpoint(context.Background(), "new-token")
 	assert.NoError(t, err)
@@ -216,9 +216,9 @@ func TestSaveCheckpoint_Update(t *testing.T) {
 func TestSaveCheckpoint_Create(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
-	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(model.ErrNotFound)
+	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1", mock.Anything, mock.Anything).Return(model.ErrNotFound)
 	mockStore.On("Create", mock.Anything, "default", mock.Anything).Return(nil)
 
 	err := w.SaveCheckpoint(context.Background(), "new-token")
@@ -229,7 +229,7 @@ func TestSaveCheckpoint_Create(t *testing.T) {
 func TestClose(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
 	// Close should be a no-op and return nil
 	err := w.Close()
@@ -239,10 +239,10 @@ func TestClose(t *testing.T) {
 func TestWatch_GetError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
 	// Get returns unexpected error
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, assert.AnError)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(nil, assert.AnError)
 
 	_, err := w.Watch(context.Background())
 	assert.Error(t, err)
@@ -252,9 +252,9 @@ func TestWatch_GetError(t *testing.T) {
 func TestSaveCheckpoint_UpdateError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
 
-	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1", mock.Anything, mock.Anything).Return(assert.AnError)
+	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1", mock.Anything, mock.Anything).Return(assert.AnError)
 
 	err := w.SaveCheckpoint(context.Background(), "new-token")
 	assert.Error(t, err)
@@ -264,12 +264,12 @@ func TestSaveCheckpoint_UpdateError(t *testing.T) {
 func TestWatch_EventTypes(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "tenant1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
 
-	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/tenant1").Return(nil, model.ErrNotFound)
+	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator/database1").Return(nil, model.ErrNotFound)
 
 	pullerCh := make(chan *events.PullerEvent)
-	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-tenant1", "").Return((<-chan *events.PullerEvent)(pullerCh))
+	mockPuller.On("Subscribe", mock.Anything, "trigger-evaluator-database1", "").Return((<-chan *events.PullerEvent)(pullerCh))
 
 	eventCh, err := w.Watch(context.Background())
 	if err != nil {
@@ -280,7 +280,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Insert
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc1", MgoDocID: "doc1", TenantID: "tenant1", OpType: events.StoreOperationInsert,
+				EventID: "evt-doc1", MgoDocID: "doc1", DatabaseID: "database1", OpType: events.StoreOperationInsert,
 				FullDocument: &storage.StoredDoc{Id: "doc1", Data: map[string]interface{}{"a": 1}},
 			},
 			Progress: "t1",
@@ -288,7 +288,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Update
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc2", MgoDocID: "doc2", TenantID: "tenant1", OpType: events.StoreOperationUpdate,
+				EventID: "evt-doc2", MgoDocID: "doc2", DatabaseID: "database1", OpType: events.StoreOperationUpdate,
 				FullDocument: &storage.StoredDoc{Id: "doc2", Data: map[string]interface{}{"a": 2}},
 			},
 			Progress: "t2",
@@ -297,7 +297,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// So we don't expect to receive this event
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc3", MgoDocID: "doc3", TenantID: "tenant1", OpType: events.StoreOperationDelete,
+				EventID: "evt-doc3", MgoDocID: "doc3", DatabaseID: "database1", OpType: events.StoreOperationDelete,
 				MgoColl: "users",
 			},
 			Progress: "t3",
@@ -305,7 +305,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Soft Delete (Update with Deleted=true) - transforms to EventDelete
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc4", MgoDocID: "doc4", TenantID: "tenant1", OpType: events.StoreOperationUpdate,
+				EventID: "evt-doc4", MgoDocID: "doc4", DatabaseID: "database1", OpType: events.StoreOperationUpdate,
 				FullDocument: &storage.StoredDoc{Id: "doc4", Deleted: true},
 			},
 			Progress: "t4",
@@ -313,7 +313,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Replace - transforms to EventCreate (recreate after soft delete)
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc5", MgoDocID: "doc5", TenantID: "tenant1", OpType: events.StoreOperationReplace,
+				EventID: "evt-doc5", MgoDocID: "doc5", DatabaseID: "database1", OpType: events.StoreOperationReplace,
 				FullDocument: &storage.StoredDoc{Id: "doc5", Data: map[string]interface{}{"b": 1}},
 			},
 			Progress: "t5",

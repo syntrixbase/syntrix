@@ -1,7 +1,7 @@
 # User & Admin Console
 
-**Date:** December 18, 2025  
-**Updated:** January 7, 2026  
+**Date:** December 18, 2025
+**Updated:** January 7, 2026
 **Topic:** Web console for end-users and admins
 
 ## 1. Scope
@@ -63,7 +63,7 @@
 - AuthN/AuthZ: require admin JWT with `role=admin`, validate via standard token pipeline; optional mTLS to bind audit to client cert; rate-limit admin actions.
 - Idempotency & safety: use `Idempotency-Key` for user mutations; reject weak passwords; enforce username uniqueness; prevent disabling the last admin.
 - Audit & observability: audit who/when/action/target/diff/client cert; metrics for admin API success/fail, latency, rule push/rollback, user mutation counts.
-- Not in scope: interactive TUI, org/tenant hierarchy management, API keys, signed URLs, secret rotation APIs.
+- Not in scope: interactive TUI, org/database hierarchy management, API keys, signed URLs, secret rotation APIs.
 
 ### Pagination & rate limits
 
@@ -251,6 +251,6 @@ function scheduleRefresh(expiresIn: number) {
 ## 8. Future (Phase 3+)
 
 - SSO/IdP integration for both user and admin.
-- Tenant-aware views once multi-tenant exists.
+- Database-aware views once multi-database exists.
 - Key rotation UI when implemented.
 - Notifications/alerts surface for admins (rule load failures, unknown kid spikes).

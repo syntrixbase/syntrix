@@ -24,13 +24,13 @@ func NewRevocationStore(db *mongo.Database, collectionName string) types.TokenRe
 	}
 }
 
-func (s *revocationStore) RevokeToken(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
-	id := tenant + ":" + jti
+func (s *revocationStore) RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error {
+	id := database + ":" + jti
 	doc := types.RevokedToken{
-		JTI:       id,
-		TenantID:  tenant,
-		ExpiresAt: expiresAt,
-		RevokedAt: time.Now(),
+		JTI:        id,
+		DatabaseID: database,
+		ExpiresAt:  expiresAt,
+		RevokedAt:  time.Now(),
 	}
 	_, err := s.coll.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
@@ -39,14 +39,14 @@ func (s *revocationStore) RevokeToken(ctx context.Context, tenant string, jti st
 	return err
 }
 
-func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, tenant string, jti string, expiresAt time.Time) error {
+func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error {
 	// Set RevokedAt to the past to bypass grace period
-	id := tenant + ":" + jti
+	id := database + ":" + jti
 	doc := types.RevokedToken{
-		JTI:       id,
-		TenantID:  tenant,
-		ExpiresAt: expiresAt,
-		RevokedAt: time.Now().Add(-24 * time.Hour),
+		JTI:        id,
+		DatabaseID: database,
+		ExpiresAt:  expiresAt,
+		RevokedAt:  time.Now().Add(-24 * time.Hour),
 	}
 	_, err := s.coll.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
@@ -55,9 +55,9 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, tenant strin
 	return err
 }
 
-func (s *revocationStore) IsRevoked(ctx context.Context, tenant string, jti string, gracePeriod time.Duration) (bool, error) {
-	id := tenant + ":" + jti
-	filter := bson.M{"_id": id, "tenant_id": tenant}
+func (s *revocationStore) IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error) {
+	id := database + ":" + jti
+	filter := bson.M{"_id": id, "database_id": database}
 	var doc types.RevokedToken
 	err := s.coll.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
@@ -90,9 +90,9 @@ func (s *revocationStore) EnsureIndexes(ctx context.Context) error {
 		return err
 	}
 
-	// Per-tenant expiration query index
+	// Per-database expiration query index
 	_, err = s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "tenant_id", Value: 1}, {Key: "expires_at", Value: 1}},
+		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "expires_at", Value: 1}},
 		Options: options.Index().SetUnique(false),
 	})
 	return err

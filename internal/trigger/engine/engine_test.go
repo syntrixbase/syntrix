@@ -19,7 +19,7 @@ func TestLoadTriggers(t *testing.T) {
 
 	validTrigger := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"create"},
 		URL:        "http://example.com",
@@ -49,7 +49,7 @@ func TestStart(t *testing.T) {
 	// Setup triggers
 	trig := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"create"},
 		URL:        "http://example.com",
@@ -143,7 +143,7 @@ func TestStart_EvaluateError(t *testing.T) {
 	// Setup triggers
 	trig := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"create"},
 		URL:        "http://example.com",
@@ -249,7 +249,7 @@ func TestStart_PublishError(t *testing.T) {
 
 	trig := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"create"},
 		URL:        "http://example.com",
@@ -301,7 +301,7 @@ func TestStart_SaveCheckpointError(t *testing.T) {
 
 	trig := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"create"},
 		URL:        "http://example.com",
@@ -354,7 +354,7 @@ func TestStart_BeforeOnlyEvent(t *testing.T) {
 
 	trig := &trigger.Trigger{
 		ID:         "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		Events:     []string{"delete"},
 		URL:        "http://example.com",

@@ -14,22 +14,22 @@ This document defines the canonical field names used throughout the Syntrix syst
 
 ## 1. Identifier Fields
 
-### 1.1 Tenant Identifier
+### 1.1 Database Identifier
 
 | Context | Field Name | JSON Key | BSON Key | Notes |
 | ------- | ---------- | -------- | -------- | ----- |
-| Storage (Document) | `TenantID` | `tenantId` | `tenant_id` | Stored in MongoDB |
-| Storage (Event) | `TenantID` | `tenantId` | - | Change stream events |
-| Puller (NormalizedEvent) | `TenantID` | `tenant` | - | **Shorter key for wire format** |
-| API Response | - | `tenantId` | - | Matches storage |
+| Storage (Document) | `DatabaseID` | `databaseId` | `database_id` | Stored in MongoDB |
+| Storage (Event) | `DatabaseID` | `databaseId` | - | Change stream events |
+| Puller (NormalizedEvent) | `DatabaseID` | `database` | - | **Shorter key for wire format** |
+| API Response | - | `databaseId` | - | Matches storage |
 
-**Rationale:** Puller events use shorter `tenant` key to reduce bandwidth on high-volume event streams. All other contexts use `tenantId` for clarity.
+**Rationale:** Puller events use shorter `database` key to reduce bandwidth on high-volume event streams. All other contexts use `databaseId` for clarity.
 
 ### 1.2 Document Identifier
 
 | Context | Field Name | JSON Key | BSON Key | Notes |
 | ------- | ---------- | -------- | -------- | ----- |
-| Storage (Document) | `Id` | `id` | `_id` | Full path hash: `tenant:hash(fullpath)` |
+| Storage (Document) | `Id` | `id` | `_id` | Full path hash: `database:hash(fullpath)` |
 | Storage (Event) | `Id` | `id` | - | References document ID |
 | Puller (NormalizedEvent) | `DocumentID` | `documentId` | - | Explicit name for clarity |
 | API Response | - | `id` | - | User-facing document ID |
@@ -50,10 +50,10 @@ This document defines the canonical field names used throughout the Syntrix syst
 
 | Context | Field Name | JSON Key | Notes |
 | ------- | ---------- | -------- | ----- |
-| JWT Claims | `TenantID` | `tid` | Legacy claim key retained |
+| JWT Claims | `DatabaseID` | `tid` | Legacy claim key retained |
 | JWT Claims | `UserID` | `oid` | Legacy claim key retained |
 
-**Rationale:** JWT claims keep `tid`/`oid` to preserve backward compatibility with existing tokens and integrations. The auth layer maps these to internal `TenantID`/`UserID` values.
+**Rationale:** JWT claims keep `tid`/`oid` to preserve backward compatibility with existing tokens and integrations. The auth layer maps these to internal `DatabaseID`/`UserID` values.
 
 ---
 
@@ -165,7 +165,7 @@ This is the canonical event schema for inter-service communication.
 type NormalizedEvent struct {
     // Identity
     EventID      string `json:"eventId"`      // Unique event ID
-    TenantID     string `json:"tenant"`       // Tenant identifier (short key)
+    DatabaseID     string `json:"database"`       // Database identifier (short key)
     Collection   string `json:"collection"`   // Collection name
     DocumentID   string `json:"documentId"`   // Document identifier
 
@@ -235,13 +235,13 @@ type TruncatedArray struct {
 
 - Use `PascalCase` for exported fields
 - Use `camelCase` for unexported fields
-- Suffix with type for clarity: `TenantID` not `Tenant`, `DocumentID` not `Document`
+- Suffix with type for clarity: `DatabaseID` not `Database`, `DocumentID` not `Document`
 
 ### 9.2 JSON Keys
 
 - Use `camelCase` for all JSON keys
 - Keep keys short but descriptive
-- Exception: Puller uses `tenant` (not `tenantId`) for bandwidth optimization
+- Exception: Puller uses `database` (not `databaseId`) for bandwidth optimization
 - Exception: JWT claims keep `tid` and `oid` for compatibility
 
 ### 9.3 BSON Keys
@@ -262,9 +262,9 @@ type TruncatedArray struct {
 | Concept | Go Field | JSON Key | BSON Key |
 | ------- | -------- | -------- | -------- |
 | Document ID | `Id` | `id` | `_id` |
-| Tenant ID (storage) | `TenantID` | `tenantId` | `tenant_id` |
-| Tenant ID (puller) | `TenantID` | `tenant` | - |
-| Tenant ID (JWT claims) | `TenantID` | `tid` | - |
+| Database ID (storage) | `DatabaseID` | `databaseId` | `database_id` |
+| Database ID (puller) | `DatabaseID` | `database` | - |
+| Database ID (JWT claims) | `DatabaseID` | `tid` | - |
 | Collection | `Collection` | `collection` | `collection` |
 | Version | `Version` | `version` | `version` |
 | Created timestamp | `CreatedAt` | `createdAt` | `created_at` |
@@ -290,7 +290,7 @@ When converting `storage.Event` to `NormalizedEvent`:
 | storage.Event Field | NormalizedEvent Field | Transformation |
 | ------------------- | --------------------- | -------------- |
 | `Id` | `DocumentID` | Direct copy |
-| `TenantID` | `TenantID` | Direct copy (JSON key changes) |
+| `DatabaseID` | `DatabaseID` | Direct copy (JSON key changes) |
 | `Type` | `OperationType` | Map: create→insert, update→update, delete→delete |
 | `Document.Data` | `FullDocument` | Extract from Document |
 | `Timestamp` | `Timestamp` | Direct copy |

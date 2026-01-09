@@ -16,41 +16,41 @@ func TestNewHandler_Panic(t *testing.T) {
 	})
 }
 
-func TestGetTenantId(t *testing.T) {
+func TestGetDatabaseId(t *testing.T) {
 	h := &Handler{}
 
-	// Case 1: Tenant present
-	ctx := context.WithValue(context.Background(), ContextKeyTenant, "t1")
+	// Case 1: Database present
+	ctx := context.WithValue(context.Background(), ContextKeyDatabase, "t1")
 	req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	tenant, err := h.getTenantId(req)
+	database, err := h.getDatabaseId(req)
 	assert.NoError(t, err)
-	assert.Equal(t, "t1", tenant)
+	assert.Equal(t, "t1", database)
 
-	// Case 2: Tenant missing
+	// Case 2: Database missing
 	req2 := httptest.NewRequest("GET", "/", nil)
-	tenant2, err2 := h.getTenantId(req2)
+	database2, err2 := h.getDatabaseId(req2)
 	assert.Error(t, err2)
-	assert.Equal(t, "", tenant2)
+	assert.Equal(t, "", database2)
 }
 
-func TestTenantOrError(t *testing.T) {
+func TestDatabaseOrError(t *testing.T) {
 	h := &Handler{}
 
-	// Case 1: Tenant present
-	ctx := context.WithValue(context.Background(), ContextKeyTenant, "t1")
+	// Case 1: Database present
+	ctx := context.WithValue(context.Background(), ContextKeyDatabase, "t1")
 	req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
 	w := httptest.NewRecorder()
-	tenant, ok := h.tenantOrError(w, req)
+	database, ok := h.databaseOrError(w, req)
 	assert.True(t, ok)
-	assert.Equal(t, "t1", tenant)
+	assert.Equal(t, "t1", database)
 	assert.Equal(t, http.StatusOK, w.Code)
 
-	// Case 2: Tenant missing
+	// Case 2: Database missing
 	req2 := httptest.NewRequest("GET", "/", nil)
 	w2 := httptest.NewRecorder()
-	tenant2, ok2 := h.tenantOrError(w2, req2)
+	database2, ok2 := h.databaseOrError(w2, req2)
 	assert.False(t, ok2)
-	assert.Equal(t, "", tenant2)
+	assert.Equal(t, "", database2)
 	assert.Equal(t, http.StatusUnauthorized, w2.Code)
 }
 
@@ -60,10 +60,10 @@ func TestClaimsToMap(t *testing.T) {
 
 	// Case 2: Valid claims
 	claims := &identity.Claims{
-		TenantID: "t1",
-		UserID:   "u1",
-		Username: "user1",
-		Roles:    []string{"admin"},
+		DatabaseID: "t1",
+		UserID:     "u1",
+		Username:   "user1",
+		Roles:      []string{"admin"},
 	}
 	m := claimsToMap(claims)
 	assert.Equal(t, "t1", m["tid"])

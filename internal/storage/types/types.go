@@ -16,7 +16,7 @@ var (
 // User represents a user in the system
 type User struct {
 	ID            string                 `json:"id" bson:"_id"`
-	TenantID      string                 `json:"tenantId" bson:"tenant_id"`
+	DatabaseID    string                 `json:"databaseId" bson:"database_id"`
 	Username      string                 `json:"username" bson:"username"`
 	PasswordHash  string                 `json:"password_hash" bson:"password_hash"`
 	PasswordAlgo  string                 `json:"password_algo" bson:"password_algo"` // "argon2id" or "bcrypt"
@@ -32,19 +32,19 @@ type User struct {
 
 // RevokedToken represents a revoked JWT
 type RevokedToken struct {
-	JTI       string    `bson:"_id"`
-	TenantID  string    `bson:"tenant_id"`
-	ExpiresAt time.Time `bson:"expires_at"`
-	RevokedAt time.Time `bson:"revoked_at"`
+	JTI        string    `bson:"_id"`
+	DatabaseID string    `bson:"database_id"`
+	ExpiresAt  time.Time `bson:"expires_at"`
+	RevokedAt  time.Time `bson:"revoked_at"`
 }
 
 // StoredDoc represents a stored document in the database
 type StoredDoc struct {
-	// Id is the unique identifier for the document, tenant_id:hash(fullpath)
+	// Id is the unique identifier for the document, database_id:hash(fullpath)
 	Id string `json:"id" bson:"_id"`
 
-	// TenantID is the tenant identifier
-	TenantID string `json:"tenantId" bson:"tenant_id"`
+	// DatabaseID is the database identifier
+	DatabaseID string `json:"databaseId" bson:"database_id"`
 
 	// Fullpath is the Full Pathname of document
 	Fullpath string `json:"-" bson:"fullpath"`
@@ -82,28 +82,28 @@ type WatchOptions struct {
 // DocumentStore defines the interface for document storage operations
 type DocumentStore interface {
 	// Get retrieves a document by its path
-	Get(ctx context.Context, tenant string, path string) (*StoredDoc, error)
+	Get(ctx context.Context, database string, path string) (*StoredDoc, error)
 
 	// Create inserts a new document. Fails if it already exists.
-	Create(ctx context.Context, tenant string, doc StoredDoc) error
+	Create(ctx context.Context, database string, doc StoredDoc) error
 
 	// Update updates an existing document.
 	// If pred is provided, it performs a CAS (Compare-And-Swap) operation.
-	Update(ctx context.Context, tenant string, path string, data map[string]interface{}, pred model.Filters) error
+	Update(ctx context.Context, database string, path string, data map[string]interface{}, pred model.Filters) error
 
 	// Patch updates specific fields of an existing document.
 	// If pred is provided, it performs a CAS (Compare-And-Swap) operation.
-	Patch(ctx context.Context, tenant string, path string, data map[string]interface{}, pred model.Filters) error
+	Patch(ctx context.Context, database string, path string, data map[string]interface{}, pred model.Filters) error
 
 	// Delete removes a document by its path
-	Delete(ctx context.Context, tenant string, path string, pred model.Filters) error
+	Delete(ctx context.Context, database string, path string, pred model.Filters) error
 
 	// Query executes a complex query
-	Query(ctx context.Context, tenant string, q model.Query) ([]*StoredDoc, error)
+	Query(ctx context.Context, database string, q model.Query) ([]*StoredDoc, error)
 
 	// Watch returns a channel of events for a given collection (or all if empty).
 	// resumeToken can be nil to start from now.
-	Watch(ctx context.Context, tenant string, collection string, resumeToken interface{}, opts WatchOptions) (<-chan Event, error)
+	Watch(ctx context.Context, database string, collection string, resumeToken interface{}, opts WatchOptions) (<-chan Event, error)
 
 	// Close closes the connection to the backend
 	Close(ctx context.Context) error
@@ -111,21 +111,21 @@ type DocumentStore interface {
 
 // UserStore defines the interface for user storage operations
 type UserStore interface {
-	CreateUser(ctx context.Context, tenant string, user *User) error
-	GetUserByUsername(ctx context.Context, tenant string, username string) (*User, error)
-	GetUserByID(ctx context.Context, tenant string, id string) (*User, error)
-	ListUsers(ctx context.Context, tenant string, limit int, offset int) ([]*User, error)
-	UpdateUser(ctx context.Context, tenant string, user *User) error
-	UpdateUserLoginStats(ctx context.Context, tenant string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error
+	CreateUser(ctx context.Context, database string, user *User) error
+	GetUserByUsername(ctx context.Context, database string, username string) (*User, error)
+	GetUserByID(ctx context.Context, database string, id string) (*User, error)
+	ListUsers(ctx context.Context, database string, limit int, offset int) ([]*User, error)
+	UpdateUser(ctx context.Context, database string, user *User) error
+	UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error
 	EnsureIndexes(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
 // TokenRevocationStore defines the interface for token revocation storage operations
 type TokenRevocationStore interface {
-	RevokeToken(ctx context.Context, tenant string, jti string, expiresAt time.Time) error
-	RevokeTokenImmediate(ctx context.Context, tenant string, jti string, expiresAt time.Time) error
-	IsRevoked(ctx context.Context, tenant string, jti string, gracePeriod time.Duration) (bool, error)
+	RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error
+	RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error
+	IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error)
 	EnsureIndexes(ctx context.Context) error
 	Close(ctx context.Context) error
 }
@@ -162,17 +162,17 @@ type Router interface {
 
 // DocumentRouter routes document operations
 type DocumentRouter interface {
-	Select(tenant string, op OpKind) (DocumentStore, error)
+	Select(database string, op OpKind) (DocumentStore, error)
 }
 
 // UserRouter routes user operations
 type UserRouter interface {
-	Select(tenant string, op OpKind) (UserStore, error)
+	Select(database string, op OpKind) (UserStore, error)
 }
 
 // RevocationRouter routes revocation operations
 type RevocationRouter interface {
-	Select(tenant string, op OpKind) (TokenRevocationStore, error)
+	Select(database string, op OpKind) (TokenRevocationStore, error)
 }
 
 // EventType represents the type of change
@@ -187,7 +187,7 @@ const (
 // Event represents a database change event
 type Event struct {
 	Id          string      `json:"id"`
-	TenantID    string      `json:"tenantId"`
+	DatabaseID  string      `json:"databaseId"`
 	Type        EventType   `json:"type"`
 	Document    *StoredDoc  `json:"document,omitempty"` // Nil for delete
 	Before      *StoredDoc  `json:"before,omitempty"`   // Previous state, if available

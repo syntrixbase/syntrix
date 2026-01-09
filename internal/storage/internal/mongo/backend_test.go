@@ -75,18 +75,18 @@ func TestMongoBackend_CRUD(t *testing.T) {
 	collection := "users"
 	docID := "testuser"
 	docPath := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
 	// 1. Create
-	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
+	doc := types.NewStoredDoc(database, collection, docID, map[string]interface{}{
 		"name": "Test User",
 		"age":  30,
 	})
-	err := backend.Create(ctx, tenant, doc)
+	err := backend.Create(ctx, database, doc)
 	require.NoError(t, err)
 
 	// 2. Get
-	fetchedDoc, err := backend.Get(ctx, tenant, collection+"/"+docID)
+	fetchedDoc, err := backend.Get(ctx, database, collection+"/"+docID)
 	require.NoError(t, err)
 	assert.Equal(t, doc.Id, fetchedDoc.Id)
 	assert.Equal(t, doc.Collection, fetchedDoc.Collection)
@@ -104,11 +104,11 @@ func TestMongoBackend_CRUD(t *testing.T) {
 		{Field: "version", Op: model.OpEq, Value: fetchedDoc.Version},
 	}
 
-	err = backend.Update(ctx, tenant, docPath, newData, filters)
+	err = backend.Update(ctx, database, docPath, newData, filters)
 	require.NoError(t, err)
 
 	// Verify Update
-	fetchedDoc, err = backend.Get(ctx, tenant, docPath)
+	fetchedDoc, err = backend.Get(ctx, database, docPath)
 	require.NoError(t, err)
 	assert.Equal(t, "Updated User", fetchedDoc.Data["name"])
 	assert.Equal(t, int64(2), fetchedDoc.Version)
@@ -118,15 +118,15 @@ func TestMongoBackend_CRUD(t *testing.T) {
 	filters = model.Filters{
 		{Field: "version", Op: model.OpEq, Value: oldVersion},
 	}
-	err = backend.Update(ctx, tenant, docPath, newData, filters)
+	err = backend.Update(ctx, database, docPath, newData, filters)
 	assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 
 	// 5. Delete
-	err = backend.Delete(ctx, tenant, docPath, nil)
+	err = backend.Delete(ctx, database, docPath, nil)
 	require.NoError(t, err)
 
 	// Verify Delete
-	_, err = backend.Get(ctx, tenant, docPath)
+	_, err = backend.Get(ctx, database, docPath)
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }
 
@@ -138,14 +138,14 @@ func TestMongoBackend_Update_IfMatch(t *testing.T) {
 	collection := "users"
 	docID := "ifmatch"
 	docPath := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
 	// 1. Create
-	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
+	doc := types.NewStoredDoc(database, collection, docID, map[string]interface{}{
 		"status": "active",
 		"score":  100,
 	})
-	err := backend.Create(ctx, tenant, doc)
+	err := backend.Create(ctx, database, doc)
 	require.NoError(t, err)
 
 	// 2. Update with matching filter (status == active)
@@ -156,11 +156,11 @@ func TestMongoBackend_Update_IfMatch(t *testing.T) {
 	filters := model.Filters{
 		{Field: "status", Op: model.OpEq, Value: "active"},
 	}
-	err = backend.Update(ctx, tenant, docPath, newData, filters)
+	err = backend.Update(ctx, database, docPath, newData, filters)
 	require.NoError(t, err)
 
 	// Verify Update
-	fetchedDoc, err := backend.Get(ctx, tenant, docPath)
+	fetchedDoc, err := backend.Get(ctx, database, docPath)
 	require.NoError(t, err)
 	assert.Equal(t, "inactive", fetchedDoc.Data["status"])
 
@@ -172,11 +172,11 @@ func TestMongoBackend_Update_IfMatch(t *testing.T) {
 	filters2 := model.Filters{
 		{Field: "score", Op: model.OpGt, Value: 200},
 	}
-	err = backend.Update(ctx, tenant, docPath, newData2, filters2)
+	err = backend.Update(ctx, database, docPath, newData2, filters2)
 	assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 
 	// Verify No Update
-	fetchedDoc, err = backend.Get(ctx, tenant, docPath)
+	fetchedDoc, err = backend.Get(ctx, database, docPath)
 	require.NoError(t, err)
 	assert.Equal(t, "inactive", fetchedDoc.Data["status"])
 }
@@ -189,44 +189,44 @@ func TestMongoBackend_FilterOperators_OnUpdatePatchDelete(t *testing.T) {
 	collection := "users"
 	docID := "filter-ops"
 	path := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
-	seed := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
+	seed := types.NewStoredDoc(database, collection, docID, map[string]interface{}{
 		"age":  int64(30),
 		"tags": []string{"a", "b"},
 	})
-	require.NoError(t, backend.Create(ctx, tenant, seed))
+	require.NoError(t, backend.Create(ctx, database, seed))
 
 	// Update guarded by numeric GT
 	gtFilter := model.Filters{{Field: "age", Op: model.OpGt, Value: int64(25)}}
-	require.NoError(t, backend.Update(ctx, tenant, path, map[string]interface{}{
+	require.NoError(t, backend.Update(ctx, database, path, map[string]interface{}{
 		"age":  int64(31),
 		"tags": []string{"a", "b"},
 	}, gtFilter))
 
-	updated, err := backend.Get(ctx, tenant, path)
+	updated, err := backend.Get(ctx, database, path)
 	require.NoError(t, err)
 	assert.EqualValues(t, 31, updated.Data["age"])
 
 	// Update blocked by LT (should conflict)
 	ltFilter := model.Filters{{Field: "age", Op: model.OpLt, Value: int64(20)}}
-	err = backend.Update(ctx, tenant, path, map[string]interface{}{"age": 40}, ltFilter)
+	err = backend.Update(ctx, database, path, map[string]interface{}{"age": 40}, ltFilter)
 	assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 
 	// Patch using IN
 	inFilter := model.Filters{{Field: "tags", Op: model.OpIn, Value: []string{"a", "c"}}}
-	require.NoError(t, backend.Patch(ctx, tenant, path, map[string]interface{}{"city": "NY"}, inFilter))
+	require.NoError(t, backend.Patch(ctx, database, path, map[string]interface{}{"city": "NY"}, inFilter))
 
-	afterPatch, err := backend.Get(ctx, tenant, path)
+	afterPatch, err := backend.Get(ctx, database, path)
 	require.NoError(t, err)
 	require.EqualValues(t, int64(3), afterPatch.Version)
 	assert.Equal(t, "NY", afterPatch.Data["city"])
 
 	// Delete guarded by GTE version
 	gteFilter := model.Filters{{Field: "version", Op: model.OpGte, Value: afterPatch.Version}}
-	require.NoError(t, backend.Delete(ctx, tenant, path, gteFilter))
+	require.NoError(t, backend.Delete(ctx, database, path, gteFilter))
 
-	_, err = backend.Get(ctx, tenant, path)
+	_, err = backend.Get(ctx, database, path)
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }
 
@@ -235,13 +235,13 @@ func TestMongoBackend_CreateDuplicate(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	tenant := "default"
-	doc := types.NewStoredDoc(tenant, "users", "dup", nil)
+	database := "default"
+	doc := types.NewStoredDoc(database, "users", "dup", nil)
 
-	err := backend.Create(ctx, tenant, doc)
+	err := backend.Create(ctx, database, doc)
 	require.NoError(t, err)
 
-	err = backend.Create(ctx, tenant, doc)
+	err = backend.Create(ctx, database, doc)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "document already exists") // Checking error message as we didn't define a specific error var for this yet
 }
@@ -251,8 +251,8 @@ func TestMongoBackend_GetNotFound(t *testing.T) {
 	defer backend.Close(context.Background())
 
 	ctx := context.Background()
-	tenant := "default"
-	_, err := backend.Get(ctx, tenant, "non/existent")
+	database := "default"
+	_, err := backend.Get(ctx, database, "non/existent")
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }
 
@@ -299,27 +299,27 @@ func TestMongoBackend_Patch(t *testing.T) {
 	collection := "users"
 	docID := "patchuser"
 	docPath := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
 	// Create initial document
-	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{
+	doc := types.NewStoredDoc(database, collection, docID, map[string]interface{}{
 		"name": "Original Name",
 		"info": map[string]interface{}{
 			"age":  30,
 			"city": "New York",
 		},
 	})
-	err := backend.Create(ctx, tenant, doc)
+	err := backend.Create(ctx, database, doc)
 	require.NoError(t, err)
 
 	// Patch top-level field
 	patchData := map[string]interface{}{
 		"name": "Patched Name",
 	}
-	err = backend.Patch(ctx, tenant, docPath, patchData, model.Filters{})
+	err = backend.Patch(ctx, database, docPath, patchData, model.Filters{})
 	require.NoError(t, err)
 
-	fetched, err := backend.Get(ctx, tenant, docPath)
+	fetched, err := backend.Get(ctx, database, docPath)
 	require.NoError(t, err)
 	assert.Equal(t, "Patched Name", fetched.Data["name"])
 
@@ -332,10 +332,10 @@ func TestMongoBackend_Patch(t *testing.T) {
 	patchData2 := map[string]interface{}{
 		"info.age": 31,
 	}
-	err = backend.Patch(ctx, tenant, docPath, patchData2, model.Filters{})
+	err = backend.Patch(ctx, database, docPath, patchData2, model.Filters{})
 	require.NoError(t, err)
 
-	fetched2, err := backend.Get(ctx, tenant, docPath)
+	fetched2, err := backend.Get(ctx, database, docPath)
 	require.NoError(t, err)
 	info2, ok := fetched2.Data["info"].(map[string]interface{})
 	require.True(t, ok)
@@ -351,24 +351,24 @@ func TestMongoBackend_Patch_WithFilter(t *testing.T) {
 	collection := "users"
 	docID := "patch-precond"
 	path := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
-	base := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"name": "One"})
-	require.NoError(t, backend.Create(ctx, tenant, base))
+	base := types.NewStoredDoc(database, collection, docID, map[string]interface{}{"name": "One"})
+	require.NoError(t, backend.Create(ctx, database, base))
 
 	wrong := model.Filters{{Field: "version", Op: model.OpEq, Value: int64(0)}}
-	err := backend.Patch(ctx, tenant, path, map[string]interface{}{"name": "Wrong"}, wrong)
+	err := backend.Patch(ctx, database, path, map[string]interface{}{"name": "Wrong"}, wrong)
 	assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 
-	current, err := backend.Get(ctx, tenant, path)
+	current, err := backend.Get(ctx, database, path)
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), current.Version)
 	assert.Equal(t, "One", current.Data["name"])
 
 	match := model.Filters{{Field: "version", Op: model.OpEq, Value: current.Version}}
-	require.NoError(t, backend.Patch(ctx, tenant, path, map[string]interface{}{"name": "Two"}, match))
+	require.NoError(t, backend.Patch(ctx, database, path, map[string]interface{}{"name": "Two"}, match))
 
-	updated, err := backend.Get(ctx, tenant, path)
+	updated, err := backend.Get(ctx, database, path)
 	require.NoError(t, err)
 	assert.Equal(t, "Two", updated.Data["name"])
 	assert.Equal(t, int64(2), updated.Version)
@@ -382,22 +382,22 @@ func TestMongoBackend_Delete_WithFilter(t *testing.T) {
 	collection := "users"
 	docID := "delete-precond"
 	path := collection + "/" + docID
-	tenant := "default"
+	database := "default"
 
-	doc := types.NewStoredDoc(tenant, collection, docID, map[string]interface{}{"name": "ToDelete"})
-	require.NoError(t, backend.Create(ctx, tenant, doc))
+	doc := types.NewStoredDoc(database, collection, docID, map[string]interface{}{"name": "ToDelete"})
+	require.NoError(t, backend.Create(ctx, database, doc))
 
 	wrong := model.Filters{{Field: "version", Op: model.OpEq, Value: int64(0)}}
-	err := backend.Delete(ctx, tenant, path, wrong)
+	err := backend.Delete(ctx, database, path, wrong)
 	assert.ErrorIs(t, err, model.ErrPreconditionFailed)
 
-	stillThere, err := backend.Get(ctx, tenant, path)
+	stillThere, err := backend.Get(ctx, database, path)
 	require.NoError(t, err)
 	assert.Equal(t, "ToDelete", stillThere.Data["name"])
 
 	match := model.Filters{{Field: "version", Op: model.OpEq, Value: stillThere.Version}}
-	require.NoError(t, backend.Delete(ctx, tenant, path, match))
+	require.NoError(t, backend.Delete(ctx, database, path, match))
 
-	_, err = backend.Get(ctx, tenant, path)
+	_, err = backend.Get(ctx, database, path)
 	assert.ErrorIs(t, err, model.ErrNotFound)
 }

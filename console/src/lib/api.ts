@@ -48,7 +48,7 @@ api.interceptors.response.use(
 export interface LoginRequest {
   username: string;
   password: string;
-  tenant?: string;
+  database?: string;
 }
 
 export interface LoginResponse {
@@ -66,17 +66,17 @@ export interface RefreshResponse {
 export interface SignupRequest {
   username: string;
   password: string;
-  tenant?: string;
+  database?: string;
 }
 
 export const authApi = {
   login: async (data: LoginRequest): Promise<{ token: string; refreshToken?: string }> => {
     const response = await api.post<LoginResponse>('/auth/v1/login', {
       ...data,
-      tenant: data.tenant || 'default',
+      database: data.database || 'default',
     });
     // Backend returns access_token/refresh_token, normalize naming
-    return { 
+    return {
       token: response.data.access_token,
       refreshToken: response.data.refresh_token,
     };
@@ -95,7 +95,7 @@ export const authApi = {
   signup: async (data: SignupRequest): Promise<void> => {
     await api.post('/auth/v1/signup', {
       ...data,
-      tenant: data.tenant || 'default',
+      database: data.database || 'default',
     });
   },
 
@@ -153,7 +153,7 @@ export interface User {
   id: string;
   username: string;
   role: string;
-  tenant: string;
+  database: string;
   created_at?: string;
 }
 

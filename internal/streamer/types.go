@@ -42,8 +42,8 @@ type Event struct {
 	// EventID is the unique identifier for this event.
 	EventID string
 
-	// Tenant is the tenant identifier.
-	Tenant string
+	// Database is the database identifier.
+	Database string
 
 	// Collection is the collection name.
 	Collection string

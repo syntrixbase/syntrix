@@ -9,15 +9,15 @@ describe('DefaultTokenProvider', () => {
     axios.post = originalPost;
   });
 
-  it('should call derived /login endpoint with tenant and set tokens', async () => {
+  it('should call derived /login endpoint with database and set tokens', async () => {
     const postMock = mock(async (url: string, body: any) => {
       expect(url).toBe('http://auth/auth/v1/login');
-      expect(body).toEqual({ username: 'alice', password: 'pw', tenant: 't1' });
+      expect(body).toEqual({ username: 'alice', password: 'pw', database: 't1' });
       return { data: { access_token: 'at', refresh_token: 'rt', expires_in: 3600 } };
     }) as any;
     axios.post = postMock;
 
-    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', tenantId: 't1' });
+    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', databaseId: 't1' });
     const resp = await provider.login('alice', 'pw');
 
     expect(resp.access_token).toBe('at');

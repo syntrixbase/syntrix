@@ -104,23 +104,23 @@ func TestNewFactory(t *testing.T) {
 	assert.NotNil(t, f.Revocation())
 }
 
-func TestNewFactory_TenantConfig(t *testing.T) {
+func TestNewFactory_DatabaseConfig(t *testing.T) {
 	setupMockProvider()
 	defer teardownMockProvider()
 
 	cfg := &config.Config{
 		Storage: config.StorageConfig{
 			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
-				"tenant1": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
+				"primary":   {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+				"database1": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
 			},
 			Topology: config.TopologyConfig{
 				Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 			},
-			Tenants: map[string]config.TenantConfig{
-				"t1": {Backend: "tenant1"},
+			Databases: map[string]config.DatabaseConfig{
+				"t1": {Backend: "database1"},
 			},
 		},
 	}
@@ -403,7 +403,7 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 }
 
-func TestNewFactory_TenantErrors(t *testing.T) {
+func TestNewFactory_DatabaseErrors(t *testing.T) {
 	origNewMongoProvider := newMongoProvider
 	defer func() { newMongoProvider = origNewMongoProvider }()
 
@@ -414,7 +414,7 @@ func TestNewFactory_TenantErrors(t *testing.T) {
 
 	ctx := context.Background()
 
-	t.Run("Tenant Document Backend Missing", func(t *testing.T) {
+	t.Run("Database Document Backend Missing", func(t *testing.T) {
 		cfg := &config.Config{
 			Storage: config.StorageConfig{
 				Backends: map[string]config.BackendConfig{
@@ -423,7 +423,7 @@ func TestNewFactory_TenantErrors(t *testing.T) {
 				Topology: config.TopologyConfig{
 					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
 				},
-				Tenants: map[string]config.TenantConfig{
+				Databases: map[string]config.DatabaseConfig{
 					"t1": {Backend: "missing"},
 				},
 			},
@@ -433,7 +433,7 @@ func TestNewFactory_TenantErrors(t *testing.T) {
 	})
 }
 
-func TestNewFactory_DefaultTenantSkipped(t *testing.T) {
+func TestNewFactory_DefaultDatabaseSkipped(t *testing.T) {
 	setupMockProvider()
 	defer teardownMockProvider()
 
@@ -447,7 +447,7 @@ func TestNewFactory_DefaultTenantSkipped(t *testing.T) {
 				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 			},
-			Tenants: map[string]config.TenantConfig{
+			Databases: map[string]config.DatabaseConfig{
 				"default": {Backend: "primary"}, // Should be skipped
 			},
 		},

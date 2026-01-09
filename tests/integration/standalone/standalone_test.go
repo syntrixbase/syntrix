@@ -199,7 +199,7 @@ match:
 func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
 	// SignUp
 	signupBody := map[string]string{
-		"tenant":   "default",
+		"database": "default",
 		"username": uid,
 		"password": "password123456",
 	}
@@ -218,7 +218,7 @@ func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
 
 	// If signup failed (user exists), try login
 	loginBody := map[string]string{
-		"tenant":   "default",
+		"database": "default",
 		"username": uid,
 		"password": "password123456",
 	}

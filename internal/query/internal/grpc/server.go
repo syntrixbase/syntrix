@@ -14,14 +14,14 @@ import (
 // Service defines the interface for the Query Engine.
 // This is a copy of query.Service to avoid circular imports.
 type Service interface {
-	GetDocument(ctx context.Context, tenant string, path string) (model.Document, error)
-	CreateDocument(ctx context.Context, tenant string, doc model.Document) error
-	ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error)
-	PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error)
-	DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error
-	ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error)
-	Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error)
-	Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error)
+	GetDocument(ctx context.Context, database string, path string) (model.Document, error)
+	CreateDocument(ctx context.Context, database string, doc model.Document) error
+	ReplaceDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error)
+	PatchDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error)
+	DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error
+	ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error)
+	Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error)
+	Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error)
 }
 
 // Server implements the gRPC QueryServiceServer interface.
@@ -38,7 +38,7 @@ func NewServer(service Service) *Server {
 
 // GetDocument retrieves a document by its path.
 func (s *Server) GetDocument(ctx context.Context, req *pb.GetDocumentRequest) (*pb.GetDocumentResponse, error) {
-	doc, err := s.service.GetDocument(ctx, req.Tenant, req.Path)
+	doc, err := s.service.GetDocument(ctx, req.Database, req.Path)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -50,7 +50,7 @@ func (s *Server) GetDocument(ctx context.Context, req *pb.GetDocumentRequest) (*
 // CreateDocument creates a new document.
 func (s *Server) CreateDocument(ctx context.Context, req *pb.CreateDocumentRequest) (*pb.CreateDocumentResponse, error) {
 	doc := protoToModelDoc(req.Document)
-	err := s.service.CreateDocument(ctx, req.Tenant, doc)
+	err := s.service.CreateDocument(ctx, req.Database, doc)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -62,7 +62,7 @@ func (s *Server) ReplaceDocument(ctx context.Context, req *pb.ReplaceDocumentReq
 	doc := protoToModelDoc(req.Document)
 	filters := protoToFilters(req.Filters)
 
-	result, err := s.service.ReplaceDocument(ctx, req.Tenant, doc, filters)
+	result, err := s.service.ReplaceDocument(ctx, req.Database, doc, filters)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -76,7 +76,7 @@ func (s *Server) PatchDocument(ctx context.Context, req *pb.PatchDocumentRequest
 	doc := protoToModelDoc(req.Document)
 	filters := protoToFilters(req.Filters)
 
-	result, err := s.service.PatchDocument(ctx, req.Tenant, doc, filters)
+	result, err := s.service.PatchDocument(ctx, req.Database, doc, filters)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -89,7 +89,7 @@ func (s *Server) PatchDocument(ctx context.Context, req *pb.PatchDocumentRequest
 func (s *Server) DeleteDocument(ctx context.Context, req *pb.DeleteDocumentRequest) (*pb.DeleteDocumentResponse, error) {
 	filters := protoToFilters(req.Filters)
 
-	err := s.service.DeleteDocument(ctx, req.Tenant, req.Path, filters)
+	err := s.service.DeleteDocument(ctx, req.Database, req.Path, filters)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -100,7 +100,7 @@ func (s *Server) DeleteDocument(ctx context.Context, req *pb.DeleteDocumentReque
 func (s *Server) ExecuteQuery(ctx context.Context, req *pb.ExecuteQueryRequest) (*pb.ExecuteQueryResponse, error) {
 	query := protoToQuery(req.Query)
 
-	docs, err := s.service.ExecuteQuery(ctx, req.Tenant, query)
+	docs, err := s.service.ExecuteQuery(ctx, req.Database, query)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -113,7 +113,7 @@ func (s *Server) ExecuteQuery(ctx context.Context, req *pb.ExecuteQueryRequest) 
 func (s *Server) Pull(ctx context.Context, req *pb.PullRequest) (*pb.PullResponse, error) {
 	pullReq := protoToPullRequest(req)
 
-	resp, err := s.service.Pull(ctx, req.Tenant, pullReq)
+	resp, err := s.service.Pull(ctx, req.Database, pullReq)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}
@@ -125,7 +125,7 @@ func (s *Server) Pull(ctx context.Context, req *pb.PullRequest) (*pb.PullRespons
 func (s *Server) Push(ctx context.Context, req *pb.PushRequest) (*pb.PushResponse, error) {
 	pushReq := protoToPushRequest(req)
 
-	resp, err := s.service.Push(ctx, req.Tenant, pushReq)
+	resp, err := s.service.Push(ctx, req.Database, pushReq)
 	if err != nil {
 		return nil, errorToStatus(err)
 	}

@@ -22,8 +22,8 @@ type MockQueryService struct {
 	query.Service
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
-	args := m.Called(ctx, tenant, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
+	args := m.Called(ctx, database, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -37,14 +37,14 @@ type MockAuthService struct {
 
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), types.ContextKeyTenant, "default")
+		ctx := context.WithValue(r.Context(), types.ContextKeyDatabase, "default")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), types.ContextKeyTenant, "default")
+		ctx := context.WithValue(r.Context(), types.ContextKeyDatabase, "default")
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }

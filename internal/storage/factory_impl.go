@@ -62,9 +62,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		return nil, err
 	}
 
-	tenantDocRouters := make(map[string]types.DocumentRouter)
-	for tID, tCfg := range cfg.Storage.Tenants {
-		if tID == model.DefaultTenantID {
+	databaseDocRouters := make(map[string]types.DocumentRouter)
+	for tID, tCfg := range cfg.Storage.Databases {
+		if tID == model.DefaultDatabaseID {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)
@@ -72,9 +72,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 			return nil, err
 		}
 		store := mongo.NewDocumentStore(p.Client(), p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.Document.DataCollection, cfg.Storage.Topology.Document.SysCollection, cfg.Storage.Topology.Document.SoftDeleteRetention)
-		tenantDocRouters[tID] = router.NewSingleDocumentRouter(store)
+		databaseDocRouters[tID] = router.NewSingleDocumentRouter(store)
 	}
-	f.docStore = router.NewRoutedDocumentStore(router.NewTenantDocumentRouter(defaultDocRouter, tenantDocRouters))
+	f.docStore = router.NewRoutedDocumentStore(router.NewDatabaseDocumentRouter(defaultDocRouter, databaseDocRouters))
 
 	// 3. Initialize User Store
 	defaultUserRouter, err := f.createUserRouter(cfg.Storage.Topology.User)
@@ -82,9 +82,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		return nil, err
 	}
 
-	tenantUserRouters := make(map[string]types.UserRouter)
-	for tID, tCfg := range cfg.Storage.Tenants {
-		if tID == model.DefaultTenantID {
+	databaseUserRouters := make(map[string]types.UserRouter)
+	for tID, tCfg := range cfg.Storage.Databases {
+		if tID == model.DefaultDatabaseID {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)
@@ -92,9 +92,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 			return nil, err
 		}
 		store := mongo.NewUserStore(p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.User.Collection)
-		tenantUserRouters[tID] = router.NewSingleUserRouter(store)
+		databaseUserRouters[tID] = router.NewSingleUserRouter(store)
 	}
-	f.usrStore = router.NewRoutedUserStore(router.NewTenantUserRouter(defaultUserRouter, tenantUserRouters))
+	f.usrStore = router.NewRoutedUserStore(router.NewDatabaseUserRouter(defaultUserRouter, databaseUserRouters))
 
 	// 4. Initialize Revocation Store
 	defaultRevRouter, err := f.createRevocationRouter(cfg.Storage.Topology.Revocation)
@@ -102,9 +102,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		return nil, err
 	}
 
-	tenantRevRouters := make(map[string]types.RevocationRouter)
-	for tID, tCfg := range cfg.Storage.Tenants {
-		if tID == model.DefaultTenantID {
+	databaseRevRouters := make(map[string]types.RevocationRouter)
+	for tID, tCfg := range cfg.Storage.Databases {
+		if tID == model.DefaultDatabaseID {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)
@@ -112,9 +112,9 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 			return nil, err
 		}
 		store := mongo.NewRevocationStore(p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.Revocation.Collection)
-		tenantRevRouters[tID] = router.NewSingleRevocationRouter(store)
+		databaseRevRouters[tID] = router.NewSingleRevocationRouter(store)
 	}
-	f.revStore = router.NewRoutedRevocationStore(router.NewTenantRevocationRouter(defaultRevRouter, tenantRevRouters))
+	f.revStore = router.NewRoutedRevocationStore(router.NewDatabaseRevocationRouter(defaultRevRouter, databaseRevRouters))
 	success = true
 
 	return f, nil

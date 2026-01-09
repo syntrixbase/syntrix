@@ -26,22 +26,22 @@ func TestSignUp_Coverage(t *testing.T) {
 
 	tests := []testCase{
 		{
-			name: "Missing Tenant",
+			name: "Missing Database",
 			req: SignupRequest{
-				TenantID: "",
-				Username: "user",
-				Password: "password12345",
+				DatabaseID: "",
+				Username:   "user",
+				Password:   "password12345",
 			},
 			mockSetup:   nil,
 			expectError: true,
-			errorMsg:    ErrTenantRequired.Error(),
+			errorMsg:    ErrDatabaseRequired.Error(),
 		},
 		{
 			name: "User Already Exists",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "existing",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "existing",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "existing").Return(&User{}, nil)
@@ -52,9 +52,9 @@ func TestSignUp_Coverage(t *testing.T) {
 		{
 			name: "Storage Error (Check User)",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "error",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "error",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "error").Return(nil, errors.New("db error"))
@@ -65,9 +65,9 @@ func TestSignUp_Coverage(t *testing.T) {
 		{
 			name: "Password Too Short",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "short",
-				Password: "short",
+				DatabaseID: "default",
+				Username:   "short",
+				Password:   "short",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "short").Return(nil, ErrUserNotFound)
@@ -78,9 +78,9 @@ func TestSignUp_Coverage(t *testing.T) {
 		{
 			name: "Storage Error (Create User)",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "create_error",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "create_error",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "create_error").Return(nil, ErrUserNotFound)
@@ -92,9 +92,9 @@ func TestSignUp_Coverage(t *testing.T) {
 		{
 			name: "Admin Role Assignment",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "syntrix",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "syntrix",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "syntrix").Return(nil, ErrUserNotFound)
@@ -167,7 +167,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "revoked").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "revoked", Password: "password12345",
+					DatabaseID: "default", Username: "revoked", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -184,7 +184,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "reverr").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "reverr", Password: "password12345",
+					DatabaseID: "default", Username: "reverr", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -200,7 +200,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "missing").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "missing", Password: "password12345",
+					DatabaseID: "default", Username: "missing", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -218,7 +218,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "disabled").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "disabled", Password: "password12345",
+					DatabaseID: "default", Username: "disabled", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -226,7 +226,7 @@ func TestRefresh_Coverage(t *testing.T) {
 			mockSetup: func(m *MockStorage) {
 				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything, mock.Anything).Return(&User{
-					ID: "user-id", TenantID: "default", Username: "disabled", Disabled: true,
+					ID: "user-id", DatabaseID: "default", Username: "disabled", Disabled: true,
 				}, nil)
 			},
 			expectError: true,

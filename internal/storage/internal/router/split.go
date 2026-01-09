@@ -14,7 +14,7 @@ func NewSplitDocumentRouter(primary, replica types.DocumentStore) types.Document
 	return &SplitDocumentRouter{primary: primary, replica: replica}
 }
 
-func (r *SplitDocumentRouter) Select(tenant string, op types.OpKind) (types.DocumentStore, error) {
+func (r *SplitDocumentRouter) Select(database string, op types.OpKind) (types.DocumentStore, error) {
 	if op == types.OpRead {
 		return r.replica, nil
 	}
@@ -31,7 +31,7 @@ func NewSplitUserRouter(primary, replica types.UserStore) types.UserRouter {
 	return &SplitUserRouter{primary: primary, replica: replica}
 }
 
-func (r *SplitUserRouter) Select(tenant string, op types.OpKind) (types.UserStore, error) {
+func (r *SplitUserRouter) Select(database string, op types.OpKind) (types.UserStore, error) {
 	if op == types.OpRead {
 		return r.replica, nil
 	}
@@ -48,7 +48,7 @@ func NewSplitRevocationRouter(primary, replica types.TokenRevocationStore) types
 	return &SplitRevocationRouter{primary: primary, replica: replica}
 }
 
-func (r *SplitRevocationRouter) Select(tenant string, op types.OpKind) (types.TokenRevocationStore, error) {
+func (r *SplitRevocationRouter) Select(database string, op types.OpKind) (types.TokenRevocationStore, error) {
 	if op == types.OpRead {
 		return r.replica, nil
 	}

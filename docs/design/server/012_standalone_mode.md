@@ -89,7 +89,7 @@ Existing service boundaries are converted to Go interfaces, allowing runtime sel
 ```go
 // internal/csp/interface.go
 type Service interface {
-    Watch(ctx context.Context, tenant, collection string) (<-chan storage.Event, error)
+    Watch(ctx context.Context, database, collection string) (<-chan storage.Event, error)
 }
 
 // CSPService - direct storage access (standalone mode)
@@ -113,8 +113,8 @@ type Engine struct {
     cspService csp.Service  // replaces: cspURL string
 }
 
-func (e *Engine) WatchCollection(ctx context.Context, tenant, collection string) (<-chan storage.Event, error) {
-    return e.cspService.Watch(ctx, tenant, collection)  // interface call
+func (e *Engine) WatchCollection(ctx context.Context, database, collection string) (<-chan storage.Event, error) {
+    return e.cspService.Watch(ctx, database, collection)  // interface call
 }
 ```
 

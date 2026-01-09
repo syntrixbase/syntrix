@@ -22,14 +22,14 @@ func ValidateTrigger(t *trigger.Trigger) error {
 		return fmt.Errorf("invalid trigger id: %s", t.ID)
 	}
 
-	if t.Tenant == "" {
-		return errors.New("tenant is required")
+	if t.Database == "" {
+		return errors.New("database is required")
 	}
-	if !validNameRegex.MatchString(t.Tenant) {
-		return fmt.Errorf("invalid tenant: %s", t.Tenant)
+	if !validNameRegex.MatchString(t.Database) {
+		return fmt.Errorf("invalid database: %s", t.Database)
 	}
-	if len(t.Tenant) > 128 {
-		return fmt.Errorf("tenant name too long: %s", t.Tenant)
+	if len(t.Database) > 128 {
+		return fmt.Errorf("database name too long: %s", t.Database)
 	}
 
 	if t.Collection == "" {

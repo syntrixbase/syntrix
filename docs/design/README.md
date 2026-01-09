@@ -47,7 +47,7 @@ The Puller service emits events with the following characteristics:
 - **Change Event**: The core event payload (`ChangeEvent`) reflects the MongoDB change stream event but with normalized fields.
 - **Mongo Provenance**: Fields `mgoColl` and `mgoDocId` explicitly indicate the MongoDB collection and document ID (document key).
 - **Full Document Contract**:
-  - The `fullDoc` field MUST conform to the `storage.StoredDoc` JSON shape (containing `id`, `tenantId`, `fullpath`).
+  - The `fullDoc` field MUST conform to the `storage.StoredDoc` JSON shape (containing `id`, `databaseId`, `fullpath`).
   - Update operations MUST use `UpdateLookup` to ensure `fullDoc` is present.
   - Events without `fullDoc` (except deletes) are rejected.
-- **Tenant Identification**: Tenant ID is derived SOLELY from `fullDoc.TenantID`.
+- **Database Identification**: Database ID is derived SOLELY from `fullDoc.DatabaseID`.

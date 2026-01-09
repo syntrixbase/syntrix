@@ -48,14 +48,14 @@ func (h *Handler) handleTriggerGet(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenantID, ok := h.tenantOrError(w, r)
+	databaseID, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
 	docs := make([]map[string]interface{}, 0, len(req.Paths))
 	for _, path := range req.Paths {
-		doc, err := h.engine.GetDocument(r.Context(), tenantID, path)
+		doc, err := h.engine.GetDocument(r.Context(), databaseID, path)
 		if err != nil {
 			if err == model.ErrNotFound {
 				continue // Skip not found documents
@@ -90,7 +90,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tenantID, ok := h.tenantOrError(w, r)
+	databaseID, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
@@ -110,7 +110,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			doc.SetCollection(collection)
 			doc.SetID(id)
-			err = h.engine.CreateDocument(r.Context(), tenantID, doc)
+			err = h.engine.CreateDocument(r.Context(), databaseID, doc)
 		case "update":
 			patchDoc := model.Document(op.Data)
 			if patchDoc == nil {
@@ -118,7 +118,7 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			patchDoc.SetCollection(collection)
 			patchDoc.SetID(id)
-			_, err = h.engine.PatchDocument(r.Context(), tenantID, patchDoc, op.IfMatch)
+			_, err = h.engine.PatchDocument(r.Context(), databaseID, patchDoc, op.IfMatch)
 		case "replace":
 			replaceDoc := model.Document(op.Data)
 			if replaceDoc == nil {
@@ -126,9 +126,9 @@ func (h *Handler) handleTriggerWrite(w http.ResponseWriter, r *http.Request) {
 			}
 			replaceDoc.SetCollection(collection)
 			replaceDoc.SetID(id)
-			_, err = h.engine.ReplaceDocument(r.Context(), tenantID, replaceDoc, op.IfMatch)
+			_, err = h.engine.ReplaceDocument(r.Context(), databaseID, replaceDoc, op.IfMatch)
 		case "delete":
-			err = h.engine.DeleteDocument(r.Context(), tenantID, op.Path, op.IfMatch)
+			err = h.engine.DeleteDocument(r.Context(), databaseID, op.Path, op.IfMatch)
 		default:
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid write type")
 			return

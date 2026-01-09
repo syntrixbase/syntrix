@@ -27,17 +27,17 @@ type Service interface {
 //
 //	stream, _ := service.Stream(ctx)
 //	defer stream.Close()
-//	subID, _ := stream.Subscribe("tenant1", "users", []Filter{{Field: "status", Op: "==", Value: "active"}})
+//	subID, _ := stream.Subscribe("database1", "users", []Filter{{Field: "status", Op: "==", Value: "active"}})
 //	for {
 //	    delivery, err := stream.Recv()
 //	    if err != nil { break }
 //	    // process delivery.Event
 //	}
 type Stream interface {
-	// Subscribe creates a new subscription for the specified tenant and collection.
+	// Subscribe creates a new subscription for the specified database and collection.
 	// Returns the subscription ID on success.
 	// For document ID match, use Filter{Field: "id", Op: model.OpEq, Value: docID}.
-	Subscribe(tenant, collection string, filters []model.Filter) (subscriptionID string, err error)
+	Subscribe(database, collection string, filters []model.Filter) (subscriptionID string, err error)
 
 	// Unsubscribe removes a subscription by ID.
 	Unsubscribe(subscriptionID string) error
@@ -79,7 +79,7 @@ type EventProcessor interface {
 // This decouples localStream from the concrete streamerService implementation.
 type subscriptionHandler interface {
 	// subscribe registers a new subscription and returns the subscription ID.
-	subscribe(gatewayID, tenant, collection string, filters []model.Filter) (subscriptionID string, err error)
+	subscribe(gatewayID, database, collection string, filters []model.Filter) (subscriptionID string, err error)
 
 	// unsubscribe removes a subscription by ID.
 	unsubscribe(subscriptionID string) error

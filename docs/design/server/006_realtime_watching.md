@@ -67,17 +67,17 @@ for evt := range stream {
   2) Probabilistic filter: per-collection field hashes into Bloom/segmented Bloom; tunable parameters (initial phase uses conservative bits/k with headroom).
   3) Exact match: evaluate survivors with the expression engine.
 - Subscription index (Why: reduce broadcast; How):
-  - Gateway registers active subscription summaries (field filters, tenant, subscription id) to CSP; CSP maintains per-collection indexes with periodic refresh/expiry.
+  - Gateway registers active subscription summaries (field filters, database, subscription id) to CSP; CSP maintains per-collection indexes with periodic refresh/expiry.
   - Bloom false positives are filtered by the Gateway (small-scope broadcast remains an acceptable fallback).
 - Index hygiene (Why: keep match quality stable; How):
-  - Enforce TTL on inactive summaries; rebuild Blooms periodically to limit false-positive drift; size budgets per collection to prevent single-tenant blowup.
+  - Enforce TTL on inactive summaries; rebuild Blooms periodically to limit false-positive drift; size budgets per collection to prevent single-database blowup.
 
 Example of building a subscription index entry:
 
 ```go
 type SubscriptionSummary struct {
     ID        string
-    Tenant    string
+    Database    string
     Gateway   string
     Expr      cel.Ast // parsed from watch expression
     BloomKeys []uint64
@@ -87,7 +87,7 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
     keys := bloomKeysFromExpr(sub.Expr, bloomConfig)
     return SubscriptionSummary{
         ID:        sub.ID,
-        Tenant:    sub.Tenant,
+        Database:    sub.Database,
         Gateway:   sub.Gateway,
         Expr:      compileToCEL(sub.Expr),
         BloomKeys: keys,
@@ -115,7 +115,7 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
 ## 4) Client Protocol (WebSocket / SSE)
 
 - Endpoints: `/realtime/ws` (bidi WebSocket), `/realtime/sse` (server-to-client SSE).
-- Connection: authenticate then establish stream; client declares tenant/project context.
+- Connection: authenticate then establish stream; client declares database/project context.
 - Subscription management: client submits watch expressions; server returns subscription ids and current matcher version.
 - Delivery & sequencing: each event includes (subscription ids, seq, partition id, lsn). Gateway preserves per-partition order.
 - Brief-disconnect resume: client keeps last seq/lsn; on reconnect (WS) it sends a resume token; server replays from a sliding window (in-memory/short TTL). Outside the window, client performs resync. SSE clients reconnect with last known cursor if supported.
@@ -123,7 +123,7 @@ func buildSummary(sub SubscribeRequest) SubscriptionSummary {
 - Sliding window (Why: bounded memory with useful coverage; How):
   - Default window: time-based 3 minutes or size-based last 10k events per partition, whichever is smaller; cap memory at ~32 MB per partition group with LRU eviction; clients exceeding the window get a `resync-required` status.
 - Message schema (Why: interoperability and evolvability; How):
-  - Include protocol `version`, `tenant`, `subIds`, `seq`, `partition`, `lsn`, `payload`, optional `checksum`; reserve an `extensions` map for forward-compatible fields.
+  - Include protocol `version`, `database`, `subIds`, `seq`, `partition`, `lsn`, `payload`, optional `checksum`; reserve an `extensions` map for forward-compatible fields.
 
 Client brief-disconnect resume (protocol sketch):
 

@@ -13,10 +13,10 @@ import (
 //   - Fast path: exact Collection+DocumentID matches (O(1))
 //   - Slow path: CEL expression evaluation (O(n) per expression)
 type Manager struct {
-	// exactMatches: tenant -> collection -> docID -> []*Subscriber
+	// exactMatches: database -> collection -> docID -> []*Subscriber
 	exactMatches map[string]map[string]map[string][]*Subscriber
 
-	// expressions: tenant -> collection -> []*ExpressionSubscriber
+	// expressions: database -> collection -> []*ExpressionSubscriber
 	expressions map[string]map[string][]*ExpressionSubscriber
 
 	// gateways: gatewayID -> GatewaySubscriptions
@@ -82,7 +82,7 @@ func (m *Manager) Subscribe(gatewayID string, req *pb.SubscribeRequest) (*pb.Sub
 	sub := &Subscriber{
 		ID:         req.SubscriptionId,
 		GatewayID:  gatewayID,
-		Tenant:     req.Tenant,
+		Database:   req.Database,
 		Collection: req.Collection,
 		Filters:    req.Filters,
 	}
@@ -175,17 +175,17 @@ func (m *Manager) UnregisterGateway(gatewayID string) {
 
 // Match finds all subscriptions that match the given event.
 // Returns a map of gatewayID -> []subscriptionID.
-func (m *Manager) Match(tenant, collection, docID string, doc model.Document) map[string][]string {
+func (m *Manager) Match(database, collection, docID string, doc model.Document) map[string][]string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
 	result := make(map[string][]string)
 
 	// Fast path: exact matches
-	m.matchExact(tenant, collection, docID, result)
+	m.matchExact(database, collection, docID, result)
 
 	// Slow path: CEL expressions
-	m.matchExpressions(tenant, collection, doc, result)
+	m.matchExpressions(database, collection, doc, result)
 
 	return result
 }
@@ -217,16 +217,16 @@ func (m *Manager) getOrCreateGateway(gatewayID string) *GatewaySubscriptions {
 }
 
 func (m *Manager) addExactMatch(sub *Subscriber) {
-	tenantMap, ok := m.exactMatches[sub.Tenant]
+	databaseMap, ok := m.exactMatches[sub.Database]
 	if !ok {
-		tenantMap = make(map[string]map[string][]*Subscriber)
-		m.exactMatches[sub.Tenant] = tenantMap
+		databaseMap = make(map[string]map[string][]*Subscriber)
+		m.exactMatches[sub.Database] = databaseMap
 	}
 
-	collMap, ok := tenantMap[sub.Collection]
+	collMap, ok := databaseMap[sub.Collection]
 	if !ok {
 		collMap = make(map[string][]*Subscriber)
-		tenantMap[sub.Collection] = collMap
+		databaseMap[sub.Collection] = collMap
 	}
 
 	// Use empty string key for collection-level subscriptions
@@ -235,12 +235,12 @@ func (m *Manager) addExactMatch(sub *Subscriber) {
 }
 
 func (m *Manager) removeExactMatch(sub *Subscriber) {
-	tenantMap, ok := m.exactMatches[sub.Tenant]
+	databaseMap, ok := m.exactMatches[sub.Database]
 	if !ok {
 		return
 	}
 
-	collMap, ok := tenantMap[sub.Collection]
+	collMap, ok := databaseMap[sub.Collection]
 	if !ok {
 		return
 	}
@@ -259,10 +259,10 @@ func (m *Manager) removeExactMatch(sub *Subscriber) {
 		delete(collMap, key)
 	}
 	if len(collMap) == 0 {
-		delete(tenantMap, sub.Collection)
+		delete(databaseMap, sub.Collection)
 	}
-	if len(tenantMap) == 0 {
-		delete(m.exactMatches, sub.Tenant)
+	if len(databaseMap) == 0 {
+		delete(m.exactMatches, sub.Database)
 	}
 }
 
@@ -277,48 +277,48 @@ func (m *Manager) addExpressionMatch(sub *Subscriber) error {
 	}
 	exprSub.Subscriber = sub
 
-	tenantMap, ok := m.expressions[sub.Tenant]
+	databaseMap, ok := m.expressions[sub.Database]
 	if !ok {
-		tenantMap = make(map[string][]*ExpressionSubscriber)
-		m.expressions[sub.Tenant] = tenantMap
+		databaseMap = make(map[string][]*ExpressionSubscriber)
+		m.expressions[sub.Database] = databaseMap
 	}
 
-	tenantMap[sub.Collection] = append(tenantMap[sub.Collection], exprSub)
+	databaseMap[sub.Collection] = append(databaseMap[sub.Collection], exprSub)
 	m.expressionSubs[sub.ID] = exprSub
 
 	return nil
 }
 
 func (m *Manager) removeExpressionMatch(sub *Subscriber) {
-	tenantMap, ok := m.expressions[sub.Tenant]
+	databaseMap, ok := m.expressions[sub.Database]
 	if !ok {
 		return
 	}
 
-	subs := tenantMap[sub.Collection]
+	subs := databaseMap[sub.Collection]
 	for i, s := range subs {
 		if s.ID == sub.ID {
-			tenantMap[sub.Collection] = append(subs[:i], subs[i+1:]...)
+			databaseMap[sub.Collection] = append(subs[:i], subs[i+1:]...)
 			break
 		}
 	}
 
 	// Cleanup empty maps
-	if len(tenantMap[sub.Collection]) == 0 {
-		delete(tenantMap, sub.Collection)
+	if len(databaseMap[sub.Collection]) == 0 {
+		delete(databaseMap, sub.Collection)
 	}
-	if len(tenantMap) == 0 {
-		delete(m.expressions, sub.Tenant)
+	if len(databaseMap) == 0 {
+		delete(m.expressions, sub.Database)
 	}
 }
 
-func (m *Manager) matchExact(tenant, collection, docID string, result map[string][]string) {
-	tenantMap, ok := m.exactMatches[tenant]
+func (m *Manager) matchExact(database, collection, docID string, result map[string][]string) {
+	databaseMap, ok := m.exactMatches[database]
 	if !ok {
 		return
 	}
 
-	collMap, ok := tenantMap[collection]
+	collMap, ok := databaseMap[collection]
 	if !ok {
 		return
 	}
@@ -334,13 +334,13 @@ func (m *Manager) matchExact(tenant, collection, docID string, result map[string
 	}
 }
 
-func (m *Manager) matchExpressions(tenant, collection string, doc model.Document, result map[string][]string) {
-	tenantMap, ok := m.expressions[tenant]
+func (m *Manager) matchExpressions(database, collection string, doc model.Document, result map[string][]string) {
+	databaseMap, ok := m.expressions[database]
 	if !ok {
 		return
 	}
 
-	subs, ok := tenantMap[collection]
+	subs, ok := databaseMap[collection]
 	if !ok {
 		return
 	}
@@ -370,8 +370,8 @@ func (m *Manager) evaluateCEL(exprSub *ExpressionSubscriber, doc model.Document)
 
 func (m *Manager) countExactMatches() int {
 	count := 0
-	for _, tenantMap := range m.exactMatches {
-		for _, collMap := range tenantMap {
+	for _, databaseMap := range m.exactMatches {
+		for _, collMap := range databaseMap {
 			for _, subs := range collMap {
 				count += len(subs)
 			}

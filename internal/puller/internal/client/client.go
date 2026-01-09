@@ -301,14 +301,14 @@ func (c *Client) convertEvent(evt *pullerv1.PullerEvent) *events.PullerEvent {
 	change := evt.ChangeEvent
 
 	normalized := &events.StoreChangeEvent{
-		EventID:   change.EventId,
-		TenantID:  change.Tenant,
-		MgoColl:   change.MgoColl,
-		MgoDocID:  change.MgoDocId,
-		OpType:    events.StoreOperationType(change.OpType),
-		Timestamp: change.Timestamp,
-		TxnNumber: &change.TxnNumber,
-		Backend:   change.Backend,
+		EventID:    change.EventId,
+		DatabaseID: change.Database,
+		MgoColl:    change.MgoColl,
+		MgoDocID:   change.MgoDocId,
+		OpType:     events.StoreOperationType(change.OpType),
+		Timestamp:  change.Timestamp,
+		TxnNumber:  &change.TxnNumber,
+		Backend:    change.Backend,
 	}
 
 	if change.ClusterTime != nil {
