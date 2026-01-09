@@ -46,10 +46,10 @@ Before ANY change:
 - Check for AGENTS.md in current directory
 - Subdirectory rules compliment root rules
 - If conflict → subdirectory wins
-- Tasks are located in `tasks` folder
-- Design docs are located in `docs\design` folder
 
 ## Preference
 
 - Use "github.com/stretchr/testify" for Golang tests.
 - Uses `bun` for frontend package scripts.
+- Tasks are located in `tasks` folder
+- Design docs are located in `docs\design` folder

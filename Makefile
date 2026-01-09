@@ -17,7 +17,7 @@ endif
 APP_BIN=$(BUILD_DIR)/$(APP_NAME)$(EXE_EXT)
 CLI_BIN=$(BUILD_DIR)/$(CLI_APP_NAME)$(EXE_EXT)
 
-build: generate
+build:
 	@$(MKDIR_P)
 	@echo "Building $(CLI_APP_NAME)..."
 	@go build -o $(CLI_BIN) ./cmd/syntrix-cli
