@@ -28,6 +28,7 @@ IMMEDIATELY STOP and ask user when:
 - Using `cat` or `echo` to write or append to files in the terminal.
 - **Integration Tests**: Direct calls to internal service components in `tests/integration` directly.
 - Start coding without a **confirmed plan** from the user.
+- Adding "Generated with Claude Code", "via Happy", or any co-author credits in commit messages.
 
 ## 🔄 DECISION TREE
 
