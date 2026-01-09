@@ -22,7 +22,6 @@ func main() {
 	runPuller := flag.Bool("puller", false, "Run Change Stream Puller Service")
 	runAll := flag.Bool("all", false, "Run All Services")
 	standalone := flag.Bool("standalone", false, "Run in standalone mode (single process, no inter-service HTTP)")
-	listenHost := flag.String("host", "", "Host to listen on for all services")
 	flag.Parse()
 
 	// 1. Load Configuration early to check deployment mode from config
@@ -34,9 +33,8 @@ func main() {
 		log.Println("Starting Syntrix in Standalone Mode...")
 		log.Println("- All services running in-process")
 		opts := services.Options{
-			Mode:       services.ModeStandalone,
-			RunAPI:     true,
-			ListenHost: *listenHost,
+			Mode:   services.ModeStandalone,
+			RunAPI: true,
 		}
 		runServer(cfg, opts)
 		return
@@ -75,7 +73,6 @@ func main() {
 		RunTriggerEvaluator: *runTriggerEvaluator,
 		RunTriggerWorker:    *runTriggerWorker,
 		RunPuller:           *runPuller,
-		ListenHost:          *listenHost,
 	}
 	runServer(cfg, opts)
 }

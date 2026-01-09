@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/nats-io/nats.go"
@@ -52,6 +53,10 @@ func TestFactoryOptions(t *testing.T) {
 	// WithStreamName
 	WithStreamName("test-stream")(f)
 	assert.Equal(t, "test-stream", f.streamName)
+
+	// WithRulesFile
+	WithRulesFile("/path/to/rules.yaml")(f)
+	assert.Equal(t, "/path/to/rules.yaml", f.rulesFile)
 }
 
 func TestFactory_Engine_Success(t *testing.T) {
@@ -115,6 +120,45 @@ func TestFactory_Engine_PublisherFail(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, e)
 	assert.Contains(t, err.Error(), "failed to create publisher")
+}
+
+func TestFactory_Engine_WithRulesFile(t *testing.T) {
+	t.Parallel()
+
+	// Create a temporary rules file
+	tmpDir := t.TempDir()
+	rulesFile := tmpDir + "/triggers.yaml"
+	rulesContent := `
+- triggerId: "test-trigger"
+  tenant: "default"
+  collection: "users"
+  events: ["create"]
+  condition: "true"
+  url: "http://localhost:8080/webhook"
+`
+	err := os.WriteFile(rulesFile, []byte(rulesContent), 0644)
+	assert.NoError(t, err)
+
+	mockPuller := new(MockPullerService)
+	f, err := NewFactory(nil, nil, nil, WithPuller(mockPuller), WithRulesFile(rulesFile))
+	assert.NoError(t, err)
+
+	e, err := f.Engine()
+	assert.NoError(t, err)
+	assert.NotNil(t, e)
+}
+
+func TestFactory_Engine_WithRulesFile_InvalidFile(t *testing.T) {
+	t.Parallel()
+
+	mockPuller := new(MockPullerService)
+	f, err := NewFactory(nil, nil, nil, WithPuller(mockPuller), WithRulesFile("/nonexistent/path.yaml"))
+	assert.NoError(t, err)
+
+	e, err := f.Engine()
+	assert.Error(t, err)
+	assert.Nil(t, e)
+	assert.Contains(t, err.Error(), "failed to load trigger rules")
 }
 
 func TestFactory_Consumer_Fail(t *testing.T) {

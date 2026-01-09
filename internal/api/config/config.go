@@ -25,3 +25,8 @@ func DefaultGatewayConfig() GatewayConfig {
 		},
 	}
 }
+
+func (g *GatewayConfig) Validate() error {
+	// Add validation logic if needed
+	return nil
+}

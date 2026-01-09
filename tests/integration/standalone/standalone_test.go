@@ -159,7 +159,6 @@ match:
 		RunQuery:            false, // No separate Query HTTP server
 		RunTriggerEvaluator: false, // Not testing triggers
 		RunTriggerWorker:    false,
-		ListenHost:          "localhost",
 		Mode:                services.ModeStandalone, // Standalone mode
 	}
 

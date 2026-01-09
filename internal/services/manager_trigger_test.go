@@ -75,7 +75,7 @@ func TestManager_InitTriggerServices_Success_WithHooks(t *testing.T) {
 	eval := &fakeEvaluator{}
 	mockFactory.On("Engine").Return(eval, nil)
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerService)
 	mockFactory.AssertExpectations(t)
@@ -108,7 +108,7 @@ func TestManager_InitTriggerServices_WorkerOnly(t *testing.T) {
 	cons := &fakeConsumer{}
 	mockFactory.On("Consumer", cfg.Trigger.WorkerCount).Return(cons, nil)
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.NoError(t, err)
 	mockFactory.AssertExpectations(t)
 }
@@ -146,7 +146,7 @@ func TestManager_InitTriggerServices_EvaluatorOnly_WithRules(t *testing.T) {
 	eval := &fakeEvaluator{}
 	mockFactory.On("Engine").Return(eval, nil)
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerService)
 	mockFactory.AssertExpectations(t)
@@ -178,7 +178,7 @@ func TestManager_InitTriggerServices_ConsumerError(t *testing.T) {
 
 	mockFactory.On("Consumer", cfg.Trigger.WorkerCount).Return(nil, fmt.Errorf("cons error"))
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.ErrorContains(t, err, "cons error")
 	mockFactory.AssertExpectations(t)
 }
@@ -194,7 +194,7 @@ func TestManager_InitTriggerServices_NatsError(t *testing.T) {
 		return nil, fmt.Errorf("nats error")
 	})
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.ErrorContains(t, err, "nats error")
 }
 
@@ -206,7 +206,7 @@ func TestManager_InitTriggerServices_StandaloneEmbeddedNATS(t *testing.T) {
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunTriggerEvaluator: true})
 
 	// EmbeddedNATSProvider should return error since it's not implemented
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), true)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, trigger.ErrEmbeddedNATSNotImplemented)
 }
@@ -240,7 +240,7 @@ func TestManager_InitTriggerServices_StandaloneRemoteNATS(t *testing.T) {
 	eval := &fakeEvaluator{}
 	mockFactory.On("Engine").Return(eval, nil)
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.natsProvider)
 	mockFactory.AssertExpectations(t)

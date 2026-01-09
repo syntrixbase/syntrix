@@ -249,7 +249,6 @@ match:
 		RunTriggerEvaluator: natsAvailable,
 		RunTriggerWorker:    natsAvailable,
 		RunPuller:           true,
-		ListenHost:          "localhost",
 	}
 
 	manager := services.NewManager(cfg, opts)

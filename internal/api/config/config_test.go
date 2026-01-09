@@ -32,3 +32,9 @@ func TestGatewayConfig_StructFields(t *testing.T) {
 	assert.False(t, cfg.Realtime.AllowDevOrigin)
 	assert.False(t, cfg.Realtime.EnableAuth)
 }
+
+func TestGatewayConfig_Validate(t *testing.T) {
+	cfg := DefaultGatewayConfig()
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}

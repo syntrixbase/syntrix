@@ -33,33 +33,31 @@ var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (stora
 }
 
 func (m *Manager) Init(ctx context.Context) error {
+	// Common infrastructure initialization
 	if err := m.initAuthService(ctx); err != nil {
 		return err
 	}
 
 	// Initialize Unified Server Service
-	// Note: We ignore port conflicts for now as we are transitioning.
-	// Existing services will continue to run on their own ports.
 	server.InitDefault(m.cfg.Server, nil)
 
-	if m.opts.RunPuller {
-		if err := m.initPullerService(ctx); err != nil {
-			return err
-		}
-	}
-
-	// Standalone mode: all services run in-process without HTTP inter-service communication
+	// Mode-specific initialization
 	if m.opts.Mode == ModeStandalone {
 		return m.initStandalone(ctx)
 	}
-
-	// Distributed mode: services communicate via HTTP
 	return m.initDistributed(ctx)
 }
 
 // initStandalone initializes services for standalone deployment mode.
 // All services run in a single process without HTTP inter-service communication.
 func (m *Manager) initStandalone(ctx context.Context) error {
+	// Initialize Puller service (local only, no gRPC)
+	if m.opts.RunPuller {
+		if err := m.initPullerService(ctx); err != nil {
+			return err
+		}
+	}
+
 	// Create Streamer service for local access
 	streamerSvc, err := m.createStreamerService()
 	if err != nil {
@@ -79,9 +77,10 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		return err
 	}
 
-	// Initialize trigger services if enabled
+	// Initialize trigger services with embedded NATS if configured
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServices(ctx); err != nil {
+		useEmbeddedNATS := m.cfg.Deployment.Standalone.EmbeddedNATS
+		if err := m.initTriggerServices(ctx, useEmbeddedNATS); err != nil {
 			return err
 		}
 	}
@@ -94,6 +93,14 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 // Key principle: In distributed mode, ALWAYS use gRPC clients for inter-service
 // communication, never direct in-process calls.
 func (m *Manager) initDistributed(ctx context.Context) error {
+	// Initialize Puller service and register gRPC server
+	if m.opts.RunPuller {
+		if err := m.initPullerService(ctx); err != nil {
+			return err
+		}
+		m.initPullerGRPCServer()
+	}
+
 	// Initialize local Query service and register gRPC server
 	if m.opts.RunQuery {
 		queryService, err := m.createQueryService(ctx)
@@ -117,8 +124,9 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		}
 	}
 
+	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServices(ctx); err != nil {
+		if err := m.initTriggerServices(ctx, false); err != nil {
 			return err
 		}
 	}
@@ -301,9 +309,11 @@ func (m *Manager) createStreamerService() (streamer.StreamerServer, error) {
 	return svc, nil
 }
 
-func (m *Manager) initTriggerServices(ctx context.Context) error {
-	// Create NATS provider based on deployment mode
-	if m.opts.Mode == ModeStandalone && m.cfg.Deployment.Standalone.EmbeddedNATS {
+// initTriggerServices initializes trigger evaluator and worker services.
+// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
+func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
+	// Create NATS provider based on parameter
+	if useEmbeddedNATS {
 		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
 	} else {
 		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
@@ -357,6 +367,8 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 	return nil
 }
 
+// initPullerService creates the Puller service and adds backends.
+// Does NOT register gRPC server - that's done separately in distributed mode.
 func (m *Manager) initPullerService(ctx context.Context) error {
 	slog.Info("Initializing Change Stream Puller Service...")
 
@@ -379,11 +391,6 @@ func (m *Manager) initPullerService(ctx context.Context) error {
 			return fmt.Errorf("failed to add backend %s: %w", backendCfg.Name, err)
 		}
 		slog.Info("Added puller backend", "name", backendCfg.Name, "database", dbName)
-	}
-
-	// 3. Register gRPC Server with unified server (if distributed mode)
-	if m.opts.Mode == ModeDistributed {
-		m.initPullerGRPCServer()
 	}
 
 	return nil

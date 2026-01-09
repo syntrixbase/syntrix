@@ -29,14 +29,6 @@ func TestManager_AuthServiceGetter(t *testing.T) {
 	assert.Nil(t, mgr.AuthService())
 }
 
-func TestNewManager_DefaultListenHost(t *testing.T) {
-	t.Parallel()
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{})
-
-	assert.Equal(t, "localhost", mgr.opts.ListenHost)
-}
-
 func TestManager_Init_StorageError(t *testing.T) {
 	t.Parallel()
 	cfg := config.LoadConfig()
@@ -167,7 +159,7 @@ func TestManager_InitTriggerServices_NATSFailure(t *testing.T) {
 	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
 	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
 
-	err := mgr.initTriggerServices(context.Background())
+	err := mgr.initTriggerServices(context.Background(), false)
 	assert.Error(t, err)
 }
 
@@ -277,7 +269,9 @@ func TestManager_initPullerService_Success(t *testing.T) {
 	names := mgr.pullerService.BackendNames()
 	assert.Len(t, names, 1)
 	assert.Equal(t, "primary", names[0])
-	assert.NotNil(t, mgr.pullerGRPC)
+	// Note: pullerGRPC is nil here because initPullerService no longer registers gRPC.
+	// gRPC registration is done separately by initPullerGRPCServer() in initDistributed().
+	assert.Nil(t, mgr.pullerGRPC)
 }
 
 func TestManager_initPullerService_GetMongoError(t *testing.T) {
@@ -910,4 +904,80 @@ func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 	err := mgr.Init(ctx)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to connect to NATS")
+}
+
+func TestManager_initStandalone_WithPuller(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"default": "test_db"},
+		client:   &mongo.Client{},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Buffer.Path = t.TempDir()
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.pullerService)
+	// In standalone mode, pullerGRPC should be nil (no gRPC registration)
+	assert.Nil(t, mgr.pullerGRPC)
+}
+
+func TestManager_initStandalone_PullerError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return nil, errors.New("storage error")
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.Error(t, err)
+}
+
+func TestManager_initPullerGRPCServer(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Server.GRPCPort = 0
+	cfg.Puller.Buffer.Path = t.TempDir()
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:      ModeDistributed,
+		RunPuller: true,
+	})
+
+	// Create a minimal puller service
+	mgr.pullerService = puller.NewService(cfg.Puller, nil)
+
+	// Call initPullerGRPCServer
+	mgr.initPullerGRPCServer()
+
+	assert.NotNil(t, mgr.pullerGRPC)
 }
