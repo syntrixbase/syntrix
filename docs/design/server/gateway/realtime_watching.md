@@ -302,3 +302,43 @@ All messages follow a standard JSON envelope:
 - Reminder: matcher/routing changes should support shadow verification or offline replay of recorded change streams to validate correctness without impacting production traffic (details to be added later).
 - Shadow plan (Why: validate safely; How):
   - Capture sampled change streams (sanitized) to object storage; replay against a shadow CSP+Gateway deployment running new matcher/routing code; compare match sets and latency, block rollout if divergence exceeds threshold.
+
+## 8) Usage Examples
+
+### 8.1 Realtime Subscription (WebSocket)
+
+**Client sends:**
+
+```json
+{
+  "type": "subscribe",
+  "id": "sub-room-123",
+  "query": {
+    "collection": "rooms/room-123/messages",
+    "filters": [{"field": "timestamp", "op": ">", "value": 1678888888000}]
+  }
+}
+```
+
+**Server responds (Snapshot):**
+
+```json
+{
+  "type": "snapshot",
+  "subId": "sub-room-123",
+  "docs": [ ... ]
+}
+```
+
+**Server pushes (Delta):**
+
+```json
+{
+  "type": "event",
+  "subId": "sub-room-123",
+  "delta": {
+    "op": "insert",
+    "doc": { "id": "msg-999", "text": "New message!", ... }
+  }
+}
+```
