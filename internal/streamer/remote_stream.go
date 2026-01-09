@@ -16,7 +16,7 @@ import (
 
 // subscriptionInfo stores subscription details for recovery on reconnect.
 type subscriptionInfo struct {
-	tenant     string
+	database   string
 	collection string
 	filters    []model.Filter
 }
@@ -59,7 +59,7 @@ type remoteStream struct {
 
 // Subscribe creates a new subscription and returns the subscription ID.
 // The subscription is automatically restored on reconnection.
-func (rs *remoteStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
+func (rs *remoteStream) Subscribe(database, collection string, filters []model.Filter) (string, error) {
 	rs.ensureRecvLoop()
 
 	rs.closedMu.Lock()
@@ -87,7 +87,7 @@ func (rs *remoteStream) Subscribe(tenant, collection string, filters []model.Fil
 	// Send subscribe request
 	protoReq := &pb.SubscribeRequest{
 		SubscriptionId: subID,
-		Tenant:         tenant,
+		Database:       database,
 		Collection:     collection,
 		Filters:        filtersToProto(filters),
 	}
@@ -106,7 +106,7 @@ func (rs *remoteStream) Subscribe(tenant, collection string, filters []model.Fil
 		// Store subscription info for potential recovery
 		rs.activeSubscriptionsMu.Lock()
 		rs.activeSubscriptions[subID] = &subscriptionInfo{
-			tenant:     tenant,
+			database:   database,
 			collection: collection,
 			filters:    filters,
 		}
@@ -382,7 +382,7 @@ func (rs *remoteStream) resubscribeAll() error {
 	for subID, info := range subs {
 		protoReq := &pb.SubscribeRequest{
 			SubscriptionId: subID,
-			Tenant:         info.tenant,
+			Database:       info.database,
 			Collection:     info.collection,
 			Filters:        filtersToProto(info.filters),
 		}

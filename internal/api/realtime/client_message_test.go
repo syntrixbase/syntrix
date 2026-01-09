@@ -81,8 +81,8 @@ func TestClientHandleMessage_AuthSuccess(t *testing.T) {
 		assert.Equal(t, TypeAuthAck, msg.Type)
 		assert.Equal(t, "req-ok", msg.ID)
 		assert.True(t, c.authenticated)
-		assert.Equal(t, "default", c.tenant)
-		assert.False(t, c.allowAllTenants)
+		assert.Equal(t, "default", c.database)
+		assert.False(t, c.allowAllDatabases)
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected auth ack")
 	}
@@ -94,7 +94,7 @@ type mockAuthServiceSystem struct {
 
 func (m *mockAuthServiceSystem) ValidateToken(tokenString string) (*identity.Claims, error) {
 	if tokenString == "system" {
-		return &identity.Claims{TenantID: "default", Roles: []string{"system"}}, nil
+		return &identity.Claims{DatabaseID: "default", Roles: []string{"system"}}, nil
 	}
 	return m.mockAuthService.ValidateToken(tokenString)
 }
@@ -114,8 +114,8 @@ func TestClientHandleMessage_AuthSystemRole(t *testing.T) {
 	case msg := <-c.send:
 		assert.Equal(t, TypeAuthAck, msg.Type)
 		assert.True(t, c.authenticated)
-		assert.True(t, c.allowAllTenants)
-		assert.Equal(t, "default", c.tenant)
+		assert.True(t, c.allowAllDatabases)
+		assert.Equal(t, "default", c.database)
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected auth ack")
 	}

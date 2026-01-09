@@ -25,8 +25,8 @@ export class SyntrixClient implements AuthService {
   }
 
   // Auth methods
-  async login(username: string, password: string, tenantId?: string): Promise<LoginResponse> {
-    return this.tokenProvider.login(username, password, tenantId);
+  async login(username: string, password: string, databaseId?: string): Promise<LoginResponse> {
+    return this.tokenProvider.login(username, password, databaseId);
   }
 
   async logout(): Promise<void> {

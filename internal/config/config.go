@@ -28,12 +28,12 @@ type Config struct {
 }
 
 type StorageConfig struct {
-	Backends map[string]BackendConfig `yaml:"backends"`
-	Topology TopologyConfig           `yaml:"topology"`
-	Tenants  map[string]TenantConfig  `yaml:"tenants"`
+	Backends  map[string]BackendConfig  `yaml:"backends"`
+	Topology  TopologyConfig            `yaml:"topology"`
+	Databases map[string]DatabaseConfig `yaml:"databases"`
 }
 
-type TenantConfig struct {
+type DatabaseConfig struct {
 	Backend string `yaml:"backend"`
 }
 
@@ -111,7 +111,7 @@ func LoadConfig() *Config {
 					Collection: "revocations",
 				},
 			},
-			Tenants: map[string]TenantConfig{
+			Databases: map[string]DatabaseConfig{
 				"default": {
 					Backend: "default_mongo",
 				},
@@ -179,13 +179,13 @@ func LoadConfig() *Config {
 }
 
 func (c *Config) Validate() error {
-	// Validate Storage Tenants
-	if _, ok := c.Storage.Tenants["default"]; !ok {
-		return fmt.Errorf("storage.tenants.default is required")
+	// Validate Storage Databases
+	if _, ok := c.Storage.Databases["default"]; !ok {
+		return fmt.Errorf("storage.databases.default is required")
 	}
-	for tID, tCfg := range c.Storage.Tenants {
+	for tID, tCfg := range c.Storage.Databases {
 		if _, ok := c.Storage.Backends[tCfg.Backend]; !ok {
-			return fmt.Errorf("tenant '%s' references unknown backend '%s'", tID, tCfg.Backend)
+			return fmt.Errorf("database '%s' references unknown backend '%s'", tID, tCfg.Backend)
 		}
 	}
 

@@ -46,8 +46,8 @@
 ## Trigger Handler
 - `TriggerHandler` continues to require `preIssuedToken` from the payload; no auto-refresh. Fail fast if missing/invalid.
 
-## Multi-tenant / Audience
-- Prefer token-scoped tenancy. If a tenant header is ever needed, expose an explicit option (not implicit) to avoid drift between token and header.
+## Multi-database / Audience
+- Prefer token-scoped database. If a database header is ever needed, expose an explicit option (not implicit) to avoid drift between token and header.
 
 ## Concurrency & Safety
 - Refresh is serialized; queued requests wait for the refreshed token and reuse it.

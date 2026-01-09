@@ -16,7 +16,7 @@ func (m *mockAuthService) Middleware(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx := withTenantAndRole(r.Context(), "default", []string{"user"})
+		ctx := withDatabaseAndRole(r.Context(), "default", []string{"user"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -31,7 +31,7 @@ func (m *mockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx := withTenantAndRole(r.Context(), "default", []string{"user"})
+		ctx := withDatabaseAndRole(r.Context(), "default", []string{"user"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -64,11 +64,11 @@ func (m *mockAuthService) ValidateToken(tokenString string) (*identity.Claims, e
 	if tokenString != "good" {
 		return nil, identity.ErrInvalidToken
 	}
-	return &identity.Claims{TenantID: "default", Roles: []string{"user"}}, nil
+	return &identity.Claims{DatabaseID: "default", Roles: []string{"user"}}, nil
 }
 
-func withTenantAndRole(ctx context.Context, tenant string, roles []string) context.Context {
-	ctx = context.WithValue(ctx, identity.ContextKeyTenant, tenant)
+func withDatabaseAndRole(ctx context.Context, database string, roles []string) context.Context {
+	ctx = context.WithValue(ctx, identity.ContextKeyDatabase, database)
 	ctx = context.WithValue(ctx, identity.ContextKeyRoles, roles)
 	return ctx
 }

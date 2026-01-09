@@ -67,11 +67,11 @@ func NewTaskPublisherFromJS(js jetstream.JetStream, streamName string, metrics t
 
 func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) error {
 	start := time.Now()
-	// Subject format: <streamName>.<tenant>.<collection>.<documentId>
+	// Subject format: <streamName>.<database>.<collection>.<documentId>
 	// DocumentID is base64url encoded to ensure safety.
 	encodedDocumentID := base64.URLEncoding.EncodeToString([]byte(task.DocumentID))
 
-	subject := fmt.Sprintf("%s.%s.%s.%s", p.prefix, task.Tenant, task.Collection, encodedDocumentID)
+	subject := fmt.Sprintf("%s.%s.%s.%s", p.prefix, task.Database, task.Collection, encodedDocumentID)
 
 	// NATS subject length limit is usually 64KB, but for performance and practical reasons,
 	// we might want to limit it. The requirement says "if length > 1024".
@@ -85,18 +85,18 @@ func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) e
 
 	data, err := json.Marshal(task)
 	if err != nil {
-		p.metrics.IncPublishFailure(task.Tenant, task.Collection, "marshal_error")
+		p.metrics.IncPublishFailure(task.Database, task.Collection, "marshal_error")
 		return err
 	}
 
 	_, err = p.js.Publish(ctx, subject, data, jetstream.WithExpectStream(p.prefix), jetstream.WithRetryAttempts(3))
 	if err != nil {
-		p.metrics.IncPublishFailure(task.Tenant, task.Collection, err.Error())
+		p.metrics.IncPublishFailure(task.Database, task.Collection, err.Error())
 		return err
 	}
 
-	p.metrics.IncPublishSuccess(task.Tenant, task.Collection, task.SubjectHashed)
-	p.metrics.ObservePublishLatency(task.Tenant, task.Collection, time.Since(start))
+	p.metrics.IncPublishSuccess(task.Database, task.Collection, task.SubjectHashed)
+	p.metrics.ObservePublishLatency(task.Database, task.Collection, time.Since(start))
 	return nil
 }
 

@@ -10,7 +10,7 @@ A Trigger is defined by a JSON configuration object. Here is the structure:
 {
   "triggerId": "user-signup-welcome",
   "version": "1.0",
-  "tenant": "acme",
+  "database": "acme",
   "collection": "chats/*/members",
   "events": ["create"],
   "condition": "event.document.data.age >= 18",

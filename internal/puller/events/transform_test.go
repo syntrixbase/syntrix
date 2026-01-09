@@ -11,10 +11,10 @@ import (
 func TestTransform_Insert(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:   "evt-1",
-			TenantID:  "tenant1",
-			OpType:    StoreOperationInsert,
-			Timestamp: 12345,
+			EventID:    "evt-1",
+			DatabaseID: "database1",
+			OpType:     StoreOperationInsert,
+			Timestamp:  12345,
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users",
@@ -28,7 +28,7 @@ func TestTransform_Insert(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "evt-1", evt.Id)
-	assert.Equal(t, "tenant1", evt.TenantID)
+	assert.Equal(t, "database1", evt.DatabaseID)
 	assert.Equal(t, EventCreate, evt.Type)
 	assert.Equal(t, int64(12345), evt.Timestamp)
 	assert.Equal(t, "progress-1", evt.Progress)
@@ -39,9 +39,9 @@ func TestTransform_Insert(t *testing.T) {
 func TestTransform_Update(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-2",
-			TenantID: "tenant1",
-			OpType:   StoreOperationUpdate,
+			EventID:    "evt-2",
+			DatabaseID: "database1",
+			OpType:     StoreOperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:      "doc1",
 				Deleted: false,
@@ -64,9 +64,9 @@ func TestTransform_Update(t *testing.T) {
 func TestTransform_Replace(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-3",
-			TenantID: "tenant1",
-			OpType:   StoreOperationReplace,
+			EventID:    "evt-3",
+			DatabaseID: "database1",
+			OpType:     StoreOperationReplace,
 			FullDocument: &storage.StoredDoc{
 				Id:      "doc1",
 				Deleted: false,
@@ -86,9 +86,9 @@ func TestTransform_Replace(t *testing.T) {
 func TestTransform_SoftDelete_Update(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-4",
-			TenantID: "tenant1",
-			OpType:   StoreOperationUpdate,
+			EventID:    "evt-4",
+			DatabaseID: "database1",
+			OpType:     StoreOperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:      "doc1",
 				Deleted: true,
@@ -109,9 +109,9 @@ func TestTransform_SoftDelete_Update(t *testing.T) {
 func TestTransform_SoftDelete_Replace(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-5",
-			TenantID: "tenant1",
-			OpType:   StoreOperationReplace,
+			EventID:    "evt-5",
+			DatabaseID: "database1",
+			OpType:     StoreOperationReplace,
 			FullDocument: &storage.StoredDoc{
 				Id:      "doc1",
 				Deleted: true,
@@ -130,9 +130,9 @@ func TestTransform_SoftDelete_Replace(t *testing.T) {
 func TestTransform_Delete_Ignored(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-6",
-			TenantID: "tenant1",
-			OpType:   StoreOperationDelete,
+			EventID:    "evt-6",
+			DatabaseID: "database1",
+			OpType:     StoreOperationDelete,
 		},
 		Progress: "progress-6",
 	}
@@ -144,9 +144,9 @@ func TestTransform_Delete_Ignored(t *testing.T) {
 func TestTransform_UnknownOpType(t *testing.T) {
 	pEvent := &PullerEvent{
 		Change: &StoreChangeEvent{
-			EventID:  "evt-7",
-			TenantID: "tenant1",
-			OpType:   "unknown",
+			EventID:    "evt-7",
+			DatabaseID: "database1",
+			OpType:     "unknown",
 		},
 		Progress: "progress-7",
 	}

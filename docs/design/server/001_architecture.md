@@ -88,7 +88,7 @@ Build a Firestore-like database system with the following core characteristics:
 5. **Trigger Delivery Service**: Dedicated module for triggers and outbound webhooks.
     - **Async Delivery**: Consumes matched trigger events fanned out by CSP into queues, signs, and sends webhooks.
     - **Reliability**: Retries with backoff, DLQ on exhaustion, idempotency keys to avoid duplicates.
-    - **Isolation**: Protects API/CSP latency from slow or failing external endpoints; enforces per-tenant rate limits and timeouts.
+    - **Isolation**: Protects API/CSP latency from slow or failing external endpoints; enforces per-database rate limits and timeouts.
 6. **MongoDB**: Storage backend.
 
 ## Identity Design Docs

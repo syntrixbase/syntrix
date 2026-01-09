@@ -151,7 +151,7 @@ func TestProtoToStoredDoc(t *testing.T) {
 	t.Run("full proto", func(t *testing.T) {
 		proto := &pb.Document{
 			Id:             "doc1",
-			TenantId:       "tenant1",
+			DatabaseId:     "database1",
 			Fullpath:       "users/doc1",
 			Collection:     "users",
 			CollectionHash: "abc123",
@@ -165,7 +165,7 @@ func TestProtoToStoredDoc(t *testing.T) {
 		result := protoToStoredDoc(proto)
 
 		assert.Equal(t, "doc1", result.Id)
-		assert.Equal(t, "tenant1", result.TenantID)
+		assert.Equal(t, "database1", result.DatabaseID)
 		assert.Equal(t, "users/doc1", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, "abc123", result.CollectionHash)
@@ -197,7 +197,7 @@ func TestStoredDocToProto(t *testing.T) {
 	t.Run("full stored doc", func(t *testing.T) {
 		doc := &storage.StoredDoc{
 			Id:             "doc1",
-			TenantID:       "tenant1",
+			DatabaseID:     "database1",
 			Fullpath:       "users/doc1",
 			Collection:     "users",
 			CollectionHash: "abc123",
@@ -211,7 +211,7 @@ func TestStoredDocToProto(t *testing.T) {
 		result := storedDocToProto(doc)
 
 		assert.Equal(t, "doc1", result.Id)
-		assert.Equal(t, "tenant1", result.TenantId)
+		assert.Equal(t, "database1", result.DatabaseId)
 		assert.Equal(t, "users/doc1", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, "abc123", result.CollectionHash)

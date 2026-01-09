@@ -45,8 +45,8 @@ message ChangeEvent {
   // Unique event identifier.
   string event_id = 1;
 
-  // Tenant identifier.
-  string tenant = 2;
+  // Database identifier.
+  string database = 2;
 
   // Mongo collection name.
   string mgo_coll = 3;

@@ -28,7 +28,7 @@ func TestUserStore_UserLifecycle(t *testing.T) {
 	defer teardown()
 
 	ctx := context.Background()
-	tenant := "default"
+	database := "default"
 
 	user := &types.User{
 		ID:           "user1",
@@ -39,38 +39,38 @@ func TestUserStore_UserLifecycle(t *testing.T) {
 	}
 
 	// 1. Create User
-	err := s.CreateUser(ctx, tenant, user)
+	err := s.CreateUser(ctx, database, user)
 	require.NoError(t, err)
 
 	// 2. Create Duplicate User (should fail)
-	err = s.CreateUser(ctx, tenant, user)
+	err = s.CreateUser(ctx, database, user)
 	assert.ErrorIs(t, err, types.ErrUserExists)
 
 	// 3. Get User By Username (case insensitive)
-	fetched, err := s.GetUserByUsername(ctx, tenant, "testuser")
+	fetched, err := s.GetUserByUsername(ctx, database, "testuser")
 	require.NoError(t, err)
 	assert.Equal(t, user.ID, fetched.ID)
 	assert.Equal(t, "testuser", fetched.Username) // Should be stored lowercase
 
 	// 4. Get User By ID
-	fetchedID, err := s.GetUserByID(ctx, tenant, user.ID)
+	fetchedID, err := s.GetUserByID(ctx, database, user.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "testuser", fetchedID.Username)
 
 	// 5. Get Non-existent User
-	_, err = s.GetUserByUsername(ctx, tenant, "nonexistent")
+	_, err = s.GetUserByUsername(ctx, database, "nonexistent")
 	assert.ErrorIs(t, err, types.ErrUserNotFound)
 
-	_, err = s.GetUserByID(ctx, tenant, "nonexistent")
+	_, err = s.GetUserByID(ctx, database, "nonexistent")
 	assert.ErrorIs(t, err, types.ErrUserNotFound)
 
 	// 6. Update Login Stats
 	now := time.Now().Truncate(time.Millisecond)
 	lockout := now.Add(1 * time.Hour)
-	err = s.UpdateUserLoginStats(ctx, tenant, user.ID, now, 5, lockout)
+	err = s.UpdateUserLoginStats(ctx, database, user.ID, now, 5, lockout)
 	require.NoError(t, err)
 
-	fetchedUpdated, err := s.GetUserByID(ctx, tenant, user.ID)
+	fetchedUpdated, err := s.GetUserByID(ctx, database, user.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 5, fetchedUpdated.LoginAttempts)
 	assert.Equal(t, now.UnixMilli(), fetchedUpdated.LastLoginAt.UnixMilli())
@@ -82,7 +82,7 @@ func TestUserStore_ListUsersAndUpdate(t *testing.T) {
 	defer teardown()
 
 	ctx := context.Background()
-	tenant := "default"
+	database := "default"
 
 	baseTime := time.Now().Add(-2 * time.Hour).Truncate(time.Millisecond)
 	users := []*types.User{
@@ -92,14 +92,14 @@ func TestUserStore_ListUsersAndUpdate(t *testing.T) {
 	}
 
 	for _, u := range users {
-		require.NoError(t, s.CreateUser(ctx, tenant, u))
+		require.NoError(t, s.CreateUser(ctx, database, u))
 	}
 
-	firstPage, err := s.ListUsers(ctx, tenant, 2, 0)
+	firstPage, err := s.ListUsers(ctx, database, 2, 0)
 	require.NoError(t, err)
 	assert.Len(t, firstPage, 2)
 
-	secondPage, err := s.ListUsers(ctx, tenant, 2, 2)
+	secondPage, err := s.ListUsers(ctx, database, 2, 2)
 	require.NoError(t, err)
 	assert.Len(t, secondPage, 1)
 
@@ -111,15 +111,15 @@ func TestUserStore_ListUsersAndUpdate(t *testing.T) {
 	}
 	assert.Len(t, idSet, 3)
 
-	// Use the ID from the created user object, which now has the tenant prefix
+	// Use the ID from the created user object, which now has the database prefix
 	targetID := users[1].ID
-	original, err := s.GetUserByID(ctx, tenant, targetID)
+	original, err := s.GetUserByID(ctx, database, targetID)
 	require.NoError(t, err)
 
 	update := &types.User{ID: targetID, Roles: []string{"admin", "editor"}, Disabled: true}
-	require.NoError(t, s.UpdateUser(ctx, tenant, update))
+	require.NoError(t, s.UpdateUser(ctx, database, update))
 
-	updated, err := s.GetUserByID(ctx, tenant, targetID)
+	updated, err := s.GetUserByID(ctx, database, targetID)
 	require.NoError(t, err)
 	assert.Equal(t, []string{"admin", "editor"}, updated.Roles)
 	assert.True(t, updated.Disabled)

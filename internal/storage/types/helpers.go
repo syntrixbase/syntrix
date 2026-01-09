@@ -9,16 +9,16 @@ import (
 	"github.com/zeebo/blake3"
 )
 
-// CalculateTenantID calculates the tenant-aware document ID
-// Format: tenant_id:hash(fullpath)
-func CalculateTenantID(tenant, fullpath string) string {
+// CalculateDatabaseID calculates the database-aware document ID
+// Format: database_id:hash(fullpath)
+func CalculateDatabaseID(database, fullpath string) string {
 	hash := blake3.Sum256([]byte(fullpath))
 	hashStr := hex.EncodeToString(hash[:16])
-	return tenant + ":" + hashStr
+	return database + ":" + hashStr
 }
 
 // CalculateID calculates the document ID (hash) from the full path
-// Deprecated: Use CalculateTenantID instead
+// Deprecated: Use CalculateDatabaseID instead
 func CalculateID(fullpath string) string {
 	hash := blake3.Sum256([]byte(fullpath))
 	return hex.EncodeToString(hash[:16])
@@ -31,7 +31,7 @@ func CalculateCollectionHash(collection string) string {
 	return hex.EncodeToString(hash[:16])
 }
 
-func NewStoredDoc(tenant, collection, docid string, data map[string]interface{}) StoredDoc {
+func NewStoredDoc(database, collection, docid string, data map[string]interface{}) StoredDoc {
 	// Calculate Parent from collection path
 	parent := ""
 	if idx := strings.LastIndex(collection, "/"); idx != -1 {
@@ -49,14 +49,14 @@ func NewStoredDoc(tenant, collection, docid string, data map[string]interface{})
 	model.StripProtectedFields(data)
 
 	fullpath := collection + "/" + docid
-	id := CalculateTenantID(tenant, fullpath)
+	id := CalculateDatabaseID(database, fullpath)
 	collectionHash := CalculateCollectionHash(collection)
 
 	now := time.Now().UnixMilli()
 
 	return StoredDoc{
 		Id:             id,
-		TenantID:       tenant,
+		DatabaseID:     database,
 		Fullpath:       fullpath,
 		Collection:     collection,
 		CollectionHash: collectionHash,

@@ -35,11 +35,11 @@ func TestDocumentProvider_EnsureIndexesError(t *testing.T) {
 	defer cancel()
 
 	// Create a conflicting index to cause EnsureIndexes to fail
-	// EnsureIndexes tries to create {tenant_id: 1, collection_hash: 1} with unique=false
+	// EnsureIndexes tries to create {database_id: 1, collection_hash: 1} with unique=false
 	// We create it with unique=true
 	coll := env.DB.Collection("docs")
 	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "tenant_id", Value: 1}, {Key: "collection_hash", Value: 1}},
+		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "collection_hash", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	require.NoError(t, err)

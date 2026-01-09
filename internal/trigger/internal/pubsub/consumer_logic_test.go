@@ -310,7 +310,7 @@ func TestConsumer_ProcessMsg_WithTimeout(t *testing.T) {
 	msg := new(MockMsg)
 	task := &types.DeliveryTask{
 		TriggerID:  "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "col1",
 		Timeout:    types.Duration(500 * time.Millisecond), // Custom timeout
 	}
@@ -352,15 +352,15 @@ func TestConsumer_ProcessMsg_WorkerError(t *testing.T) {
 	msg := new(MockMsg)
 	task := &types.DeliveryTask{
 		TriggerID:  "t1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "col1",
 	}
 	data, _ := json.Marshal(task)
 
 	msg.On("Data").Return(data)
 	mockWorker.On("ProcessTask", mock.Anything, mock.Anything).Return(errors.New("worker failed"))
-	mockMetrics.On("IncConsumeFailure", "tenant1", "col1", "worker failed").Return()
-	mockMetrics.On("ObserveConsumeLatency", "tenant1", "col1", mock.Anything).Return()
+	mockMetrics.On("IncConsumeFailure", "database1", "col1", "worker failed").Return()
+	mockMetrics.On("ObserveConsumeLatency", "database1", "col1", mock.Anything).Return()
 
 	err := c.processMsg(context.Background(), msg)
 	assert.Error(t, err)
@@ -374,46 +374,46 @@ type MockMetrics struct {
 	mock.Mock
 }
 
-func (m *MockMetrics) IncPublishSuccess(tenant, collection string, hashed bool) {
-	m.Called(tenant, collection, hashed)
+func (m *MockMetrics) IncPublishSuccess(database, collection string, hashed bool) {
+	m.Called(database, collection, hashed)
 }
 
-func (m *MockMetrics) IncPublishFailure(tenant, collection, reason string) {
-	m.Called(tenant, collection, reason)
+func (m *MockMetrics) IncPublishFailure(database, collection, reason string) {
+	m.Called(database, collection, reason)
 }
 
-func (m *MockMetrics) IncConsumeSuccess(tenant, collection string, hashed bool) {
-	m.Called(tenant, collection, hashed)
+func (m *MockMetrics) IncConsumeSuccess(database, collection string, hashed bool) {
+	m.Called(database, collection, hashed)
 }
 
-func (m *MockMetrics) IncConsumeFailure(tenant, collection, reason string) {
-	m.Called(tenant, collection, reason)
+func (m *MockMetrics) IncConsumeFailure(database, collection, reason string) {
+	m.Called(database, collection, reason)
 }
 
-func (m *MockMetrics) ObservePublishLatency(tenant, collection string, d time.Duration) {
-	m.Called(tenant, collection, d)
+func (m *MockMetrics) ObservePublishLatency(database, collection string, d time.Duration) {
+	m.Called(database, collection, d)
 }
 
-func (m *MockMetrics) ObserveConsumeLatency(tenant, collection string, d time.Duration) {
-	m.Called(tenant, collection, d)
+func (m *MockMetrics) ObserveConsumeLatency(database, collection string, d time.Duration) {
+	m.Called(database, collection, d)
 }
 
-func (m *MockMetrics) IncHashCollision(tenant, collection string) {
-	m.Called(tenant, collection)
+func (m *MockMetrics) IncHashCollision(database, collection string) {
+	m.Called(database, collection)
 }
 
-func (m *MockMetrics) IncDeliverySuccess(tenant, collection string) {
-	m.Called(tenant, collection)
+func (m *MockMetrics) IncDeliverySuccess(database, collection string) {
+	m.Called(database, collection)
 }
 
-func (m *MockMetrics) IncDeliveryFailure(tenant, collection string, status int, fatal bool) {
-	m.Called(tenant, collection, status, fatal)
+func (m *MockMetrics) IncDeliveryFailure(database, collection string, status int, fatal bool) {
+	m.Called(database, collection, status, fatal)
 }
 
-func (m *MockMetrics) IncDeliveryRetry(tenant, collection string) {
-	m.Called(tenant, collection)
+func (m *MockMetrics) IncDeliveryRetry(database, collection string) {
+	m.Called(database, collection)
 }
 
-func (m *MockMetrics) ObserveDeliveryLatency(tenant, collection string, d time.Duration) {
-	m.Called(tenant, collection, d)
+func (m *MockMetrics) ObserveDeliveryLatency(database, collection string, d time.Duration) {
+	m.Called(database, collection, d)
 }

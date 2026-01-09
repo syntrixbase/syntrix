@@ -50,14 +50,14 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
 
 	log.Printf("[Info][Pull] collection: %s, checkpoint: %d, limit: %d", req.Collection, req.Checkpoint, req.Limit)
 
-	resp, err := h.engine.Pull(r.Context(), tenant, req)
+	resp, err := h.engine.Pull(r.Context(), database, req)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to pull changes")
 		return
@@ -99,7 +99,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tenant, ok := h.tenantOrError(w, r)
+	database, ok := h.databaseOrError(w, r)
 	if !ok {
 		return
 	}
@@ -134,7 +134,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 			continue // Skip invalid
 		}
 
-		doc := storage.NewStoredDoc(tenant, collection, docID, docData)
+		doc := storage.NewStoredDoc(database, collection, docID, docData)
 		doc.Version = version
 
 		if change.Action == "delete" {
@@ -164,7 +164,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	log.Printf("[Info][Push] collection: %s, changes: %d", collection, len(changes))
-	resp, err := h.engine.Push(r.Context(), tenant, pushReq)
+	resp, err := h.engine.Push(r.Context(), database, pushReq)
 	if err != nil {
 		log.Println("[Error][Push] error during push:", err)
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to push changes")

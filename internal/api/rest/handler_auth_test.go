@@ -19,7 +19,7 @@ func TestHandleSignUp(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		reqBody := identity.SignupRequest{TenantID: "default", Username: "newuser", Password: "password"}
+		reqBody := identity.SignupRequest{DatabaseID: "default", Username: "newuser", Password: "password"}
 		tokenPair := &identity.TokenPair{AccessToken: "access", RefreshToken: "refresh"}
 		mockAuth.On("SignUp", mock.Anything, reqBody).Return(tokenPair, nil).Once()
 
@@ -36,7 +36,7 @@ func TestHandleSignUp(t *testing.T) {
 	})
 
 	t.Run("UserExists", func(t *testing.T) {
-		reqBody := identity.SignupRequest{TenantID: "default", Username: "existing", Password: "password"}
+		reqBody := identity.SignupRequest{DatabaseID: "default", Username: "existing", Password: "password"}
 		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, errors.New("user already exists")).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -63,7 +63,7 @@ func TestHandleLogin(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "user", Password: "password"}
 		tokenPair := &identity.TokenPair{AccessToken: "access", RefreshToken: "refresh"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(tokenPair, nil).Once()
 
@@ -80,7 +80,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("InvalidCredentials", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "user", Password: "wrong"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "user", Password: "wrong"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrInvalidCredentials).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -93,7 +93,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("AccountDisabled", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "disabled", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "disabled", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountDisabled).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -106,7 +106,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("AccountLocked", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "locked", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -118,9 +118,9 @@ func TestHandleLogin(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
-	t.Run("TenantRequired", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "", Username: "user", Password: "password"}
-		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrTenantRequired).Once()
+	t.Run("DatabaseRequired", func(t *testing.T) {
+		reqBody := identity.LoginRequest{DatabaseID: "", Username: "user", Password: "password"}
+		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/login", bytes.NewReader(body))
@@ -132,7 +132,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("InternalError", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("internal error")).Once()
 
 		body, _ := json.Marshal(reqBody)

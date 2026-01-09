@@ -97,9 +97,9 @@ type Client struct {
 	streamerSubIDs map[string]string       // clientSubID -> streamerSubID
 	mu             sync.Mutex
 
-	tenant          string
-	authenticated   bool
-	allowAllTenants bool
+	database          string
+	authenticated     bool
+	allowAllDatabases bool
 }
 
 type Subscription struct {
@@ -168,7 +168,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		}
 
 		// Subscribe to Streamer
-		streamerSubID, err := c.hub.SubscribeToStream(c.tenant, payload.Query.Collection, payload.Query.Filters)
+		streamerSubID, err := c.hub.SubscribeToStream(c.database, payload.Query.Collection, payload.Query.Filters)
 		if err != nil {
 			log.Printf("[Error][WS] Failed to subscribe: %v", err)
 			errPayload, _ := json.Marshal(map[string]string{"message": "Subscribe failed: " + err.Error()})
@@ -205,7 +205,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			resp, err := c.queryService.Pull(ctx, c.tenant, req)
+			resp, err := c.queryService.Pull(ctx, c.database, req)
 			if err != nil {
 				log.Printf("[Error][WS] Snapshot pull failed: %v", err)
 				return
@@ -269,14 +269,14 @@ func (c *Client) handleAuth(msg BaseMessage) {
 	}
 
 	claims, err := c.auth.ValidateToken(payload.Token)
-	if err != nil || claims == nil || claims.TenantID == "" {
+	if err != nil || claims == nil || claims.DatabaseID == "" {
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "invalid token"})}
 		return
 	}
 
 	c.mu.Lock()
-	c.tenant = claims.TenantID
-	c.allowAllTenants = hasSystemRoleFromClaims(claims)
+	c.database = claims.DatabaseID
+	c.allowAllDatabases = hasSystemRoleFromClaims(claims)
 	c.authenticated = true
 	c.mu.Unlock()
 
@@ -329,26 +329,26 @@ func (c *Client) writePump() {
 	}
 }
 
-func tenantFromContext(ctx context.Context) (string, bool) {
+func databaseFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
-	tenant, _ := ctx.Value(identity.ContextKeyTenant).(string)
-	if tenant == "" {
+	database, _ := ctx.Value(identity.ContextKeyDatabase).(string)
+	if database == "" {
 		if claims, ok := ctx.Value(identity.ContextKeyClaims).(*identity.Claims); ok && claims != nil {
-			tenant = claims.TenantID
+			database = claims.DatabaseID
 		}
 	}
 	allowAll := hasSystemRole(ctx)
-	return tenant, allowAll
+	return database, allowAll
 }
 
-func tenantFromContextMust(ctx context.Context, w http.ResponseWriter) string {
-	tenant, _ := tenantFromContext(ctx)
-	if tenant == "" {
-		http.Error(w, "tenant required", http.StatusUnauthorized)
+func databaseFromContextMust(ctx context.Context, w http.ResponseWriter) string {
+	database, _ := databaseFromContext(ctx)
+	if database == "" {
+		http.Error(w, "database required", http.StatusUnauthorized)
 	}
-	return tenant
+	return database
 }
 
 func hasSystemRole(ctx context.Context) bool {
@@ -450,20 +450,20 @@ func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Rea
 		return
 	}
 
-	tenant, allowAll := tenantFromContext(r.Context())
+	database, allowAll := databaseFromContext(r.Context())
 
 	client := &Client{
-		hub:             hub,
-		queryService:    qs,
-		auth:            auth,
-		cfg:             cfg,
-		conn:            conn,
-		send:            make(chan BaseMessage, 256),
-		subscriptions:   make(map[string]Subscription),
-		streamerSubIDs:  make(map[string]string),
-		tenant:          tenant,
-		authenticated:   tenant != "",
-		allowAllTenants: allowAll,
+		hub:               hub,
+		queryService:      qs,
+		auth:              auth,
+		cfg:               cfg,
+		conn:              conn,
+		send:              make(chan BaseMessage, 256),
+		subscriptions:     make(map[string]Subscription),
+		streamerSubIDs:    make(map[string]string),
+		database:          database,
+		authenticated:     database != "",
+		allowAllDatabases: allowAll,
 	}
 
 	if !client.hub.Register(client) {
@@ -503,31 +503,31 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 	w.Header().Add("Vary", "Origin")
 
 	// Create client without websocket connection
-	tenant, allowAll := tenantFromContext(ctx)
-	if tenant == "" {
-		http.Error(w, "tenant required", http.StatusUnauthorized)
+	database, allowAll := databaseFromContext(ctx)
+	if database == "" {
+		http.Error(w, "database required", http.StatusUnauthorized)
 		return
 	}
 
 	client := &Client{
-		hub:             hub,
-		queryService:    qs,
-		auth:            auth,
-		cfg:             cfg,
-		conn:            nil,
-		send:            make(chan BaseMessage, 256),
-		subscriptions:   make(map[string]Subscription),
-		streamerSubIDs:  make(map[string]string),
-		tenant:          tenant,
-		authenticated:   tenant != "",
-		allowAllTenants: allowAll,
+		hub:               hub,
+		queryService:      qs,
+		auth:              auth,
+		cfg:               cfg,
+		conn:              nil,
+		send:              make(chan BaseMessage, 256),
+		subscriptions:     make(map[string]Subscription),
+		streamerSubIDs:    make(map[string]string),
+		database:          database,
+		authenticated:     database != "",
+		allowAllDatabases: allowAll,
 	}
 
 	// Handle initial subscription from query params
 	collection := r.URL.Query().Get("collection")
 
 	// Subscribe to stream
-	streamerSubID, err := client.hub.SubscribeToStream(client.tenant, collection, nil)
+	streamerSubID, err := client.hub.SubscribeToStream(client.database, collection, nil)
 	if err != nil {
 		http.Error(w, "failed to subscribe: "+err.Error(), http.StatusInternalServerError)
 		return

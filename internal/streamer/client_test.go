@@ -128,7 +128,7 @@ func TestRemoteStream_Subscribe_SendError(t *testing.T) {
 		logger:     slog.Default(),
 	}
 
-	_, err := rs.Subscribe("tenant1", "users", nil)
+	_, err := rs.Subscribe("database1", "users", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "send failed")
 }
@@ -142,7 +142,7 @@ func TestRemoteStream_Subscribe_Closed(t *testing.T) {
 		closed:     true,
 	}
 
-	_, err := rs.Subscribe("tenant1", "users", nil)
+	_, err := rs.Subscribe("database1", "users", nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, io.EOF)
 }
@@ -160,7 +160,7 @@ func TestRemoteStream_Subscribe_ContextCanceled(t *testing.T) {
 	// Start subscribe in goroutine
 	done := make(chan error, 1)
 	go func() {
-		_, err := rs.Subscribe("tenant1", "users", nil)
+		_, err := rs.Subscribe("database1", "users", nil)
 		done <- err
 	}()
 

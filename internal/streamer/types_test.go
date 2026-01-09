@@ -29,7 +29,7 @@ func TestEvent(t *testing.T) {
 	t.Run("event with model.Document", func(t *testing.T) {
 		evt := Event{
 			EventID:    "evt1",
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			DocumentID: "doc1",
 			Operation:  OperationInsert,
@@ -49,7 +49,7 @@ func TestEvent(t *testing.T) {
 	t.Run("event without document (delete)", func(t *testing.T) {
 		evt := Event{
 			EventID:    "evt2",
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			DocumentID: "doc1",
 			Operation:  OperationDelete,

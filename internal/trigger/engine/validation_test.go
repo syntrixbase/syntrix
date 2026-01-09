@@ -18,7 +18,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "valid trigger",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
@@ -28,7 +28,7 @@ func TestValidateTrigger(t *testing.T) {
 		{
 			name: "missing id",
 			trigger: &trigger.Trigger{
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
@@ -39,7 +39,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "invalid id",
 			trigger: &trigger.Trigger{
 				ID:         "invalid id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
@@ -47,44 +47,44 @@ func TestValidateTrigger(t *testing.T) {
 			wantErr: "invalid trigger id",
 		},
 		{
-			name: "missing tenant",
+			name: "missing database",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
 			},
-			wantErr: "tenant is required",
+			wantErr: "database is required",
 		},
 		{
-			name: "invalid tenant",
+			name: "invalid database",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "invalid tenant",
+				Database:   "invalid database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
 			},
-			wantErr: "invalid tenant",
+			wantErr: "invalid database",
 		},
 		{
-			name: "tenant too long",
+			name: "database too long",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     strings.Repeat("a", 129),
+				Database:   strings.Repeat("a", 129),
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://example.com",
 			},
-			wantErr: "tenant name too long",
+			wantErr: "database name too long",
 		},
 		{
 			name: "missing collection",
 			trigger: &trigger.Trigger{
-				ID:     "valid-id",
-				Tenant: "valid-tenant",
-				Events: []string{"create"},
-				URL:    "http://example.com",
+				ID:       "valid-id",
+				Database: "valid-database",
+				Events:   []string{"create"},
+				URL:      "http://example.com",
 			},
 			wantErr: "collection is required",
 		},
@@ -92,7 +92,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "collection too long",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: strings.Repeat("a", 129),
 				Events:     []string{"create"},
 				URL:        "http://example.com",
@@ -103,7 +103,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "missing events",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				URL:        "http://example.com",
 			},
@@ -113,7 +113,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "invalid event",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"invalid"},
 				URL:        "http://example.com",
@@ -124,7 +124,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "missing url",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 			},
@@ -134,7 +134,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "invalid url scheme",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "ftp://example.com",
@@ -145,7 +145,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "url without host",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "http://",
@@ -156,7 +156,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "valid https url",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "https://example.com/webhook",
@@ -167,7 +167,7 @@ func TestValidateTrigger(t *testing.T) {
 			name: "invalid url format",
 			trigger: &trigger.Trigger{
 				ID:         "valid-id",
-				Tenant:     "valid-tenant",
+				Database:   "valid-database",
 				Collection: "users",
 				Events:     []string{"create"},
 				URL:        "://invalid-url",

@@ -35,8 +35,8 @@ func TestFactoryOptions(t *testing.T) {
 	t.Parallel()
 	f := &defaultTriggerFactory{}
 
-	WithTenant("tenant1")(f)
-	assert.Equal(t, "tenant1", f.tenant)
+	WithDatabase("database1")(f)
+	assert.Equal(t, "database1", f.database)
 
 	WithStartFromNow(true)(f)
 	assert.True(t, f.startFromNow)
@@ -130,7 +130,7 @@ func TestFactory_Engine_WithRulesFile(t *testing.T) {
 	rulesFile := tmpDir + "/triggers.yaml"
 	rulesContent := `
 - triggerId: "test-trigger"
-  tenant: "default"
+  database: "default"
   collection: "users"
   events: ["create"]
   condition: "true"

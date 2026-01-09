@@ -96,10 +96,10 @@ func (e *ServiceEnv) GenerateSystemToken(t *testing.T) string {
 }
 
 func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
-	return e.GetTokenForTenant(t, "default", uid, role)
+	return e.GetTokenForDatabase(t, "default", uid, role)
 }
 
-func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) string {
+func (e *ServiceEnv) GetTokenForDatabase(t *testing.T, database, uid, role string) string {
 	// Prefix the username with testPrefix to ensure uniqueness across parallel tests
 	prefixedUID := uid
 	if e.testPrefix != "" {
@@ -108,7 +108,7 @@ func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) s
 
 	// 1. Try SignUp
 	signupBody := map[string]string{
-		"tenant":   tenant,
+		"database": database,
 		"username": prefixedUID,
 		"password": "password123456",
 	}
@@ -130,7 +130,7 @@ func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) s
 
 		// Assume user exists, try Login
 		loginBody := map[string]string{
-			"tenant":   tenant,
+			"database": database,
 			"username": prefixedUID,
 			"password": "password123456",
 		}
@@ -189,7 +189,7 @@ func (e *ServiceEnv) GetTokenForTenant(t *testing.T, tenant, uid, role string) s
 
 	// 4. Re-Login to get new token
 	loginBody := map[string]string{
-		"tenant":   tenant,
+		"database": database,
 		"username": prefixedUID,
 		"password": "password123456",
 	}

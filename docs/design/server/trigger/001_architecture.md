@@ -18,14 +18,14 @@
 
 ## Data Flow
 
-1) DocumentWatcher reads a tenant-scoped resume token from storage, opens the tenant watch stream, emits events.
+1) DocumentWatcher reads a database-scoped resume token from storage, opens the database watch stream, emits events.
 2) TriggerEngine invokes Evaluator per event, builds DeliveryTask when matched.
-3) TaskPublisher pushes tasks to NATS `<stream_name>.<tenant>.<collection>.<docKey>` (stream name is configurable, default `TRIGGERS`).
+3) TaskPublisher pushes tasks to NATS `<stream_name>.<database>.<collection>.<docKey>` (stream name is configurable, default `TRIGGERS`).
 4) TaskConsumer pulls from the configured stream filtered by `<stream_name>.>`, partitions by collection+docKey, dispatches to DeliveryWorker.
 5) DeliveryWorker POSTs to target URL with headers, signature, and optional system token.
-6) Checkpoint updated after each processed event using tenant-scoped keys to maintain per-tenant resume tokens (at-least-once semantics). If checkpoint is missing, default behavior must be explicitly chosen (e.g., opt-in "start from now" with audit/metric) to avoid silent backlog loss.
-7) Watch scope: default watch all collections within a tenant; optionally restrict via include/exclude collection prefixes in config to reduce noise.
-8) Checkpoint keys: `sys/checkpoints/trigger_evaluator/<tenant>`; if collection filtering is enabled, append the collection key to isolate per-collection progress.
+6) Checkpoint updated after each processed event using database-scoped keys to maintain per-database resume tokens (at-least-once semantics). If checkpoint is missing, default behavior must be explicitly chosen (e.g., opt-in "start from now" with audit/metric) to avoid silent backlog loss.
+7) Watch scope: default watch all collections within a database; optionally restrict via include/exclude collection prefixes in config to reduce noise.
+8) Checkpoint keys: `sys/checkpoints/trigger_evaluator/<database>`; if collection filtering is enabled, append the collection key to isolate per-collection progress.
 
 Partitioning and hashing notes
 
@@ -36,7 +36,7 @@ Partitioning and hashing notes
 
 Recovery/audit notes (low priority)
 
-- "Start from now" must be an explicit, authorized action; log audit records (tenant, actor, reason) and emit a metric when invoked. Reason: skipping backlog is operationally risky and must be traceable.
+- "Start from now" must be an explicit, authorized action; log audit records (database, actor, reason) and emit a metric when invoked. Reason: skipping backlog is operationally risky and must be traceable.
 
 ## ASCII Module Diagram
 
@@ -64,17 +64,17 @@ Recovery/audit notes (low priority)
 
 ## Configuration Surfaces
 
-- TriggerFactory accepts trigger-specific config: NATS stream/consumer names, worker pool size, backoff defaults, HTTP timeouts, signature secret source placeholder, tenant ID for watch scope and checkpoint key prefix, optional collection include/exclude lists, subject-length guard (hashing toggle) and docKey encoding strategy (base64url without padding), tenant/collection naming and length validation knobs, and hash-flag emission to payload/metrics.
+- TriggerFactory accepts trigger-specific config: NATS stream/consumer names, worker pool size, backoff defaults, HTTP timeouts, signature secret source placeholder, database ID for watch scope and checkpoint key prefix, optional collection include/exclude lists, subject-length guard (hashing toggle) and docKey encoding strategy (base64url without padding), database/collection naming and length validation knobs, and hash-flag emission to payload/metrics.
 - External services only pass config + dependencies; they do not call NATS/HTTP directly.
 
 ## Compatibility Notes
 
-- Subject scheme is `<stream_name>.<tenant>.>` (default stream is `TRIGGERS`). This allows stream isolation for testing or multi-tenant sharding.
+- Subject scheme is `<stream_name>.<database>.>` (default stream is `TRIGGERS`). This allows stream isolation for testing or multi-database sharding.
 - docKey inserted into subjects must use a subject-safe encoding (no `.` `*` `>` wildcards); publisher/consumer must apply the same encoding/decoding path.
 - CEL condition semantics remain identical; collection matching still supports glob via `path.Match`.
-- Single-stream assumption: monitor per-tenant traffic and retention; if quotas or noisy-neighbor risk are observed, pivot to per-tenant streams via config.
-- Observability: emit per-tenant metrics for publish/consume/worker success, retry counts, and latency to detect tenant-specific regressions.
+- Single-stream assumption: monitor per-database traffic and retention; if quotas or noisy-neighbor risk are observed, pivot to per-database streams via config.
+- Observability: emit per-database metrics for publish/consume/worker success, retry counts, and latency to detect database-specific regressions.
 - Subject-length guard: enforce NATS subject length; hash docKey segment when encoded subject would exceed limit, keeping the original docKey in payload.
-- Tenant/collection naming constraints: validate against allowed charset and length (configurable, default <=128 chars each) to prevent subject overflow and routing issues.
+- Database/collection naming constraints: validate against allowed charset and length (configurable, default <=128 chars each) to prevent subject overflow and routing issues.
 - Secret/token failure handling: if secret fetch or token minting fails, treat as task failure and follow retry policy; do not silently drop.
 - Recovery semantics: on missing/cleared checkpoint, start from "now" (no historical replay); allow admin override to resume from a provided token for controlled replay.

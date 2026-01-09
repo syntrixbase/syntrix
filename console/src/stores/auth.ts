@@ -41,14 +41,14 @@ function parseJwtUser(token: string, username: string): User {
       id: payload.oid || payload.sub || '',
       username: payload.username || username,
       role: payload.roles?.[0] || 'user',
-      tenant: payload.tid || 'default',
+      database: payload.tid || 'default',
     };
   } catch {
     return {
       id: '',
       username,
       role: 'user',
-      tenant: 'default',
+      database: 'default',
     };
   }
 }
@@ -72,13 +72,13 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.login(credentials);
           const token = response.token;
           const refreshToken = response.refreshToken || null;
-          
+
           // Store token in localStorage for API interceptor
           localStorage.setItem('token', token);
           if (refreshToken) {
             localStorage.setItem('refreshToken', refreshToken);
           }
-          
+
           // Parse user and expiry from JWT
           const user = parseJwtUser(token, credentials.username);
           const tokenExpiry = parseJwtExpiry(token);
@@ -157,7 +157,7 @@ export const useAuthStore = create<AuthState>()(
           const response = await authApi.refresh(refreshToken);
           const newToken = response.token;
           const newRefreshToken = response.refreshToken || refreshToken;
-          
+
           localStorage.setItem('token', newToken);
           if (newRefreshToken) {
             localStorage.setItem('refreshToken', newRefreshToken);
@@ -185,7 +185,7 @@ export const useAuthStore = create<AuthState>()(
 
       setupTokenRefresh: () => {
         const { tokenExpiry, refreshTimerId } = get();
-        
+
         // Clear existing timer
         if (refreshTimerId) {
           clearTimeout(refreshTimerId);
@@ -198,10 +198,10 @@ export const useAuthStore = create<AuthState>()(
 
         const now = Math.floor(Date.now() / 1000);
         const timeUntilExpiry = tokenExpiry - now;
-        
+
         // Refresh 1 minute before expiry (or at 80% of lifetime)
         const refreshIn = Math.max(timeUntilExpiry - 60, timeUntilExpiry * 0.8);
-        
+
         // Show warning 5 minutes before expiry
         const warnIn = Math.max(timeUntilExpiry - 300, 0);
 
@@ -251,14 +251,14 @@ const initAuth = () => {
   const state = useAuthStore.getState();
   const storedToken = localStorage.getItem('token');
   const storedRefreshToken = localStorage.getItem('refreshToken');
-  
+
   if (storedToken && state.isAuthenticated) {
     const expiry = parseJwtExpiry(storedToken);
     const now = Math.floor(Date.now() / 1000);
-    
+
     if (expiry && expiry > now) {
       // Token still valid, setup refresh
-      useAuthStore.setState({ 
+      useAuthStore.setState({
         token: storedToken,
         refreshToken: storedRefreshToken,
         tokenExpiry: expiry,

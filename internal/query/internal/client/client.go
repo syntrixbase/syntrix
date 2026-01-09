@@ -54,10 +54,10 @@ func (c *Client) Close() error {
 }
 
 // GetDocument retrieves a document by path.
-func (c *Client) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
+func (c *Client) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
 	resp, err := c.client.GetDocument(ctx, &pb.GetDocumentRequest{
-		Tenant: tenant,
-		Path:   path,
+		Database: database,
+		Path:     path,
 	})
 	if err != nil {
 		return nil, statusToError(err)
@@ -67,9 +67,9 @@ func (c *Client) GetDocument(ctx context.Context, tenant string, path string) (m
 }
 
 // CreateDocument creates a new document.
-func (c *Client) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+func (c *Client) CreateDocument(ctx context.Context, database string, doc model.Document) error {
 	_, err := c.client.CreateDocument(ctx, &pb.CreateDocumentRequest{
-		Tenant:   tenant,
+		Database: database,
 		Document: modelDocToProto(doc),
 	})
 	if err != nil {
@@ -79,9 +79,9 @@ func (c *Client) CreateDocument(ctx context.Context, tenant string, doc model.Do
 }
 
 // ReplaceDocument replaces a document with optional filters.
-func (c *Client) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+func (c *Client) ReplaceDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
 	resp, err := c.client.ReplaceDocument(ctx, &pb.ReplaceDocumentRequest{
-		Tenant:   tenant,
+		Database: database,
 		Document: modelDocToProto(data),
 		Filters:  filtersToProto(pred),
 	})
@@ -93,9 +93,9 @@ func (c *Client) ReplaceDocument(ctx context.Context, tenant string, data model.
 }
 
 // PatchDocument partially updates a document with optional filters.
-func (c *Client) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
+func (c *Client) PatchDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
 	resp, err := c.client.PatchDocument(ctx, &pb.PatchDocumentRequest{
-		Tenant:   tenant,
+		Database: database,
 		Document: modelDocToProto(data),
 		Filters:  filtersToProto(pred),
 	})
@@ -107,11 +107,11 @@ func (c *Client) PatchDocument(ctx context.Context, tenant string, data model.Do
 }
 
 // DeleteDocument removes a document by path with optional filters.
-func (c *Client) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
+func (c *Client) DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error {
 	_, err := c.client.DeleteDocument(ctx, &pb.DeleteDocumentRequest{
-		Tenant:  tenant,
-		Path:    path,
-		Filters: filtersToProto(pred),
+		Database: database,
+		Path:     path,
+		Filters:  filtersToProto(pred),
 	})
 	if err != nil {
 		return statusToError(err)
@@ -120,10 +120,10 @@ func (c *Client) DeleteDocument(ctx context.Context, tenant string, path string,
 }
 
 // ExecuteQuery executes a query and returns matching documents.
-func (c *Client) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
+func (c *Client) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
 	resp, err := c.client.ExecuteQuery(ctx, &pb.ExecuteQueryRequest{
-		Tenant: tenant,
-		Query:  queryToProto(q),
+		Database: database,
+		Query:    queryToProto(q),
 	})
 	if err != nil {
 		return nil, statusToError(err)
@@ -137,9 +137,9 @@ func (c *Client) ExecuteQuery(ctx context.Context, tenant string, q model.Query)
 }
 
 // Pull retrieves documents for replication.
-func (c *Client) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (c *Client) Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	resp, err := c.client.Pull(ctx, &pb.PullRequest{
-		Tenant:     tenant,
+		Database:   database,
 		Collection: req.Collection,
 		Checkpoint: req.Checkpoint,
 		Limit:      int32(req.Limit),
@@ -160,14 +160,14 @@ func (c *Client) Pull(ctx context.Context, tenant string, req storage.Replicatio
 }
 
 // Push sends documents for replication.
-func (c *Client) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (c *Client) Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	changes := make([]*pb.PushChange, 0, len(req.Changes))
 	for _, change := range req.Changes {
 		changes = append(changes, pushChangeToProto(change))
 	}
 
 	resp, err := c.client.Push(ctx, &pb.PushRequest{
-		Tenant:     tenant,
+		Database:   database,
 		Collection: req.Collection,
 		Changes:    changes,
 	})

@@ -12,16 +12,16 @@ bun add @syntrix/client
 
 ## 1. SyntrixClient (Standard)
 
-Use this client in external applications (Web, Mobile, Backend). Multi-tenant auth requires a tenant ID during login.
+Use this client in external applications (Web, Mobile, Backend). Multi-database auth requires a database ID during login.
 
 ```typescript
 import { SyntrixClient } from '@syntrix/client';
 
 const client = new SyntrixClient('<URL_ENDPOINT>', {
-  tenantId: 'my-tenant',
+  databaseId: 'my-database',
 });
 
-await client.login('username', 'password', 'my-tenant');
+await client.login('username', 'password', 'my-database');
 ```
 
 ### Methods
@@ -87,7 +87,7 @@ Both clients return `DocumentReference` and `CollectionReference` objects with t
 ```typescript
 const rt = client.realtime();
 rt.on('onEvent', (evt) => console.log(evt));
-await rt.connect(); // Auth sent via Bearer token; tenant enforced server-side
+await rt.connect(); // Auth sent via Bearer token; database enforced server-side
 
 const sub = rt.subscribe({
   query: { collection: 'users' },

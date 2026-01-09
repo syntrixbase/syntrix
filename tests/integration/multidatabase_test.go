@@ -13,20 +13,20 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
-func TestMultiTenant_DataIsolation(t *testing.T) {
+func TestMultiDatabase_DataIsolation(t *testing.T) {
 	t.Parallel()
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
-	tenantA := "tenant-a"
-	tenantB := "tenant-b"
+	databaseA := "database-a"
+	databaseB := "database-b"
 
-	tokenA := env.GetTokenForTenant(t, tenantA, "user-a", "user")
-	tokenB := env.GetTokenForTenant(t, tenantB, "user-b", "user")
+	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
+	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")
 
 	collection := "private_docs"
 
-	// 1. Tenant A creates a document
+	// 1. Database A creates a document
 	docData := map[string]interface{}{
 		"title": "Secret Plan A",
 		"owner": "A",
@@ -40,12 +40,12 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 	resp.Body.Close()
 	docID := createdDoc["id"].(string)
 
-	// 2. Tenant B tries to GET the document (Should fail)
+	// 2. Database B tries to GET the document (Should fail)
 	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenB)
-	// Should be 404 Not Found because it doesn't exist in Tenant B's scope
+	// Should be 404 Not Found because it doesn't exist in Database B's scope
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
-	// 3. Tenant B tries to LIST documents (Should not see it)
+	// 3. Database B tries to LIST documents (Should not see it)
 	// GET /api/v1/collection is not supported, use Query
 	queryAll := model.Query{
 		Collection: collection,
@@ -57,9 +57,9 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 	require.NoError(t, err)
 	resp.Body.Close()
 
-	assert.Empty(t, listRes, "Tenant B should see no documents")
+	assert.Empty(t, listRes, "Database B should see no documents")
 
-	// 4. Tenant B tries to UPDATE the document (Should fail)
+	// 4. Database B tries to UPDATE the document (Should fail)
 	updateData := map[string]interface{}{
 		"doc": map[string]interface{}{
 			"title": "Hacked by B",
@@ -68,11 +68,11 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, docID), updateData, tokenB)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
-	// 5. Tenant B tries to DELETE the document (Should fail)
+	// 5. Database B tries to DELETE the document (Should fail)
 	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenB)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
-	// 6. Tenant B tries to Query the document (Should not find it)
+	// 6. Database B tries to Query the document (Should not find it)
 	query := model.Query{
 		Collection: collection,
 		Filters: []model.Filter{
@@ -85,27 +85,27 @@ func TestMultiTenant_DataIsolation(t *testing.T) {
 	err = json.NewDecoder(resp.Body).Decode(&queryResults)
 	require.NoError(t, err)
 	resp.Body.Close()
-	assert.Empty(t, queryResults, "Tenant B query should return empty")
+	assert.Empty(t, queryResults, "Database B query should return empty")
 
-	// 7. Tenant A can see the document
+	// 7. Database A can see the document
 	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenA)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
-func TestMultiTenant_RealtimeIsolation(t *testing.T) {
+func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 	t.Parallel()
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
-	tenantA := "tenant-a"
-	tenantB := "tenant-b"
+	databaseA := "database-a"
+	databaseB := "database-b"
 
-	tokenA := env.GetTokenForTenant(t, tenantA, "user-a", "user")
-	tokenB := env.GetTokenForTenant(t, tenantB, "user-b", "user")
+	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
+	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")
 
 	collection := "live_updates"
 
-	// Connect Client A (Tenant A)
+	// Connect Client A (Database A)
 	wsA := env.ConnectWebSocket(t)
 	defer wsA.Close()
 
@@ -124,7 +124,7 @@ func TestMultiTenant_RealtimeIsolation(t *testing.T) {
 	require.NoError(t, err)
 	readUntilType(t, wsA, TypeSubscribeAck)
 
-	// Connect Client B (Tenant B)
+	// Connect Client B (Database B)
 	wsB := env.ConnectWebSocket(t)
 	defer wsB.Close()
 
@@ -143,9 +143,9 @@ func TestMultiTenant_RealtimeIsolation(t *testing.T) {
 	require.NoError(t, err)
 	readUntilType(t, wsB, TypeSubscribeAck)
 
-	// 1. Create Document in Tenant A
+	// 1. Create Document in Database A
 	docData := map[string]interface{}{
-		"msg": "Hello Tenant A",
+		"msg": "Hello Database A",
 	}
 	resp := env.MakeRequest(t, "POST", "/api/v1/"+collection, docData, tokenA)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
@@ -155,11 +155,11 @@ func TestMultiTenant_RealtimeIsolation(t *testing.T) {
 	msgA := readUntilType(t, wsA, TypeEvent)
 	var payloadA EventPayload
 	json.Unmarshal(msgA.Payload, &payloadA)
-	assert.Equal(t, "Hello Tenant A", payloadA.Delta.Document["msg"])
+	assert.Equal(t, "Hello Database A", payloadA.Delta.Document["msg"])
 
-	// 2. Create Document in Tenant B
+	// 2. Create Document in Database B
 	docDataB := map[string]interface{}{
-		"msg": "Hello Tenant B",
+		"msg": "Hello Database B",
 	}
 	respB := env.MakeRequest(t, "POST", "/api/v1/"+collection, docDataB, tokenB)
 	require.Equal(t, http.StatusCreated, respB.StatusCode)
@@ -170,7 +170,7 @@ func TestMultiTenant_RealtimeIsolation(t *testing.T) {
 	msgB := readUntilType(t, wsB, TypeEvent)
 	var payloadB EventPayload
 	json.Unmarshal(msgB.Payload, &payloadB)
-	assert.Equal(t, "Hello Tenant B", payloadB.Delta.Document["msg"])
+	assert.Equal(t, "Hello Database B", payloadB.Delta.Document["msg"])
 
 	// Client A should NOT receive event
 	wsA.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
@@ -182,20 +182,20 @@ func TestMultiTenant_RealtimeIsolation(t *testing.T) {
 	}
 }
 
-func TestMultiTenant_ReplicationIsolation(t *testing.T) {
+func TestMultiDatabase_ReplicationIsolation(t *testing.T) {
 	t.Parallel()
 	env := setupServiceEnv(t, "")
 	defer env.Cancel()
 
-	tenantA := "tenant-a"
-	tenantB := "tenant-b"
+	databaseA := "database-a"
+	databaseB := "database-b"
 
-	tokenA := env.GetTokenForTenant(t, tenantA, "user-a", "user")
-	tokenB := env.GetTokenForTenant(t, tenantB, "user-b", "user")
+	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
+	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")
 
 	collection := "repl_docs"
 
-	// 1. Tenant A creates a document via REST
+	// 1. Database A creates a document via REST
 	docData := map[string]interface{}{
 		"title": "Repl Doc A",
 	}
@@ -203,7 +203,7 @@ func TestMultiTenant_ReplicationIsolation(t *testing.T) {
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
-	// 2. Tenant B PULLs (Should get nothing)
+	// 2. Database B PULLs (Should get nothing)
 	pullURL := fmt.Sprintf("/replication/v1/pull?collection=%s&checkpoint=0&limit=100", collection)
 	resp = env.MakeRequest(t, "GET", pullURL, nil, tokenB)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
@@ -214,9 +214,9 @@ func TestMultiTenant_ReplicationIsolation(t *testing.T) {
 	resp.Body.Close()
 
 	docs := pullRes["documents"].([]interface{})
-	assert.Empty(t, docs, "Tenant B should pull 0 documents")
+	assert.Empty(t, docs, "Database B should pull 0 documents")
 
-	// 3. Tenant B PUSHes a document
+	// 3. Database B PUSHes a document
 	pushReq := map[string]interface{}{
 		"collection": collection,
 		"changes": []map[string]interface{}{
@@ -233,7 +233,7 @@ func TestMultiTenant_ReplicationIsolation(t *testing.T) {
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	// 4. Tenant A PULLs (Should see only Doc A, not Doc B)
+	// 4. Database A PULLs (Should see only Doc A, not Doc B)
 	resp = env.MakeRequest(t, "GET", pullURL, nil, tokenA)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -245,7 +245,7 @@ func TestMultiTenant_ReplicationIsolation(t *testing.T) {
 	// Should contain Doc A (maybe) but definitely NOT Doc B
 	for _, d := range docsA {
 		docMap := d.(map[string]interface{})
-		assert.NotEqual(t, "doc-b", docMap["id"], "Tenant A should not see Tenant B's document")
+		assert.NotEqual(t, "doc-b", docMap["id"], "Database A should not see Database B's document")
 	}
 }
 

@@ -23,8 +23,8 @@ func New(storage storage.DocumentStore) *Engine {
 }
 
 // GetDocument retrieves a document by path.
-func (e *Engine) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
-	stored, err := e.storage.Get(ctx, tenant, path)
+func (e *Engine) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
+	stored, err := e.storage.Get(ctx, database, path)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (e *Engine) GetDocument(ctx context.Context, tenant string, path string) (m
 }
 
 // CreateDocument creates a new document.
-func (e *Engine) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
+func (e *Engine) CreateDocument(ctx context.Context, database string, doc model.Document) error {
 	if doc == nil {
 		return errors.New("document cannot be nil")
 	}
@@ -44,11 +44,11 @@ func (e *Engine) CreateDocument(ctx context.Context, tenant string, doc model.Do
 	}
 	doc.StripProtectedFields()
 
-	return e.storage.Create(ctx, tenant, types.NewStoredDoc(tenant, collection, doc.GetID(), doc))
+	return e.storage.Create(ctx, database, types.NewStoredDoc(database, collection, doc.GetID(), doc))
 }
 
 // ReplaceDocument replaces a document or creates it if it doesn't exist (Upsert).
-func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.Document, pred model.Filters) (model.Document, error) {
+func (e *Engine) ReplaceDocument(ctx context.Context, database string, doc model.Document, pred model.Filters) (model.Document, error) {
 	if doc == nil {
 		return nil, errors.New("document cannot be nil")
 	}
@@ -67,12 +67,12 @@ func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.D
 	fullpath := collection + "/" + id
 
 	// Try Get first
-	_, err := e.storage.Get(ctx, tenant, fullpath)
+	_, err := e.storage.Get(ctx, database, fullpath)
 	if err != nil {
 		if err == model.ErrNotFound {
 			// Create
-			storedDoc := storage.NewStoredDoc(tenant, collection, id, doc)
-			if err := e.storage.Create(ctx, tenant, storedDoc); err != nil {
+			storedDoc := storage.NewStoredDoc(database, collection, id, doc)
+			if err := e.storage.Create(ctx, database, storedDoc); err != nil {
 				return nil, err
 			}
 			return helper.FlattenStorageDocument(&storedDoc), nil
@@ -81,12 +81,12 @@ func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.D
 	}
 
 	// Update (Replace data)
-	if err := e.storage.Update(ctx, tenant, fullpath, map[string]interface{}(doc), pred); err != nil {
+	if err := e.storage.Update(ctx, database, fullpath, map[string]interface{}(doc), pred); err != nil {
 		return nil, err
 	}
 
 	// Return updated doc
-	updatedDoc, err := e.storage.Get(ctx, tenant, fullpath)
+	updatedDoc, err := e.storage.Get(ctx, database, fullpath)
 	if err != nil {
 		return nil, err
 	}
@@ -95,7 +95,7 @@ func (e *Engine) ReplaceDocument(ctx context.Context, tenant string, doc model.D
 }
 
 // PatchDocument updates specific fields of a document (Merge + CAS).
-func (e *Engine) PatchDocument(ctx context.Context, tenant string, doc model.Document, pred model.Filters) (model.Document, error) {
+func (e *Engine) PatchDocument(ctx context.Context, database string, doc model.Document, pred model.Filters) (model.Document, error) {
 	if doc == nil {
 		return nil, errors.New("document cannot be nil")
 	}
@@ -114,11 +114,11 @@ func (e *Engine) PatchDocument(ctx context.Context, tenant string, doc model.Doc
 	doc.StripProtectedFields()
 	delete(doc, "id")
 
-	if err := e.storage.Patch(ctx, tenant, fullpath, map[string]interface{}(doc), pred); err != nil {
+	if err := e.storage.Patch(ctx, database, fullpath, map[string]interface{}(doc), pred); err != nil {
 		return nil, err
 	}
 
-	updatedDoc, err := e.storage.Get(ctx, tenant, fullpath)
+	updatedDoc, err := e.storage.Get(ctx, database, fullpath)
 	if err != nil {
 		return nil, err
 	}
@@ -127,13 +127,13 @@ func (e *Engine) PatchDocument(ctx context.Context, tenant string, doc model.Doc
 }
 
 // DeleteDocument deletes a document.
-func (e *Engine) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
-	return e.storage.Delete(ctx, tenant, path, pred)
+func (e *Engine) DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error {
+	return e.storage.Delete(ctx, database, path, pred)
 }
 
 // ExecuteQuery executes a structured query.
-func (e *Engine) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
-	storedDocs, err := e.storage.Query(ctx, tenant, q)
+func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	storedDocs, err := e.storage.Query(ctx, database, q)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func (e *Engine) ExecuteQuery(ctx context.Context, tenant string, q model.Query)
 }
 
 // Pull handles replication pull requests.
-func (e *Engine) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+func (e *Engine) Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
 	q := model.Query{
 		Collection: req.Collection,
 		Filters: []model.Filter{
@@ -171,7 +171,7 @@ func (e *Engine) Pull(ctx context.Context, tenant string, req storage.Replicatio
 		ShowDeleted: true,
 	}
 
-	docs, err := e.storage.Query(ctx, tenant, q)
+	docs, err := e.storage.Query(ctx, database, q)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,7 @@ func (e *Engine) Pull(ctx context.Context, tenant string, req storage.Replicatio
 }
 
 // Push handles replication push requests.
-func (e *Engine) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+func (e *Engine) Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
 	var conflicts []*storage.StoredDoc
 
 	for _, change := range req.Changes {
@@ -210,10 +210,10 @@ func (e *Engine) Push(ctx context.Context, tenant string, req storage.Replicatio
 			}
 		}
 
-		existing, err := e.storage.Get(ctx, tenant, doc.Fullpath)
+		existing, err := e.storage.Get(ctx, database, doc.Fullpath)
 		if err != nil {
 			if err == model.ErrNotFound {
-				if err := e.storage.Create(ctx, tenant, *doc); err != nil {
+				if err := e.storage.Create(ctx, database, *doc); err != nil {
 					conflicts = append(conflicts, doc)
 				}
 				continue
@@ -237,14 +237,14 @@ func (e *Engine) Push(ctx context.Context, tenant string, req storage.Replicatio
 
 		// Handle Delete
 		if doc.Deleted {
-			if err := e.storage.Delete(ctx, tenant, doc.Fullpath, filters); err != nil {
+			if err := e.storage.Delete(ctx, database, doc.Fullpath, filters); err != nil {
 				if err == model.ErrPreconditionFailed {
-					latest, _ := e.storage.Get(ctx, tenant, doc.Fullpath)
+					latest, _ := e.storage.Get(ctx, database, doc.Fullpath)
 					if latest != nil {
 						conflicts = append(conflicts, latest)
 					}
 				} else if err == model.ErrNotFound {
-					latest, getErr := e.storage.Get(ctx, tenant, doc.Fullpath)
+					latest, getErr := e.storage.Get(ctx, database, doc.Fullpath)
 					if getErr == nil && latest != nil {
 						conflicts = append(conflicts, latest)
 					}
@@ -256,9 +256,9 @@ func (e *Engine) Push(ctx context.Context, tenant string, req storage.Replicatio
 		}
 
 		// Update
-		if err := e.storage.Update(ctx, tenant, doc.Fullpath, doc.Data, filters); err != nil {
+		if err := e.storage.Update(ctx, database, doc.Fullpath, doc.Data, filters); err != nil {
 			if err == model.ErrPreconditionFailed {
-				latest, _ := e.storage.Get(ctx, tenant, doc.Fullpath)
+				latest, _ := e.storage.Get(ctx, database, doc.Fullpath)
 				if latest != nil {
 					conflicts = append(conflicts, latest)
 				}

@@ -19,9 +19,9 @@ func TestAuthHandlerErrors(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	server := createTestServer(nil, mockAuth, nil)
 
-	t.Run("SignUp_TenantRequired", func(t *testing.T) {
-		reqBody := identity.SignupRequest{Username: "user", Password: "password"} // Missing TenantID
-		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, identity.ErrTenantRequired).Once()
+	t.Run("SignUp_DatabaseRequired", func(t *testing.T) {
+		reqBody := identity.SignupRequest{Username: "user", Password: "password"} // Missing DatabaseID
+		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/signup", bytes.NewReader(body))
@@ -30,11 +30,11 @@ func TestAuthHandlerErrors(t *testing.T) {
 		server.handleSignUp(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "Tenant is required")
+		assert.Contains(t, w.Body.String(), "Database is required")
 	})
 
 	t.Run("Login_AccountLocked", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "locked", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -47,9 +47,9 @@ func TestAuthHandlerErrors(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "Account is locked")
 	})
 
-	t.Run("Login_TenantRequired", func(t *testing.T) {
+	t.Run("Login_DatabaseRequired", func(t *testing.T) {
 		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
-		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrTenantRequired).Once()
+		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/login", bytes.NewReader(body))
@@ -61,7 +61,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_InternalError", func(t *testing.T) {
-		reqBody := identity.LoginRequest{TenantID: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("db error")).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -349,19 +349,19 @@ type FailAuthService struct {
 
 func (m *FailAuthService) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Do not set tenant in context
+		// Do not set database in context
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (m *FailAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Do not set tenant in context
+		// Do not set database in context
 		next.ServeHTTP(w, r)
 	})
 }
 
-func TestDocumentHandler_TenantError(t *testing.T) {
+func TestDocumentHandler_DatabaseError(t *testing.T) {
 	mockService := new(MockQueryService)
 	mockAuth := &FailAuthService{MockAuthService: new(MockAuthService)}
 
@@ -373,7 +373,7 @@ func TestDocumentHandler_TenantError(t *testing.T) {
 
 	server.ServeHTTP(rr, req)
 
-	// Should fail with 401 Unauthorized because tenant is missing
+	// Should fail with 401 Unauthorized because database is missing
 	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Tenant identification required")
+	assert.Contains(t, rr.Body.String(), "Database identification required")
 }

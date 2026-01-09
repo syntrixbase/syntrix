@@ -17,66 +17,66 @@ type MockQueryService struct {
 	mock.Mock
 }
 
-func (m *MockQueryService) GetDocument(ctx context.Context, tenant string, path string) (model.Document, error) {
-	args := m.Called(ctx, tenant, path)
+func (m *MockQueryService) GetDocument(ctx context.Context, database string, path string) (model.Document, error) {
+	args := m.Called(ctx, database, path)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) CreateDocument(ctx context.Context, tenant string, doc model.Document) error {
-	args := m.Called(ctx, tenant, doc)
+func (m *MockQueryService) CreateDocument(ctx context.Context, database string, doc model.Document) error {
+	args := m.Called(ctx, database, doc)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ReplaceDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, tenant, data, pred)
+func (m *MockQueryService) ReplaceDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, database, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) PatchDocument(ctx context.Context, tenant string, data model.Document, pred model.Filters) (model.Document, error) {
-	args := m.Called(ctx, tenant, data, pred)
+func (m *MockQueryService) PatchDocument(ctx context.Context, database string, data model.Document, pred model.Filters) (model.Document, error) {
+	args := m.Called(ctx, database, data, pred)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) DeleteDocument(ctx context.Context, tenant string, path string, pred model.Filters) error {
-	args := m.Called(ctx, tenant, path, pred)
+func (m *MockQueryService) DeleteDocument(ctx context.Context, database string, path string, pred model.Filters) error {
+	args := m.Called(ctx, database, path, pred)
 	return args.Error(0)
 }
 
-func (m *MockQueryService) ExecuteQuery(ctx context.Context, tenant string, q model.Query) ([]model.Document, error) {
-	args := m.Called(ctx, tenant, q)
+func (m *MockQueryService) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	args := m.Called(ctx, database, q)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]model.Document), args.Error(1)
 }
 
-func (m *MockQueryService) WatchCollection(ctx context.Context, tenant string, collection string) (<-chan storage.Event, error) {
-	args := m.Called(ctx, tenant, collection)
+func (m *MockQueryService) WatchCollection(ctx context.Context, database string, collection string) (<-chan storage.Event, error) {
+	args := m.Called(ctx, database, collection)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(<-chan storage.Event), args.Error(1)
 }
 
-func (m *MockQueryService) Pull(ctx context.Context, tenant string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
-	args := m.Called(ctx, tenant, req)
+func (m *MockQueryService) Pull(ctx context.Context, database string, req storage.ReplicationPullRequest) (*storage.ReplicationPullResponse, error) {
+	args := m.Called(ctx, database, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.ReplicationPullResponse), args.Error(1)
 }
 
-func (m *MockQueryService) Push(ctx context.Context, tenant string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
-	args := m.Called(ctx, tenant, req)
+func (m *MockQueryService) Push(ctx context.Context, database string, req storage.ReplicationPushRequest) (*storage.ReplicationPushResponse, error) {
+	args := m.Called(ctx, database, req)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -91,7 +91,7 @@ type MockAuthService struct {
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 	if len(m.ExpectedCalls) == 0 {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+			ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
 			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -103,7 +103,7 @@ func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+		ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
 		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -112,7 +112,7 @@ func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	if len(m.ExpectedCalls) == 0 {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+			ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
 			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -124,7 +124,7 @@ func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), identity.ContextKeyTenant, "default")
+		ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
 		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

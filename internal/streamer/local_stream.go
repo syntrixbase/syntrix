@@ -36,7 +36,7 @@ func newLocalStream(ctx context.Context, gatewayID string, handler subscriptionH
 }
 
 // Subscribe creates a new subscription and returns the subscription ID.
-func (ls *localStream) Subscribe(tenant, collection string, filters []model.Filter) (string, error) {
+func (ls *localStream) Subscribe(database, collection string, filters []model.Filter) (string, error) {
 	ls.closedMu.Lock()
 	if ls.closed {
 		ls.closedMu.Unlock()
@@ -44,7 +44,7 @@ func (ls *localStream) Subscribe(tenant, collection string, filters []model.Filt
 	}
 	ls.closedMu.Unlock()
 
-	return ls.handler.subscribe(ls.gatewayID, tenant, collection, filters)
+	return ls.handler.subscribe(ls.gatewayID, database, collection, filters)
 }
 
 // Unsubscribe removes a subscription by ID.

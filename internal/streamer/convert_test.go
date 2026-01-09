@@ -23,7 +23,7 @@ func TestProtoToEventDelivery(t *testing.T) {
 			SubscriptionIds: []string{"sub1", "sub2"},
 			Event: &pb.StreamerEvent{
 				EventId:    "evt1",
-				Tenant:     "tenant1",
+				Database:   "database1",
 				Collection: "users",
 				DocumentId: "doc1",
 				Operation:  pb.OperationType_OPERATION_TYPE_INSERT,
@@ -132,7 +132,7 @@ func TestEventToProto(t *testing.T) {
 	t.Run("with document", func(t *testing.T) {
 		result := eventToProto(&Event{
 			EventID:    "evt1",
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			DocumentID: "doc1",
 			Operation:  OperationInsert,
@@ -206,7 +206,7 @@ func TestProtoToEvent(t *testing.T) {
 	t.Run("with document data", func(t *testing.T) {
 		result := protoToEvent(&pb.StreamerEvent{
 			EventId:      "evt1",
-			Tenant:       "tenant1",
+			Database:     "database1",
 			Collection:   "users",
 			DocumentId:   "doc1",
 			Operation:    pb.OperationType_OPERATION_TYPE_INSERT,
@@ -215,7 +215,7 @@ func TestProtoToEvent(t *testing.T) {
 		})
 		require.NotNil(t, result)
 		assert.Equal(t, "evt1", result.EventID)
-		assert.Equal(t, "tenant1", result.Tenant)
+		assert.Equal(t, "database1", result.Database)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, "doc1", result.DocumentID)
 		assert.Equal(t, OperationInsert, result.Operation)
@@ -250,7 +250,7 @@ func TestProtoToEvent(t *testing.T) {
 func TestProtoEventToDelivery(t *testing.T) {
 	result := protoEventToDelivery(&pb.StreamerEvent{
 		EventId:    "evt1",
-		Tenant:     "tenant1",
+		Database:   "database1",
 		Collection: "users",
 		DocumentId: "doc1",
 		Operation:  pb.OperationType_OPERATION_TYPE_UPDATE,

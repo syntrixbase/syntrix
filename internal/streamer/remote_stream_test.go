@@ -41,7 +41,7 @@ func TestRemoteStream_Recv_EventDelivery(t *testing.T) {
 						SubscriptionIds: []string{"sub1"},
 						Event: &pb.StreamerEvent{
 							EventId:    "evt1",
-							Tenant:     "tenant1",
+							Database:   "database1",
 							Collection: "users",
 							Operation:  pb.OperationType_OPERATION_TYPE_INSERT,
 						},
@@ -313,7 +313,7 @@ func TestRemoteStream_Success(t *testing.T) {
 					Delivery: &pb.EventDelivery{
 						SubscriptionIds: []string{"sub1"},
 						Event: &pb.StreamerEvent{
-							Tenant:     "tenant1",
+							Database:   "database1",
 							Collection: "users",
 							DocumentId: "doc1",
 							Operation:  pb.OperationType_OPERATION_TYPE_INSERT,
@@ -480,7 +480,7 @@ func TestRemoteStream_Subscribe_FailedResponse(t *testing.T) {
 		rs.pendingSubscribesMu.Unlock()
 	}()
 
-	_, err := rs.Subscribe("tenant1", "denied-collection", nil)
+	_, err := rs.Subscribe("database1", "denied-collection", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "subscribe failed")
 }
@@ -848,8 +848,8 @@ func TestRemoteStream_Reconnect_WithSubscriptions(t *testing.T) {
 		logger: slog.Default(),
 		client: client,
 		activeSubscriptions: map[string]*subscriptionInfo{
-			"sub1": {tenant: "tenant1", collection: "users", filters: nil},
-			"sub2": {tenant: "tenant1", collection: "orders", filters: nil},
+			"sub1": {database: "database1", collection: "users", filters: nil},
+			"sub2": {database: "database1", collection: "orders", filters: nil},
 		},
 	}
 
@@ -880,7 +880,7 @@ func TestRemoteStream_ResubscribeAll_Success(t *testing.T) {
 		grpcStream: mockStream,
 		logger:     slog.Default(),
 		activeSubscriptions: map[string]*subscriptionInfo{
-			"sub1": {tenant: "tenant1", collection: "users", filters: nil},
+			"sub1": {database: "database1", collection: "users", filters: nil},
 		},
 	}
 
@@ -893,7 +893,7 @@ func TestRemoteStream_ResubscribeAll_Success(t *testing.T) {
 	subscribe := msg.GetSubscribe()
 	require.NotNil(t, subscribe)
 	assert.Equal(t, "sub1", subscribe.SubscriptionId)
-	assert.Equal(t, "tenant1", subscribe.Tenant)
+	assert.Equal(t, "database1", subscribe.Database)
 	assert.Equal(t, "users", subscribe.Collection)
 }
 
@@ -907,7 +907,7 @@ func TestRemoteStream_ResubscribeAll_SendError(t *testing.T) {
 		grpcStream: mockStream,
 		logger:     slog.Default(),
 		activeSubscriptions: map[string]*subscriptionInfo{
-			"sub1": {tenant: "tenant1", collection: "users", filters: nil},
+			"sub1": {database: "database1", collection: "users", filters: nil},
 		},
 	}
 
@@ -1355,7 +1355,7 @@ func TestRemoteStream_Subscribe_StoresSubscriptionInfo(t *testing.T) {
 	}()
 
 	filters := []model.Filter{{Field: "status", Op: model.OpEq, Value: "active"}}
-	subID, err := rs.Subscribe("tenant1", "users", filters)
+	subID, err := rs.Subscribe("database1", "users", filters)
 
 	require.NoError(t, err)
 	assert.NotEmpty(t, subID)
@@ -1367,7 +1367,7 @@ func TestRemoteStream_Subscribe_StoresSubscriptionInfo(t *testing.T) {
 
 	assert.True(t, exists, "subscription info should be stored")
 	if exists {
-		assert.Equal(t, "tenant1", info.tenant)
+		assert.Equal(t, "database1", info.database)
 		assert.Equal(t, "users", info.collection)
 		assert.Len(t, info.filters, 1)
 	}
@@ -1458,7 +1458,7 @@ func TestRemoteStream_Reconnect_ResubscribeFails(t *testing.T) {
 		logger: slog.Default(),
 		client: client,
 		activeSubscriptions: map[string]*subscriptionInfo{
-			"sub1": {tenant: "tenant1", collection: "users", filters: nil},
+			"sub1": {database: "database1", collection: "users", filters: nil},
 		},
 	}
 

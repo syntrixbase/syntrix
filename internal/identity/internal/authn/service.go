@@ -17,7 +17,7 @@ var (
 	ErrAccountDisabled    = errors.New("account disabled")
 	ErrAccountLocked      = errors.New("account locked")
 	ErrInvalidToken       = errors.New("invalid token")
-	ErrTenantRequired     = errors.New("tenant is required")
+	ErrDatabaseRequired   = errors.New("database is required")
 )
 
 type UserStore = storage.UserStore
@@ -59,12 +59,12 @@ func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 }
 
 func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair, error) {
-	tenant := req.TenantID
-	if tenant == "" {
-		return nil, ErrTenantRequired
+	database := req.DatabaseID
+	if database == "" {
+		return nil, ErrDatabaseRequired
 	}
 
-	user, err := s.users.GetUserByUsername(ctx, tenant, req.Username)
+	user, err := s.users.GetUserByUsername(ctx, database, req.Username)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 		if attempts >= 10 { // Lockout threshold
 			lockoutUntil = time.Now().Add(5 * time.Minute)
 		}
-		_ = s.users.UpdateUserLoginStats(ctx, tenant, user.ID, user.LastLoginAt, attempts, lockoutUntil)
+		_ = s.users.UpdateUserLoginStats(ctx, database, user.ID, user.LastLoginAt, attempts, lockoutUntil)
 		return nil, ErrInvalidCredentials
 	}
 
@@ -97,19 +97,19 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 	}
 
 	// Success - reset stats
-	_ = s.users.UpdateUserLoginStats(ctx, tenant, user.ID, time.Now(), 0, time.Time{})
+	_ = s.users.UpdateUserLoginStats(ctx, database, user.ID, time.Now(), 0, time.Time{})
 
 	return s.tokenService.GenerateTokenPair(user)
 }
 
 func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair, error) {
-	tenant := req.TenantID
-	if tenant == "" {
-		return nil, ErrTenantRequired
+	database := req.DatabaseID
+	if database == "" {
+		return nil, ErrDatabaseRequired
 	}
 
 	// Check if user already exists
-	_, err := s.users.GetUserByUsername(ctx, tenant, req.Username)
+	_, err := s.users.GetUserByUsername(ctx, database, req.Username)
 	if err == nil {
 		return nil, errors.New("user already exists")
 	}
@@ -131,7 +131,7 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 	user := &User{
 		ID:           uuid.New().String(),
 		Username:     req.Username,
-		TenantID:     tenant,
+		DatabaseID:   database,
 		PasswordHash: hash,
 		PasswordAlgo: algo,
 		CreatedAt:    time.Now(),
@@ -147,7 +147,7 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 		user.Roles = append(user.Roles, "user")
 	}
 
-	if err := s.users.CreateUser(ctx, tenant, user); err != nil {
+	if err := s.users.CreateUser(ctx, database, user); err != nil {
 		return nil, err
 	}
 
@@ -155,14 +155,14 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 }
 
 func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPair, error) {
-	// TODO: Extract tenant from request or context
+	// TODO: Extract database from request or context
 	claims, err := s.tokenService.ValidateToken(req.RefreshToken)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
 
 	// Check revocation with overlap
-	revoked, err := s.revocations.IsRevoked(ctx, claims.TenantID, claims.ID, s.tokenService.RefreshOverlap())
+	revoked, err := s.revocations.IsRevoked(ctx, claims.DatabaseID, claims.ID, s.tokenService.RefreshOverlap())
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 	}
 
 	// Get user to ensure still exists/active
-	user, err := s.users.GetUserByID(ctx, claims.TenantID, claims.Subject)
+	user, err := s.users.GetUserByID(ctx, claims.DatabaseID, claims.Subject)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
@@ -181,7 +181,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 
 	// Revoke old token (soft revoke for overlap)
 	// We use the Expiration time from claims to clean up later
-	if err := s.revocations.RevokeToken(ctx, claims.TenantID, claims.ID, claims.ExpiresAt.Time); err != nil {
+	if err := s.revocations.RevokeToken(ctx, claims.DatabaseID, claims.ID, claims.ExpiresAt.Time); err != nil {
 		return nil, err
 	}
 
@@ -195,7 +195,7 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 		return ErrInvalidToken
 	}
 
-	return s.revocations.RevokeTokenImmediate(ctx, claims.TenantID, claims.ID, claims.ExpiresAt.Time)
+	return s.revocations.RevokeTokenImmediate(ctx, claims.DatabaseID, claims.ID, claims.ExpiresAt.Time)
 }
 
 func (s *AuthService) GenerateSystemToken(serviceName string) (string, error) {
@@ -223,8 +223,8 @@ func (s *AuthService) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if claims.TenantID == "" {
-			http.Error(w, "Invalid token: missing tenant ID", http.StatusUnauthorized)
+		if claims.DatabaseID == "" {
+			http.Error(w, "Invalid token: missing database ID", http.StatusUnauthorized)
 			return
 		}
 
@@ -233,7 +233,7 @@ func (s *AuthService) Middleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
 		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 		ctx = context.WithValue(ctx, ContextKeyClaims, claims)
-		ctx = context.WithValue(ctx, ContextKeyTenant, claims.TenantID)
+		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.DatabaseID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -260,8 +260,8 @@ func (s *AuthService) MiddlewareOptional(next http.Handler) http.Handler {
 			return
 		}
 
-		if claims.TenantID == "" {
-			http.Error(w, "Invalid token: missing tenant ID", http.StatusUnauthorized)
+		if claims.DatabaseID == "" {
+			http.Error(w, "Invalid token: missing database ID", http.StatusUnauthorized)
 			return
 		}
 
@@ -270,46 +270,46 @@ func (s *AuthService) MiddlewareOptional(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
 		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 		ctx = context.WithValue(ctx, ContextKeyClaims, claims)
-		ctx = context.WithValue(ctx, ContextKeyTenant, claims.TenantID)
+		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.DatabaseID)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func (s *AuthService) ListUsers(ctx context.Context, limit int, offset int) ([]*User, error) {
-	tenant, err := tenantFromContext(ctx)
+	database, err := databaseFromContext(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return s.users.ListUsers(ctx, tenant, limit, offset)
+	return s.users.ListUsers(ctx, database, limit, offset)
 }
 
 func (s *AuthService) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
-	tenant, err := tenantFromContext(ctx)
+	database, err := databaseFromContext(ctx)
 	if err != nil {
 		return err
 	}
 
-	user, err := s.users.GetUserByID(ctx, tenant, id)
+	user, err := s.users.GetUserByID(ctx, database, id)
 	if err != nil {
 		return err
 	}
 
 	user.Roles = roles
 	user.Disabled = disabled
-	return s.users.UpdateUser(ctx, tenant, user)
+	return s.users.UpdateUser(ctx, database, user)
 }
 
-func tenantFromContext(ctx context.Context) (string, error) {
-	val := ctx.Value(ContextKeyTenant)
+func databaseFromContext(ctx context.Context) (string, error) {
+	val := ctx.Value(ContextKeyDatabase)
 	if val == nil {
-		return "", ErrTenantRequired
+		return "", ErrDatabaseRequired
 	}
 
-	tenant, ok := val.(string)
-	if !ok || tenant == "" {
-		return "", ErrTenantRequired
+	database, ok := val.(string)
+	if !ok || database == "" {
+		return "", ErrDatabaseRequired
 	}
 
-	return tenant, nil
+	return database, nil
 }

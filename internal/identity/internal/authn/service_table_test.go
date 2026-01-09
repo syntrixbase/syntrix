@@ -26,9 +26,9 @@ func TestSignUp_TableDriven(t *testing.T) {
 		{
 			name: "Success",
 			req: SignupRequest{
-				TenantID: "default",
-				Username: "newuser",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "newuser",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "newuser").Return(nil, ErrUserNotFound)
@@ -88,15 +88,15 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "Success",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "existinguser",
-				Password: "password123",
+				DatabaseID: "default",
+				Username:   "existinguser",
+				Password:   "password123",
 			},
 			mockSetup: func(m *MockStorage) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					TenantID:     "default",
+					DatabaseID:   "default",
 					Username:     "existinguser",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -109,9 +109,9 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "User Not Found",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "nonexistent",
-				Password: "password12345",
+				DatabaseID: "default",
+				Username:   "nonexistent",
+				Password:   "password12345",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "default", "nonexistent").Return(nil, ErrUserNotFound)
@@ -122,15 +122,15 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "Wrong Password",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "existinguser",
-				Password: "wrongpassword",
+				DatabaseID: "default",
+				Username:   "existinguser",
+				Password:   "wrongpassword",
 			},
 			mockSetup: func(m *MockStorage) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					TenantID:     "default",
+					DatabaseID:   "default",
 					Username:     "existinguser",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -145,15 +145,15 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "Wrong Password Lockout",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "existinguser",
-				Password: "wrongpassword",
+				DatabaseID: "default",
+				Username:   "existinguser",
+				Password:   "wrongpassword",
 			},
 			mockSetup: func(m *MockStorage) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:            "user-id",
-					TenantID:      "default",
+					DatabaseID:    "default",
 					Username:      "existinguser",
 					PasswordHash:  hash,
 					PasswordAlgo:  algo,
@@ -171,14 +171,14 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "Locked Out",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "locked",
-				Password: "password123",
+				DatabaseID: "default",
+				Username:   "locked",
+				Password:   "password123",
 			},
 			mockSetup: func(m *MockStorage) {
 				user := &User{
 					ID:           "user-id",
-					TenantID:     "default",
+					DatabaseID:   "default",
 					Username:     "locked",
 					LockoutUntil: time.Now().Add(time.Hour),
 				}
@@ -190,15 +190,15 @@ func TestSignIn_TableDriven(t *testing.T) {
 		{
 			name: "Disabled",
 			req: LoginRequest{
-				TenantID: "default",
-				Username: "disabled",
-				Password: "password123",
+				DatabaseID: "default",
+				Username:   "disabled",
+				Password:   "password123",
 			},
 			mockSetup: func(m *MockStorage) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					TenantID:     "default",
+					DatabaseID:   "default",
 					Username:     "disabled",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -269,7 +269,7 @@ func TestRefresh_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "refreshuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "refreshuser", Password: "password12345",
+					DatabaseID: "default", Username: "refreshuser", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -277,7 +277,7 @@ func TestRefresh_TableDriven(t *testing.T) {
 			mockSetup: func(m *MockStorage) {
 				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything, mock.Anything).Return(&User{
-					ID: "user-id", TenantID: "default", Username: "refreshuser", Disabled: false,
+					ID: "user-id", DatabaseID: "default", Username: "refreshuser", Disabled: false,
 				}, nil)
 				m.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
@@ -344,7 +344,7 @@ func TestLogout_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "logoutuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "logoutuser", Password: "password12345",
+					DatabaseID: "default", Username: "logoutuser", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken
@@ -401,7 +401,7 @@ func TestMiddleware_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "mwuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "mwuser", Password: "password12345",
+					DatabaseID: "default", Username: "mwuser", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken
@@ -470,13 +470,13 @@ func TestListUsers_TableDriven(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		tenantID    string
+		databaseID  string
 		mockSetup   func(*MockStorage)
 		expectError bool
 	}{
 		{
-			name:     "Success",
-			tenantID: "default",
+			name:       "Success",
+			databaseID: "default",
 			mockSetup: func(m *MockStorage) {
 				m.On("ListUsers", mock.Anything, "default", 10, 0).Return([]*User{}, nil)
 			},
@@ -496,8 +496,8 @@ func TestListUsers_TableDriven(t *testing.T) {
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
 
-			// Inject tenant into context
-			ctx := context.WithValue(context.Background(), ContextKeyTenant, tt.tenantID)
+			// Inject database into context
+			ctx := context.WithValue(context.Background(), ContextKeyDatabase, tt.databaseID)
 			_, err = svc.ListUsers(ctx, 10, 0) // limit, offset
 
 			if tt.expectError {
@@ -517,7 +517,7 @@ func TestUpdateUser_TableDriven(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		tenantID    string
+		databaseID  string
 		userID      string
 		roles       []string
 		disabled    bool
@@ -525,13 +525,13 @@ func TestUpdateUser_TableDriven(t *testing.T) {
 		expectError bool
 	}{
 		{
-			name:     "Success",
-			tenantID: "default",
-			userID:   "user-id",
-			roles:    []string{"admin"},
-			disabled: false,
+			name:       "Success",
+			databaseID: "default",
+			userID:     "user-id",
+			roles:      []string{"admin"},
+			disabled:   false,
 			mockSetup: func(m *MockStorage) {
-				m.On("GetUserByID", mock.Anything, "default", "user-id").Return(&User{ID: "user-id", TenantID: "default"}, nil)
+				m.On("GetUserByID", mock.Anything, "default", "user-id").Return(&User{ID: "user-id", DatabaseID: "default"}, nil)
 				m.On("UpdateUser", mock.Anything, "default", mock.Anything).Return(nil)
 			},
 			expectError: false,
@@ -550,7 +550,7 @@ func TestUpdateUser_TableDriven(t *testing.T) {
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
 
-			ctx := context.WithValue(context.Background(), ContextKeyTenant, tt.tenantID)
+			ctx := context.WithValue(context.Background(), ContextKeyDatabase, tt.databaseID)
 			err = svc.UpdateUser(ctx, tt.userID, tt.roles, tt.disabled)
 
 			if tt.expectError {
@@ -582,7 +582,7 @@ func TestMiddlewareOptional_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "default", "optuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					TenantID: "default", Username: "optuser", Password: "password12345",
+					DatabaseID: "default", Username: "optuser", Password: "password12345",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken

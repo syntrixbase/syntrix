@@ -55,7 +55,7 @@ func (w *HTTPWorker) ProcessTask(ctx context.Context, task *types.DeliveryTask) 
 	if w.auth != nil {
 		token, err := w.auth.GenerateSystemToken("trigger-worker")
 		if err != nil {
-			w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, false)
+			w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, false)
 			return fmt.Errorf("failed to generate system token: %w", err)
 		}
 		task.PreIssuedToken = token
@@ -63,13 +63,13 @@ func (w *HTTPWorker) ProcessTask(ctx context.Context, task *types.DeliveryTask) 
 
 	payload, err := json.Marshal(task)
 	if err != nil {
-		w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, true)
+		w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, true)
 		return fmt.Errorf("failed to marshal task: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "POST", task.URL, bytes.NewReader(payload))
 	if err != nil {
-		w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, true)
+		w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, true)
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -84,14 +84,14 @@ func (w *HTTPWorker) ProcessTask(ctx context.Context, task *types.DeliveryTask) 
 	if task.SecretsRef != "" {
 		if w.secrets == nil {
 			log.Printf("[Warning] SecretsRef %s specified but no SecretProvider configured", task.SecretsRef)
-			w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, true)
+			w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, true)
 			return &types.FatalError{Err: fmt.Errorf("no secret provider configured for SecretsRef %s", task.SecretsRef)}
 		}
 		secret, err := w.secrets.GetSecret(ctx, task.SecretsRef)
 		if err != nil {
 			// If we can't get the secret, should we fail fatally or retry?
 			// Probably retry, as it might be a temporary issue with secret store.
-			w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, false)
+			w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, false)
 			return fmt.Errorf("failed to resolve secret %s: %w", task.SecretsRef, err)
 		}
 		timestamp := time.Now().Unix()
@@ -102,19 +102,19 @@ func (w *HTTPWorker) ProcessTask(ctx context.Context, task *types.DeliveryTask) 
 
 	resp, err := w.client.Do(req)
 	if err != nil {
-		w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, 0, false)
+		w.metrics.IncDeliveryFailure(task.Database, task.Collection, 0, false)
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		w.metrics.IncDeliverySuccess(task.Tenant, task.Collection)
-		w.metrics.ObserveDeliveryLatency(task.Tenant, task.Collection, time.Since(start))
+		w.metrics.IncDeliverySuccess(task.Database, task.Collection)
+		w.metrics.ObserveDeliveryLatency(task.Database, task.Collection, time.Since(start))
 		return nil
 	}
 
 	fatal := resp.StatusCode >= 400 && resp.StatusCode < 500
-	w.metrics.IncDeliveryFailure(task.Tenant, task.Collection, resp.StatusCode, fatal)
+	w.metrics.IncDeliveryFailure(task.Database, task.Collection, resp.StatusCode, fatal)
 
 	// 4xx errors are fatal, 5xx are retryable.
 	if fatal {

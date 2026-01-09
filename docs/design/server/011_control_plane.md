@@ -15,7 +15,7 @@
 
 - **Database Operations**: Backup, Restore, and Point-in-Time Recovery.
 - **Migration Tools**: Managing schema changes or data migrations if necessary.
-- **Tenant Management**: (If multi-tenant) Creating and managing separate namespaces/databases.
+- **Database Management**: (If multi-database) Creating and managing separate namespaces/databases.
 
 ### 3. Observability
 

@@ -46,7 +46,7 @@ func protoToEvent(e *pb.StreamerEvent) *Event {
 
 	return &Event{
 		EventID:    e.EventId,
-		Tenant:     e.Tenant,
+		Database:   e.Database,
 		Collection: e.Collection,
 		DocumentID: e.DocumentId,
 		Operation:  protoToOperationType(e.Operation),
@@ -144,7 +144,7 @@ func eventToProto(e *Event) *pb.StreamerEvent {
 
 	return &pb.StreamerEvent{
 		EventId:      e.EventID,
-		Tenant:       e.Tenant,
+		Database:     e.Database,
 		Collection:   e.Collection,
 		DocumentId:   e.DocumentID,
 		Operation:    operationTypeToProto(e.Operation),
@@ -194,7 +194,7 @@ func syntrixEventToDelivery(event events.SyntrixChangeEvent, doc model.Document,
 		SubscriptionIDs: subscriptionIDs,
 		Event: &Event{
 			EventID:    event.Id,
-			Tenant:     event.TenantID,
+			Database:   event.DatabaseID,
 			Collection: event.Document.Collection,
 			DocumentID: doc.GetID(),
 			Operation:  eventTypeToOperationType(event.Type),

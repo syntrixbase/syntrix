@@ -25,10 +25,10 @@ const (
 // The document data is stored as JSON bytes for flexibility.
 type Document struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique document identifier (tenant_id:hash(fullpath)).
+	// Unique document identifier (database_id:hash(fullpath)).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Tenant identifier.
-	TenantId string `protobuf:"bytes,2,opt,name=tenant_id,json=tenantId,proto3" json:"tenant_id,omitempty"`
+	// Database identifier.
+	DatabaseId string `protobuf:"bytes,2,opt,name=database_id,json=databaseId,proto3" json:"database_id,omitempty"`
 	// Full pathname of the document.
 	Fullpath string `protobuf:"bytes,3,opt,name=fullpath,proto3" json:"fullpath,omitempty"`
 	// Parent collection name.
@@ -88,9 +88,9 @@ func (x *Document) GetId() string {
 	return ""
 }
 
-func (x *Document) GetTenantId() string {
+func (x *Document) GetDatabaseId() string {
 	if x != nil {
-		return x.TenantId
+		return x.DatabaseId
 	}
 	return ""
 }
@@ -371,8 +371,8 @@ func (x *Query) GetShowDeleted() bool {
 
 type GetDocumentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Document path.
 	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -409,9 +409,9 @@ func (*GetDocumentRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *GetDocumentRequest) GetTenant() string {
+func (x *GetDocumentRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -470,8 +470,8 @@ func (x *GetDocumentResponse) GetDocument() *Document {
 
 type CreateDocumentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Document to create.
 	Document      *Document `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -508,9 +508,9 @@ func (*CreateDocumentRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *CreateDocumentRequest) GetTenant() string {
+func (x *CreateDocumentRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -560,8 +560,8 @@ func (*CreateDocumentResponse) Descriptor() ([]byte, []int) {
 
 type ReplaceDocumentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Document with new data.
 	Document *Document `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
 	// Optional filters for conditional update.
@@ -600,9 +600,9 @@ func (*ReplaceDocumentRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *ReplaceDocumentRequest) GetTenant() string {
+func (x *ReplaceDocumentRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -668,8 +668,8 @@ func (x *ReplaceDocumentResponse) GetDocument() *Document {
 
 type PatchDocumentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Document with partial data to merge.
 	Document *Document `protobuf:"bytes,2,opt,name=document,proto3" json:"document,omitempty"`
 	// Optional filters for conditional update.
@@ -708,9 +708,9 @@ func (*PatchDocumentRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *PatchDocumentRequest) GetTenant() string {
+func (x *PatchDocumentRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -776,8 +776,8 @@ func (x *PatchDocumentResponse) GetDocument() *Document {
 
 type DeleteDocumentRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Document path.
 	Path string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
 	// Optional filters for conditional delete.
@@ -816,9 +816,9 @@ func (*DeleteDocumentRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *DeleteDocumentRequest) GetTenant() string {
+func (x *DeleteDocumentRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -875,8 +875,8 @@ func (*DeleteDocumentResponse) Descriptor() ([]byte, []int) {
 
 type ExecuteQueryRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Query specification.
 	Query         *Query `protobuf:"bytes,2,opt,name=query,proto3" json:"query,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -913,9 +913,9 @@ func (*ExecuteQueryRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *ExecuteQueryRequest) GetTenant() string {
+func (x *ExecuteQueryRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -974,8 +974,8 @@ func (x *ExecuteQueryResponse) GetDocuments() []*Document {
 
 type PullRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Target collection.
 	Collection string `protobuf:"bytes,2,opt,name=collection,proto3" json:"collection,omitempty"`
 	// Checkpoint to resume from (Unix milliseconds).
@@ -1016,9 +1016,9 @@ func (*PullRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{16}
 }
 
-func (x *PullRequest) GetTenant() string {
+func (x *PullRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -1155,8 +1155,8 @@ func (x *PushChange) GetBaseVersion() int64 {
 
 type PushRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,1,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,1,opt,name=database,proto3" json:"database,omitempty"`
 	// Target collection.
 	Collection string `protobuf:"bytes,2,opt,name=collection,proto3" json:"collection,omitempty"`
 	// Changes to push.
@@ -1195,9 +1195,9 @@ func (*PushRequest) Descriptor() ([]byte, []int) {
 	return file_query_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *PushRequest) GetTenant() string {
+func (x *PushRequest) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -1265,10 +1265,11 @@ var File_query_proto protoreflect.FileDescriptor
 
 const file_query_proto_rawDesc = "" +
 	"\n" +
-	"\vquery.proto\x12\x10syntrix.query.v1\"\xba\x02\n" +
+	"\vquery.proto\x12\x10syntrix.query.v1\"\xbe\x02\n" +
 	"\bDocument\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
-	"\ttenant_id\x18\x02 \x01(\tR\btenantId\x12\x1a\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vdatabase_id\x18\x02 \x01(\tR\n" +
+	"databaseId\x12\x1a\n" +
 	"\bfullpath\x18\x03 \x01(\tR\bfullpath\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x04 \x01(\tR\n" +
@@ -1299,40 +1300,40 @@ const file_query_proto_rawDesc = "" +
 	"\x05limit\x18\x04 \x01(\x05R\x05limit\x12\x1f\n" +
 	"\vstart_after\x18\x05 \x01(\tR\n" +
 	"startAfter\x12!\n" +
-	"\fshow_deleted\x18\x06 \x01(\bR\vshowDeleted\"@\n" +
-	"\x12GetDocumentRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x12\n" +
+	"\fshow_deleted\x18\x06 \x01(\bR\vshowDeleted\"D\n" +
+	"\x12GetDocumentRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\"M\n" +
 	"\x13GetDocumentResponse\x126\n" +
-	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"g\n" +
-	"\x15CreateDocumentRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x126\n" +
+	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"k\n" +
+	"\x15CreateDocumentRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x126\n" +
 	"\bdocument\x18\x02 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"\x18\n" +
-	"\x16CreateDocumentResponse\"\x9c\x01\n" +
-	"\x16ReplaceDocumentRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x126\n" +
+	"\x16CreateDocumentResponse\"\xa0\x01\n" +
+	"\x16ReplaceDocumentRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x126\n" +
 	"\bdocument\x18\x02 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\x122\n" +
 	"\afilters\x18\x03 \x03(\v2\x18.syntrix.query.v1.FilterR\afilters\"Q\n" +
 	"\x17ReplaceDocumentResponse\x126\n" +
-	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"\x9a\x01\n" +
-	"\x14PatchDocumentRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x126\n" +
+	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"\x9e\x01\n" +
+	"\x14PatchDocumentRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x126\n" +
 	"\bdocument\x18\x02 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\x122\n" +
 	"\afilters\x18\x03 \x03(\v2\x18.syntrix.query.v1.FilterR\afilters\"O\n" +
 	"\x15PatchDocumentResponse\x126\n" +
-	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"w\n" +
-	"\x15DeleteDocumentRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x12\n" +
+	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\"{\n" +
+	"\x15DeleteDocumentRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x122\n" +
 	"\afilters\x18\x03 \x03(\v2\x18.syntrix.query.v1.FilterR\afilters\"\x18\n" +
-	"\x16DeleteDocumentResponse\"\\\n" +
-	"\x13ExecuteQueryRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12-\n" +
+	"\x16DeleteDocumentResponse\"`\n" +
+	"\x13ExecuteQueryRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x12-\n" +
 	"\x05query\x18\x02 \x01(\v2\x17.syntrix.query.v1.QueryR\x05query\"P\n" +
 	"\x14ExecuteQueryResponse\x128\n" +
-	"\tdocuments\x18\x01 \x03(\v2\x1a.syntrix.query.v1.DocumentR\tdocuments\"{\n" +
-	"\vPullRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1e\n" +
+	"\tdocuments\x18\x01 \x03(\v2\x1a.syntrix.query.v1.DocumentR\tdocuments\"\x7f\n" +
+	"\vPullRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x02 \x01(\tR\n" +
 	"collection\x12\x1e\n" +
@@ -1348,9 +1349,9 @@ const file_query_proto_rawDesc = "" +
 	"\n" +
 	"PushChange\x126\n" +
 	"\bdocument\x18\x01 \x01(\v2\x1a.syntrix.query.v1.DocumentR\bdocument\x12!\n" +
-	"\fbase_version\x18\x02 \x01(\x03R\vbaseVersion\"}\n" +
-	"\vPushRequest\x12\x16\n" +
-	"\x06tenant\x18\x01 \x01(\tR\x06tenant\x12\x1e\n" +
+	"\fbase_version\x18\x02 \x01(\x03R\vbaseVersion\"\x81\x01\n" +
+	"\vPushRequest\x12\x1a\n" +
+	"\bdatabase\x18\x01 \x01(\tR\bdatabase\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x02 \x01(\tR\n" +
 	"collection\x126\n" +

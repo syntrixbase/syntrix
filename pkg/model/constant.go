@@ -1,5 +1,5 @@
 package model
 
 const (
-	DefaultTenantID = "default"
+	DefaultDatabaseID = "default"
 )

@@ -87,18 +87,18 @@ func (tc *TestContext) Manager() *services.Manager {
 // GetToken creates a user and returns an access token
 // The username is prefixed to ensure isolation
 func (tc *TestContext) GetToken(uid string, role string) string {
-	return tc.GetTokenForTenant("default", uid, role)
+	return tc.GetTokenForDatabase("default", uid, role)
 }
 
-// GetTokenForTenant creates a user in a specific tenant and returns an access token
-func (tc *TestContext) GetTokenForTenant(tenant, uid, role string) string {
+// GetTokenForDatabase creates a user in a specific database and returns an access token
+func (tc *TestContext) GetTokenForDatabase(database, uid, role string) string {
 	// Prefix the username to ensure isolation
 	prefixedUID := fmt.Sprintf("%s_%s", tc.prefix, uid)
 	tc.createdUsers = append(tc.createdUsers, prefixedUID)
 
 	// Try signup
 	signupBody := map[string]string{
-		"tenant":   tenant,
+		"database": database,
 		"username": prefixedUID,
 		"password": "password123456",
 	}
@@ -116,7 +116,7 @@ func (tc *TestContext) GetTokenForTenant(tenant, uid, role string) string {
 	} else {
 		// User might exist, try login
 		loginBody := map[string]string{
-			"tenant":   tenant,
+			"database": database,
 			"username": prefixedUID,
 			"password": "password123456",
 		}
@@ -134,10 +134,10 @@ func (tc *TestContext) GetTokenForTenant(tenant, uid, role string) string {
 
 	// Update role if needed
 	if role != "user" {
-		tc.updateUserRole(token, role, tenant, prefixedUID)
+		tc.updateUserRole(token, role, database, prefixedUID)
 		// Re-login to get new token with updated role
 		loginBody := map[string]string{
-			"tenant":   tenant,
+			"database": database,
 			"username": prefixedUID,
 			"password": "password123456",
 		}
@@ -156,7 +156,7 @@ func (tc *TestContext) GetTokenForTenant(tenant, uid, role string) string {
 	return token
 }
 
-func (tc *TestContext) updateUserRole(token, role, tenant, uid string) {
+func (tc *TestContext) updateUserRole(token, role, database, uid string) {
 	claims, err := parseTokenClaims(token)
 	require.NoError(tc.t, err)
 

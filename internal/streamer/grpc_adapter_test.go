@@ -122,7 +122,7 @@ func TestGRPCStream_SubscribeMessage(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "sub1",
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -282,7 +282,7 @@ func TestGRPCStream_SubscribeWithError(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "dup-sub",
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -291,7 +291,7 @@ func TestGRPCStream_SubscribeWithError(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "dup-sub", // duplicate
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -397,7 +397,7 @@ func TestGRPCAdapter_OutgoingDelivery(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "sub-grpc-1",
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -415,12 +415,12 @@ func TestGRPCAdapter_OutgoingDelivery(t *testing.T) {
 
 	// Process an event that matches the subscription
 	err = internal.ProcessEvent(events.SyntrixChangeEvent{
-		Id:       "evt-grpc-1",
-		TenantID: "tenant1",
-		Type:     events.EventCreate,
+		Id:         "evt-grpc-1",
+		DatabaseID: "database1",
+		Type:       events.EventCreate,
 		Document: &storage.StoredDoc{
 			Id:         "_id_doc1",
-			TenantID:   "tenant1",
+			DatabaseID: "database1",
 			Collection: "users",
 			Fullpath:   "users/doc1",
 			Data:       map[string]interface{}{"id": "doc1", "name": "Alice"},
@@ -465,7 +465,7 @@ func TestGRPCAdapter_OutgoingSendError(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "sub-send-err",
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "products",
 					},
 				},
@@ -488,12 +488,12 @@ func TestGRPCAdapter_OutgoingSendError(t *testing.T) {
 
 	// Process an event to trigger delivery send
 	err = internal.ProcessEvent(events.SyntrixChangeEvent{
-		Id:       "evt-send-err",
-		TenantID: "tenant1",
-		Type:     events.EventCreate,
+		Id:         "evt-send-err",
+		DatabaseID: "database1",
+		Type:       events.EventCreate,
 		Document: &storage.StoredDoc{
 			Id:         "_id_doc1",
-			TenantID:   "tenant1",
+			DatabaseID: "database1",
 			Collection: "products",
 			Fullpath:   "products/doc1",
 			Data: map[string]interface{}{
@@ -530,7 +530,7 @@ func TestGRPCAdapter_SubscribeAutoGenerateID(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "", // Empty - should be auto-generated
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -601,7 +601,7 @@ func TestGRPCAdapter_Subscribe_ManagerError(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "dup-id",
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},
@@ -610,7 +610,7 @@ func TestGRPCAdapter_Subscribe_ManagerError(t *testing.T) {
 				Payload: &pb.GatewayMessage_Subscribe{
 					Subscribe: &pb.SubscribeRequest{
 						SubscriptionId: "dup-id", // Same ID - should cause error
-						Tenant:         "tenant1",
+						Database:       "database1",
 						Collection:     "users",
 					},
 				},

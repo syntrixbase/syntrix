@@ -34,7 +34,7 @@ func TestNatsPublisher_Publish(t *testing.T) {
 	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	task := &trigger.DeliveryTask{
-		Tenant:     "acme",
+		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",
@@ -59,14 +59,14 @@ func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
 	encodedDocumentID := base64.URLEncoding.EncodeToString([]byte(longDocumentID))
 
 	task := &trigger.DeliveryTask{
-		Tenant:     "acme",
+		Database:   "acme",
 		Collection: "users",
 		DocumentID: longDocumentID,
 		TriggerID:  "t1",
 	}
 
 	// Calculate expected subject
-	originalSubject := fmt.Sprintf("TRIGGERS.%s.%s.%s", task.Tenant, task.Collection, encodedDocumentID)
+	originalSubject := fmt.Sprintf("TRIGGERS.%s.%s.%s", task.Database, task.Collection, encodedDocumentID)
 	// Verify it is indeed long enough
 	assert.True(t, len(originalSubject) > 1024)
 
@@ -93,7 +93,7 @@ func TestNatsPublisher_Publish_Error(t *testing.T) {
 	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
 	task := &trigger.DeliveryTask{
-		Tenant:     "acme",
+		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",
@@ -140,7 +140,7 @@ func TestNewTaskPublisherFromJS_EmptyStream(t *testing.T) {
 	// but we can verify it works by calling Publish and checking the subject.
 
 	task := &trigger.DeliveryTask{
-		Tenant:     "acme",
+		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",

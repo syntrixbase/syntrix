@@ -152,8 +152,8 @@ type ChangeEvent struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Unique event identifier.
 	EventId string `protobuf:"bytes,1,opt,name=event_id,json=eventId,proto3" json:"event_id,omitempty"`
-	// Tenant identifier.
-	Tenant string `protobuf:"bytes,2,opt,name=tenant,proto3" json:"tenant,omitempty"`
+	// Database identifier.
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
 	// Mongo collection name.
 	MgoColl string `protobuf:"bytes,3,opt,name=mgo_coll,json=mgoColl,proto3" json:"mgo_coll,omitempty"`
 	// Mongo document identifier.
@@ -215,9 +215,9 @@ func (x *ChangeEvent) GetEventId() string {
 	return ""
 }
 
-func (x *ChangeEvent) GetTenant() string {
+func (x *ChangeEvent) GetDatabase() string {
 	if x != nil {
-		return x.Tenant
+		return x.Database
 	}
 	return ""
 }
@@ -352,10 +352,10 @@ const file_puller_proto_rawDesc = "" +
 	"\x14coalesce_on_catch_up\x18\x03 \x01(\bR\x11coalesceOnCatchUp\"l\n" +
 	"\vPullerEvent\x12A\n" +
 	"\fchange_event\x18\x01 \x01(\v2\x1e.syntrix.puller.v1.ChangeEventR\vchangeEvent\x12\x1a\n" +
-	"\bprogress\x18\x02 \x01(\tR\bprogress\"\xe8\x02\n" +
+	"\bprogress\x18\x02 \x01(\tR\bprogress\"\xec\x02\n" +
 	"\vChangeEvent\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x16\n" +
-	"\x06tenant\x18\x02 \x01(\tR\x06tenant\x12\x19\n" +
+	"\bevent_id\x18\x01 \x01(\tR\aeventId\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x19\n" +
 	"\bmgo_coll\x18\x03 \x01(\tR\amgoColl\x12\x1c\n" +
 	"\n" +
 	"mgo_doc_id\x18\x04 \x01(\tR\bmgoDocId\x12\x17\n" +

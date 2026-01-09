@@ -9,17 +9,17 @@ func TestNoopMetrics(t *testing.T) {
 	m := &NoopMetrics{}
 
 	// Call all methods to ensure coverage
-	m.IncPublishSuccess("tenant", "collection", true)
-	m.IncPublishFailure("tenant", "collection", "reason")
-	m.ObservePublishLatency("tenant", "collection", time.Second)
+	m.IncPublishSuccess("database", "collection", true)
+	m.IncPublishFailure("database", "collection", "reason")
+	m.ObservePublishLatency("database", "collection", time.Second)
 
-	m.IncConsumeSuccess("tenant", "collection", true)
-	m.IncConsumeFailure("tenant", "collection", "reason")
-	m.ObserveConsumeLatency("tenant", "collection", time.Second)
-	m.IncHashCollision("tenant", "collection")
+	m.IncConsumeSuccess("database", "collection", true)
+	m.IncConsumeFailure("database", "collection", "reason")
+	m.ObserveConsumeLatency("database", "collection", time.Second)
+	m.IncHashCollision("database", "collection")
 
-	m.IncDeliverySuccess("tenant", "collection")
-	m.IncDeliveryFailure("tenant", "collection", 500, true)
-	m.IncDeliveryRetry("tenant", "collection")
-	m.ObserveDeliveryLatency("tenant", "collection", time.Second)
+	m.IncDeliverySuccess("database", "collection")
+	m.IncDeliveryFailure("database", "collection", 500, true)
+	m.IncDeliveryRetry("database", "collection")
+	m.ObserveDeliveryLatency("database", "collection", time.Second)
 }

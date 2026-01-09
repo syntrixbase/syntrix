@@ -118,7 +118,7 @@ func (c *Coalescer) merge(existing, incoming *events.StoreChangeEvent) *events.S
 			// Create insert with the full document from update
 			merged := &events.StoreChangeEvent{
 				EventID:      incoming.EventID, // Use latest event ID
-				TenantID:     incoming.TenantID,
+				DatabaseID:   incoming.DatabaseID,
 				MgoColl:      incoming.MgoColl,
 				MgoDocID:     incoming.MgoDocID,
 				OpType:       events.StoreOperationInsert, // Keep as insert

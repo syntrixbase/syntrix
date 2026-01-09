@@ -18,8 +18,8 @@ func TestStoredDocToProto(t *testing.T) {
 
 	t.Run("full document", func(t *testing.T) {
 		doc := &storage.StoredDoc{
-			Id:             "tenant1:abc123",
-			TenantID:       "tenant1",
+			Id:             "database1:abc123",
+			DatabaseID:     "database1",
 			Fullpath:       "users/user1",
 			Collection:     "users",
 			CollectionHash: "abc",
@@ -33,8 +33,8 @@ func TestStoredDocToProto(t *testing.T) {
 
 		result := storedDocToProto(doc)
 
-		assert.Equal(t, "tenant1:abc123", result.Id)
-		assert.Equal(t, "tenant1", result.TenantId)
+		assert.Equal(t, "database1:abc123", result.Id)
+		assert.Equal(t, "database1", result.DatabaseId)
 		assert.Equal(t, "users/user1", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, int64(1704067200000), result.UpdatedAt)
@@ -59,8 +59,8 @@ func TestProtoToStoredDoc(t *testing.T) {
 	t.Run("full document", func(t *testing.T) {
 		data, _ := json.Marshal(map[string]interface{}{"name": "Bob"})
 		proto := &pb.Document{
-			Id:         "tenant1:xyz",
-			TenantId:   "tenant1",
+			Id:         "database1:xyz",
+			DatabaseId: "database1",
 			Fullpath:   "users/user2",
 			Collection: "users",
 			UpdatedAt:  1704067300000,
@@ -72,8 +72,8 @@ func TestProtoToStoredDoc(t *testing.T) {
 
 		result := protoToStoredDoc(proto)
 
-		assert.Equal(t, "tenant1:xyz", result.Id)
-		assert.Equal(t, "tenant1", result.TenantID)
+		assert.Equal(t, "database1:xyz", result.Id)
+		assert.Equal(t, "database1", result.DatabaseID)
 		assert.Equal(t, "users/user2", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, int64(3), result.Version)
@@ -356,7 +356,7 @@ func TestPullRequestConversions(t *testing.T) {
 
 	t.Run("protoToPullRequest", func(t *testing.T) {
 		proto := &pb.PullRequest{
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			Checkpoint: 12345,
 			Limit:      100,
@@ -432,7 +432,7 @@ func TestPushRequestConversions(t *testing.T) {
 		data, _ := json.Marshal(map[string]interface{}{"name": "test"})
 		baseVersion := int64(5)
 		proto := &pb.PushRequest{
-			Tenant:     "tenant1",
+			Database:   "database1",
 			Collection: "users",
 			Changes: []*pb.PushChange{
 				{

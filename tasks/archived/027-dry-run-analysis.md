@@ -77,7 +77,7 @@ Hub currently expects `storage.Event`, but Streamer delivers `streamer.EventDeli
 | Event Type | `storage.EventType` (string: "create", "update", "delete") | `streamer.OperationType` (int: Insert, Update, Delete) |
 | Document | `*storage.StoredDoc` | `model.Document` (map[string]interface{}) |
 | ID Format | `Id` (full path like "users/1") | `DocumentID` (just ID) + `Collection` |
-| Tenant | `TenantID` | `Tenant` |
+| Database | `DatabaseID` | `Database` |
 
 ### Conversion Function Needed
 
@@ -85,7 +85,7 @@ Hub currently expects `storage.Event`, but Streamer delivers `streamer.EventDeli
 func eventDeliveryToStorageEvent(delivery *streamer.EventDelivery) storage.Event {
     evt := storage.Event{
         Id:        fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
-        TenantID:  delivery.Event.Tenant,
+        DatabaseID:  delivery.Event.Database,
         Type:      operationToEventType(delivery.Event.Operation),
         Timestamp: delivery.Event.Timestamp,
     }
@@ -278,7 +278,7 @@ func ServeSSE(hub *Hub, qs engine.Service, streamer streamer.Service, auth ident
     defer stream.Close()
 
     // Subscribe
-    streamerSubID, err := stream.Subscribe(tenant, collection, nil)
+    streamerSubID, err := stream.Subscribe(database, collection, nil)
     if err != nil {
         http.Error(w, "failed to subscribe", http.StatusInternalServerError)
         return
@@ -307,7 +307,7 @@ Client.handleMessage(TypeSubscribe)
 ```
 Client.handleMessage(TypeSubscribe)
   → Convert model.Query.Filters to streamer.Filter[]
-  → stream.Subscribe(tenant, collection, filters) → streamerSubID
+  → stream.Subscribe(database, collection, filters) → streamerSubID
   → Map: clientSubID (msg.ID) ↔ streamerSubID
   → c.subscriptions[msg.ID] = Subscription{...}  // Keep for IncludeData flag
   → hub.RegisterSubscription(streamerSubID, client, msg.ID)
@@ -409,7 +409,7 @@ func (s *Server) StartBackgroundTasks(ctx context.Context) error {
 - `server_background_test.go` - Mock `streamer.Service` instead of `engine.Service.WatchCollection`
 - `hub_*.go` tests - Use `streamer.EventDelivery` instead of `storage.Event`
 - `client_*.go` tests - Mock `streamer.Stream` for subscription tests
-- `tenant_isolation_test.go` - Update event creation
+- `database_isolation_test.go` - Update event creation
 - `server_sse_test.go` - Add streamer mock
 
 ### Strategy

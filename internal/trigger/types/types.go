@@ -31,7 +31,7 @@ func IsFatal(err error) bool {
 type Trigger struct {
 	ID            string            `json:"triggerId" yaml:"triggerId"`
 	Version       string            `json:"version" yaml:"version"`
-	Tenant        string            `json:"tenant" yaml:"tenant"`
+	Database      string            `json:"database" yaml:"database"`
 	Collection    string            `json:"collection" yaml:"collection"`
 	Events        []string          `json:"events" yaml:"events"` // create, update, delete
 	Condition     string            `json:"condition" yaml:"condition"`
@@ -56,7 +56,7 @@ type RetryPolicy struct {
 // DeliveryTask represents the payload sent to the delivery worker via NATS.
 type DeliveryTask struct {
 	TriggerID      string                 `json:"triggerId"`
-	Tenant         string                 `json:"tenant"`
+	Database       string                 `json:"database"`
 	Event          string                 `json:"event"`
 	Collection     string                 `json:"collection"`
 	DocumentID     string                 `json:"documentId"`

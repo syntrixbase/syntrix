@@ -72,10 +72,10 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) 
 		return nil, fmt.Errorf("fullDocument missing for %s operation (UpdateLookup required)", opType)
 	}
 
-	// Extract tenant ID
-	var tenantID string
+	// Extract database ID
+	var databaseID string
 	if fullDoc != nil {
-		tenantID = fullDoc.TenantID
+		databaseID = fullDoc.DatabaseID
 	}
 
 	// Generate event ID
@@ -84,7 +84,7 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) 
 	// Create change event
 	evt := &events.StoreChangeEvent{
 		EventID:      eventID,
-		TenantID:     tenantID,
+		DatabaseID:   databaseID,
 		MgoColl:      raw.Namespace.Coll,
 		MgoDocID:     docID,
 		OpType:       opType,

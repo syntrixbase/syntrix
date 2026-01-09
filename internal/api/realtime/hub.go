@@ -142,13 +142,13 @@ func (h *Hub) SetStream(s streamer.Stream) {
 	h.streamMu.Unlock()
 }
 
-func (h *Hub) SubscribeToStream(tenant, collection string, filters []model.Filter) (string, error) {
+func (h *Hub) SubscribeToStream(database, collection string, filters []model.Filter) (string, error) {
 	h.streamMu.Lock()
 	defer h.streamMu.Unlock()
 	if h.stream == nil {
 		return "", fmt.Errorf("stream not initialized")
 	}
-	return h.stream.Subscribe(tenant, collection, filters)
+	return h.stream.Subscribe(database, collection, filters)
 }
 
 func (h *Hub) UnsubscribeFromStream(subID string) error {
@@ -236,10 +236,10 @@ func (h *Hub) Done() <-chan struct{} {
 
 func eventDeliveryToStorageEvent(delivery *streamer.EventDelivery) storage.Event {
 	evt := storage.Event{
-		Id:        fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
-		TenantID:  delivery.Event.Tenant,
-		Type:      operationToEventType(delivery.Event.Operation),
-		Timestamp: delivery.Event.Timestamp,
+		Id:         fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
+		DatabaseID: delivery.Event.Database,
+		Type:       operationToEventType(delivery.Event.Operation),
+		Timestamp:  delivery.Event.Timestamp,
 	}
 
 	if delivery.Event.Document != nil {
