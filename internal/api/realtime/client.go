@@ -462,8 +462,8 @@ func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Rea
 		subscriptions:   make(map[string]Subscription),
 		streamerSubIDs:  make(map[string]string),
 		tenant:          tenant,
-		authenticated:   !cfg.EnableAuth || tenant != "",
-		allowAllTenants: allowAll || !cfg.EnableAuth,
+		authenticated:   tenant != "",
+		allowAllTenants: allowAll,
 	}
 
 	if !client.hub.Register(client) {
@@ -503,21 +503,10 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 	w.Header().Add("Vary", "Origin")
 
 	// Create client without websocket connection
-	tenant := ""
-	allowAll := false
-	if cfg.EnableAuth {
-		tenant, allowAll = tenantFromContext(ctx)
-		if tenant == "" {
-			http.Error(w, "tenant required", http.StatusUnauthorized)
-			return
-		}
-	} else {
-		tenant, allowAll = tenantFromContext(ctx)
-	}
-
-	// Default tenant if not specified (development/test mode)
-	if tenant == "" && !cfg.EnableAuth {
-		tenant = "default"
+	tenant, allowAll := tenantFromContext(ctx)
+	if tenant == "" {
+		http.Error(w, "tenant required", http.StatusUnauthorized)
+		return
 	}
 
 	client := &Client{
@@ -530,8 +519,8 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 		subscriptions:   make(map[string]Subscription),
 		streamerSubIDs:  make(map[string]string),
 		tenant:          tenant,
-		authenticated:   !cfg.EnableAuth || tenant != "",
-		allowAllTenants: allowAll || !cfg.EnableAuth,
+		authenticated:   tenant != "",
+		allowAllTenants: allowAll,
 	}
 
 	// Handle initial subscription from query params

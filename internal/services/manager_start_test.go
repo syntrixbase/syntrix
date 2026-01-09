@@ -291,7 +291,7 @@ func TestManager_Start_AllServices(t *testing.T) {
 	// 3. Mock Realtime Server
 	mockQuery := new(MockQueryService)
 	mockAuth := new(MockAuthService)
-	rtCfg := api_config.RealtimeConfig{EnableAuth: false}
+	rtCfg := api_config.RealtimeConfig{}
 	// We need to pass the real realtime.Server to manager
 	rtSrv := realtime.NewServer(mockQuery, mockStreamer, "data", mockAuth, rtCfg)
 	mgr.rtServer = rtSrv
@@ -468,7 +468,7 @@ func TestManager_Start_RealtimeRetry(t *testing.T) {
 
 	mockQuery := new(MockQueryService)
 	mockAuth := new(MockAuthService)
-	rtCfg := api_config.RealtimeConfig{EnableAuth: false}
+	rtCfg := api_config.RealtimeConfig{}
 	rtSrv := realtime.NewServer(mockQuery, mockStreamer, "data", mockAuth, rtCfg)
 	mgr.rtServer = rtSrv
 

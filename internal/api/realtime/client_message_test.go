@@ -170,7 +170,7 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 
@@ -200,7 +200,7 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 
@@ -407,7 +407,7 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 
 	qs := setupMockQuery()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{EnableAuth: false}, w, r)
+		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 

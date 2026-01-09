@@ -87,7 +87,7 @@ func (m *stubQuery) Push(ctx context.Context, tenant string, req storage.Replica
 }
 
 func TestServer_StartBackgroundTasks_WatchError(t *testing.T) {
-	srv := NewServer(&stubQuery{}, &mockStreamerError{}, "", nil, api_config.RealtimeConfig{EnableAuth: false})
+	srv := NewServer(&stubQuery{}, &mockStreamerError{}, "", nil, api_config.RealtimeConfig{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -100,7 +100,7 @@ func TestServer_StartBackgroundTasks_Broadcast(t *testing.T) {
 	stream := make(chan *streamer.EventDelivery, 1)
 	ms := &mockStreamerStream{stream: stream}
 	qs := &stubQuery{}
-	srv := NewServer(qs, ms, "", nil, api_config.RealtimeConfig{EnableAuth: false})
+	srv := NewServer(qs, ms, "", nil, api_config.RealtimeConfig{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -129,7 +129,7 @@ func (m *mockStreamerRecvError) Recv() (*streamer.EventDelivery, error) {
 func TestStartBackgroundTasks_RecvError(t *testing.T) {
 	ms := &mockStreamerRecvError{}
 	qs := &stubQuery{}
-	srv := NewServer(qs, ms, "", nil, api_config.RealtimeConfig{EnableAuth: false})
+	srv := NewServer(qs, ms, "", nil, api_config.RealtimeConfig{})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

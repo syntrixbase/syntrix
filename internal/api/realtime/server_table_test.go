@@ -43,7 +43,7 @@ func TestServer_HandleWS_TableDriven(t *testing.T) {
 	t.Parallel()
 	mockQS := new(MockQueryService)
 	mockStreamer := new(MockStreamerService)
-	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, api_config.RealtimeConfig{EnableAuth: true})
+	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, api_config.RealtimeConfig{})
 
 	// Start Hub
 	ctxHub, cancelHub := context.WithCancel(context.Background())
@@ -91,7 +91,7 @@ func TestServer_HandleSSE_TableDriven(t *testing.T) {
 	mockQS := new(MockQueryService)
 	mockStreamer := new(MockStreamerService)
 	server := NewServer(mockQS, mockStreamer, "docs", &mockAuthService{}, api_config.RealtimeConfig{
-		EnableAuth: true, AllowedOrigins: []string{"http://example.com"}})
+		AllowedOrigins: []string{"http://example.com"}})
 
 	// Setup Hub Stream
 	ms := new(MockStreamerStream)
