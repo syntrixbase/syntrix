@@ -6,30 +6,35 @@ This directory now splits designs into server-side and SDK-focused documents.
 
 ```mermaid
 graph TB
-    Gateway[Gateway]
-    MongoDB[(MongoDB Storage)]
-    NATS1[(NATS Jetstream)]
-    NATS2[(NATS Jetstream)]
     Client[Client SDK]
+    Gateway[API Gateway: HTTP, Websocket, SSE]
+    Streamer[Streamers, Stateful]
+    Indexer[A Group of Indexers, Sharded & Copies, Stateful, Presistant]
+    QueryServer[A Group of Query Servers, Stateless]
+    MongoDB[(MongoDB Storage)]
 
     Client --> |HTTP/SSE/Websocket|Gateway
 
-    Gateway ---> |Req over HTTP| QueryServer ---> |Get/Put| MongoDB
+    Gateway ---> |gRPC| QueryServer ---> |Get/Put| MongoDB
     QueryServer ---> |Query| Indexer
-    Indexer ---> |Subscribe| Puller
+    Indexer ---> |gRPC Streaming| Puller
 
-    Gateway <---> |Register/Unregister|Streamer
-    Streamer ---> |Pub| NATS1 --> |Sub| Gateway
-    Streamer ---> |Subscribe| Puller
+    Gateway ---> |Register/Unregister|Streamer
+    Streamer ---> |gRPC Streaming| Gateway
+    Streamer ---> |gRPC Streaming| Puller
 
-    Puller <---> |ChangeStream| MongoDB
+    Puller ---> |ChangeStream| MongoDB
 
-    TriggerEval --->|Subscribe| Puller
-    subgraph Trigger
-        TriggerEval ---> |Pub| NATS2 -->|Sub| TriggerWorker
-    end
 
+    TriggerEval --->|gRPC Streaming| Puller
+    TriggerEval ---> |Pub| NATS2 -->|Sub| TriggerWorker
     TriggerWorker --> External
+
+    subgraph Trigger
+        NATS2[(NATS Jetstream)]
+        TriggerEval[Sharded Trigger Evaluators]
+        TriggerWorker[A Group of Trigger Workers]
+    end
 
     subgraph External
       Webhook[Webhook Worker]
