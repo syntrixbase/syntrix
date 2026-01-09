@@ -30,7 +30,7 @@ go test ${PKGS} -covermode=atomic -coverprofile="$COVERPROFILE" > "$TMP_OUTPUT" 
 EXIT_CODE=$?
 set -e
 
-sed -i 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT"
+sed 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT" > "$TMP_OUTPUT.tmp" && mv "$TMP_OUTPUT.tmp" "$TMP_OUTPUT"
 
 echo
 echo "Package coverage summary:"
