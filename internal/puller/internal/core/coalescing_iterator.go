@@ -1,8 +1,8 @@
 package core
 
 import (
+	"github.com/syntrixbase/syntrix/internal/puller/buffer"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 )
 
 // CoalescingIterator wraps an iterator and coalesces events in batches.

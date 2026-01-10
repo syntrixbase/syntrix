@@ -9,9 +9,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/puller/buffer"
 	"github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/puller/internal/buffer"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/cursor"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/flowcontrol"
 	"github.com/syntrixbase/syntrix/internal/puller/internal/metrics"
