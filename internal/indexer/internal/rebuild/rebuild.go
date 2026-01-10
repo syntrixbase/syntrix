@@ -127,6 +127,10 @@ type StorageScanner interface {
 
 // EventReplayer provides event replay from buffer for catch-up.
 type EventReplayer interface {
+	// CurrentPosition returns the current buffer position.
+	// This must be called BEFORE the storage scan to record where replay should start.
+	CurrentPosition(ctx context.Context) (string, error)
+
 	// ReplayFrom replays events from the given progress marker.
 	// The callback is called for each event.
 	ReplayFrom(ctx context.Context, startKey string, callback func(evt *Event) error) error
@@ -306,9 +310,19 @@ func (o *Orchestrator) doRebuild(
 	replayer EventReplayer,
 ) error {
 	// Step 1: Record current buffer position (for event replay)
-	// This would be obtained from the replayer
-	// For now, we'll use empty string to replay from beginning
-	startKey := ""
+	// This MUST be done BEFORE the storage scan to ensure we don't miss
+	// any events that arrive during the scan.
+	var startKey string
+	if replayer != nil {
+		var err error
+		startKey, err = replayer.CurrentPosition(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get buffer position: %w", err)
+		}
+		o.logger.Info("recorded buffer position for replay",
+			"jobID", job.ID,
+			"startKey", startKey)
+	}
 
 	// Step 2: Scan storage with pagination
 	if scanner != nil {
@@ -317,7 +331,7 @@ func (o *Orchestrator) doRebuild(
 		}
 	}
 
-	// Step 3: Replay buffered events
+	// Step 3: Replay buffered events from the recorded position
 	if replayer != nil {
 		if err := o.replayEvents(ctx, job, idx, replayer, startKey); err != nil {
 			return fmt.Errorf("event replay failed: %w", err)
