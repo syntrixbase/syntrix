@@ -31,6 +31,7 @@ services:
   nats:
     image: nats:2.10-alpine
     container_name: syntrix_nats
+    restart: always
     ports:
       - "4222:4222"
       - "8222:8222"
