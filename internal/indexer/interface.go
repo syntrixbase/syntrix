@@ -21,6 +21,7 @@ package indexer
 import (
 	"context"
 
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
 )
 
@@ -74,6 +75,15 @@ const (
 	FilterLte = manager.FilterLte
 )
 
+// Direction represents sort direction.
+type Direction = encoding.Direction
+
+// Direction constants.
+const (
+	Asc  = encoding.Asc
+	Desc = encoding.Desc
+)
+
 // OrderField represents an ordering specification.
 type OrderField = manager.OrderField
 
@@ -83,7 +93,7 @@ type DocRef = manager.DocRef
 // Health represents the health status of the indexer.
 type Health struct {
 	Status      HealthStatus      // Overall status
-	ShardHealth map[string]string // Per-shard status (key: database|pattern|templateID)
+	IndexHealth map[string]string // Per-index status (key: database|pattern|templateID)
 	LastError   string            // Last error message if any
 }
 
@@ -99,7 +109,7 @@ const (
 // Stats represents index statistics.
 type Stats struct {
 	DatabaseCount int   // Number of databases
-	ShardCount    int   // Total number of shards
+	IndexCount    int   // Total number of indexes
 	TemplateCount int   // Number of loaded templates
 	DocumentCount int64 // Total indexed documents
 	LastEventTime int64 // Unix timestamp of last processed event
@@ -108,3 +118,18 @@ type Stats struct {
 
 // ChangeEvent is the change event type from Puller.
 type ChangeEvent = manager.ChangeEvent
+
+// Indexer errors - exported for use by Query Engine and other consumers.
+var (
+	// ErrNoMatchingIndex is returned when no index template matches the query.
+	ErrNoMatchingIndex = manager.ErrNoMatchingIndex
+
+	// ErrIndexNotReady is returned when the index exists but is not ready to serve queries.
+	ErrIndexNotReady = manager.ErrIndexNotReady
+
+	// ErrIndexRebuilding is returned when the index is currently being rebuilt.
+	ErrIndexRebuilding = manager.ErrIndexRebuilding
+
+	// ErrInvalidPlan is returned when the query plan is invalid.
+	ErrInvalidPlan = manager.ErrInvalidPlan
+)

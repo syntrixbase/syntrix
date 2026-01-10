@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/shard"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
@@ -22,9 +22,14 @@ func testLogger() *slog.Logger {
 }
 
 // mockKeyBuilder implements OrderKeyBuilder for testing.
-type mockKeyBuilder struct{}
+type mockKeyBuilder struct {
+	err error
+}
 
 func (m *mockKeyBuilder) BuildOrderKey(data map[string]any, tmpl *template.Template) ([]byte, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
 	// Simple key based on "id" field
 	if id, ok := data["id"].(string); ok {
 		return []byte(id), nil
@@ -144,7 +149,7 @@ func TestOrchestrator_StartRebuild(t *testing.T) {
 	cfg := Config{BatchSize: 10, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("users/*/chats", "test_template", "users/{uid}/chats")
+	s := index.New("users/*/chats", "test_template", "users/{uid}/chats")
 	tmpl := &template.Template{
 		Name:              "test_template",
 		CollectionPattern: "users/{uid}/chats",
@@ -173,8 +178,8 @@ func TestOrchestrator_StartRebuild(t *testing.T) {
 	assert.Equal(t, int64(3), progress.DocsTotal)
 	assert.Equal(t, int64(3), progress.DocsAdded)
 
-	// Shard should be healthy
-	assert.Equal(t, shard.StateHealthy, s.State())
+	// Index should be healthy
+	assert.Equal(t, index.StateHealthy, s.State())
 	assert.Equal(t, 3, s.Len())
 }
 
@@ -182,7 +187,7 @@ func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("users/*/chats", "test_template", "users/{uid}/chats")
+	s := index.New("users/*/chats", "test_template", "users/{uid}/chats")
 	tmpl := &template.Template{
 		Name:              "test_template",
 		CollectionPattern: "users/{uid}/chats",
@@ -199,7 +204,7 @@ func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
 	jobID1, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
 	require.NoError(t, err)
 
-	// Try to start another rebuild for same shard
+	// Try to start another rebuild for same index
 	_, err = o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already in progress")
@@ -216,7 +221,7 @@ func TestOrchestrator_CancelRebuild(t *testing.T) {
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("test", "id", "test")
+	s := index.New("test", "id", "test")
 	tmpl := &template.Template{Name: "test"}
 
 	// Scanner with many docs
@@ -249,8 +254,8 @@ func TestOrchestrator_ListJobs(t *testing.T) {
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s1 := shard.NewShard("a", "id", "a")
-	s2 := shard.NewShard("b", "id", "b")
+	s1 := index.New("a", "id", "a")
+	s2 := index.New("b", "id", "b")
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -287,7 +292,7 @@ func TestOrchestrator_CleanupCompletedJobs(t *testing.T) {
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("test", "id", "test")
+	s := index.New("test", "id", "test")
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -315,7 +320,7 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("test", "id", "test")
+	s := index.New("test", "id", "test")
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -350,7 +355,7 @@ func TestOrchestrator_ScannerError(t *testing.T) {
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("test", "id", "test")
+	s := index.New("test", "id", "test")
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -368,7 +373,7 @@ func TestOrchestrator_ScannerError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusFailed, progress.Status)
 	assert.Contains(t, progress.Error, "storage error")
-	assert.Equal(t, shard.StateFailed, s.State())
+	assert.Equal(t, index.StateFailed, s.State())
 }
 
 func TestOrchestrator_MaxConcurrent(t *testing.T) {
@@ -382,8 +387,8 @@ func TestOrchestrator_MaxConcurrent(t *testing.T) {
 	}
 	scanner := &mockStorageScanner{docs: docs}
 
-	s1 := shard.NewShard("a", "id", "a")
-	s2 := shard.NewShard("b", "id", "b")
+	s1 := index.New("a", "id", "a")
+	s2 := index.New("b", "id", "b")
 	tmpl := &template.Template{Name: "test"}
 
 	ctx := context.Background()
@@ -433,7 +438,7 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := shard.NewShard("test", "id", "test")
+	s := index.New("test", "id", "test")
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -479,7 +484,7 @@ func TestOrchestrator_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			s := shard.NewShard(string(rune('a'+idx)), "id", string(rune('a'+idx)))
+			s := index.New(string(rune('a'+idx)), "id", string(rune('a'+idx)))
 			_, err := o.StartRebuild(ctx, s, tmpl, "db", scanner, nil)
 			assert.NoError(t, err)
 		}(i)
@@ -496,4 +501,146 @@ func TestOrchestrator_ConcurrentAccess(t *testing.T) {
 	for _, j := range jobs {
 		assert.Equal(t, StatusCompleted, j.Status)
 	}
+}
+
+func TestOrchestrator_CancelRunningJob(t *testing.T) {
+	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 1}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	// Create a slow scanner with many docs
+	docs := make([]*types.StoredDoc, 1000)
+	for i := range docs {
+		docs[i] = &types.StoredDoc{Id: string(rune(i)), Data: map[string]any{"id": float64(i)}}
+	}
+	scanner := &mockStorageScanner{docs: docs}
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	require.NoError(t, err)
+
+	// Wait for it to start running
+	time.Sleep(50 * time.Millisecond)
+
+	// Cancel the running job
+	err = o.CancelRebuild(jobID)
+	require.NoError(t, err)
+
+	// Wait for cancellation to take effect
+	time.Sleep(100 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+	// Should be canceled or failed (due to context cancellation)
+	assert.True(t, progress.Status == StatusCanceled || progress.Status == StatusFailed)
+}
+
+func TestOrchestrator_CancelCompletedJob(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(100 * time.Millisecond)
+
+	// Try to cancel a completed job - should fail
+	err = o.CancelRebuild(jobID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not pending or running")
+}
+
+func TestOrchestrator_ReplayEventsError(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
+
+	// Create a replayer that returns an error
+	replayer := &mockEventReplayer{
+		err: errors.New("replay error"),
+	}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(200 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusFailed, progress.Status)
+	assert.Contains(t, progress.Error, "replay error")
+}
+
+func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
+
+	// Events from a different database should be ignored
+	replayer := &mockEventReplayer{
+		events: []*Event{
+			{DatabaseID: "other-db", DocID: "doc1", Data: map[string]any{"id": "a"}},
+		},
+	}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(200 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusCompleted, progress.Status)
+
+	// Should have 0 docs (event was from different database)
+	assert.Equal(t, 0, s.Len())
+}
+
+func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	// Use a key builder that fails
+	o := New(cfg, &mockKeyBuilder{err: errors.New("build key error")}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
+
+	replayer := &mockEventReplayer{
+		events: []*Event{
+			{DatabaseID: "testdb", DocID: "doc1", Data: map[string]any{"id": "a"}},
+		},
+	}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(200 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+	// Should complete (error is logged but not fatal)
+	assert.Equal(t, StatusCompleted, progress.Status)
+
+	// Doc should not be added due to key build error
+	assert.Equal(t, 0, s.Len())
 }

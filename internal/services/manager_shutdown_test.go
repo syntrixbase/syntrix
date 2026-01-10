@@ -3,11 +3,13 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
@@ -165,4 +167,16 @@ func TestManager_Shutdown_StreamerClientError(t *testing.T) {
 	mgr.Shutdown(context.Background())
 
 	assert.True(t, mockClient.closed)
+}
+
+func TestManager_Shutdown_IndexerService(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{RunIndexer: true})
+
+	// Use a real indexer service since LocalService has internal types
+	mockIndexer := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mgr.indexerService = mockIndexer
+
+	// Should not panic and should stop the indexer
+	mgr.Shutdown(context.Background())
 }

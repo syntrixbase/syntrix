@@ -50,6 +50,14 @@ func (m *MockStorageBackend) Query(ctx context.Context, database string, q model
 	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
 }
 
+func (m *MockStorageBackend) GetMany(ctx context.Context, database string, paths []string) ([]*storage.StoredDoc, error) {
+	args := m.Called(ctx, database, paths)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*storage.StoredDoc), args.Error(1)
+}
+
 func (m *MockStorageBackend) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
 	args := m.Called(ctx, database, collection, resumeToken, opts)
 	if args.Get(0) == nil {

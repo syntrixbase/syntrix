@@ -74,6 +74,13 @@ func (m *mockDocumentStore) Query(ctx context.Context, database string, q model.
 	args := m.Called(ctx, database, q)
 	return args.Get(0).([]*types.StoredDoc), args.Error(1)
 }
+func (m *mockDocumentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	args := m.Called(ctx, database, paths)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*types.StoredDoc), args.Error(1)
+}
 func (m *mockDocumentStore) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
 	args := m.Called(ctx, database, collection, resumeToken, opts)
 	return args.Get(0).(<-chan types.Event), args.Error(1)

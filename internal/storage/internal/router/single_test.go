@@ -30,6 +30,9 @@ func (f *fakeDocumentStore) Delete(ctx context.Context, database string, path st
 func (f *fakeDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
 	return nil, nil
 }
+func (f *fakeDocumentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	return nil, nil
+}
 func (f *fakeDocumentStore) Watch(ctx context.Context, database string, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
 	return nil, nil
 }

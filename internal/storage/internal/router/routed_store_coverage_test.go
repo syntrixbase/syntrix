@@ -85,6 +85,16 @@ func TestRoutedDocumentStore_Coverage(t *testing.T) {
 
 		assert.ErrorIs(t, err, errSelect)
 	})
+
+	t.Run("GetMany Select Error", func(t *testing.T) {
+		router := new(mockDocRouter)
+		router.On("Select", database, types.OpRead).Return(nil, errSelect)
+
+		rs := NewRoutedDocumentStore(router)
+		_, err := rs.GetMany(ctx, database, []string{"path1", "path2"})
+
+		assert.ErrorIs(t, err, errSelect)
+	})
 }
 
 func TestRoutedUserStore_Coverage(t *testing.T) {

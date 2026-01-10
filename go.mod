@@ -5,6 +5,8 @@ go 1.24.0
 require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/golang/protobuf v1.5.4
+	github.com/google/btree v1.1.3
 	github.com/google/cel-go v0.26.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/schema v1.4.1
@@ -35,7 +37,6 @@ require (
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/btree v1.1.3 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.0.12 // indirect
 	github.com/kr/pretty v0.3.1 // indirect

@@ -1,4 +1,4 @@
-package shard
+package index
 
 import (
 	"fmt"
@@ -8,8 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewShard(t *testing.T) {
-	s := NewShard("users/*/chats", "timestamp:desc", "users/{uid}/chats")
+func TestNew(t *testing.T) {
+	s := New("users/*/chats", "timestamp:desc", "users/{uid}/chats")
 
 	assert.Equal(t, "users/*/chats", s.Pattern)
 	assert.Equal(t, "timestamp:desc", s.TemplateID)
@@ -17,8 +17,8 @@ func TestNewShard(t *testing.T) {
 	assert.Equal(t, 0, s.Len())
 }
 
-func TestShard_Upsert(t *testing.T) {
-	s := NewShard("users/*/chats", "ts:desc", "users/{uid}/chats")
+func TestIndex_Upsert(t *testing.T) {
+	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	// Insert first document
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
@@ -35,8 +35,8 @@ func TestShard_Upsert(t *testing.T) {
 	assert.Equal(t, []byte{0x01, 0x00, 0x05}, s.Get("doc1"))
 }
 
-func TestShard_Delete(t *testing.T) {
-	s := NewShard("users/*/chats", "ts:desc", "users/{uid}/chats")
+func TestIndex_Delete(t *testing.T) {
+	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
 	s.Upsert("doc2", []byte{0x01, 0x00, 0x20})
@@ -57,8 +57,8 @@ func TestShard_Delete(t *testing.T) {
 	assert.Equal(t, 0, s.Len())
 }
 
-func TestShard_Search_Basic(t *testing.T) {
-	s := NewShard("users/*/chats", "ts:desc", "users/{uid}/chats")
+func TestIndex_Search_Basic(t *testing.T) {
+	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	// Insert documents with different OrderKeys
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
@@ -75,8 +75,8 @@ func TestShard_Search_Basic(t *testing.T) {
 	assert.Equal(t, "doc3", results[2].ID)
 }
 
-func TestShard_Search_Limit(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_Limit(t *testing.T) {
+	s := New("test", "id", "test")
 
 	for i := 0; i < 10; i++ {
 		s.Upsert(fmt.Sprintf("doc%d", i), []byte{byte(i)})
@@ -89,8 +89,8 @@ func TestShard_Search_Limit(t *testing.T) {
 	assert.Equal(t, "doc2", results[2].ID)
 }
 
-func TestShard_Search_LowerBound(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_LowerBound(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -108,8 +108,8 @@ func TestShard_Search_LowerBound(t *testing.T) {
 	assert.Equal(t, "d", results[1].ID)
 }
 
-func TestShard_Search_UpperBound(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_UpperBound(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -127,8 +127,8 @@ func TestShard_Search_UpperBound(t *testing.T) {
 	assert.Equal(t, "b", results[1].ID)
 }
 
-func TestShard_Search_Range(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_Range(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -147,8 +147,8 @@ func TestShard_Search_Range(t *testing.T) {
 	assert.Equal(t, "c", results[1].ID)
 }
 
-func TestShard_Search_StartAfter(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_StartAfter(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -166,8 +166,8 @@ func TestShard_Search_StartAfter(t *testing.T) {
 	assert.Equal(t, "d", results[1].ID)
 }
 
-func TestShard_Search_StartAfter_NotFound(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_StartAfter_NotFound(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -184,8 +184,8 @@ func TestShard_Search_StartAfter_NotFound(t *testing.T) {
 	assert.Equal(t, "c", results[1].ID)
 }
 
-func TestShard_Search_DefaultLimit(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_DefaultLimit(t *testing.T) {
+	s := New("test", "id", "test")
 
 	for i := 0; i < 2000; i++ {
 		key := make([]byte, 2)
@@ -199,8 +199,8 @@ func TestShard_Search_DefaultLimit(t *testing.T) {
 	assert.Len(t, results, 1000) // default limit
 }
 
-func TestShard_Clear(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Clear(t *testing.T) {
+	s := New("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -216,8 +216,8 @@ func TestShard_Clear(t *testing.T) {
 	assert.Equal(t, 1, s.Len())
 }
 
-func TestShard_ConcurrentAccess(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_ConcurrentAccess(t *testing.T) {
+	s := New("test", "id", "test")
 	done := make(chan bool)
 
 	// Writer goroutine
@@ -250,8 +250,8 @@ func TestShard_ConcurrentAccess(t *testing.T) {
 	<-done
 }
 
-func TestShard_OrderPreservation(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_OrderPreservation(t *testing.T) {
+	s := New("test", "id", "test")
 
 	// Insert documents in random order
 	keys := [][]byte{
@@ -277,8 +277,8 @@ func TestShard_OrderPreservation(t *testing.T) {
 	}
 }
 
-func TestShard_UpdateChangesOrder(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_UpdateChangesOrder(t *testing.T) {
+	s := New("test", "id", "test")
 
 	// Insert documents
 	s.Upsert("doc1", []byte{0x10})
@@ -299,8 +299,8 @@ func TestShard_UpdateChangesOrder(t *testing.T) {
 	assert.Equal(t, "doc1", results[2].ID)
 }
 
-func TestShard_Search_EmptyShard(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_Search_EmptyIndex(t *testing.T) {
+	s := New("test", "id", "test")
 
 	results := s.Search(SearchOptions{Limit: 100})
 	assert.Len(t, results, 0)
@@ -322,11 +322,11 @@ func TestState_String(t *testing.T) {
 	}
 }
 
-func TestShard_SameOrderKeyDifferentDocs(t *testing.T) {
+func TestIndex_SameOrderKeyDifferentDocs(t *testing.T) {
 	// When two documents have the same OrderKey, they should still be stored separately
 	// Note: In practice, OrderKey should include docID as tie-breaker to prevent this.
-	// But the shard itself should handle this gracefully by using (orderKey, id) as the key.
-	s := NewShard("test", "id", "test")
+	// But the index itself should handle this gracefully by using (orderKey, id) as the key.
+	s := New("test", "id", "test")
 
 	// Insert two docs with same OrderKey but different IDs
 	// The second insert will update doc1's position in the tree but they're different docs
@@ -344,8 +344,8 @@ func TestShard_SameOrderKeyDifferentDocs(t *testing.T) {
 	assert.Len(t, results, 2)
 }
 
-func TestShard_State(t *testing.T) {
-	s := NewShard("test", "id", "test")
+func TestIndex_State(t *testing.T) {
+	s := New("test", "id", "test")
 
 	// Default state is healthy (zero value)
 	assert.Equal(t, StateHealthy, s.State())

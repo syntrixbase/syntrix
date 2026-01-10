@@ -1,4 +1,4 @@
-// Package manager provides the index manager that routes events to shards
+// Package manager provides the index manager that routes events to indexes
 // and matches queries to templates.
 package manager
 
@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/shard"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
@@ -22,8 +22,8 @@ type ChangeEvent = events.StoreChangeEvent
 var (
 	ErrDatabaseNotFound   = errors.New("database not found")
 	ErrNoMatchingIndex    = errors.New("no matching index for query")
-	ErrShardNotFound      = errors.New("shard not found")
-	ErrShardRebuilding    = errors.New("shard is rebuilding")
+	ErrIndexNotFound      = errors.New("index not found")
+	ErrIndexRebuilding    = errors.New("index is rebuilding")
 	ErrIndexNotReady      = errors.New("index not ready")
 	ErrTemplateLoadFailed = errors.New("failed to load templates")
 	ErrInvalidPlan        = errors.New("invalid query plan")
@@ -68,17 +68,17 @@ type DocRef struct {
 	OrderKey []byte // Encoded sort key
 }
 
-// Manager manages index databases and shards.
+// Manager manages index databases and indexes.
 type Manager struct {
 	mu        sync.RWMutex
-	databases map[string]*shard.Database
+	databases map[string]*index.Database
 	templates []template.Template
 }
 
 // New creates a new index manager.
 func New() *Manager {
 	return &Manager{
-		databases: make(map[string]*shard.Database),
+		databases: make(map[string]*index.Database),
 	}
 }
 
@@ -114,7 +114,7 @@ func (m *Manager) Templates() []template.Template {
 }
 
 // GetDatabase returns a database by name, creating it if needed.
-func (m *Manager) GetDatabase(name string) *shard.Database {
+func (m *Manager) GetDatabase(name string) *index.Database {
 	m.mu.RLock()
 	if db, ok := m.databases[name]; ok {
 		m.mu.RUnlock()
@@ -127,12 +127,12 @@ func (m *Manager) GetDatabase(name string) *shard.Database {
 	if db, ok := m.databases[name]; ok {
 		return db
 	}
-	db := shard.NewDatabase(name)
+	db := index.NewDatabase(name)
 	m.databases[name] = db
 	return db
 }
 
-// DeleteDatabase removes a database and all its shards.
+// DeleteDatabase removes a database and all its indexes.
 func (m *Manager) DeleteDatabase(name string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -308,10 +308,10 @@ func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]Doc
 	// Get or create database
 	db := m.GetDatabase(database)
 
-	// Get shard
+	// Get index
 	pattern := tmpl.NormalizedPattern()
-	s := db.GetShard(pattern, tmpl.Identity())
-	if s == nil {
+	idx := db.GetIndex(pattern, tmpl.Identity())
+	if idx == nil {
 		return nil, ErrIndexNotReady
 	}
 
@@ -322,7 +322,7 @@ func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]Doc
 	}
 
 	// Execute search
-	results := s.Search(opts)
+	results := idx.Search(opts)
 
 	// Convert to DocRef
 	docRefs := make([]DocRef, len(results))
@@ -340,8 +340,8 @@ func (m *Manager) validatePlan(plan Plan) error {
 	return nil
 }
 
-func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (shard.SearchOptions, error) {
-	opts := shard.SearchOptions{
+func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (index.SearchOptions, error) {
+	opts := index.SearchOptions{
 		Limit: plan.Limit,
 	}
 	if opts.Limit <= 0 {
@@ -362,22 +362,22 @@ func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (shard.
 	return opts, nil
 }
 
-// GetShard returns a shard for the given database, pattern, and template.
-func (m *Manager) GetShard(database, pattern, templateID string) *shard.Shard {
+// GetIndex returns an index for the given database, pattern, and template.
+func (m *Manager) GetIndex(database, pattern, templateID string) *index.Index {
 	db := m.GetDatabase(database)
-	return db.GetShard(pattern, templateID)
+	return db.GetIndex(pattern, templateID)
 }
 
-// GetOrCreateShard returns or creates a shard.
-func (m *Manager) GetOrCreateShard(database, pattern, templateID, rawPattern string) *shard.Shard {
+// GetOrCreateIndex returns or creates an index.
+func (m *Manager) GetOrCreateIndex(database, pattern, templateID, rawPattern string) *index.Index {
 	db := m.GetDatabase(database)
-	return db.GetOrCreateShard(pattern, templateID, rawPattern)
+	return db.GetOrCreateIndex(pattern, templateID, rawPattern)
 }
 
 // Stats returns manager statistics.
 type Stats struct {
 	DatabaseCount int
-	ShardCount    int
+	IndexCount    int
 	TemplateCount int
 }
 
@@ -386,14 +386,14 @@ func (m *Manager) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	shardCount := 0
+	indexCount := 0
 	for _, db := range m.databases {
-		shardCount += db.ShardCount()
+		indexCount += db.IndexCount()
 	}
 
 	return Stats{
 		DatabaseCount: len(m.databases),
-		ShardCount:    shardCount,
+		IndexCount:    indexCount,
 		TemplateCount: len(m.templates),
 	}
 }

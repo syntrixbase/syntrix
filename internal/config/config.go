@@ -9,6 +9,7 @@ import (
 
 	api "github.com/syntrixbase/syntrix/internal/api/config"
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
+	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
 	puller "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	services "github.com/syntrixbase/syntrix/internal/services/config"
@@ -25,6 +26,7 @@ type Config struct {
 	Gateway    api.GatewayConfig         `yaml:"gateway"`
 	Trigger    trigger.Config            `yaml:"trigger"`
 	Puller     puller.Config             `yaml:"puller"`
+	Indexer    indexer.Config            `yaml:"indexer"`
 }
 
 type StorageConfig struct {
@@ -123,6 +125,7 @@ func LoadConfig() *Config {
 		Trigger:    trigger.DefaultConfig(),
 		Deployment: services.DefaultDeploymentConfig(),
 		Puller:     puller.DefaultConfig(),
+		Indexer:    indexer.DefaultConfig(),
 	}
 
 	// 2. Load config.yml
@@ -208,6 +211,7 @@ func (c *Config) resolvePaths() {
 	c.Identity.AuthZ.RulesFile = resolvePath(configDir, c.Identity.AuthZ.RulesFile)
 	c.Identity.AuthN.PrivateKeyFile = resolvePath(configDir, c.Identity.AuthN.PrivateKeyFile)
 	c.Trigger.RulesFile = resolvePath(configDir, c.Trigger.RulesFile)
+	c.Indexer.TemplatePath = resolvePath(configDir, c.Indexer.TemplatePath)
 }
 
 func resolvePath(base, path string) string {

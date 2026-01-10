@@ -95,6 +95,76 @@ func TestDocumentStore_Coverage_Extended(t *testing.T) {
 	})
 }
 
+func TestDocumentStore_GetMany_Coverage(t *testing.T) {
+	env := setupTestEnv(t)
+	store := NewDocumentStore(env.Client, env.DB, "docs", "sys", 0)
+	ctx := context.Background()
+	database := "default"
+
+	// Ensure indexes
+	if ds, ok := store.(interface{ EnsureIndexes(context.Context) error }); ok {
+		require.NoError(t, ds.EnsureIndexes(ctx))
+	}
+
+	t.Run("GetMany Empty Paths", func(t *testing.T) {
+		docs, err := store.GetMany(ctx, database, []string{})
+		require.NoError(t, err)
+		assert.Empty(t, docs)
+	})
+
+	t.Run("GetMany Non-Existent Documents", func(t *testing.T) {
+		docs, err := store.GetMany(ctx, database, []string{"nonexistent/doc1", "nonexistent/doc2"})
+		require.NoError(t, err)
+		assert.Len(t, docs, 2)
+		assert.Nil(t, docs[0])
+		assert.Nil(t, docs[1])
+	})
+
+	t.Run("GetMany Mixed Existing and Non-Existing", func(t *testing.T) {
+		// Create a doc
+		doc := types.NewStoredDoc(database, "getmany", "existing1", map[string]interface{}{"name": "test"})
+		require.NoError(t, store.Create(ctx, database, doc))
+
+		paths := []string{"getmany/existing1", "getmany/nonexistent"}
+		docs, err := store.GetMany(ctx, database, paths)
+		require.NoError(t, err)
+		assert.Len(t, docs, 2)
+		assert.NotNil(t, docs[0])
+		assert.Equal(t, "getmany/existing1", docs[0].Fullpath)
+		assert.Nil(t, docs[1])
+	})
+
+	t.Run("GetMany All Existing", func(t *testing.T) {
+		// Create docs
+		doc1 := types.NewStoredDoc(database, "getmany", "all1", map[string]interface{}{"name": "one"})
+		doc2 := types.NewStoredDoc(database, "getmany", "all2", map[string]interface{}{"name": "two"})
+		require.NoError(t, store.Create(ctx, database, doc1))
+		require.NoError(t, store.Create(ctx, database, doc2))
+
+		paths := []string{"getmany/all1", "getmany/all2"}
+		docs, err := store.GetMany(ctx, database, paths)
+		require.NoError(t, err)
+		assert.Len(t, docs, 2)
+		assert.NotNil(t, docs[0])
+		assert.NotNil(t, docs[1])
+		assert.Equal(t, "getmany/all1", docs[0].Fullpath)
+		assert.Equal(t, "getmany/all2", docs[1].Fullpath)
+	})
+
+	t.Run("GetMany Excludes Deleted Docs", func(t *testing.T) {
+		// Create and delete a doc
+		doc := types.NewStoredDoc(database, "getmany", "deleted1", map[string]interface{}{"name": "deleted"})
+		require.NoError(t, store.Create(ctx, database, doc))
+		require.NoError(t, store.Delete(ctx, database, "getmany/deleted1", nil))
+
+		paths := []string{"getmany/deleted1"}
+		docs, err := store.GetMany(ctx, database, paths)
+		require.NoError(t, err)
+		assert.Len(t, docs, 1)
+		assert.Nil(t, docs[0]) // Deleted doc should not be returned
+	})
+}
+
 func TestDocumentStore_Watch_Coverage(t *testing.T) {
 	env := setupTestEnv(t)
 	store := NewDocumentStore(env.Client, env.DB, "docs", "sys", 0)

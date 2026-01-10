@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -316,6 +318,9 @@ func (f *fakeDocumentStore) Delete(ctx context.Context, database, path string, p
 	return nil
 }
 func (f *fakeDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*storage.StoredDoc, error) {
+	return nil, nil
+}
+func (f *fakeDocumentStore) GetMany(ctx context.Context, database string, paths []string) ([]*storage.StoredDoc, error) {
 	return nil, nil
 }
 func (f *fakeDocumentStore) Watch(ctx context.Context, database, collection string, resumeToken interface{}, opts storage.WatchOptions) (<-chan storage.Event, error) {
@@ -980,4 +985,121 @@ func TestManager_initPullerGRPCServer(t *testing.T) {
 	mgr.initPullerGRPCServer()
 
 	assert.NotNil(t, mgr.pullerGRPC)
+}
+
+func TestManager_initIndexerService(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"default": "test_db"},
+		client:   &mongo.Client{},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Server.GRPCPort = 0
+	cfg.Indexer.TemplatePath = ""
+
+	mgr := NewManager(cfg, Options{
+		Mode:       ModeDistributed,
+		RunIndexer: true,
+		RunPuller:  true, // Indexer uses puller if available
+	})
+
+	// Create a minimal puller service (so the indexer can use it)
+	mgr.pullerService = &mockPullerService{}
+
+	err := mgr.initIndexerService(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.indexerService)
+}
+
+func TestManager_initIndexerGRPCServer(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Server.GRPCPort = 0
+	cfg.Indexer.TemplatePath = ""
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:       ModeDistributed,
+		RunIndexer: true,
+	})
+
+	// Create a real indexer service - simpler than mocking the internal interface
+	mgr.indexerService = indexer.NewService(indexer.Config{}, nil, slog.Default())
+
+	// Call initIndexerGRPCServer
+	mgr.initIndexerGRPCServer()
+	// Just verify it doesn't panic - gRPC registration happens on server.Default()
+}
+
+func TestManager_initStandalone_WithIndexer(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"default": "test_db"},
+		client:   &mongo.Client{},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Indexer.TemplatePath = ""
+	cfg.Puller.Buffer.Path = t.TempDir()
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	mgr := NewManager(cfg, Options{
+		Mode:       ModeStandalone,
+		RunAPI:     true,
+		RunPuller:  true,
+		RunIndexer: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.indexerService)
+}
+
+func TestManager_initDistributed_WithIndexer(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"default": "test_db"},
+		client:   &mongo.Client{},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Server.GRPCPort = 0
+	cfg.Indexer.TemplatePath = ""
+	cfg.Puller.Buffer.Path = t.TempDir()
+	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+
+	// Initialize the unified server first
+	server.InitDefault(cfg.Server, nil)
+
+	mgr := NewManager(cfg, Options{
+		Mode:       ModeDistributed,
+		RunPuller:  true,
+		RunIndexer: true,
+	})
+
+	err := mgr.initDistributed(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.indexerService)
 }

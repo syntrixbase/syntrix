@@ -229,7 +229,7 @@ func (s *service) ApplyEvent(ctx context.Context, evt *ChangeEvent) error {
 	return nil
 }
 
-// applyEventToTemplate applies an event to a specific template's shard.
+// applyEventToTemplate applies an event to a specific template's index.
 func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tmpl *template.Template) error {
 	doc := evt.FullDocument
 	if doc == nil {
@@ -239,13 +239,13 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 	// Skip deleted documents unless template includes them
 	if doc.Deleted && !tmpl.IncludeDeleted {
 		// Delete from index
-		shard := s.manager.GetOrCreateShard(
+		idx := s.manager.GetOrCreateIndex(
 			evt.DatabaseID,
 			tmpl.NormalizedPattern(),
 			tmpl.Identity(),
 			tmpl.CollectionPattern,
 		)
-		shard.Delete(doc.Id)
+		idx.Delete(doc.Id)
 		return nil
 	}
 
@@ -255,8 +255,8 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		return fmt.Errorf("failed to build order key: %w", err)
 	}
 
-	// Get or create shard
-	shard := s.manager.GetOrCreateShard(
+	// Get or create index
+	idx := s.manager.GetOrCreateIndex(
 		evt.DatabaseID,
 		tmpl.NormalizedPattern(),
 		tmpl.Identity(),
@@ -264,7 +264,7 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 	)
 
 	// Upsert document
-	shard.Upsert(doc.Id, orderKey)
+	idx.Upsert(doc.Id, orderKey)
 
 	return nil
 }
@@ -291,7 +291,7 @@ func (s *service) buildOrderKey(data map[string]any, tmpl *template.Template) ([
 	}
 
 	// Note: docID is already appended by encoding.Encode as tie-breaker
-	// We use empty string here since the shard stores ID separately
+	// We use empty string here since the index stores ID separately
 	return encoding.Encode(fields, "")
 }
 
@@ -318,11 +318,11 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 		status = HealthUnhealthy
 	}
 
-	// TODO: Check shard health, lag status, etc.
+	// TODO: Check index health, lag status, etc.
 
 	return Health{
 		Status:      status,
-		ShardHealth: make(map[string]string),
+		IndexHealth: make(map[string]string),
 	}, nil
 }
 
@@ -332,7 +332,7 @@ func (s *service) Stats(ctx context.Context) (Stats, error) {
 
 	return Stats{
 		DatabaseCount: mgrStats.DatabaseCount,
-		ShardCount:    mgrStats.ShardCount,
+		IndexCount:    mgrStats.IndexCount,
 		TemplateCount: mgrStats.TemplateCount,
 		EventsApplied: s.eventsApplied.Load(),
 		LastEventTime: s.lastEventTime.Load(),

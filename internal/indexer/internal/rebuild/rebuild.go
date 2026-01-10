@@ -1,4 +1,4 @@
-// Package rebuild provides rebuild orchestration for index shards.
+// Package rebuild provides rebuild orchestration for indexes.
 //
 // Rebuild is triggered when:
 //   - Gap is detected (progress marker too old for Puller buffer)
@@ -7,11 +7,11 @@
 //
 // Rebuild flow:
 //  1. Record current buffer position (startKey)
-//  2. Mark shard as "rebuilding" (queries fall back to storage)
-//  3. Clear existing shard data
+//  2. Mark index as "rebuilding" (queries fall back to storage)
+//  3. Clear existing index data
 //  4. Scan storage with pagination (throttled)
 //  5. Replay buffered events from startKey
-//  6. Mark shard as "healthy"
+//  6. Mark index as "healthy"
 package rebuild
 
 import (
@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/shard"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
@@ -61,7 +61,7 @@ const (
 	StatusCanceled  Status = "canceled"
 )
 
-// Job represents a single rebuild job for a shard.
+// Job represents a single rebuild job for an index.
 type Job struct {
 	ID         string // Unique job ID
 	Database   string // Database name
@@ -179,11 +179,11 @@ func New(cfg Config, keyBuilder OrderKeyBuilder, logger *slog.Logger) *Orchestra
 	}
 }
 
-// StartRebuild initiates a rebuild job for a shard.
+// StartRebuild initiates a rebuild job for an index.
 // Returns the job ID for tracking.
 func (o *Orchestrator) StartRebuild(
 	ctx context.Context,
-	s *shard.Shard,
+	idx *index.Index,
 	tmpl *template.Template,
 	database string,
 	scanner StorageScanner,
@@ -193,13 +193,13 @@ func (o *Orchestrator) StartRebuild(
 	defer o.mu.Unlock()
 
 	// Generate job ID
-	jobID := fmt.Sprintf("%s|%s|%s|%d", database, s.Pattern, s.TemplateID, time.Now().UnixNano())
+	jobID := fmt.Sprintf("%s|%s|%s|%d", database, idx.Pattern, idx.TemplateID, time.Now().UnixNano())
 
 	// Check if already rebuilding
 	for _, job := range o.jobs {
-		if job.Database == database && job.Pattern == s.Pattern && job.TemplateID == s.TemplateID {
+		if job.Database == database && job.Pattern == idx.Pattern && job.TemplateID == idx.TemplateID {
 			if job.Status == StatusPending || job.Status == StatusRunning {
-				return "", fmt.Errorf("rebuild already in progress for shard %s|%s", s.Pattern, s.TemplateID)
+				return "", fmt.Errorf("rebuild already in progress for index %s|%s", idx.Pattern, idx.TemplateID)
 			}
 		}
 	}
@@ -207,8 +207,8 @@ func (o *Orchestrator) StartRebuild(
 	job := &Job{
 		ID:         jobID,
 		Database:   database,
-		Pattern:    s.Pattern,
-		TemplateID: s.TemplateID,
+		Pattern:    idx.Pattern,
+		TemplateID: idx.TemplateID,
 		Template:   tmpl,
 		Status:     StatusPending,
 	}
@@ -217,13 +217,13 @@ func (o *Orchestrator) StartRebuild(
 	// Check if we can start immediately
 	if o.running < o.cfg.MaxConcurrent {
 		o.running++
-		go o.runJob(ctx, job, s, scanner, replayer)
+		go o.runJob(ctx, job, idx, scanner, replayer)
 	} else {
 		o.pending = append(o.pending, job)
 		o.logger.Info("rebuild job queued",
 			"jobID", jobID,
 			"database", database,
-			"pattern", s.Pattern)
+			"pattern", idx.Pattern)
 	}
 
 	return jobID, nil
@@ -233,7 +233,7 @@ func (o *Orchestrator) StartRebuild(
 func (o *Orchestrator) runJob(
 	ctx context.Context,
 	job *Job,
-	s *shard.Shard,
+	idx *index.Index,
 	scanner StorageScanner,
 	replayer EventReplayer,
 ) {
@@ -249,14 +249,14 @@ func (o *Orchestrator) runJob(
 		"database", job.Database,
 		"pattern", job.Pattern)
 
-	// Mark shard as rebuilding
-	s.SetState(shard.StateRebuilding)
+	// Mark index as rebuilding
+	idx.SetState(index.StateRebuilding)
 
 	// Clear existing data
-	s.Clear()
+	idx.Clear()
 
 	// Run the rebuild
-	err := o.doRebuild(jobCtx, job, s, scanner, replayer)
+	err := o.doRebuild(jobCtx, job, idx, scanner, replayer)
 
 	// Update job status
 	job.mu.Lock()
@@ -267,14 +267,14 @@ func (o *Orchestrator) runJob(
 		} else {
 			job.Status = StatusFailed
 			job.Error = err.Error()
-			s.SetState(shard.StateFailed)
+			idx.SetState(index.StateFailed)
 		}
 		o.logger.Error("rebuild job failed",
 			"jobID", job.ID,
 			"error", err)
 	} else {
 		job.Status = StatusCompleted
-		s.SetState(shard.StateHealthy)
+		idx.SetState(index.StateHealthy)
 		o.logger.Info("rebuild job completed",
 			"jobID", job.ID,
 			"duration", job.EndTime.Sub(job.StartTime),
@@ -289,8 +289,8 @@ func (o *Orchestrator) runJob(
 		next := o.pending[0]
 		o.pending = o.pending[1:]
 		o.running++
-		// Note: We need to get the shard for the pending job
-		// This is simplified - in production, pending jobs would store shard reference
+		// Note: We need to get the index for the pending job
+		// This is simplified - in production, pending jobs would store index reference
 		o.logger.Info("starting queued rebuild job",
 			"jobID", next.ID)
 	}
@@ -301,7 +301,7 @@ func (o *Orchestrator) runJob(
 func (o *Orchestrator) doRebuild(
 	ctx context.Context,
 	job *Job,
-	s *shard.Shard,
+	idx *index.Index,
 	scanner StorageScanner,
 	replayer EventReplayer,
 ) error {
@@ -312,14 +312,14 @@ func (o *Orchestrator) doRebuild(
 
 	// Step 2: Scan storage with pagination
 	if scanner != nil {
-		if err := o.scanStorage(ctx, job, s, scanner); err != nil {
+		if err := o.scanStorage(ctx, job, idx, scanner); err != nil {
 			return fmt.Errorf("storage scan failed: %w", err)
 		}
 	}
 
 	// Step 3: Replay buffered events
 	if replayer != nil {
-		if err := o.replayEvents(ctx, job, s, replayer, startKey); err != nil {
+		if err := o.replayEvents(ctx, job, idx, replayer, startKey); err != nil {
 			return fmt.Errorf("event replay failed: %w", err)
 		}
 	}
@@ -327,11 +327,11 @@ func (o *Orchestrator) doRebuild(
 	return nil
 }
 
-// scanStorage scans the storage and adds documents to the shard.
+// scanStorage scans the storage and adds documents to the index.
 func (o *Orchestrator) scanStorage(
 	ctx context.Context,
 	job *Job,
-	s *shard.Shard,
+	idx *index.Index,
 	scanner StorageScanner,
 ) error {
 	var startAfter string
@@ -347,7 +347,7 @@ func (o *Orchestrator) scanStorage(
 		default:
 		}
 
-		iter, err := scanner.ScanCollection(ctx, job.Database, s.RawPattern, o.cfg.BatchSize, startAfter)
+		iter, err := scanner.ScanCollection(ctx, job.Database, idx.RawPattern, o.cfg.BatchSize, startAfter)
 		if err != nil {
 			return err
 		}
@@ -374,8 +374,8 @@ func (o *Orchestrator) scanStorage(
 				continue
 			}
 
-			// Add to shard
-			s.Upsert(doc.Id, orderKey)
+			// Add to index
+			idx.Upsert(doc.Id, orderKey)
 
 			job.mu.Lock()
 			job.DocsAdded++
@@ -421,7 +421,7 @@ func (o *Orchestrator) scanStorage(
 func (o *Orchestrator) replayEvents(
 	ctx context.Context,
 	job *Job,
-	s *shard.Shard,
+	idx *index.Index,
 	replayer EventReplayer,
 	startKey string,
 ) error {
@@ -434,14 +434,14 @@ func (o *Orchestrator) replayEvents(
 		default:
 		}
 
-		// Check if this event matches our shard's collection pattern
+		// Check if this event matches our index's collection pattern
 		// This is simplified - in production, we'd check pattern matching
 		if evt.DatabaseID != job.Database {
 			return nil
 		}
 
 		if evt.Deleted {
-			s.Delete(evt.DocID)
+			idx.Delete(evt.DocID)
 		} else {
 			orderKey, err := o.keyBuilder.BuildOrderKey(evt.Data, job.Template)
 			if err != nil {
@@ -450,7 +450,7 @@ func (o *Orchestrator) replayEvents(
 					"error", err)
 				return nil
 			}
-			s.Upsert(evt.DocID, orderKey)
+			idx.Upsert(evt.DocID, orderKey)
 		}
 
 		eventsReplayed++

@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/shard"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 )
 
@@ -258,8 +258,8 @@ func TestManager_Search(t *testing.T) {
 	m := New()
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
-	// Create shard and add data
-	s := m.GetOrCreateShard("mydb", "users/*/chats", "chats_by_timestamp", "users/{uid}/chats")
+	// Create index and add data
+	s := m.GetOrCreateIndex("mydb", "users/*/chats", "chats_by_timestamp", "users/{uid}/chats")
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
 	s.Upsert("doc2", []byte{0x01, 0x00, 0x20})
 	s.Upsert("doc3", []byte{0x01, 0x00, 0x30})
@@ -310,7 +310,7 @@ func TestManager_Search(t *testing.T) {
 			OrderBy:    []OrderField{{Field: "timestamp", Direction: encoding.Desc}},
 			Limit:      10,
 		}
-		// Search in a database where shard doesn't exist
+		// Search in a database where index doesn't exist
 		_, err := m.Search(context.Background(), "otherdb", plan)
 		assert.ErrorIs(t, err, ErrIndexNotReady)
 	})
@@ -346,19 +346,19 @@ func TestManager_Search(t *testing.T) {
 	})
 }
 
-func TestManager_GetShard(t *testing.T) {
+func TestManager_GetIndex(t *testing.T) {
 	m := New()
 
-	// Shard doesn't exist
-	s := m.GetShard("mydb", "users/*/chats", "ts:desc")
+	// Index doesn't exist
+	s := m.GetIndex("mydb", "users/*/chats", "ts:desc")
 	assert.Nil(t, s)
 
-	// Create shard
-	created := m.GetOrCreateShard("mydb", "users/*/chats", "ts:desc", "users/{uid}/chats")
+	// Create index
+	created := m.GetOrCreateIndex("mydb", "users/*/chats", "ts:desc", "users/{uid}/chats")
 	assert.NotNil(t, created)
 
 	// Now it exists
-	found := m.GetShard("mydb", "users/*/chats", "ts:desc")
+	found := m.GetIndex("mydb", "users/*/chats", "ts:desc")
 	assert.Same(t, created, found)
 }
 
@@ -367,17 +367,17 @@ func TestManager_Stats(t *testing.T) {
 
 	stats := m.Stats()
 	assert.Equal(t, 0, stats.DatabaseCount)
-	assert.Equal(t, 0, stats.ShardCount)
+	assert.Equal(t, 0, stats.IndexCount)
 	assert.Equal(t, 0, stats.TemplateCount)
 
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
-	m.GetOrCreateShard("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	m.GetOrCreateShard("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
-	m.GetOrCreateShard("db2", "users/*/chats", "ts:desc", "users/{uid}/chats")
+	m.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
+	m.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+	m.GetOrCreateIndex("db2", "users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	stats = m.Stats()
 	assert.Equal(t, 2, stats.DatabaseCount)
-	assert.Equal(t, 3, stats.ShardCount)
+	assert.Equal(t, 3, stats.IndexCount)
 	assert.Equal(t, 4, stats.TemplateCount)
 }
 
@@ -519,9 +519,9 @@ templates:
 `
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
 
-	// Create shard and add data
-	shard := m.GetOrCreateShard("mydb", "test/docs", "test", "test/docs")
-	shard.Upsert("doc1", []byte{0x01, 0x02, 0x03})
+	// Create index and add data
+	index := m.GetOrCreateIndex("mydb", "test/docs", "test", "test/docs")
+	index.Upsert("doc1", []byte{0x01, 0x02, 0x03})
 
 	t.Run("invalid base64 cursor", func(t *testing.T) {
 		plan := Plan{
@@ -552,7 +552,7 @@ func TestManager_GetDatabase_Concurrent(t *testing.T) {
 	// Run many goroutines concurrently trying to get/create the same database
 	// This should trigger the double-check path
 	const numGoroutines = 100
-	done := make(chan *shard.Database, numGoroutines)
+	done := make(chan *index.Database, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
 		go func() {
@@ -561,7 +561,7 @@ func TestManager_GetDatabase_Concurrent(t *testing.T) {
 	}
 
 	// Collect all results
-	var dbs []*shard.Database
+	var dbs []*index.Database
 	for i := 0; i < numGoroutines; i++ {
 		dbs = append(dbs, <-done)
 	}

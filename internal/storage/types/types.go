@@ -84,6 +84,11 @@ type DocumentStore interface {
 	// Get retrieves a document by its path
 	Get(ctx context.Context, database string, path string) (*StoredDoc, error)
 
+	// GetMany retrieves multiple documents by their paths within a collection.
+	// Returns documents in the same order as the provided paths.
+	// Documents that are not found are returned as nil in the result slice.
+	GetMany(ctx context.Context, database string, paths []string) ([]*StoredDoc, error)
+
 	// Create inserts a new document. Fails if it already exists.
 	Create(ctx context.Context, database string, doc StoredDoc) error
 

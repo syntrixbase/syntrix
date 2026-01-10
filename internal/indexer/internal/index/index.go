@@ -1,5 +1,5 @@
-// Package shard provides the in-memory index shard implementation.
-package shard
+// Package index provides the in-memory index implementation.
+package index
 
 import (
 	"bytes"
@@ -20,15 +20,15 @@ type btreeItem struct {
 	id       string
 }
 
-// Shard represents an index shard for a specific (pattern, templateID) pair.
+// Index represents an index for a specific (pattern, templateID) pair.
 // It maintains a btree for ordered iteration and a ByID map for O(1) lookups.
-type Shard struct {
+type Index struct {
 	Pattern    string // Normalized pattern (e.g., "users/*/chats")
 	TemplateID string // Template identity (name or fields signature)
 	RawPattern string // Original pattern (e.g., "users/{uid}/chats")
 
 	mu    sync.RWMutex
-	state State // Current shard state
+	state State // Current index state
 	tree  *btree.BTreeG[btreeItem]
 	byID  map[string][]byte // docID -> OrderKey
 }
@@ -44,9 +44,9 @@ func lessFunc(a, b btreeItem) bool {
 	return a.id < b.id
 }
 
-// NewShard creates a new index shard.
-func NewShard(pattern, templateID, rawPattern string) *Shard {
-	return &Shard{
+// New creates a new index.
+func New(pattern, templateID, rawPattern string) *Index {
+	return &Index{
 		Pattern:    pattern,
 		TemplateID: templateID,
 		RawPattern: rawPattern,
@@ -55,30 +55,30 @@ func NewShard(pattern, templateID, rawPattern string) *Shard {
 	}
 }
 
-// Upsert inserts or updates a document in the shard.
+// Upsert inserts or updates a document in the index.
 // If the document already exists, it removes the old entry first.
-func (s *Shard) Upsert(id string, orderKey []byte) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+func (idx *Index) Upsert(id string, orderKey []byte) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 
 	// Remove existing entry if present
-	if oldKey, ok := s.byID[id]; ok {
-		s.tree.Delete(btreeItem{orderKey: oldKey, id: id})
+	if oldKey, ok := idx.byID[id]; ok {
+		idx.tree.Delete(btreeItem{orderKey: oldKey, id: id})
 	}
 
 	// Insert new entry
-	s.tree.ReplaceOrInsert(btreeItem{orderKey: orderKey, id: id})
-	s.byID[id] = orderKey
+	idx.tree.ReplaceOrInsert(btreeItem{orderKey: orderKey, id: id})
+	idx.byID[id] = orderKey
 }
 
-// Delete removes a document from the shard.
-func (s *Shard) Delete(id string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// Delete removes a document from the index.
+func (idx *Index) Delete(id string) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
 
-	if oldKey, ok := s.byID[id]; ok {
-		s.tree.Delete(btreeItem{orderKey: oldKey, id: id})
-		delete(s.byID, id)
+	if oldKey, ok := idx.byID[id]; ok {
+		idx.tree.Delete(btreeItem{orderKey: oldKey, id: id})
+		delete(idx.byID, id)
 	}
 }
 
@@ -92,9 +92,9 @@ type SearchOptions struct {
 
 // Search returns documents within the specified bounds.
 // Results are returned in OrderKey order.
-func (s *Shard) Search(opts SearchOptions) []DocRef {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+func (idx *Index) Search(opts SearchOptions) []DocRef {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
 
 	var results []DocRef
 	limit := opts.Limit
@@ -113,7 +113,7 @@ func (s *Shard) Search(opts SearchOptions) []DocRef {
 	// Create iterator starting point
 	startItem := btreeItem{orderKey: startKey}
 
-	s.tree.AscendGreaterOrEqual(startItem, func(item btreeItem) bool {
+	idx.tree.AscendGreaterOrEqual(startItem, func(item btreeItem) bool {
 		// Skip the startAfter cursor itself (exclusive)
 		if isStartAfter && bytes.Equal(item.orderKey, opts.StartAfter) {
 			return true // continue
@@ -137,34 +137,34 @@ func (s *Shard) Search(opts SearchOptions) []DocRef {
 
 // Get returns the OrderKey for a document by ID.
 // Returns nil if the document is not indexed.
-func (s *Shard) Get(id string) []byte {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.byID[id]
+func (idx *Index) Get(id string) []byte {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.byID[id]
 }
 
-// Len returns the number of documents in the shard.
-func (s *Shard) Len() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return len(s.byID)
+// Len returns the number of documents in the index.
+func (idx *Index) Len() int {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return len(idx.byID)
 }
 
-// Clear removes all documents from the shard.
-func (s *Shard) Clear() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.tree.Clear(false)
-	s.byID = make(map[string][]byte)
+// Clear removes all documents from the index.
+func (idx *Index) Clear() {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.tree.Clear(false)
+	idx.byID = make(map[string][]byte)
 }
 
-// State represents the current state of a shard.
+// State represents the current state of an index.
 type State int
 
 const (
-	StateHealthy    State = iota // Shard is up-to-date and serving queries
-	StateRebuilding              // Shard is being rebuilt, queries fall back
-	StateFailed                  // Shard failed, needs manual intervention
+	StateHealthy    State = iota // Index is up-to-date and serving queries
+	StateRebuilding              // Index is being rebuilt, queries fall back
+	StateFailed                  // Index failed, needs manual intervention
 )
 
 // String returns the state name.
@@ -181,21 +181,21 @@ func (s State) String() string {
 	}
 }
 
-// State returns the current state of the shard.
-func (s *Shard) State() State {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.state
+// State returns the current state of the index.
+func (idx *Index) State() State {
+	idx.mu.RLock()
+	defer idx.mu.RUnlock()
+	return idx.state
 }
 
-// SetState sets the state of the shard.
-func (s *Shard) SetState(state State) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.state = state
+// SetState sets the state of the index.
+func (idx *Index) SetState(state State) {
+	idx.mu.Lock()
+	defer idx.mu.Unlock()
+	idx.state = state
 }
 
-// IsHealthy returns true if the shard is in healthy state.
-func (s *Shard) IsHealthy() bool {
-	return s.State() == StateHealthy
+// IsHealthy returns true if the index is in healthy state.
+func (idx *Index) IsHealthy() bool {
+	return idx.State() == StateHealthy
 }

@@ -70,4 +70,12 @@ func (m *Manager) Shutdown(ctx context.Context) {
 			slog.Error("Error stopping Change Stream Puller", "error", err)
 		}
 	}
+
+	// Stop Indexer Service
+	if m.indexerService != nil {
+		slog.Info("Stopping Indexer Service...")
+		if err := m.indexerService.Stop(ctx); err != nil {
+			slog.Error("Error stopping Indexer Service", "error", err)
+		}
+	}
 }

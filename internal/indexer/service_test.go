@@ -265,7 +265,7 @@ templates:
 		stats, err := svc.Stats(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), stats.EventsApplied)
-		assert.Equal(t, 1, stats.ShardCount)
+		assert.Equal(t, 1, stats.IndexCount)
 	})
 
 	t.Run("deleted document without includeDeleted", func(t *testing.T) {
@@ -304,9 +304,9 @@ templates:
 		require.NoError(t, err)
 
 		// Verify indexed
-		shard := s.manager.GetShard("testdb", "users/*/chats", "chats_by_timestamp")
-		require.NotNil(t, shard)
-		assert.Equal(t, 1, shard.Len())
+		index := s.manager.GetIndex("testdb", "users/*/chats", "chats_by_timestamp")
+		require.NotNil(t, index)
+		assert.Equal(t, 1, index.Len())
 
 		// Now mark as deleted
 		evt2 := &ChangeEvent{
@@ -325,7 +325,7 @@ templates:
 		require.NoError(t, err)
 
 		// Verify deleted from index
-		assert.Equal(t, 0, shard.Len())
+		assert.Equal(t, 0, index.Len())
 	})
 
 	t.Run("deleted document with includeDeleted", func(t *testing.T) {
@@ -364,9 +364,9 @@ templates:
 		require.NoError(t, err)
 
 		// Verify still in index (includeDeleted = true)
-		shard := s.manager.GetShard("testdb", "users/*/chats", "chats_by_timestamp")
-		require.NotNil(t, shard)
-		assert.Equal(t, 1, shard.Len())
+		index := s.manager.GetIndex("testdb", "users/*/chats", "chats_by_timestamp")
+		require.NotNil(t, index)
+		assert.Equal(t, 1, index.Len())
 	})
 }
 
@@ -436,7 +436,7 @@ templates:
 				{Field: "timestamp", Direction: 1},
 			},
 		})
-		// Returns ErrIndexNotReady since shard doesn't exist
+		// Returns ErrIndexNotReady since index doesn't exist
 		assert.Error(t, err)
 		assert.Nil(t, results)
 	})
@@ -484,7 +484,7 @@ templates:
 	stats, err := svc.Stats(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 0, stats.DatabaseCount)
-	assert.Equal(t, 0, stats.ShardCount)
+	assert.Equal(t, 0, stats.IndexCount)
 	assert.Equal(t, 1, stats.TemplateCount)
 	assert.Equal(t, int64(0), stats.EventsApplied)
 
@@ -506,7 +506,7 @@ templates:
 	stats, err = svc.Stats(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, 1, stats.DatabaseCount)
-	assert.Equal(t, 1, stats.ShardCount)
+	assert.Equal(t, 1, stats.IndexCount)
 	assert.Equal(t, int64(1), stats.EventsApplied)
 	assert.Greater(t, stats.LastEventTime, int64(0))
 }
@@ -790,9 +790,9 @@ templates:
 		require.NoError(t, err)
 
 		// But the document should not be indexed
-		shard := s.manager.GetShard("testdb", "users/*/docs", "test_template")
-		if shard != nil {
-			assert.Equal(t, 0, shard.Len())
+		index := s.manager.GetIndex("testdb", "users/*/docs", "test_template")
+		if index != nil {
+			assert.Equal(t, 0, index.Len())
 		}
 	})
 }
