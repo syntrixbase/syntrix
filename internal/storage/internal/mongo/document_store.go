@@ -65,6 +65,43 @@ func (m *documentStore) Get(ctx context.Context, database string, fullpath strin
 	return &doc, nil
 }
 
+func (m *documentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	if len(paths) == 0 {
+		return []*types.StoredDoc{}, nil
+	}
+	ids := make([]string, len(paths))
+	for i, path := range paths {
+		ids[i] = types.CalculateDatabaseID(database, path)
+	}
+	collection := m.getCollection(paths[0])
+	filter := bson.M{
+		"_id":         bson.M{"$in": ids},
+		"database_id": database,
+		"deleted":     bson.M{"$ne": true},
+	}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	docMap := make(map[string]*types.StoredDoc)
+	for cursor.Next(ctx) {
+		var doc types.StoredDoc
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		docMap[doc.Id] = &doc
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	result := make([]*types.StoredDoc, len(paths))
+	for i, id := range ids {
+		result[i] = docMap[id]
+	}
+	return result, nil
+}
+
 func (m *documentStore) Create(ctx context.Context, database string, doc types.StoredDoc) error {
 	collection := m.getCollection(doc.Collection)
 

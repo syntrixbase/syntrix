@@ -102,4 +102,12 @@ func (m *Manager) Start(bgCtx context.Context) {
 			m.pullerGRPC.Init()
 		}
 	}
+
+	// Start Indexer Service
+	if m.opts.RunIndexer && m.indexerService != nil {
+		slog.Info("Starting Indexer Service...")
+		if err := m.indexerService.Start(bgCtx); err != nil {
+			slog.Error("Failed to start Indexer Service", "error", err)
+		}
+	}
 }

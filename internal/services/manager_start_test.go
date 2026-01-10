@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"net/http"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
@@ -487,4 +489,23 @@ func TestManager_Start_RealtimeRetry(t *testing.T) {
 	// 200ms: Context done.
 	// Expect at least 2 calls.
 	assert.GreaterOrEqual(t, len(mockStreamer.Calls), 2, "Should attempt retry at least once")
+}
+
+func TestManager_Start_IndexerService(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{RunIndexer: true})
+
+	// Use a real indexer service instead of a stub since LocalService has internal types
+	mockIndexer := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mgr.indexerService = mockIndexer
+
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.Start(bgCtx)
+
+	// Wait for Start to be called
+	time.Sleep(100 * time.Millisecond)
+
+	// Just verify it doesn't panic - the indexer was started
 }

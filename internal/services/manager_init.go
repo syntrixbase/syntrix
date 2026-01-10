@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
@@ -12,6 +13,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -58,6 +60,13 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		}
 	}
 
+	// Initialize Indexer service (local only, no gRPC)
+	if m.opts.RunIndexer {
+		if err := m.initIndexerService(ctx); err != nil {
+			return err
+		}
+	}
+
 	// Create Streamer service for local access
 	streamerSvc, err := m.createStreamerService()
 	if err != nil {
@@ -99,6 +108,14 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 			return err
 		}
 		m.initPullerGRPCServer()
+	}
+
+	// Initialize Indexer service and register gRPC server
+	if m.opts.RunIndexer {
+		if err := m.initIndexerService(ctx); err != nil {
+			return err
+		}
+		m.initIndexerGRPCServer()
 	}
 
 	// Initialize local Query service and register gRPC server
@@ -402,4 +419,34 @@ func (m *Manager) initPullerGRPCServer() {
 	m.pullerGRPC = grpcServer
 	server.Default().RegisterGRPCService(&pullerv1.PullerService_ServiceDesc, grpcServer)
 	slog.Info("Registered Puller Service (gRPC)")
+}
+
+// initIndexerService creates the Indexer service.
+func (m *Manager) initIndexerService(ctx context.Context) error {
+	slog.Info("Initializing Indexer Service...")
+
+	// Create Indexer config from app config
+	cfg := indexer.Config{
+		TemplatePath: m.cfg.Indexer.TemplatePath,
+		ProgressPath: m.cfg.Indexer.ProgressPath,
+		ConsumerID:   m.cfg.Indexer.ConsumerID,
+	}
+
+	// Use local Puller service if available
+	var pullerSvc puller.Service
+	if m.pullerService != nil {
+		pullerSvc = m.pullerService
+	}
+
+	m.indexerService = indexer.NewService(cfg, pullerSvc, slog.Default())
+	slog.Info("Initialized Indexer Service")
+
+	return nil
+}
+
+// initIndexerGRPCServer registers the Indexer service with the unified gRPC server.
+func (m *Manager) initIndexerGRPCServer() {
+	grpcServer := indexer.NewGRPCServer(m.indexerService)
+	server.Default().RegisterGRPCService(&indexerv1.IndexerService_ServiceDesc, grpcServer)
+	slog.Info("Registered Indexer Service (gRPC)")
 }

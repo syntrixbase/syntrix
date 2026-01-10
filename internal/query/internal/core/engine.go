@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -13,6 +14,7 @@ import (
 // Engine handles all business logic and coordinates with the storage backend.
 type Engine struct {
 	storage storage.DocumentStore
+	indexer indexer.Service
 }
 
 // New creates a new Query Engine instance.
@@ -20,6 +22,12 @@ func New(storage storage.DocumentStore) *Engine {
 	return &Engine{
 		storage: storage,
 	}
+}
+
+// WithIndexer sets the indexer service for accelerated queries.
+func (e *Engine) WithIndexer(idx indexer.Service) *Engine {
+	e.indexer = idx
+	return e
 }
 
 // GetDocument retrieves a document by path.
@@ -132,7 +140,18 @@ func (e *Engine) DeleteDocument(ctx context.Context, database string, path strin
 }
 
 // ExecuteQuery executes a structured query.
+// If an indexer is configured, it attempts to use the index for ordering/filtering.
 func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	// Try indexer if available
+	if e.indexer != nil {
+		docs, err := e.executeWithIndexer(ctx, database, q)
+		if err == nil {
+			return docs, nil
+		}
+		// Fallback to storage on indexer error (e.g., no matching index)
+	}
+
+	// Fallback to storage query
 	storedDocs, err := e.storage.Query(ctx, database, q)
 	if err != nil {
 		return nil, err
@@ -144,6 +163,89 @@ func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Quer
 	}
 
 	return flatDocs, nil
+}
+
+// executeWithIndexer uses the indexer to find document IDs and fetches them.
+func (e *Engine) executeWithIndexer(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	plan := e.queryToPlan(q)
+
+	refs, err := e.indexer.Search(ctx, database, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(refs) == 0 {
+		return []model.Document{}, nil
+	}
+
+	// Build full paths from IDs
+	paths := make([]string, len(refs))
+	for i, ref := range refs {
+		paths[i] = q.Collection + "/" + ref.ID
+	}
+
+	// Fetch documents by path
+	storedDocs, err := e.storage.GetMany(ctx, database, paths)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter out nils and convert to model.Document
+	flatDocs := make([]model.Document, 0, len(storedDocs))
+	for _, d := range storedDocs {
+		if d != nil {
+			flatDocs = append(flatDocs, helper.FlattenStorageDocument(d))
+		}
+	}
+
+	return flatDocs, nil
+}
+
+// queryToPlan converts a model.Query to an indexer.Plan.
+func (e *Engine) queryToPlan(q model.Query) indexer.Plan {
+	plan := indexer.Plan{
+		Collection: q.Collection,
+		Limit:      q.Limit,
+		StartAfter: q.StartAfter,
+	}
+
+	// Convert filters
+	for _, f := range q.Filters {
+		var op indexer.FilterOp
+		switch f.Op {
+		case "==":
+			op = indexer.FilterEq
+		case ">":
+			op = indexer.FilterGt
+		case "<":
+			op = indexer.FilterLt
+		case ">=":
+			op = indexer.FilterGte
+		case "<=":
+			op = indexer.FilterLte
+		default:
+			continue // Skip unsupported ops
+		}
+		plan.Filters = append(plan.Filters, indexer.Filter{
+			Field: f.Field,
+			Op:    op,
+			Value: f.Value,
+		})
+	}
+
+	// Convert order by
+	for _, o := range q.OrderBy {
+		dir := indexer.Asc
+		if o.Direction == "desc" {
+			dir = indexer.Desc
+		}
+		plan.OrderBy = append(plan.OrderBy, indexer.OrderField{
+			Field:     o.Field,
+			Direction: dir,
+		})
+	}
+
+	return plan
 }
 
 // Pull handles replication pull requests.

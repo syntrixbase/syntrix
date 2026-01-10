@@ -7,6 +7,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/streamer"
@@ -30,6 +31,7 @@ type Options struct {
 	RunTriggerEvaluator bool
 	RunTriggerWorker    bool
 	RunPuller           bool
+	RunIndexer          bool
 
 	ForceQueryClient bool
 
@@ -62,6 +64,7 @@ type Manager struct {
 	natsProvider    trigger.NATSProvider
 	pullerService   puller.LocalService
 	pullerGRPC      *puller.GRPCServer
+	indexerService  indexer.LocalService
 
 	wg sync.WaitGroup
 }

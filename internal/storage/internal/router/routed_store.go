@@ -25,6 +25,14 @@ func (s *RoutedDocumentStore) Get(ctx context.Context, database string, path str
 	return store.Get(ctx, database, path)
 }
 
+func (s *RoutedDocumentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	store, err := s.router.Select(database, types.OpRead)
+	if err != nil {
+		return nil, err
+	}
+	return store.GetMany(ctx, database, paths)
+}
+
 func (s *RoutedDocumentStore) Create(ctx context.Context, database string, doc types.StoredDoc) error {
 	store, err := s.router.Select(database, types.OpWrite)
 	if err != nil {

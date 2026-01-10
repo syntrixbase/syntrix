@@ -65,6 +65,14 @@ func (m *mockDocumentStore) Query(ctx context.Context, database string, q model.
 	return args.Get(0).([]*types.StoredDoc), args.Error(1)
 }
 
+func (m *mockDocumentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	args := m.Called(ctx, database, paths)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*types.StoredDoc), args.Error(1)
+}
+
 func (m *mockDocumentStore) Watch(ctx context.Context, database string, collection string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
 	args := m.Called(ctx, database, collection, resumeToken, opts)
 	if args.Get(0) == nil {
@@ -190,6 +198,28 @@ func TestRoutedDocumentStore(t *testing.T) {
 		_, err := rs.Watch(ctx, database, "col", nil, types.WatchOptions{})
 
 		assert.NoError(t, err)
+		router.AssertExpectations(t)
+		store.AssertExpectations(t)
+	})
+
+	t.Run("GetMany uses Read op", func(t *testing.T) {
+		router := new(mockDocRouter)
+		store := new(mockDocumentStore)
+
+		paths := []string{"users/user1", "users/user2"}
+		expectedDocs := []*types.StoredDoc{
+			{Id: "testdb:users/user1", Fullpath: "users/user1"},
+			{Id: "testdb:users/user2", Fullpath: "users/user2"},
+		}
+
+		router.On("Select", database, types.OpRead).Return(store, nil)
+		store.On("GetMany", ctx, database, paths).Return(expectedDocs, nil)
+
+		rs := NewRoutedDocumentStore(router)
+		docs, err := rs.GetMany(ctx, database, paths)
+
+		assert.NoError(t, err)
+		assert.Len(t, docs, 2)
 		router.AssertExpectations(t)
 		store.AssertExpectations(t)
 	})

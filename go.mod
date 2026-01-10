@@ -5,6 +5,8 @@ go 1.24.0
 require (
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
+	github.com/golang/protobuf v1.5.4
+	github.com/google/btree v1.1.3
 	github.com/google/cel-go v0.26.1
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/schema v1.4.1
