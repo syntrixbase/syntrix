@@ -18,6 +18,7 @@
 package encoding
 
 import (
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"math"
@@ -224,4 +225,14 @@ func ExtractDocID(key []byte) (string, error) {
 	// For now, return error - full decode needed for extraction
 	// This is a simplified implementation; full decode requires field schema
 	return "", errors.New("ExtractDocID requires field schema for full decode")
+}
+
+// EncodeBase64 encodes an OrderKey to base64-url format for wire transmission.
+func EncodeBase64(key []byte) string {
+	return base64.RawURLEncoding.EncodeToString(key)
+}
+
+// DecodeBase64 decodes a base64-url encoded OrderKey.
+func DecodeBase64(s string) ([]byte, error) {
+	return base64.RawURLEncoding.DecodeString(s)
 }

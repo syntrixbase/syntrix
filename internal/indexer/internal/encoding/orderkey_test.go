@@ -260,3 +260,125 @@ func TestEncode_SortCorrectness(t *testing.T) {
 		assert.Equal(t, expected[i], docs[idx].id, "position %d", i)
 	}
 }
+
+func TestEncode_StringWithNullBytes(t *testing.T) {
+	// Test that strings with embedded null bytes are properly escaped
+	// and maintain correct sort order
+
+	t.Run("escape null bytes", func(t *testing.T) {
+		// String with null byte should be encoded properly
+		strWithNull := "a\x00b"
+		key, err := Encode([]Field{{Value: strWithNull, Direction: Asc}}, "id")
+		require.NoError(t, err)
+
+		// Verify the key is valid (no error)
+		assert.NotNil(t, key)
+	})
+
+	t.Run("null byte ordering", func(t *testing.T) {
+		// "a\x00b" should sort between "a" and "a\x01"
+		keyA, _ := Encode([]Field{{Value: "a", Direction: Asc}}, "x")
+		keyA0B, _ := Encode([]Field{{Value: "a\x00b", Direction: Asc}}, "x")
+		keyA1, _ := Encode([]Field{{Value: "a\x01", Direction: Asc}}, "x")
+
+		assert.Equal(t, -1, Compare(keyA, keyA0B), "a < a\\x00b")
+		assert.Equal(t, -1, Compare(keyA0B, keyA1), "a\\x00b < a\\x01")
+	})
+
+	t.Run("multiple null bytes", func(t *testing.T) {
+		strMultiNull := "\x00\x00\x00"
+		key, err := Encode([]Field{{Value: strMultiNull, Direction: Asc}}, "id")
+		require.NoError(t, err)
+		assert.NotNil(t, key)
+	})
+
+	t.Run("desc with null bytes", func(t *testing.T) {
+		keyA, _ := Encode([]Field{{Value: "a\x00b", Direction: Desc}}, "x")
+		keyB, _ := Encode([]Field{{Value: "b\x00a", Direction: Desc}}, "x")
+
+		// In desc, "b\x00a" should sort before "a\x00b"
+		assert.Equal(t, -1, Compare(keyB, keyA), "b\\x00a should sort before a\\x00b in desc")
+	})
+}
+
+func TestExtractDocID(t *testing.T) {
+	t.Run("key too short", func(t *testing.T) {
+		_, err := ExtractDocID([]byte{0x01, 0x02})
+		assert.Error(t, err)
+	})
+
+	t.Run("requires field schema", func(t *testing.T) {
+		// Current implementation requires field schema for full decode
+		key, _ := Encode([]Field{{Value: "test", Direction: Asc}}, "doc123")
+		_, err := ExtractDocID(key)
+		assert.Error(t, err, "should return error since field schema is required")
+	})
+}
+
+func TestEncode_DescNull(t *testing.T) {
+	// Test desc ordering for null values
+	keyNullAsc, _ := Encode([]Field{{Value: nil, Direction: Asc}}, "a")
+	keyNullDesc, _ := Encode([]Field{{Value: nil, Direction: Desc}}, "a")
+
+	// Asc and desc should produce different keys (inverted)
+	assert.NotEqual(t, keyNullAsc[1], keyNullDesc[1], "null asc and desc should differ")
+}
+
+func TestEncode_DescBool(t *testing.T) {
+	// In desc mode, true should sort before false
+	keyFalse, _ := Encode([]Field{{Value: false, Direction: Desc}}, "a")
+	keyTrue, _ := Encode([]Field{{Value: true, Direction: Desc}}, "a")
+
+	assert.Equal(t, -1, Compare(keyTrue, keyFalse), "true should sort before false in desc")
+}
+
+func TestEncode_NegativeNumbers(t *testing.T) {
+	// Test edge cases for negative numbers
+	tests := []struct {
+		a, b float64
+		want int
+	}{
+		{math.Inf(-1), math.Inf(-1), 0},
+		{math.Inf(1), math.Inf(1), 0},
+		{-0.0, 0.0, 0}, // -0 and +0 should be equal
+		{math.SmallestNonzeroFloat64, 0, 1},
+		{-math.SmallestNonzeroFloat64, 0, -1},
+	}
+
+	for _, tt := range tests {
+		keyA, _ := Encode([]Field{{Value: tt.a, Direction: Asc}}, "x")
+		keyB, _ := Encode([]Field{{Value: tt.b, Direction: Asc}}, "x")
+		assert.Equal(t, tt.want, Compare(keyA, keyB), "%v vs %v", tt.a, tt.b)
+	}
+}
+
+func TestBase64Encoding(t *testing.T) {
+	t.Run("encode and decode roundtrip", func(t *testing.T) {
+		key, err := Encode([]Field{
+			{Value: "hello", Direction: Asc},
+			{Value: float64(42), Direction: Desc},
+		}, "doc123")
+		require.NoError(t, err)
+
+		encoded := EncodeBase64(key)
+		assert.NotEmpty(t, encoded)
+
+		decoded, err := DecodeBase64(encoded)
+		require.NoError(t, err)
+		assert.Equal(t, key, decoded)
+	})
+
+	t.Run("decode invalid base64", func(t *testing.T) {
+		_, err := DecodeBase64("!!!invalid!!!")
+		assert.Error(t, err)
+	})
+
+	t.Run("empty key", func(t *testing.T) {
+		encoded := EncodeBase64(nil)
+		assert.Equal(t, "", encoded)
+
+		decoded, err := DecodeBase64("")
+		require.NoError(t, err)
+		assert.Empty(t, decoded)
+	})
+}

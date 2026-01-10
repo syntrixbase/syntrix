@@ -8,7 +8,7 @@ The system consists of the following core services:
 
 1. **API Gateway**: The entry point for client REST requests. It handles authentication (future), validation, and routing to the Query Service.
 2. **Query Service**: The central brain for data operations. It abstracts the storage layer and provides a unified interface for CRUD and complex queries.
-3. **Indexer** - Index Server, pull data from storage and build index, real worker of query request.
+3. **Indexer** - Secondary index service that subscribes to change events from Puller and maintains in-memory indexes for accelerated query execution.
 4. **Puller** - Realtime change puller, subscribe changes from storage and fanout to consumers.
 5. **Streamer** - Realtime watch processor.
 6. **Trigger Service**: A server-side event reaction system. It evaluates database changes against user-defined rules (CEL) and executes Webhooks via a durable queue (NATS).

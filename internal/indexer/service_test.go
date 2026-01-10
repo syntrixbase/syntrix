@@ -1,0 +1,947 @@
+package indexer
+
+import (
+	"context"
+	"log/slog"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/storage"
+)
+
+// mockPullerService is a mock implementation of puller.Service for testing.
+type mockPullerService struct {
+	mu          sync.Mutex
+	events      chan *puller.Event
+	subscribers []mockSubscription
+}
+
+type mockSubscription struct {
+	consumerID string
+	after      string
+	ch         chan *puller.Event
+}
+
+func newMockPullerService() *mockPullerService {
+	return &mockPullerService{
+		events: make(chan *puller.Event, 100),
+	}
+}
+
+func (m *mockPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ch := make(chan *puller.Event, 100)
+	m.subscribers = append(m.subscribers, mockSubscription{
+		consumerID: consumerID,
+		after:      after,
+		ch:         ch,
+	})
+
+	// Forward events from main channel to subscriber
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				close(ch)
+				return
+			case evt, ok := <-m.events:
+				if !ok {
+					close(ch)
+					return
+				}
+				select {
+				case ch <- evt:
+				case <-ctx.Done():
+					close(ch)
+					return
+				}
+			}
+		}
+	}()
+
+	return ch
+}
+
+func (m *mockPullerService) SendEvent(evt *puller.Event) {
+	m.events <- evt
+}
+
+func (m *mockPullerService) Close() {
+	close(m.events)
+}
+
+func testLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
+}
+
+func TestNewService(t *testing.T) {
+	t.Run("with defaults", func(t *testing.T) {
+		cfg := Config{}
+		svc := NewService(cfg, nil, testLogger())
+
+		require.NotNil(t, svc)
+		s := svc.(*service)
+		assert.Equal(t, "indexer", s.cfg.ConsumerID)
+		assert.Equal(t, "data/indexer/progress", s.cfg.ProgressPath)
+	})
+
+	t.Run("with custom config", func(t *testing.T) {
+		cfg := Config{
+			ConsumerID:   "my-indexer",
+			ProgressPath: "/custom/path",
+		}
+		svc := NewService(cfg, nil, testLogger())
+
+		s := svc.(*service)
+		assert.Equal(t, "my-indexer", s.cfg.ConsumerID)
+		assert.Equal(t, "/custom/path", s.cfg.ProgressPath)
+	})
+}
+
+func TestService_StartStop(t *testing.T) {
+	t.Run("start without puller", func(t *testing.T) {
+		cfg := Config{}
+		svc := NewService(cfg, nil, testLogger())
+
+		ctx := context.Background()
+		err := svc.Start(ctx)
+		require.NoError(t, err)
+
+		// Verify running
+		health, err := svc.Health(ctx)
+		require.NoError(t, err)
+		assert.Equal(t, HealthOK, health.Status)
+
+		// Stop
+		err = svc.Stop(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("start already running", func(t *testing.T) {
+		cfg := Config{}
+		svc := NewService(cfg, nil, testLogger())
+
+		ctx := context.Background()
+		err := svc.Start(ctx)
+		require.NoError(t, err)
+		defer svc.Stop(ctx)
+
+		// Try to start again
+		err = svc.Start(ctx)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "already running")
+	})
+
+	t.Run("stop not running", func(t *testing.T) {
+		cfg := Config{}
+		svc := NewService(cfg, nil, testLogger())
+
+		ctx := context.Background()
+		err := svc.Stop(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("start with puller", func(t *testing.T) {
+		mockPuller := newMockPullerService()
+		cfg := Config{}
+		svc := NewService(cfg, mockPuller, testLogger())
+
+		ctx := context.Background()
+		err := svc.Start(ctx)
+		require.NoError(t, err)
+
+		// Give subscription loop time to start
+		time.Sleep(10 * time.Millisecond)
+
+		err = svc.Stop(ctx)
+		require.NoError(t, err)
+	})
+}
+
+func TestService_ApplyEvent(t *testing.T) {
+	t.Run("nil event", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		err = svc.ApplyEvent(context.Background(), nil)
+		require.NoError(t, err)
+	})
+
+	t.Run("event without FullDocument", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		evt := &ChangeEvent{
+			EventID:      "evt1",
+			DatabaseID:   "testdb",
+			FullDocument: nil,
+		}
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+	})
+
+	t.Run("event with empty collection", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "",
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+	})
+
+	t.Run("event with no matching template", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "unknown/collection",
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+	})
+
+	t.Run("event with matching template", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		s := svc.(*service)
+
+		// Load templates
+		templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/chats",
+				Data: map[string]any{
+					"timestamp": float64(1000),
+				},
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+
+		// Verify document was indexed
+		stats, err := svc.Stats(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), stats.EventsApplied)
+		assert.Equal(t, 1, stats.ShardCount)
+	})
+
+	t.Run("deleted document without includeDeleted", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		s := svc.(*service)
+
+		templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+    includeDeleted: false
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// First, insert a document
+		evt1 := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/chats",
+				Data: map[string]any{
+					"timestamp": float64(1000),
+				},
+				Deleted: false,
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt1)
+		require.NoError(t, err)
+
+		// Verify indexed
+		shard := s.manager.GetShard("testdb", "users/*/chats", "chats_by_timestamp")
+		require.NotNil(t, shard)
+		assert.Equal(t, 1, shard.Len())
+
+		// Now mark as deleted
+		evt2 := &ChangeEvent{
+			EventID:    "evt2",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/chats",
+				Data: map[string]any{
+					"timestamp": float64(1000),
+				},
+				Deleted: true,
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt2)
+		require.NoError(t, err)
+
+		// Verify deleted from index
+		assert.Equal(t, 0, shard.Len())
+	})
+
+	t.Run("deleted document with includeDeleted", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		s := svc.(*service)
+
+		templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+    includeDeleted: true
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// Insert a deleted document
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/chats",
+				Data: map[string]any{
+					"timestamp": float64(1000),
+				},
+				Deleted: true,
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+
+		// Verify still in index (includeDeleted = true)
+		shard := s.manager.GetShard("testdb", "users/*/chats", "chats_by_timestamp")
+		require.NotNil(t, shard)
+		assert.Equal(t, 1, shard.Len())
+	})
+}
+
+func TestService_Search(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+	err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+	require.NoError(t, err)
+
+	err = svc.Start(context.Background())
+	require.NoError(t, err)
+	defer svc.Stop(context.Background())
+
+	// Add some documents
+	for i := 1; i <= 5; i++ {
+		evt := &ChangeEvent{
+			EventID:    "evt" + string(rune('0'+i)),
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc" + string(rune('0'+i)),
+				Collection: "users/alice/chats",
+				Data: map[string]any{
+					"timestamp": float64(i * 1000),
+				},
+			},
+		}
+		err := svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+	}
+
+	t.Run("basic search", func(t *testing.T) {
+		results, err := svc.Search(context.Background(), "testdb", Plan{
+			Collection: "users/alice/chats",
+			OrderBy: []OrderField{
+				{Field: "timestamp", Direction: 1}, // Desc
+			},
+			Limit: 10,
+		})
+		require.NoError(t, err)
+		assert.Len(t, results, 5)
+	})
+
+	t.Run("search with limit", func(t *testing.T) {
+		results, err := svc.Search(context.Background(), "testdb", Plan{
+			Collection: "users/alice/chats",
+			OrderBy: []OrderField{
+				{Field: "timestamp", Direction: 1}, // Desc
+			},
+			Limit: 2,
+		})
+		require.NoError(t, err)
+		assert.Len(t, results, 2)
+	})
+
+	t.Run("search non-existent database", func(t *testing.T) {
+		results, err := svc.Search(context.Background(), "nonexistent", Plan{
+			Collection: "users/alice/chats",
+			OrderBy: []OrderField{
+				{Field: "timestamp", Direction: 1},
+			},
+		})
+		// Returns ErrIndexNotReady since shard doesn't exist
+		assert.Error(t, err)
+		assert.Nil(t, results)
+	})
+}
+
+func TestService_Health(t *testing.T) {
+	t.Run("healthy when running", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		health, err := svc.Health(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, HealthOK, health.Status)
+	})
+
+	t.Run("unhealthy when not running", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+
+		health, err := svc.Health(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, HealthUnhealthy, health.Status)
+	})
+}
+
+func TestService_Stats(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+	err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+	require.NoError(t, err)
+
+	err = svc.Start(context.Background())
+	require.NoError(t, err)
+	defer svc.Stop(context.Background())
+
+	stats, err := svc.Stats(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats.DatabaseCount)
+	assert.Equal(t, 0, stats.ShardCount)
+	assert.Equal(t, 1, stats.TemplateCount)
+	assert.Equal(t, int64(0), stats.EventsApplied)
+
+	// Add an event
+	evt := &ChangeEvent{
+		EventID:    "evt1",
+		DatabaseID: "testdb",
+		FullDocument: &storage.StoredDoc{
+			Id:         "doc1",
+			Collection: "users/alice/chats",
+			Data: map[string]any{
+				"timestamp": float64(1000),
+			},
+		},
+	}
+	err = svc.ApplyEvent(context.Background(), evt)
+	require.NoError(t, err)
+
+	stats, err = svc.Stats(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.DatabaseCount)
+	assert.Equal(t, 1, stats.ShardCount)
+	assert.Equal(t, int64(1), stats.EventsApplied)
+	assert.Greater(t, stats.LastEventTime, int64(0))
+}
+
+func TestService_Manager(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	mgr := svc.Manager()
+	assert.Same(t, s.manager, mgr)
+}
+
+func TestService_PullerSubscription(t *testing.T) {
+	t.Run("receives events from puller", func(t *testing.T) {
+		mockPuller := newMockPullerService()
+		svc := NewService(Config{}, mockPuller, testLogger())
+		s := svc.(*service)
+
+		templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// Give subscription loop time to start
+		time.Sleep(50 * time.Millisecond)
+
+		// Send an event through puller
+		mockPuller.SendEvent(&puller.Event{
+			Change: &events.StoreChangeEvent{
+				EventID:    "evt1",
+				DatabaseID: "testdb",
+				FullDocument: &storage.StoredDoc{
+					Id:         "doc1",
+					Collection: "users/alice/chats",
+					Data: map[string]any{
+						"timestamp": float64(1000),
+					},
+				},
+			},
+			Progress: "progress-1",
+		})
+
+		// Wait for event to be processed
+		time.Sleep(100 * time.Millisecond)
+
+		// Verify event was applied
+		stats, err := svc.Stats(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), stats.EventsApplied)
+
+		// Verify progress was updated
+		s.mu.RLock()
+		progress := s.progress
+		s.mu.RUnlock()
+		assert.Equal(t, "progress-1", progress)
+	})
+}
+
+func TestExtractFieldValue(t *testing.T) {
+	t.Run("simple field", func(t *testing.T) {
+		data := map[string]any{
+			"name":  "Alice",
+			"count": 42,
+		}
+		assert.Equal(t, "Alice", extractFieldValue(data, "name"))
+		assert.Equal(t, 42, extractFieldValue(data, "count"))
+	})
+
+	t.Run("missing field", func(t *testing.T) {
+		data := map[string]any{
+			"name": "Alice",
+		}
+		assert.Nil(t, extractFieldValue(data, "unknown"))
+	})
+}
+
+func TestService_StartWithTemplatePath(t *testing.T) {
+	t.Run("valid template file", func(t *testing.T) {
+		// Create temp template file
+		tmpFile, err := os.CreateTemp("", "templates-*.yaml")
+		require.NoError(t, err)
+		defer os.Remove(tmpFile.Name())
+
+		templateYAML := `
+templates:
+  - name: test_template
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: timestamp, order: desc }
+`
+		_, err = tmpFile.WriteString(templateYAML)
+		require.NoError(t, err)
+		tmpFile.Close()
+
+		cfg := Config{
+			TemplatePath: tmpFile.Name(),
+		}
+		svc := NewService(cfg, nil, testLogger())
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// Verify templates were loaded
+		stats, err := svc.Stats(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, 1, stats.TemplateCount)
+	})
+
+	t.Run("invalid template file", func(t *testing.T) {
+		cfg := Config{
+			TemplatePath: "/nonexistent/path/templates.yaml",
+		}
+		svc := NewService(cfg, nil, testLogger())
+
+		err := svc.Start(context.Background())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to load templates")
+	})
+}
+
+func TestService_StopWithTimeout(t *testing.T) {
+	t.Run("stop with context timeout", func(t *testing.T) {
+		// Create a mock puller that keeps subscription alive
+		mockPuller := &slowPullerService{}
+		svc := NewService(Config{}, mockPuller, testLogger())
+
+		err := svc.Start(context.Background())
+		require.NoError(t, err)
+
+		// Give subscription loop time to start
+		time.Sleep(10 * time.Millisecond)
+
+		// Stop with an already canceled context
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err = svc.Stop(ctx)
+		assert.Error(t, err)
+		assert.Equal(t, context.Canceled, err)
+
+		// Clean up with a proper context
+		svc.Stop(context.Background())
+	})
+}
+
+// slowPullerService is a mock that blocks on Subscribe
+type slowPullerService struct{}
+
+func (s *slowPullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
+	ch := make(chan *puller.Event)
+	go func() {
+		// Block until context is done
+		<-ctx.Done()
+		// Wait a bit before closing to simulate slow cleanup
+		time.Sleep(100 * time.Millisecond)
+		close(ch)
+	}()
+	return ch
+}
+
+func TestService_SubscriptionReconnect(t *testing.T) {
+	t.Run("reconnects on channel close", func(t *testing.T) {
+		reconnectPuller := &reconnectablePullerService{
+			reconnectCount: 0,
+		}
+		svc := NewService(Config{}, reconnectPuller, testLogger())
+		s := svc.(*service)
+
+		templateYAML := `
+templates:
+  - name: test_template
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: timestamp, order: desc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+
+		// Give subscription loop time to start
+		time.Sleep(50 * time.Millisecond)
+
+		// Close the first channel to trigger reconnect
+		reconnectPuller.CloseCurrentChannel()
+
+		// Wait for reconnect (1 second backoff + some margin)
+		time.Sleep(1200 * time.Millisecond)
+
+		// Verify reconnect happened
+		reconnectPuller.mu.Lock()
+		count := reconnectPuller.reconnectCount
+		reconnectPuller.mu.Unlock()
+		assert.GreaterOrEqual(t, count, 2, "should have reconnected at least once")
+
+		svc.Stop(context.Background())
+	})
+}
+
+// reconnectablePullerService tracks reconnection attempts
+type reconnectablePullerService struct {
+	mu             sync.Mutex
+	reconnectCount int
+	currentCh      chan *puller.Event
+}
+
+func (r *reconnectablePullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.reconnectCount++
+	ch := make(chan *puller.Event, 10)
+	r.currentCh = ch
+
+	go func() {
+		<-ctx.Done()
+		r.mu.Lock()
+		if r.currentCh == ch {
+			close(ch)
+		}
+		r.mu.Unlock()
+	}()
+
+	return ch
+}
+
+func (r *reconnectablePullerService) CloseCurrentChannel() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.currentCh != nil {
+		close(r.currentCh)
+		r.currentCh = nil
+	}
+}
+
+func TestService_ApplyEventWithUnsupportedType(t *testing.T) {
+	t.Run("unsupported field type logs error", func(t *testing.T) {
+		svc := NewService(Config{}, nil, testLogger())
+		s := svc.(*service)
+
+		templateYAML := `
+templates:
+  - name: test_template
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: data, order: asc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// Event with unsupported type (slice)
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/docs",
+				Data: map[string]any{
+					"data": []string{"a", "b", "c"}, // Unsupported type
+				},
+			},
+		}
+
+		// Should not return error (error is logged, not returned)
+		err = svc.ApplyEvent(context.Background(), evt)
+		require.NoError(t, err)
+
+		// But the document should not be indexed
+		shard := s.manager.GetShard("testdb", "users/*/docs", "test_template")
+		if shard != nil {
+			assert.Equal(t, 0, shard.Len())
+		}
+	})
+}
+
+func TestService_BuildOrderKey(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	t.Run("asc direction", func(t *testing.T) {
+		templateYAML := `
+templates:
+  - name: test_asc
+    collectionPattern: test/docs
+    fields:
+      - { field: value, order: asc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		tmpl := s.manager.Templates()[0]
+		data := map[string]any{"value": float64(100)}
+
+		key, err := s.buildOrderKey(data, &tmpl)
+		require.NoError(t, err)
+		assert.NotEmpty(t, key)
+	})
+
+	t.Run("desc direction", func(t *testing.T) {
+		templateYAML := `
+templates:
+  - name: test_desc
+    collectionPattern: test/docs
+    fields:
+      - { field: value, order: desc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		templates := s.manager.Templates()
+		tmpl := templates[len(templates)-1] // Get the last loaded template
+		data := map[string]any{"value": float64(100)}
+
+		key, err := s.buildOrderKey(data, &tmpl)
+		require.NoError(t, err)
+		assert.NotEmpty(t, key)
+	})
+
+	t.Run("unsupported type returns error", func(t *testing.T) {
+		templateYAML := `
+templates:
+  - name: test_unsupported
+    collectionPattern: test/unsupported
+    fields:
+      - { field: value, order: asc }
+`
+		err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		templates := s.manager.Templates()
+		tmpl := templates[len(templates)-1]
+		data := map[string]any{"value": struct{}{}} // Unsupported type
+
+		_, err = s.buildOrderKey(data, &tmpl)
+		require.Error(t, err)
+	})
+}
+
+func TestService_ApplyEventToTemplate_NilDoc(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	templateYAML := `
+templates:
+  - name: test_template
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: timestamp, order: desc }
+`
+	err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+	require.NoError(t, err)
+
+	err = svc.Start(context.Background())
+	require.NoError(t, err)
+	defer svc.Stop(context.Background())
+
+	tmpl := s.manager.Templates()[0]
+
+	// Event with nil FullDocument
+	evt := &ChangeEvent{
+		EventID:      "evt1",
+		DatabaseID:   "testdb",
+		FullDocument: nil,
+	}
+
+	err = s.applyEventToTemplate(context.Background(), evt, &tmpl)
+	require.NoError(t, err)
+}
+
+func TestService_SubscriptionReconnect_ContextCanceled(t *testing.T) {
+	t.Run("context canceled during reconnect backoff", func(t *testing.T) {
+		// Create a puller that closes channel immediately
+		closingPuller := &immediateClosePullerService{}
+		svc := NewService(Config{}, closingPuller, testLogger())
+
+		ctx, cancel := context.WithCancel(context.Background())
+		err := svc.Start(ctx)
+		require.NoError(t, err)
+
+		// Give subscription loop time to start and hit the reconnect path
+		time.Sleep(50 * time.Millisecond)
+
+		// Cancel context while in the reconnect backoff
+		cancel()
+
+		// Wait for the subscription loop to exit
+		time.Sleep(100 * time.Millisecond)
+
+		// Clean up
+		svc.Stop(context.Background())
+	})
+}
+
+// immediateClosePullerService closes the channel immediately to trigger reconnect
+type immediateClosePullerService struct {
+	mu        sync.Mutex
+	callCount int
+}
+
+func (p *immediateClosePullerService) Subscribe(ctx context.Context, consumerID string, after string) <-chan *puller.Event {
+	p.mu.Lock()
+	p.callCount++
+	count := p.callCount
+	p.mu.Unlock()
+
+	ch := make(chan *puller.Event)
+
+	// First call: close immediately to trigger reconnect
+	// Subsequent calls: wait for context
+	if count == 1 {
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			close(ch)
+		}()
+	} else {
+		go func() {
+			<-ctx.Done()
+			close(ch)
+		}()
+	}
+
+	return ch
+}
