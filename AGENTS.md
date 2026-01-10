@@ -5,7 +5,7 @@ applyTo: "**"
 # AI AGENT INSTRUCTIONS
 
 - Always disucss in "中文" with user and write document and code in English.
-- Always run testing to ensure code quality.
+- Always run testing after code changes to ensure code quality.
 - Always run `make coverage` to evaluate test coverage and fix as needed.
 - Always ask "should I add more testing" and make robust but not over-engineering testing.
 - Always document the "Why" (reasoning/analysis) alongside the "How" (decision/implementation) in design discussion documents.
