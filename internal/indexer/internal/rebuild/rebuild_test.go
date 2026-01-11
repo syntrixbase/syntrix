@@ -103,11 +103,22 @@ func (m *mockDocIterator) Close() error {
 
 // mockEventReplayer implements EventReplayer for testing.
 type mockEventReplayer struct {
-	events []*Event
-	err    error
+	events           []*Event
+	err              error
+	currentPosition  string // The current buffer position
+	receivedStartKey string // Records the startKey passed to ReplayFrom
+	positionErr      error  // Error to return from CurrentPosition
+}
+
+func (m *mockEventReplayer) CurrentPosition(ctx context.Context) (string, error) {
+	if m.positionErr != nil {
+		return "", m.positionErr
+	}
+	return m.currentPosition, nil
 }
 
 func (m *mockEventReplayer) ReplayFrom(ctx context.Context, startKey string, callback func(evt *Event) error) error {
+	m.receivedStartKey = startKey // Record the startKey for verification
 	if m.err != nil {
 		return m.err
 	}
@@ -643,4 +654,85 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 
 	// Doc should not be added due to key build error
 	assert.Equal(t, 0, s.Len())
+}
+
+// TestOrchestrator_ReplayUsesCurrentPosition verifies that rebuild uses the
+// replayer's CurrentPosition to determine the startKey for event replay.
+// This is critical for correctness: without recording the buffer position
+// before the storage scan, rebuild would replay ALL buffered events instead
+// of only the events that arrived during the rebuild.
+func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+
+	// Storage has some documents
+	scanner := &mockStorageScanner{
+		docs: []*types.StoredDoc{
+			{Id: "doc1", Data: map[string]any{"id": "a"}},
+			{Id: "doc2", Data: map[string]any{"id": "b"}},
+		},
+	}
+
+	// Replayer has a specific current position that should be used
+	expectedStartKey := "buffer-position-12345"
+	replayer := &mockEventReplayer{
+		currentPosition: expectedStartKey,
+		events: []*Event{
+			{DatabaseID: "testdb", DocID: "doc3", Data: map[string]any{"id": "c"}},
+		},
+	}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(200 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusCompleted, progress.Status)
+
+	// CRITICAL: Verify that ReplayFrom was called with the correct startKey
+	// obtained from CurrentPosition, NOT with an empty string.
+	// If this fails, it means rebuild is replaying from the beginning of the
+	// buffer instead of from the position recorded before the storage scan.
+	assert.Equal(t, expectedStartKey, replayer.receivedStartKey,
+		"ReplayFrom should be called with the startKey from CurrentPosition, not empty string")
+
+	// Should have 3 docs (2 from storage + 1 from replay)
+	assert.Equal(t, 3, s.Len())
+}
+
+// TestOrchestrator_ReplayCurrentPositionError verifies that rebuild fails
+// gracefully when CurrentPosition returns an error.
+func TestOrchestrator_ReplayCurrentPositionError(t *testing.T) {
+	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
+	o := New(cfg, &mockKeyBuilder{}, testLogger())
+
+	s := index.New("test", "id", "test")
+	tmpl := &template.Template{Name: "test"}
+	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
+
+	// Replayer returns an error when getting current position
+	replayer := &mockEventReplayer{
+		positionErr: errors.New("buffer position unavailable"),
+	}
+
+	ctx := context.Background()
+	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	require.NoError(t, err)
+
+	// Wait for completion
+	time.Sleep(200 * time.Millisecond)
+
+	progress, err := o.GetJob(jobID)
+	require.NoError(t, err)
+
+	// Should fail because we couldn't get the buffer position
+	assert.Equal(t, StatusFailed, progress.Status)
+	assert.Contains(t, progress.Error, "buffer position")
 }
