@@ -10,7 +10,9 @@ Create a well-structured git commit for the current changes.
 
 3. **Stage Changes** (if needed): If there are unstaged changes that should be committed, stage them with `git add`.
 
-4. **Commit**: Create a commit message with this format and use HEREDOC:
+4. **Create New Branch** (if needed): If currently on `main`, create a new branch with a name based on changes with the prefix of `feats/`, `bugfix/` or any applicable prefix.
+
+5. **Commit**: Create a commit message with this format and use HEREDOC:
    ```bash
    git commit -m "$(cat <<'EOF'
    <Summary: 50 chars or less, imperative mood>

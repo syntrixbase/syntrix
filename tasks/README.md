@@ -14,3 +14,4 @@ Index of task planning documents for Syntrix.
 - [027.2026-01-05-streamer-service-implementation.md](027.2026-01-05-streamer-service-implementation.md) — Streamer Service Implementation (Replace CSP). Status: Planned. Depends on: Puller.
 - [x] [032.2026-01-08-query-grpc-migration.md](032.2026-01-08-query-grpc-migration.md) — Query Service gRPC Migration. Status: Completed.
 - [033.2026-01-08-unified-grpc-server.md](033.2026-01-08-unified-grpc-server.md) — Unified gRPC Server Migration (Puller & Streamer). Status: Pending.
+- [034.2026-01-11-query-indexer-integration.md](034.2026-01-11-query-indexer-integration.md) — Query-Indexer Integration. Status: Planned. Depends on: 017.
