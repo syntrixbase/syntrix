@@ -2,6 +2,7 @@ package buffer
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -61,6 +62,12 @@ func TestBuffer_Close_PanicHandled(t *testing.T) {
 	t.Parallel()
 	buf, err := New(Options{Path: t.TempDir()})
 	require.NoError(t, err)
+
+	// Save real DB to close it later manually
+	// This is necessary because setting buf.db to nil makes us lose the reference,
+	// keeping the DB file open and causing t.TempDir cleanup to fail on Windows.
+	realDB := buf.db
+	defer realDB.Close()
 
 	// Corrupt the db pointer to trigger panic inside Close and ensure we recover.
 	buf.db = nil
@@ -376,7 +383,7 @@ func TestNewForBackend(t *testing.T) {
 	}
 	defer buf.Close()
 
-	expectedPath := dir + "/backend-1"
+	expectedPath := filepath.Join(dir, "backend-1")
 	if buf.Path() != expectedPath {
 		t.Errorf("Path() = %s, want %s", buf.Path(), expectedPath)
 	}

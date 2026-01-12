@@ -4,6 +4,8 @@ import "time"
 
 // Config holds the configuration for the unified server module.
 type Config struct {
+	Host string `yaml:"host"`
+
 	// HTTP Configuration
 	HTTPPort         int           `yaml:"http_port"`
 	HTTPReadTimeout  time.Duration `yaml:"http_read_timeout"`
@@ -23,6 +25,7 @@ type Config struct {
 // DefaultConfig returns safe defaults for development.
 func DefaultConfig() Config {
 	return Config{
+		Host:             "localhost",
 		HTTPPort:         8080,
 		HTTPReadTimeout:  10 * time.Second,
 		HTTPWriteTimeout: 10 * time.Second,

@@ -152,26 +152,9 @@ match:
 		return nil, fmt.Errorf("failed to get gRPC port: %w", err)
 	}
 
-	// Initialize the unified server
-	server.InitDefault(server.Config{
-		HTTPPort: apiPort,
-		GRPCPort: grpcPort, // Query service uses gRPC now
-	}, nil)
-
-	// Check if NATS is available
-	natsAvailable := false
-	if os.Getenv("NATS_URL") != "" {
-		natsAvailable = true
-	} else {
-		conn, err := net.DialTimeout("tcp", "localhost:4222", 100*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			natsAvailable = true
-		}
-	}
-
 	cfg := &config.Config{
 		Server: server.Config{
+			Host:     "localhost",
 			HTTPPort: apiPort,
 			GRPCPort: grpcPort,
 		},
@@ -239,6 +222,21 @@ match:
 				MaxSize: "100MB",
 			},
 		},
+	}
+
+	// Initialize the unified server
+	server.InitDefault(cfg.Server, nil)
+
+	// Check if NATS is available
+	natsAvailable := false
+	if os.Getenv("NATS_URL") != "" {
+		natsAvailable = true
+	} else {
+		conn, err := net.DialTimeout("tcp", "localhost:4222", 100*time.Millisecond)
+		if err == nil {
+			conn.Close()
+			natsAvailable = true
+		}
 	}
 
 	opts := services.Options{

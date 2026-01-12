@@ -35,7 +35,7 @@ type testGRPCServer struct {
 // newTestGRPCServer creates a test gRPC server with the Puller service registered.
 func newTestGRPCServer(t *testing.T, pullerCore *core.Puller, logger *slog.Logger) *testGRPCServer {
 	port := getFreePort(t)
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", port))
 	require.NoError(t, err)
 
 	grpcCfg := config.GRPCConfig{

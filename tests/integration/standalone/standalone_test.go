@@ -87,14 +87,9 @@ match:
 	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
-	// Initialize the unified server for standalone mode
-	server.InitDefault(server.Config{
-		HTTPPort: apiPort,
-		GRPCPort: 0,
-	}, nil)
-
 	cfg := &config.Config{
 		Server: server.Config{
+			Host:     "localhost",
 			HTTPPort: apiPort,
 		},
 		// Query and CSP configs don't need ports in standalone mode
@@ -151,6 +146,9 @@ match:
 	for _, mod := range configModifiers {
 		mod(cfg)
 	}
+
+	// Initialize the unified server for standalone mode
+	server.InitDefault(cfg.Server, nil)
 
 	// Create manager in standalone mode
 	// Note: RunQuery is not needed as it's handled internally

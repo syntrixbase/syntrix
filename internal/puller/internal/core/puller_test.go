@@ -258,6 +258,7 @@ func TestPuller_watchChangeStream_WithResumeToken(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{Name: "backend1"}
 	if err := p.AddBackend("backend1", env.Client, env.DBName, backendCfg); err != nil {
@@ -282,6 +283,7 @@ func TestPuller_watchChangeStream_FromBeginning(t *testing.T) {
 	cfg := newTestConfig(t)
 	cfg.Bootstrap.Mode = "from_beginning"
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{Name: "backend1"}
 	if err := p.AddBackend("backend1", env.Client, env.DBName, backendCfg); err != nil {
@@ -367,6 +369,7 @@ func TestPuller_watchChangeStream_StreamErr(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{Name: "backend1"}
 	require.NoError(t, p.AddBackend("backend1", env.Client, env.DBName, backendCfg))
@@ -386,6 +389,7 @@ func TestPuller_watchChangeStream_DecodeError(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{Name: "backend1"}
 	require.NoError(t, p.AddBackend("backend1", env.Client, env.DBName, backendCfg))
@@ -435,6 +439,7 @@ func TestPuller_AddBackend(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{
 		Collections: []string{"users"},
@@ -462,6 +467,7 @@ func TestPuller_AddBackend_InvalidMaxSizeIsGraceful(t *testing.T) {
 	cfg := newTestConfig(t)
 	cfg.Buffer.MaxSize = "not-a-size"
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	err := p.AddBackend("backend1", env.Client, env.DBName, config.PullerBackendConfig{Collections: []string{"users"}})
 	require.NoError(t, err)
@@ -521,6 +527,7 @@ func TestPuller_Replay_IteratorErrorClosesExisting(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	require.NoError(t, p.AddBackend("backend1", env.Client, env.DBName, config.PullerBackendConfig{Collections: []string{"users"}}))
 	require.NoError(t, p.AddBackend("backend2", env.Client, env.DBName, config.PullerBackendConfig{Collections: []string{"users"}}))

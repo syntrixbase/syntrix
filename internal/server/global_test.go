@@ -26,6 +26,7 @@ func TestGlobal_SetDefault(t *testing.T) {
 
 		// Test InitDefault
 		cfg := Config{
+			Host:     "localhost",
 			HTTPPort: 8080,
 			GRPCPort: 9000,
 		}

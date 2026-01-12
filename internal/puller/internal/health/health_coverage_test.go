@@ -14,7 +14,7 @@ func TestStartServer(t *testing.T) {
 
 	// Start server in goroutine
 	go func() {
-		_ = StartServer(ctx, ":8099", checker)
+		_ = StartServer(ctx, "localhost:8099", checker)
 	}()
 
 	// Give it time to start
