@@ -174,6 +174,34 @@ templates:
         order: asc
       - field: price
         order: asc
+
+  # Additional templates for TestAPIQueryAdvanced
+  - name: products-category-price-desc
+    collectionPattern: "products"
+    fields:
+      - field: category
+        order: asc
+      - field: price
+        order: desc
+
+  - name: products-stock
+    collectionPattern: "products"
+    fields:
+      - field: stock
+        order: asc
+
+  - name: products-id
+    collectionPattern: "products"
+    fields:
+      - field: id
+        order: asc
+
+  - name: products-id-deleted
+    collectionPattern: "products"
+    includeDeleted: true
+    fields:
+      - field: id
+        order: asc
 `
 	templatesFile := tempDir + "/templates.yaml"
 	if err := os.WriteFile(templatesFile, []byte(templatesContent), 0644); err != nil {

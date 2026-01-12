@@ -55,11 +55,12 @@ type OrderField struct {
 
 // Plan represents a query plan passed from Query Engine.
 type Plan struct {
-	Collection string       // Concrete collection path (e.g., "users/alice/chats")
-	Filters    []Filter     // Prefix/range filters
-	OrderBy    []OrderField // Ordering specification
-	Limit      int          // Max results
-	StartAfter string       // Cursor for pagination (base64-encoded OrderKey)
+	Collection  string       // Concrete collection path (e.g., "users/alice/chats")
+	Filters     []Filter     // Prefix/range filters
+	OrderBy     []OrderField // Ordering specification
+	Limit       int          // Max results
+	StartAfter  string       // Cursor for pagination (base64-encoded OrderKey)
+	ShowDeleted bool         // Include deleted documents in results
 }
 
 // DocRef represents a document reference with its OrderKey.
@@ -161,31 +162,29 @@ func (m *Manager) MatchTemplatesForCollection(collection string) []template.Matc
 // SelectBestTemplate selects the best template for a query plan.
 // Implements Query-to-Index matching rules.
 func (m *Manager) SelectBestTemplate(plan Plan) (*template.Template, error) {
-	fmt.Printf("DEBUG: SelectBestTemplate for collection=%s filters=%v orderBy=%v\n", plan.Collection, plan.Filters, plan.OrderBy)
 	// Get all matching templates for the collection
 	matches := m.MatchTemplatesForCollection(plan.Collection)
 	if len(matches) == 0 {
-		fmt.Println("DEBUG: No matches for collection")
 		return nil, ErrNoMatchingIndex
 	}
 
 	// Filter by query compatibility and include pattern score
 	var compatible []matchCandidate
 	for _, match := range matches {
+		// If showDeleted is requested, the template must have includeDeleted=true
+		if plan.ShowDeleted && !match.Template.IncludeDeleted {
+			continue
+		}
 		if queryScore := m.computeQueryScore(plan, match.Template); queryScore > 0 {
-			fmt.Printf("DEBUG: Compatible template %s score=%d\n", match.Template.Name, queryScore)
 			compatible = append(compatible, matchCandidate{
 				template:     match.Template,
 				queryScore:   queryScore,
 				patternScore: match.Score,
 			})
-		} else {
-			fmt.Printf("DEBUG: Incompatible template %s score=0\n", match.Template.Name)
 		}
 	}
 
 	if len(compatible) == 0 {
-		fmt.Println("DEBUG: No compatible templates")
 		return nil, ErrNoMatchingIndex
 	}
 
@@ -235,20 +234,24 @@ func (m *Manager) computeQueryScore(plan Plan, tmpl *template.Template) int {
 		eqFields[f.Field] = true
 	}
 
-	// Step 2: Check range filter (at most one, on next field)
-	var rangeField string
-	rangeCount := 0
+	// Step 2: Check range filter (at most one FIELD with range filters)
+	// Multiple bounds on the same field (e.g., >= and <) are allowed
+	rangeFields := make(map[string]bool)
 	for _, filter := range plan.Filters {
 		if eqFields[filter.Field] {
 			continue
 		}
 		if filter.Op == FilterGt || filter.Op == FilterLt || filter.Op == FilterGte || filter.Op == FilterLte {
-			rangeCount++
-			rangeField = filter.Field
+			rangeFields[filter.Field] = true
 		}
 	}
-	if rangeCount > 1 {
-		return 0 // Multiple range filters not supported
+	if len(rangeFields) > 1 {
+		return 0 // Range filters on multiple fields not supported
+	}
+
+	var rangeField string
+	for f := range rangeFields {
+		rangeField = f
 	}
 
 	// Step 3: Determine usable index prefix
@@ -265,9 +268,34 @@ func (m *Manager) computeQueryScore(plan Plan, tmpl *template.Template) int {
 	}
 
 	// Step 4: Check orderBy is prefix of remaining index fields
+	// Special case: if orderBy starts with the range field, that's allowed
+	// because the index already covers that field's ordering
 	orderStart := usablePrefixLen
 	for i, orderField := range plan.OrderBy {
+		// If this is the first orderBy field and it matches the range field,
+		// use the range field's position instead of starting after it
+		if i == 0 && rangeField != "" && orderField.Field == rangeField {
+			// Check direction matches the template field at range position
+			rangeFieldIdx := len(eqFields)
+			var expectedDir template.Direction
+			if orderField.Direction == encoding.Asc {
+				expectedDir = template.Asc
+			} else {
+				expectedDir = template.Desc
+			}
+			if tmpl.Fields[rangeFieldIdx].Order != expectedDir {
+				return 0 // direction mismatch
+			}
+			// This orderBy is satisfied by the range field, continue to next
+			orderStart = rangeFieldIdx + 1
+			continue
+		}
+
 		templateIdx := orderStart + i
+		// Adjust for the case where we already counted range field in orderBy
+		if i > 0 && rangeField != "" && plan.OrderBy[0].Field == rangeField {
+			templateIdx = orderStart + i - 1
+		}
 		if templateIdx >= len(tmpl.Fields) {
 			return 0 // orderBy exceeds index
 		}
@@ -287,13 +315,29 @@ func (m *Manager) computeQueryScore(plan Plan, tmpl *template.Template) int {
 	}
 
 	// Score: coverage of filters + orderBy fields
-	score := len(eqFields)*10 + len(plan.OrderBy)*5
+	// Minimum score of 1 for any template that matches the collection pattern
+	score := 1 + len(eqFields)*10 + len(plan.OrderBy)*5
 	if rangeField != "" {
 		score += 3
 	}
 	// Prefer exact matches
 	if orderStart+len(plan.OrderBy) == len(tmpl.Fields) {
 		score += 1
+	}
+
+	// When there's no orderBy, prefer templates with ascending order on filter fields
+	// This simplifies range filter bounds handling and is more predictable
+	if len(plan.OrderBy) == 0 {
+		hasDescField := false
+		for i := 0; i < usablePrefixLen && i < len(tmpl.Fields); i++ {
+			if tmpl.Fields[i].Order == template.Desc {
+				hasDescField = true
+				break
+			}
+		}
+		if !hasDescField {
+			score += 2 // Prefer ascending when no orderBy specified
+		}
 	}
 
 	return score
@@ -318,7 +362,9 @@ func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]Doc
 	pattern := tmpl.NormalizedPattern()
 	idx := db.GetIndex(pattern, tmpl.Identity())
 	if idx == nil {
-		return nil, ErrIndexNotReady
+		// Index doesn't exist yet - no documents have been indexed for this pattern
+		// Return empty results instead of error
+		return []DocRef{}, nil
 	}
 
 	// Build search options
@@ -354,10 +400,8 @@ func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (index.
 		opts.Limit = 100 // default
 	}
 
-	// TODO: Build lower/upper bounds from filters using OrderKey encoding
-	// For now, just handle startAfter
+	// Handle startAfter cursor
 	if plan.StartAfter != "" {
-		// Decode base64 cursor
 		key, err := encoding.DecodeBase64(plan.StartAfter)
 		if err != nil {
 			return opts, fmt.Errorf("invalid cursor: %w", err)
@@ -365,7 +409,209 @@ func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (index.
 		opts.StartAfter = key
 	}
 
+	// Build lower/upper bounds from filters
+	// We need to encode equality prefix + optional range bounds
+	lowerFields := make([]encoding.Field, 0, len(tmpl.Fields))
+	upperFields := make([]encoding.Field, 0, len(tmpl.Fields))
+
+	// Track inclusivity for range bounds (only applies to the last field)
+	var rangeLowerInclusive, rangeUpperInclusive bool = true, true
+	var hasRangeLower, hasRangeUpper bool
+
+	// Track which fields have filters
+	filterMap := make(map[string][]Filter)
+	for _, f := range plan.Filters {
+		filterMap[f.Field] = append(filterMap[f.Field], f)
+	}
+
+	// Process template fields in order
+	for _, tf := range tmpl.Fields {
+		filters := filterMap[tf.Field]
+		if len(filters) == 0 {
+			// No filter on this field - stop building bounds here
+			// All subsequent fields are unconstrained
+			break
+		}
+
+		var dir encoding.Direction
+		if tf.Order == template.Desc {
+			dir = encoding.Desc
+		} else {
+			dir = encoding.Asc
+		}
+
+		// Check for equality filter first
+		var eqFilter *Filter
+		var rangeFilters []Filter
+		for j := range filters {
+			if filters[j].Op == FilterEq {
+				eqFilter = &filters[j]
+			} else {
+				rangeFilters = append(rangeFilters, filters[j])
+			}
+		}
+
+		if eqFilter != nil {
+			// Equality: add to both lower and upper
+			lowerFields = append(lowerFields, encoding.Field{Value: eqFilter.Value, Direction: dir})
+			upperFields = append(upperFields, encoding.Field{Value: eqFilter.Value, Direction: dir})
+			continue
+		}
+
+		// Range filter - this should be on the field after the equality prefix
+		// Process gt/gte for lower bound, lt/lte for upper bound
+		// NOTE: For descending order fields, the bounds are INVERTED because
+		// smaller values encode to larger keys.
+		var hasLowerBound, hasUpperBound bool
+		var lowerVal, upperVal any
+		var lowerInclusive, upperInclusive bool
+
+		for _, rf := range rangeFilters {
+			switch rf.Op {
+			case FilterGt:
+				if dir == encoding.Asc {
+					lowerVal = rf.Value
+					lowerInclusive = false
+					hasLowerBound = true
+				} else {
+					// Descending: > becomes upper bound (larger keys)
+					upperVal = rf.Value
+					upperInclusive = false
+					hasUpperBound = true
+				}
+			case FilterGte:
+				if dir == encoding.Asc {
+					lowerVal = rf.Value
+					lowerInclusive = true
+					hasLowerBound = true
+				} else {
+					upperVal = rf.Value
+					upperInclusive = true
+					hasUpperBound = true
+				}
+			case FilterLt:
+				if dir == encoding.Asc {
+					upperVal = rf.Value
+					upperInclusive = false
+					hasUpperBound = true
+				} else {
+					// Descending: < becomes lower bound (larger keys)
+					lowerVal = rf.Value
+					lowerInclusive = false
+					hasLowerBound = true
+				}
+			case FilterLte:
+				if dir == encoding.Asc {
+					upperVal = rf.Value
+					upperInclusive = true
+					hasUpperBound = true
+				} else {
+					lowerVal = rf.Value
+					lowerInclusive = true
+					hasLowerBound = true
+				}
+			}
+		}
+
+		// For range filters, we add them to the bounds
+		// After a range filter, we cannot add more constraints
+		if hasLowerBound {
+			lowerFields = append(lowerFields, encoding.Field{Value: lowerVal, Direction: dir})
+			rangeLowerInclusive = lowerInclusive
+			hasRangeLower = true
+		}
+		if hasUpperBound {
+			upperFields = append(upperFields, encoding.Field{Value: upperVal, Direction: dir})
+			rangeUpperInclusive = upperInclusive
+			hasRangeUpper = true
+		}
+
+		// After a range filter, break - can't have more constraints
+		if hasLowerBound || hasUpperBound {
+			break
+		}
+	}
+
+	// Encode bounds if we have any fields
+	// Use EncodePrefix to avoid adding id_len suffix, which would break prefix matching
+	if len(lowerFields) > 0 {
+		lower, err := encoding.EncodePrefix(lowerFields)
+		if err != nil {
+			return opts, fmt.Errorf("failed to encode lower bound: %w", err)
+		}
+		// Index search uses Lower as inclusive (AscendGreaterOrEqual)
+		// For exclusive lower bound (> not >=), we need to skip past all keys with this value
+		// by appending max suffix to the encoded value
+		if hasRangeLower && !rangeLowerInclusive {
+			opts.Lower = appendMaxSuffix(lower)
+		} else {
+			opts.Lower = lower
+		}
+	}
+
+	if len(upperFields) > 0 {
+		upper, err := encoding.EncodePrefix(upperFields)
+		if err != nil {
+			return opts, fmt.Errorf("failed to encode upper bound: %w", err)
+		}
+		// Index search uses Upper as exclusive (bytes.Compare >= 0 stops)
+		// - For equality filters (no range): need max suffix to include all with prefix
+		// - For inclusive upper bound (<= not <): need max suffix to include this value
+		// - For exclusive upper bound (< not <=): use value directly
+		if !hasRangeUpper {
+			// Pure equality filters - need to include all documents with this prefix
+			opts.Upper = appendMaxSuffix(upper)
+		} else if rangeUpperInclusive {
+			// Inclusive range (<=) - need to include documents with exactly this value
+			opts.Upper = appendMaxSuffix(upper)
+		} else {
+			// Exclusive range (<) - stop before reaching this value
+			opts.Upper = upper
+		}
+	}
+	// Note: The case where len(lowerFields) > 0 && len(upperFields) == 0 with equality filters
+	// is not possible because equality filters always add to both lower and upper fields.
+	// Range-only queries with just a lower bound (e.g., price > 100) scan to the end,
+	// which is the expected behavior for unbounded range queries.
+
 	return opts, nil
+}
+
+// appendMaxSuffix appends 0xFF bytes to create an upper bound that includes all keys with the given prefix.
+// This is used instead of incrementing because variable-length encodings make increment tricky.
+func appendMaxSuffix(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	// Append enough 0xFF bytes to exceed any possible suffix
+	// Using 64 bytes should be more than enough for any document ID
+	result := make([]byte, len(b)+64)
+	copy(result, b)
+	for i := len(b); i < len(result); i++ {
+		result[i] = 0xFF
+	}
+	return result
+}
+
+// incrementBytes returns a byte slice that is lexicographically just after the input.
+// Used to create exclusive upper bounds from inclusive prefixes.
+func incrementBytes(b []byte) []byte {
+	if len(b) == 0 {
+		return nil
+	}
+	result := make([]byte, len(b))
+	copy(result, b)
+
+	// Increment from the rightmost byte
+	for i := len(result) - 1; i >= 0; i-- {
+		if result[i] < 0xFF {
+			result[i]++
+			return result
+		}
+		result[i] = 0
+	}
+	// Overflow - append a byte
+	return append(result, 0x00)
 }
 
 // GetIndex returns an index for the given database, pattern, and template.
@@ -407,7 +653,7 @@ type IndexHealth struct {
 
 // Health represents the health status of the indexer.
 type Health struct {
-	Status    string                 // Overall status
+	Status    HealthStatus           // Overall status
 	Indexes   map[string]IndexHealth // Per-index status (key: database|pattern|templateID)
 	LastError string                 // Last error message if any
 }

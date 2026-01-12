@@ -304,15 +304,16 @@ func TestManager_Search(t *testing.T) {
 		assert.Equal(t, "doc3", results[1].ID)
 	})
 
-	t.Run("search empty collection", func(t *testing.T) {
+	t.Run("search empty collection returns empty results", func(t *testing.T) {
 		plan := Plan{
 			Collection: "users/bob/chats",
 			OrderBy:    []OrderField{{Field: "timestamp", Direction: encoding.Desc}},
 			Limit:      10,
 		}
-		// Search in a database where index doesn't exist
-		_, err := m.Search(context.Background(), "otherdb", plan)
-		assert.ErrorIs(t, err, ErrIndexNotReady)
+		// Search in a database where index doesn't exist returns empty results
+		results, err := m.Search(context.Background(), "otherdb", plan)
+		require.NoError(t, err)
+		assert.Empty(t, results)
 	})
 
 	t.Run("search no matching template", func(t *testing.T) {
@@ -601,4 +602,1060 @@ templates:
 	tmpl, err := m.SelectBestTemplate(plan)
 	require.NoError(t, err)
 	assert.Equal(t, "specific", tmpl.Name)
+}
+
+// ============================================================================
+// buildSearchOptions Unit Tests
+// ============================================================================
+
+func TestManager_BuildSearchOptions_NoFilters(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+		Limit:      50,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.Equal(t, 50, opts.Limit)
+	assert.Nil(t, opts.Lower)
+	assert.Nil(t, opts.Upper)
+	assert.Nil(t, opts.StartAfter)
+}
+
+func TestManager_BuildSearchOptions_DefaultLimit(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+		Limit:      0, // No limit specified
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.Equal(t, 100, opts.Limit) // Default limit
+}
+
+func TestManager_BuildSearchOptions_EqualityFilter(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+		},
+		OrderBy: []OrderField{{Field: "price", Direction: encoding.Asc}},
+		Limit:   10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.Equal(t, 10, opts.Limit)
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+
+	// Lower and upper should have same prefix for equality filter
+	// Lower should be prefix, Upper should be prefix + 0xFF...
+	assert.True(t, len(opts.Upper) > len(opts.Lower))
+}
+
+func TestManager_BuildSearchOptions_MultipleEqualityFilters(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_brand_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: brand, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "brand", Op: FilterEq, Value: "sony"},
+		},
+		OrderBy: []OrderField{{Field: "price", Direction: encoding.Asc}},
+		Limit:   10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+func TestManager_BuildSearchOptions_RangeFilter_Asc(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tests := []struct {
+		name        string
+		filters     []Filter
+		expectLower bool
+		expectUpper bool
+	}{
+		{
+			name:        "greater than",
+			filters:     []Filter{{Field: "price", Op: FilterGt, Value: float64(100)}},
+			expectLower: true,
+			expectUpper: false,
+		},
+		{
+			name:        "greater than or equal",
+			filters:     []Filter{{Field: "price", Op: FilterGte, Value: float64(100)}},
+			expectLower: true,
+			expectUpper: false,
+		},
+		{
+			name:        "less than",
+			filters:     []Filter{{Field: "price", Op: FilterLt, Value: float64(500)}},
+			expectLower: false,
+			expectUpper: true,
+		},
+		{
+			name:        "less than or equal",
+			filters:     []Filter{{Field: "price", Op: FilterLte, Value: float64(500)}},
+			expectLower: false,
+			expectUpper: true,
+		},
+		{
+			name: "both bounds",
+			filters: []Filter{
+				{Field: "price", Op: FilterGte, Value: float64(100)},
+				{Field: "price", Op: FilterLt, Value: float64(500)},
+			},
+			expectLower: true,
+			expectUpper: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Plan{
+				Collection: "products",
+				Filters:    tt.filters,
+				Limit:      10,
+			}
+
+			tmpl, err := m.SelectBestTemplate(plan)
+			require.NoError(t, err)
+
+			opts, err := m.buildSearchOptions(plan, tmpl)
+			require.NoError(t, err)
+
+			if tt.expectLower {
+				assert.NotNil(t, opts.Lower, "expected lower bound")
+			}
+			if tt.expectUpper {
+				assert.NotNil(t, opts.Upper, "expected upper bound")
+			}
+		})
+	}
+}
+
+func TestManager_BuildSearchOptions_RangeFilter_Desc(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price_desc
+    collectionPattern: products
+    fields:
+      - { field: price, order: desc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tests := []struct {
+		name        string
+		filters     []Filter
+		expectLower bool
+		expectUpper bool
+	}{
+		{
+			// For descending: > becomes upper bound (larger values encode to smaller keys)
+			name:        "greater than",
+			filters:     []Filter{{Field: "price", Op: FilterGt, Value: float64(100)}},
+			expectLower: false,
+			expectUpper: true,
+		},
+		{
+			name:        "greater than or equal",
+			filters:     []Filter{{Field: "price", Op: FilterGte, Value: float64(100)}},
+			expectLower: false,
+			expectUpper: true,
+		},
+		{
+			// For descending: < becomes lower bound
+			name:        "less than",
+			filters:     []Filter{{Field: "price", Op: FilterLt, Value: float64(500)}},
+			expectLower: true,
+			expectUpper: false,
+		},
+		{
+			name:        "less than or equal",
+			filters:     []Filter{{Field: "price", Op: FilterLte, Value: float64(500)}},
+			expectLower: true,
+			expectUpper: false,
+		},
+		{
+			name: "both bounds",
+			filters: []Filter{
+				{Field: "price", Op: FilterGte, Value: float64(100)},
+				{Field: "price", Op: FilterLt, Value: float64(500)},
+			},
+			expectLower: true,
+			expectUpper: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Plan{
+				Collection: "products",
+				Filters:    tt.filters,
+				Limit:      10,
+			}
+
+			tmpl, err := m.SelectBestTemplate(plan)
+			require.NoError(t, err)
+
+			opts, err := m.buildSearchOptions(plan, tmpl)
+			require.NoError(t, err)
+
+			if tt.expectLower {
+				assert.NotNil(t, opts.Lower, "expected lower bound")
+			} else {
+				assert.Nil(t, opts.Lower, "expected no lower bound")
+			}
+			if tt.expectUpper {
+				assert.NotNil(t, opts.Upper, "expected upper bound")
+			} else {
+				assert.Nil(t, opts.Upper, "expected no upper bound")
+			}
+		})
+	}
+}
+
+func TestManager_BuildSearchOptions_EqualityPlusRange(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "price", Op: FilterGte, Value: float64(100)},
+			{Field: "price", Op: FilterLt, Value: float64(500)},
+		},
+		Limit: 10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+func TestManager_BuildSearchOptions_StartAfter(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	cursor := encoding.EncodeBase64([]byte{0x01, 0x02, 0x03})
+
+	plan := Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+		StartAfter: cursor,
+		Limit:      10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.Equal(t, []byte{0x01, 0x02, 0x03}, opts.StartAfter)
+}
+
+func TestManager_BuildSearchOptions_InvalidCursor(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+		StartAfter: "!!!invalid-base64!!!",
+		Limit:      10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	_, err = m.buildSearchOptions(plan, tmpl)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid cursor")
+}
+
+func TestManager_BuildSearchOptions_StringValues(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: users_by_name
+    collectionPattern: users
+    fields:
+      - { field: name, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "users",
+		Filters: []Filter{
+			{Field: "name", Op: FilterGte, Value: "alice"},
+			{Field: "name", Op: FilterLt, Value: "bob"},
+		},
+		Limit: 10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+func TestManager_BuildSearchOptions_IntegerValues(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: orders_by_count
+    collectionPattern: orders
+    fields:
+      - { field: count, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "orders",
+		Filters: []Filter{
+			{Field: "count", Op: FilterGte, Value: int64(10)},
+			{Field: "count", Op: FilterLte, Value: int64(100)},
+		},
+		Limit: 10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+func TestManager_BuildSearchOptions_BooleanValues(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: users_by_active
+    collectionPattern: users
+    fields:
+      - { field: active, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	plan := Plan{
+		Collection: "users",
+		Filters: []Filter{
+			{Field: "active", Op: FilterEq, Value: true},
+		},
+		Limit: 10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+func TestManager_BuildSearchOptions_EqualityWithLowerRangeBound(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	// Equality on category, lower bound on price (no upper bound on price)
+	// Upper bound is created from equality prefix on category
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "price", Op: FilterGt, Value: float64(100)},
+		},
+		Limit: 10,
+	}
+
+	tmpl, err := m.SelectBestTemplate(plan)
+	require.NoError(t, err)
+
+	opts, err := m.buildSearchOptions(plan, tmpl)
+	require.NoError(t, err)
+
+	// Should have both bounds - upper created from equality filter on category
+	assert.NotNil(t, opts.Lower)
+	assert.NotNil(t, opts.Upper)
+}
+
+// ============================================================================
+// buildSearchOptions Integration Tests
+// ============================================================================
+
+func TestManager_BuildSearchOptions_Integration_EqualitySearch(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	// Insert test documents
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		Filters:    []Filter{{Field: "category", Op: FilterEq, Value: "electronics"}},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	docs := []struct {
+		id       string
+		category string
+		price    float64
+	}{
+		{"p1", "electronics", 100},
+		{"p2", "electronics", 200},
+		{"p3", "electronics", 300},
+		{"p4", "clothing", 50},
+		{"p5", "clothing", 150},
+		{"p6", "food", 10},
+	}
+
+	for _, doc := range docs {
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: doc.category, Direction: encoding.Asc},
+			{Value: doc.price, Direction: encoding.Asc},
+		}, doc.id)
+		require.NoError(t, err)
+		idx.Upsert(doc.id, key)
+	}
+
+	// Search for electronics only
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+		},
+		Limit: 10,
+	}
+
+	results, err := m.Search(context.Background(), "testdb", plan)
+	require.NoError(t, err)
+
+	assert.Len(t, results, 3)
+	ids := make([]string, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+	}
+	assert.Contains(t, ids, "p1")
+	assert.Contains(t, ids, "p2")
+	assert.Contains(t, ids, "p3")
+}
+
+func TestManager_BuildSearchOptions_Integration_RangeSearch_Asc(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		Filters:    []Filter{{Field: "price", Op: FilterGte, Value: float64(100)}},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	docs := []struct {
+		id    string
+		price float64
+	}{
+		{"p1", 50},
+		{"p2", 100},
+		{"p3", 150},
+		{"p4", 200},
+		{"p5", 250},
+		{"p6", 300},
+	}
+
+	for _, doc := range docs {
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: doc.price, Direction: encoding.Asc},
+		}, doc.id)
+		require.NoError(t, err)
+		idx.Upsert(doc.id, key)
+	}
+
+	tests := []struct {
+		name     string
+		filters  []Filter
+		expected []string
+	}{
+		{
+			name:     "gte 150",
+			filters:  []Filter{{Field: "price", Op: FilterGte, Value: float64(150)}},
+			expected: []string{"p3", "p4", "p5", "p6"},
+		},
+		{
+			name:     "gt 150",
+			filters:  []Filter{{Field: "price", Op: FilterGt, Value: float64(150)}},
+			expected: []string{"p4", "p5", "p6"},
+		},
+		{
+			name:     "lte 200",
+			filters:  []Filter{{Field: "price", Op: FilterLte, Value: float64(200)}},
+			expected: []string{"p1", "p2", "p3", "p4"},
+		},
+		{
+			name:     "lt 200",
+			filters:  []Filter{{Field: "price", Op: FilterLt, Value: float64(200)}},
+			expected: []string{"p1", "p2", "p3"},
+		},
+		{
+			name: "between 100 and 250 inclusive",
+			filters: []Filter{
+				{Field: "price", Op: FilterGte, Value: float64(100)},
+				{Field: "price", Op: FilterLte, Value: float64(250)},
+			},
+			expected: []string{"p2", "p3", "p4", "p5"},
+		},
+		{
+			name: "between 100 and 250 exclusive",
+			filters: []Filter{
+				{Field: "price", Op: FilterGt, Value: float64(100)},
+				{Field: "price", Op: FilterLt, Value: float64(250)},
+			},
+			expected: []string{"p3", "p4"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Plan{
+				Collection: "products",
+				Filters:    tt.filters,
+				Limit:      100,
+			}
+
+			results, err := m.Search(context.Background(), "testdb", plan)
+			require.NoError(t, err)
+
+			ids := make([]string, len(results))
+			for i, r := range results {
+				ids[i] = r.ID
+			}
+			assert.ElementsMatch(t, tt.expected, ids)
+		})
+	}
+}
+
+func TestManager_BuildSearchOptions_Integration_RangeSearch_Desc(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price_desc
+    collectionPattern: products
+    fields:
+      - { field: price, order: desc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Desc}},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	docs := []struct {
+		id    string
+		price float64
+	}{
+		{"p1", 50},
+		{"p2", 100},
+		{"p3", 150},
+		{"p4", 200},
+		{"p5", 250},
+		{"p6", 300},
+	}
+
+	for _, doc := range docs {
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: doc.price, Direction: encoding.Desc},
+		}, doc.id)
+		require.NoError(t, err)
+		idx.Upsert(doc.id, key)
+	}
+
+	tests := []struct {
+		name     string
+		filters  []Filter
+		expected []string
+	}{
+		{
+			name:     "gte 150 (descending order)",
+			filters:  []Filter{{Field: "price", Op: FilterGte, Value: float64(150)}},
+			expected: []string{"p3", "p4", "p5", "p6"},
+		},
+		{
+			name:     "gt 150 (descending order)",
+			filters:  []Filter{{Field: "price", Op: FilterGt, Value: float64(150)}},
+			expected: []string{"p4", "p5", "p6"},
+		},
+		{
+			name:     "lte 200 (descending order)",
+			filters:  []Filter{{Field: "price", Op: FilterLte, Value: float64(200)}},
+			expected: []string{"p1", "p2", "p3", "p4"},
+		},
+		{
+			name:     "lt 200 (descending order)",
+			filters:  []Filter{{Field: "price", Op: FilterLt, Value: float64(200)}},
+			expected: []string{"p1", "p2", "p3"},
+		},
+		{
+			name: "between 100 and 250 inclusive (descending order)",
+			filters: []Filter{
+				{Field: "price", Op: FilterGte, Value: float64(100)},
+				{Field: "price", Op: FilterLte, Value: float64(250)},
+			},
+			expected: []string{"p2", "p3", "p4", "p5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Plan{
+				Collection: "products",
+				Filters:    tt.filters,
+				OrderBy:    []OrderField{{Field: "price", Direction: encoding.Desc}},
+				Limit:      100,
+			}
+
+			results, err := m.Search(context.Background(), "testdb", plan)
+			require.NoError(t, err)
+
+			ids := make([]string, len(results))
+			for i, r := range results {
+				ids[i] = r.ID
+			}
+			assert.ElementsMatch(t, tt.expected, ids)
+		})
+	}
+}
+
+func TestManager_BuildSearchOptions_Integration_EqualityPlusRange(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "price", Op: FilterGte, Value: float64(100)},
+		},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	docs := []struct {
+		id       string
+		category string
+		price    float64
+	}{
+		{"p1", "electronics", 50},
+		{"p2", "electronics", 100},
+		{"p3", "electronics", 200},
+		{"p4", "electronics", 300},
+		{"p5", "clothing", 100},
+		{"p6", "clothing", 200},
+	}
+
+	for _, doc := range docs {
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: doc.category, Direction: encoding.Asc},
+			{Value: doc.price, Direction: encoding.Asc},
+		}, doc.id)
+		require.NoError(t, err)
+		idx.Upsert(doc.id, key)
+	}
+
+	tests := []struct {
+		name     string
+		filters  []Filter
+		expected []string
+	}{
+		{
+			name: "electronics, price >= 100",
+			filters: []Filter{
+				{Field: "category", Op: FilterEq, Value: "electronics"},
+				{Field: "price", Op: FilterGte, Value: float64(100)},
+			},
+			expected: []string{"p2", "p3", "p4"},
+		},
+		{
+			name: "electronics, price > 100 and < 300",
+			filters: []Filter{
+				{Field: "category", Op: FilterEq, Value: "electronics"},
+				{Field: "price", Op: FilterGt, Value: float64(100)},
+				{Field: "price", Op: FilterLt, Value: float64(300)},
+			},
+			expected: []string{"p3"},
+		},
+		{
+			name: "clothing, price <= 150",
+			filters: []Filter{
+				{Field: "category", Op: FilterEq, Value: "clothing"},
+				{Field: "price", Op: FilterLte, Value: float64(150)},
+			},
+			expected: []string{"p5"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			plan := Plan{
+				Collection: "products",
+				Filters:    tt.filters,
+				Limit:      100,
+			}
+
+			results, err := m.Search(context.Background(), "testdb", plan)
+			require.NoError(t, err)
+
+			ids := make([]string, len(results))
+			for i, r := range results {
+				ids[i] = r.ID
+			}
+			assert.ElementsMatch(t, tt.expected, ids)
+		})
+	}
+}
+
+func TestManager_BuildSearchOptions_Integration_MultipleEquality(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_category_brand_price
+    collectionPattern: products
+    fields:
+      - { field: category, order: asc }
+      - { field: brand, order: asc }
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "brand", Op: FilterEq, Value: "sony"},
+		},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	docs := []struct {
+		id       string
+		category string
+		brand    string
+		price    float64
+	}{
+		{"p1", "electronics", "sony", 100},
+		{"p2", "electronics", "sony", 200},
+		{"p3", "electronics", "samsung", 150},
+		{"p4", "electronics", "lg", 120},
+		{"p5", "clothing", "nike", 80},
+	}
+
+	for _, doc := range docs {
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: doc.category, Direction: encoding.Asc},
+			{Value: doc.brand, Direction: encoding.Asc},
+			{Value: doc.price, Direction: encoding.Asc},
+		}, doc.id)
+		require.NoError(t, err)
+		idx.Upsert(doc.id, key)
+	}
+
+	plan := Plan{
+		Collection: "products",
+		Filters: []Filter{
+			{Field: "category", Op: FilterEq, Value: "electronics"},
+			{Field: "brand", Op: FilterEq, Value: "sony"},
+		},
+		Limit: 100,
+	}
+
+	results, err := m.Search(context.Background(), "testdb", plan)
+	require.NoError(t, err)
+
+	ids := make([]string, len(results))
+	for i, r := range results {
+		ids[i] = r.ID
+	}
+	assert.ElementsMatch(t, []string{"p1", "p2"}, ids)
+}
+
+func TestManager_BuildSearchOptions_Integration_Pagination(t *testing.T) {
+	m := New()
+	templateYAML := `
+templates:
+  - name: products_by_price
+    collectionPattern: products
+    fields:
+      - { field: price, order: asc }
+`
+	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
+
+	tmpl, _ := m.SelectBestTemplate(Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+	})
+	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+
+	// Insert 10 documents
+	for i := 1; i <= 10; i++ {
+		id := "p" + string(rune('0'+i))
+		price := float64(i * 10)
+		key, err := encoding.Encode([]encoding.Field{
+			{Value: price, Direction: encoding.Asc},
+		}, id)
+		require.NoError(t, err)
+		idx.Upsert(id, key)
+	}
+
+	// First page (limit 3)
+	plan := Plan{
+		Collection: "products",
+		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
+		Limit:      3,
+	}
+
+	results, err := m.Search(context.Background(), "testdb", plan)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+
+	// Get cursor from last result
+	cursor := encoding.EncodeBase64(results[2].OrderKey)
+
+	// Second page using cursor
+	plan.StartAfter = cursor
+	results2, err := m.Search(context.Background(), "testdb", plan)
+	require.NoError(t, err)
+	require.Len(t, results2, 3)
+
+	// Ensure no overlap
+	ids1 := make([]string, 3)
+	ids2 := make([]string, 3)
+	for i := 0; i < 3; i++ {
+		ids1[i] = results[i].ID
+		ids2[i] = results2[i].ID
+	}
+
+	for _, id := range ids1 {
+		assert.NotContains(t, ids2, id, "page 2 should not contain ids from page 1")
+	}
+}
+
+func TestManager_AppendMaxSuffix(t *testing.T) {
+	tests := []struct {
+		name  string
+		input []byte
+	}{
+		{
+			name:  "empty",
+			input: []byte{},
+		},
+		{
+			name:  "single byte",
+			input: []byte{0x42},
+		},
+		{
+			name:  "multiple bytes",
+			input: []byte{0x01, 0x02, 0x03},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := appendMaxSuffix(tt.input)
+
+			if len(tt.input) == 0 {
+				assert.Nil(t, result)
+			} else {
+				// Result should be longer
+				assert.Greater(t, len(result), len(tt.input))
+				// Prefix should match
+				assert.Equal(t, tt.input, result[:len(tt.input)])
+				// Suffix should be 0xFF
+				for i := len(tt.input); i < len(result); i++ {
+					assert.Equal(t, byte(0xFF), result[i])
+				}
+			}
+		})
+	}
+}
+
+func TestManager_IncrementBytes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []byte
+		expected []byte
+	}{
+		{
+			name:     "empty",
+			input:    []byte{},
+			expected: nil,
+		},
+		{
+			name:     "simple increment",
+			input:    []byte{0x01},
+			expected: []byte{0x02},
+		},
+		{
+			name:     "carry over",
+			input:    []byte{0xFF},
+			expected: []byte{0x00, 0x00},
+		},
+		{
+			name:     "partial carry",
+			input:    []byte{0x01, 0xFF},
+			expected: []byte{0x02, 0x00},
+		},
+		{
+			name:     "all FF",
+			input:    []byte{0xFF, 0xFF},
+			expected: []byte{0x00, 0x00, 0x00},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := incrementBytes(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

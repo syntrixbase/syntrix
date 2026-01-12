@@ -122,7 +122,7 @@ func (c *Client) Health(ctx context.Context) (manager.Health, error) {
 	}
 
 	return manager.Health{
-		Status:  resp.Status,
+		Status:  manager.HealthStatus(resp.Status),
 		Indexes: indexes,
 	}, nil
 }

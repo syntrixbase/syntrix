@@ -43,6 +43,13 @@ func (m *mockPuller) close() {
 
 // createTestEvent creates a change event for testing.
 func createTestEvent(database, collection, docID string, data map[string]any) *puller.ChangeEvent {
+	// Ensure Data contains the "id" field for proper indexing
+	if data == nil {
+		data = make(map[string]any)
+	}
+	if _, ok := data["id"]; !ok {
+		data["id"] = docID
+	}
 	return &puller.ChangeEvent{
 		EventID:    "evt-" + docID,
 		DatabaseID: database,
@@ -51,6 +58,7 @@ func createTestEvent(database, collection, docID string, data map[string]any) *p
 			Id:         docID,
 			DatabaseID: database,
 			Collection: collection,
+			Fullpath:   collection + "/" + docID,
 			Data:       data,
 		},
 		ClusterTime: puller.ClusterTime{T: uint32(time.Now().Unix()), I: 1},
@@ -225,15 +233,18 @@ func TestIntegration_ConcurrentUpdates(t *testing.T) {
 	// Update documents multiple times
 	for round := 0; round < updateRounds; round++ {
 		for i := 0; i < docCount; i++ {
+			docID := fmt.Sprintf("user%03d", i)
 			updateEvt := &puller.ChangeEvent{
 				EventID:    fmt.Sprintf("evt-update-%d-%d", round, i),
 				DatabaseID: "db1",
 				OpType:     puller.OperationUpdate,
 				FullDocument: &storage.StoredDoc{
-					Id:         fmt.Sprintf("user%03d", i),
+					Id:         docID,
 					DatabaseID: "db1",
 					Collection: "users",
+					Fullpath:   "users/" + docID,
 					Data: map[string]any{
+						"id":        docID,
 						"name":      fmt.Sprintf("User %d (v%d)", i, round+2),
 						"timestamp": int64((round+1)*docCount + i),
 					},
@@ -417,15 +428,18 @@ func TestIntegration_BulkDeletes(t *testing.T) {
 
 	// Delete half the documents (even numbers)
 	for i := 0; i < docCount; i += 2 {
+		docID := fmt.Sprintf("user%03d", i)
 		deleteEvt := &puller.ChangeEvent{
 			EventID:    fmt.Sprintf("evt-delete-%d", i),
 			DatabaseID: "db1",
 			OpType:     puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
-				Id:         fmt.Sprintf("user%03d", i),
+				Id:         docID,
 				DatabaseID: "db1",
 				Collection: "users",
+				Fullpath:   "users/" + docID,
 				Data: map[string]any{
+					"id":        docID,
 					"name":      fmt.Sprintf("User %d", i),
 					"timestamp": int64(i),
 				},
@@ -624,15 +638,18 @@ func TestIntegration_MixedOperations(t *testing.T) {
 	// Phase 2: Mixed operations - update some, delete some, insert new
 	// Update users 0-19 (bump their timestamps)
 	for i := 0; i < 20; i++ {
+		docID := fmt.Sprintf("user%03d", i)
 		updateEvt := &puller.ChangeEvent{
 			EventID:    fmt.Sprintf("evt-update-%d", i),
 			DatabaseID: "db1",
 			OpType:     puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
-				Id:         fmt.Sprintf("user%03d", i),
+				Id:         docID,
 				DatabaseID: "db1",
 				Collection: "users",
+				Fullpath:   "users/" + docID,
 				Data: map[string]any{
+					"id":        docID,
 					"name":      fmt.Sprintf("User %d (Updated)", i),
 					"timestamp": int64(1000 + i), // Bump to top
 				},
@@ -645,15 +662,17 @@ func TestIntegration_MixedOperations(t *testing.T) {
 
 	// Delete users 80-99
 	for i := 80; i < 100; i++ {
+		docID := fmt.Sprintf("user%03d", i)
 		deleteEvt := &puller.ChangeEvent{
 			EventID:    fmt.Sprintf("evt-delete-%d", i),
 			DatabaseID: "db1",
 			OpType:     puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
-				Id:         fmt.Sprintf("user%03d", i),
+				Id:         docID,
 				DatabaseID: "db1",
 				Collection: "users",
-				Data:       map[string]any{"timestamp": int64(i)},
+				Fullpath:   "users/" + docID,
+				Data:       map[string]any{"id": docID, "timestamp": int64(i)},
 				Deleted:    true,
 			},
 			ClusterTime: puller.ClusterTime{T: uint32(time.Now().Unix()), I: uint32(100 + i)},
@@ -898,7 +917,9 @@ func TestIntegration_DocumentUpdate(t *testing.T) {
 			Id:         "user1",
 			DatabaseID: "db1",
 			Collection: "users",
+			Fullpath:   "users/user1",
 			Data: map[string]any{
+				"id":        "user1",
 				"name":      "Alice Updated",
 				"timestamp": int64(3000), // Higher timestamp, should move to first position
 			},
@@ -973,7 +994,9 @@ func TestIntegration_DocumentDelete(t *testing.T) {
 			Id:         "user2",
 			DatabaseID: "db1",
 			Collection: "users",
+			Fullpath:   "users/user2",
 			Data: map[string]any{
+				"id":        "user2",
 				"name":      "Bob",
 				"timestamp": int64(2000),
 			},
@@ -1339,16 +1362,19 @@ func TestIntegration_EmptyCollection(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Search orders - template exists but no documents have been indexed yet
-	// This returns ErrIndexNotReady because the index hasn't been created
+	// This returns empty results because no documents match
 	plan := indexer.Plan{
 		Collection: "orders",
 		OrderBy:    []indexer.OrderField{{Field: "amount", Direction: indexer.Desc}},
 		Limit:      10,
 	}
 
-	_, err := svc.Search(ctx, "db1", plan)
-	if err != indexer.ErrIndexNotReady {
-		t.Errorf("expected ErrIndexNotReady for collection with no indexed documents, got %v", err)
+	results, err := svc.Search(ctx, "db1", plan)
+	if err != nil {
+		t.Errorf("expected no error for empty collection, got %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("expected empty results for collection with no indexed documents, got %d", len(results))
 	}
 
 	// Now insert one order to create the index
@@ -1360,7 +1386,7 @@ func TestIntegration_EmptyCollection(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Search again - should now work and return the one document
-	results, err := svc.Search(ctx, "db1", plan)
+	results, err = svc.Search(ctx, "db1", plan)
 	if err != nil {
 		t.Fatalf("search failed after inserting order: %v", err)
 	}

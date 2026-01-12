@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,6 +237,22 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		return nil
 	}
 
+	// Get the user-facing document ID from Data["id"]
+	// This is different from doc.Id which is the internal storage ID (database:hash)
+	docID, ok := doc.Data["id"].(string)
+	if !ok || docID == "" {
+		// Fallback: extract from Fullpath (collection/id)
+		if doc.Fullpath != "" {
+			parts := strings.Split(doc.Fullpath, "/")
+			if len(parts) > 0 {
+				docID = parts[len(parts)-1]
+			}
+		}
+	}
+	if docID == "" {
+		return nil // Cannot index without a document ID
+	}
+
 	// Skip deleted documents unless template includes them
 	if doc.Deleted && !tmpl.IncludeDeleted {
 		// Delete from index
@@ -245,7 +262,7 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 			tmpl.Identity(),
 			tmpl.CollectionPattern,
 		)
-		idx.Delete(doc.Id)
+		idx.Delete(docID)
 		return nil
 	}
 
@@ -263,8 +280,8 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		tmpl.CollectionPattern,
 	)
 
-	// Upsert document
-	idx.Upsert(doc.Id, orderKey)
+	// Upsert document using the user-facing document ID
+	idx.Upsert(docID, orderKey)
 
 	return nil
 }
@@ -313,9 +330,9 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 	running := s.running
 	s.mu.RUnlock()
 
-	status := string(HealthOK)
+	status := HealthOK
 	if !running {
-		status = string(HealthUnhealthy)
+		status = HealthUnhealthy
 	}
 
 	indexes := make(map[string]manager.IndexHealth)

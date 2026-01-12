@@ -139,9 +139,21 @@ func (e *Engine) DeleteDocument(ctx context.Context, database string, path strin
 }
 
 // ExecuteQuery executes a structured query.
-// It requires an indexer to function; fallback to storage scan is not supported.
+// Falls back to storage scan when no filters/orderBy, otherwise uses indexer.
 func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
-	// Indexer is mandatory
+	// If no filters and no orderBy, go directly to storage
+	// This handles simple "list all" queries and ShowDeleted properly
+	if len(q.Filters) == 0 && len(q.OrderBy) == 0 {
+		return e.executeWithStorage(ctx, database, q)
+	}
+
+	// If filters only contain id == or id in, go directly to storage
+	// These can be resolved by direct document lookups without indexer
+	if e.isIDOnlyQuery(q) {
+		return e.executeWithStorage(ctx, database, q)
+	}
+
+	// Indexer is required for filtered/ordered queries
 	if e.indexer == nil {
 		return nil, ErrIndexerRequired
 	}
@@ -152,6 +164,49 @@ func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Quer
 	}
 
 	return docs, nil
+}
+
+// isIDOnlyQuery returns true if the query only filters by id (== or in).
+func (e *Engine) isIDOnlyQuery(q model.Query) bool {
+	// Must have no orderBy to be an ID-only query
+	if len(q.OrderBy) > 0 {
+		return false
+	}
+
+	// Must have at least one filter
+	if len(q.Filters) == 0 {
+		return false
+	}
+
+	// All filters must be on "id" field with == or in operator
+	for _, f := range q.Filters {
+		if f.Field != "id" {
+			return false
+		}
+		if f.Op != "==" && f.Op != "in" {
+			return false
+		}
+	}
+
+	return true
+}
+
+// executeWithStorage uses storage directly for simple queries without filters/orderBy.
+func (e *Engine) executeWithStorage(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
+	storedDocs, err := e.storage.Query(ctx, database, q)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to model.Document
+	flatDocs := make([]model.Document, 0, len(storedDocs))
+	for _, d := range storedDocs {
+		if d != nil {
+			flatDocs = append(flatDocs, helper.FlattenStorageDocument(d))
+		}
+	}
+
+	return flatDocs, nil
 }
 
 // executeWithIndexer uses the indexer to find document IDs and fetches them.
@@ -193,9 +248,10 @@ func (e *Engine) executeWithIndexer(ctx context.Context, database string, q mode
 // queryToPlan converts a model.Query to an indexer.Plan.
 func (e *Engine) queryToPlan(q model.Query) indexer.Plan {
 	plan := indexer.Plan{
-		Collection: q.Collection,
-		Limit:      q.Limit,
-		StartAfter: q.StartAfter,
+		Collection:  q.Collection,
+		Limit:       q.Limit,
+		StartAfter:  q.StartAfter,
+		ShowDeleted: q.ShowDeleted,
 	}
 
 	// Convert filters

@@ -421,6 +421,37 @@ func (s *stubQueryService) Push(context.Context, string, storage.ReplicationPush
 	return nil, nil
 }
 
+// stubIndexerService implements indexer.LocalService for testing
+type stubIndexerService struct{}
+
+func (s *stubIndexerService) Search(ctx context.Context, database string, plan indexer.Plan) ([]indexer.DocRef, error) {
+	return nil, nil
+}
+
+func (s *stubIndexerService) Health(ctx context.Context) (indexer.Health, error) {
+	return indexer.Health{}, nil
+}
+
+func (s *stubIndexerService) Stats(ctx context.Context) (indexer.Stats, error) {
+	return indexer.Stats{}, nil
+}
+
+func (s *stubIndexerService) Start(ctx context.Context) error {
+	return nil
+}
+
+func (s *stubIndexerService) Stop(ctx context.Context) error {
+	return nil
+}
+
+func (s *stubIndexerService) ApplyEvent(ctx context.Context, evt *indexer.ChangeEvent) error {
+	return nil
+}
+
+func (s *stubIndexerService) Manager() *indexer.IndexManager {
+	return nil
+}
+
 type stubStorageFactory struct {
 	dbByName  map[string]string
 	errByName map[string]error
@@ -555,6 +586,83 @@ func TestManager_createQueryService(t *testing.T) {
 	service, err := mgr.createQueryService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
+}
+
+func TestManager_createQueryService_StandaloneMode(t *testing.T) {
+	fakeDocStore := &fakeDocumentStore{}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunQuery: true})
+	// Set indexerService to a non-nil value
+	mgr.indexerService = &stubIndexerService{}
+
+	service, err := mgr.createQueryService(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, service)
+}
+
+func TestManager_createQueryService_StandaloneMissingIndexer(t *testing.T) {
+	fakeDocStore := &fakeDocumentStore{}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunQuery: true})
+	// indexerService is nil
+
+	_, err := mgr.createQueryService(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
+}
+
+func TestManager_createQueryService_DistributedMissingURL(t *testing.T) {
+	fakeDocStore := &fakeDocumentStore{}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Gateway.IndexerServiceURL = "" // Clear the URL
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunQuery: true})
+
+	_, err := mgr.createQueryService(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway.indexer_service_url required in distributed mode")
+}
+
+func TestManager_createQueryService_StorageError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return nil, errors.New("storage connection failed")
+	}
+
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	_, err := mgr.createQueryService(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "storage connection failed")
 }
 
 func TestManager_initQueryGRPCServer(t *testing.T) {

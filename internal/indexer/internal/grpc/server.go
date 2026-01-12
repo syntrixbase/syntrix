@@ -77,7 +77,7 @@ func (s *Server) Health(ctx context.Context, req *indexerv1.HealthRequest) (*ind
 	}
 
 	return &indexerv1.HealthResponse{
-		Status:  health.Status,
+		Status:  string(health.Status),
 		Indexes: indexes,
 	}, nil
 }

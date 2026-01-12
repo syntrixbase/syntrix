@@ -76,8 +76,8 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 				Collection: "test",
 			},
 			mockSetup: func(m *MockStorageBackend, idx *MockIndexerService) {
-				idx.On("Search", mock.Anything, "default", mock.Anything).Return([]indexer.DocRef{{ID: "1"}}, nil)
-				m.On("GetMany", mock.Anything, "default", mock.Anything).Return(nil, assert.AnError)
+				// No filters/orderBy - goes directly to storage.Query
+				m.On("Query", mock.Anything, "default", mock.Anything).Return(nil, assert.AnError)
 			},
 			expectError: true,
 		},
@@ -87,8 +87,8 @@ func TestEngine_ExecuteQuery(t *testing.T) {
 				Collection: "test",
 			},
 			mockSetup: func(m *MockStorageBackend, idx *MockIndexerService) {
-				// Indexer returns empty
-				idx.On("Search", mock.Anything, "default", mock.Anything).Return([]indexer.DocRef{}, nil)
+				// No filters/orderBy - goes directly to storage.Query
+				m.On("Query", mock.Anything, "default", mock.Anything).Return([]*storage.StoredDoc{}, nil)
 			},
 			expectedDocs: []model.Document{},
 			expectError:  false,
@@ -850,9 +850,6 @@ func TestExecuteQuery_CustomDatabase(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	// Mock Indexer
-	mockIndexer.On("Search", mock.Anything, "custom-database", mock.Anything).Return([]indexer.DocRef{{ID: "doc1"}}, nil)
-
 	engine := New(mockStorage, mockIndexer)
 
 	storedDocs := []*storage.StoredDoc{
@@ -864,7 +861,8 @@ func TestExecuteQuery_CustomDatabase(t *testing.T) {
 			Version:    1,
 		},
 	}
-	mockStorage.On("GetMany", mock.Anything, "custom-database", []string{"col/doc1"}).Return(storedDocs, nil)
+	// No filters/orderBy - goes directly to storage.Query
+	mockStorage.On("Query", mock.Anything, "custom-database", mock.Anything).Return(storedDocs, nil)
 
 	query := model.Query{Collection: "col"}
 	docs, err := engine.ExecuteQuery(context.Background(), "custom-database", query)

@@ -92,6 +92,7 @@ func TestEngine_ExecuteQuery_IndexerError(t *testing.T) {
 
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
@@ -118,6 +119,7 @@ func TestEngine_ExecuteQuery_EmptyResults(t *testing.T) {
 
 	query := model.Query{
 		Collection: "users",
+		OrderBy:    []model.Order{{Field: "age", Direction: "asc"}}, // OrderBy to trigger indexer path
 		Limit:      10,
 	}
 
@@ -145,6 +147,7 @@ func TestEngine_ExecuteQuery_GetManyError(t *testing.T) {
 
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
@@ -190,6 +193,7 @@ func TestEngine_ExecuteQuery_NilDocumentsFiltered(t *testing.T) {
 
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
@@ -275,4 +279,93 @@ func TestEngine_QueryToPlan_UnsupportedOpSkipped(t *testing.T) {
 	assert.Len(t, plan.Filters, 2)
 	assert.Equal(t, "status", plan.Filters[0].Field)
 	assert.Equal(t, "age", plan.Filters[1].Field)
+}
+
+func TestEngine_IsIDOnlyQuery(t *testing.T) {
+	mockStorage := new(MockStorageBackend)
+	engine := New(mockStorage, nil)
+
+	tests := []struct {
+		name     string
+		query    model.Query
+		expected bool
+	}{
+		{
+			name: "id == filter only",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "==", Value: "user1"}},
+			},
+			expected: true,
+		},
+		{
+			name: "id in filter only",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "in", Value: []string{"user1", "user2"}}},
+			},
+			expected: true,
+		},
+		{
+			name: "multiple id filters",
+			query: model.Query{
+				Collection: "users",
+				Filters: []model.Filter{
+					{Field: "id", Op: "==", Value: "user1"},
+					{Field: "id", Op: "in", Value: []string{"user2"}},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "id filter with orderBy",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "==", Value: "user1"}},
+				OrderBy:    []model.Order{{Field: "name", Direction: "asc"}},
+			},
+			expected: false,
+		},
+		{
+			name: "non-id filter",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}},
+			},
+			expected: false,
+		},
+		{
+			name: "mixed id and non-id filters",
+			query: model.Query{
+				Collection: "users",
+				Filters: []model.Filter{
+					{Field: "id", Op: "==", Value: "user1"},
+					{Field: "status", Op: "==", Value: "active"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "id filter with unsupported op",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: ">", Value: "user1"}},
+			},
+			expected: false,
+		},
+		{
+			name: "no filters",
+			query: model.Query{
+				Collection: "users",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := engine.isIDOnlyQuery(tt.query)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

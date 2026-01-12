@@ -85,12 +85,10 @@ func LoadFromFile(path string) ([]Template, error) {
 
 // LoadFromBytes parses templates from YAML bytes.
 func LoadFromBytes(data []byte) ([]Template, error) {
-	fmt.Printf("DEBUG: Loading templates from bytes: %s\n", string(data))
 	var cfg Config
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse templates: %w", err)
 	}
-	fmt.Printf("DEBUG: Loaded %d templates from bytes\n", len(cfg.Templates))
 
 	// Validate each template
 	for i := range cfg.Templates {
@@ -205,7 +203,6 @@ func (s PatternScore) Equal(other PatternScore) bool {
 // MatchTemplates finds all templates that match a collection path.
 // Returns templates sorted by priority (highest first).
 func MatchTemplates(path string, templates []Template) []MatchResult {
-	fmt.Printf("DEBUG: MatchTemplates path=%s templates=%d\n", path, len(templates))
 	pathSegments := strings.Split(path, "/")
 	var results []MatchResult
 
@@ -227,7 +224,6 @@ func MatchTemplates(path string, templates []Template) []MatchResult {
 		score := calculateScore(patternSegments)
 		results = append(results, MatchResult{Template: t, Score: score})
 	}
-	fmt.Printf("DEBUG: MatchTemplates found %d matches\n", len(results))
 
 	// Sort by score (highest first)
 	sort.Slice(results, func(i, j int) bool {

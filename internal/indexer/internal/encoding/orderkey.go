@@ -85,6 +85,26 @@ func Encode(fields []Field, docID string) ([]byte, error) {
 	return buf, nil
 }
 
+// EncodePrefix creates a prefix from fields without the document ID suffix.
+// Used for building search bounds where we want to match all documents with a given field prefix.
+func EncodePrefix(fields []Field) ([]byte, error) {
+	buf := make([]byte, 0, 64)
+
+	// Version byte
+	buf = append(buf, Version)
+
+	// Encode each field
+	for _, f := range fields {
+		encoded, err := encodeField(f.Value, f.Direction)
+		if err != nil {
+			return nil, err
+		}
+		buf = append(buf, encoded...)
+	}
+
+	return buf, nil
+}
+
 // encodeField encodes a single field value with its type tag.
 func encodeField(value any, dir Direction) ([]byte, error) {
 	var buf []byte

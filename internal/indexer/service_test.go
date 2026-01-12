@@ -134,7 +134,7 @@ func TestService_StartStop(t *testing.T) {
 		require.NoError(t, err)
 		defer svc.Stop(ctx)
 
-		// Try to start again
+		// Try to start again - returns error
 		err = svc.Start(ctx)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "already running")
@@ -253,7 +253,9 @@ templates:
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/doc1",
 				Data: map[string]any{
+					"id":        "doc1",
 					"timestamp": float64(1000),
 				},
 			},
@@ -294,7 +296,9 @@ templates:
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/doc1",
 				Data: map[string]any{
+					"id":        "doc1",
 					"timestamp": float64(1000),
 				},
 				Deleted: false,
@@ -315,7 +319,9 @@ templates:
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/doc1",
 				Data: map[string]any{
+					"id":        "doc1",
 					"timestamp": float64(1000),
 				},
 				Deleted: true,
@@ -354,7 +360,9 @@ templates:
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/doc1",
 				Data: map[string]any{
+					"id":        "doc1",
 					"timestamp": float64(1000),
 				},
 				Deleted: true,
@@ -390,13 +398,16 @@ templates:
 
 	// Add some documents
 	for i := 1; i <= 5; i++ {
+		docID := "doc" + string(rune('0'+i))
 		evt := &ChangeEvent{
 			EventID:    "evt" + string(rune('0'+i)),
 			DatabaseID: "testdb",
 			FullDocument: &storage.StoredDoc{
-				Id:         "doc" + string(rune('0'+i)),
+				Id:         docID,
 				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/" + docID,
 				Data: map[string]any{
+					"id":        docID,
 					"timestamp": float64(i * 1000),
 				},
 			},
@@ -436,9 +447,9 @@ templates:
 				{Field: "timestamp", Direction: 1},
 			},
 		})
-		// Returns ErrIndexNotReady since index doesn't exist
-		assert.Error(t, err)
-		assert.Nil(t, results)
+		// Returns empty results since no documents have been indexed yet
+		assert.NoError(t, err)
+		assert.Empty(t, results)
 	})
 }
 
@@ -495,7 +506,9 @@ templates:
 		FullDocument: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users/alice/chats",
+			Fullpath:   "users/alice/chats/doc1",
 			Data: map[string]any{
+				"id":        "doc1",
 				"timestamp": float64(1000),
 			},
 		},
@@ -550,7 +563,9 @@ templates:
 				FullDocument: &storage.StoredDoc{
 					Id:         "doc1",
 					Collection: "users/alice/chats",
+					Fullpath:   "users/alice/chats/doc1",
 					Data: map[string]any{
+						"id":        "doc1",
 						"timestamp": float64(1000),
 					},
 				},
@@ -653,6 +668,7 @@ func TestService_StopWithTimeout(t *testing.T) {
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel() // Cancel immediately
 
+		// Stop returns context.Canceled because context is already cancelled
 		err = svc.Stop(ctx)
 		assert.Error(t, err)
 		assert.Equal(t, context.Canceled, err)
@@ -779,7 +795,9 @@ templates:
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/docs",
+				Fullpath:   "users/alice/docs/doc1",
 				Data: map[string]any{
+					"id":   "doc1",
 					"data": []string{"a", "b", "c"}, // Unsupported type
 				},
 			},
@@ -889,6 +907,49 @@ templates:
 
 	err = s.applyEventToTemplate(context.Background(), evt, &tmpl)
 	require.NoError(t, err)
+}
+
+func TestService_ApplyEventToTemplate_DocIDFromFullpath(t *testing.T) {
+	svc := NewService(Config{}, nil, testLogger())
+	s := svc.(*service)
+
+	templateYAML := `
+templates:
+  - name: test_template
+    collectionPattern: users
+    fields:
+      - { field: name, order: asc }
+`
+	err := s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+	require.NoError(t, err)
+
+	err = svc.Start(context.Background())
+	require.NoError(t, err)
+	defer svc.Stop(context.Background())
+
+	tmpl := s.manager.Templates()[0]
+
+	// Event with FullDocument that has no "id" in Data but has Fullpath
+	evt := &ChangeEvent{
+		EventID:    "evt1",
+		DatabaseID: "testdb",
+		FullDocument: &storage.StoredDoc{
+			Fullpath:   "users/user123", // ID should be extracted from here
+			Collection: "users",
+			Data: map[string]any{
+				"name": "John",
+				// No "id" field - should fallback to Fullpath
+			},
+		},
+	}
+
+	err = s.applyEventToTemplate(context.Background(), evt, &tmpl)
+	require.NoError(t, err)
+
+	// Verify the document was indexed
+	idx := s.manager.GetOrCreateIndex("testdb", "users", tmpl.Identity(), tmpl.CollectionPattern)
+	key := idx.Get("user123")
+	assert.NotNil(t, key, "document should be indexed with ID extracted from Fullpath")
 }
 
 func TestService_SubscriptionReconnect_ContextCanceled(t *testing.T) {

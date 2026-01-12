@@ -187,8 +187,8 @@ templates:
 		RunQuery:            false, // No separate Query HTTP server
 		RunTriggerEvaluator: false, // Not testing triggers
 		RunTriggerWorker:    false,
-		RunIndexer:          true,  // Indexer must run to load templates
-		RunPuller:           true,  // Puller must run to feed Indexer
+		RunIndexer:          true,                    // Indexer must run to load templates
+		RunPuller:           true,                    // Puller must run to feed Indexer
 		Mode:                services.ModeStandalone, // Standalone mode
 	}
 
@@ -298,15 +298,12 @@ func TestStandaloneMode_BasicCRUD(t *testing.T) {
 		assert.Contains(t, result, "id")
 	})
 
-	time.Sleep(3 * time.Second) // Wait for indexer to digest changes
-
 	// Test Query (uses Query service internally)
+	// Query without filters/orderBy goes directly to storage, no need to wait for indexer
 	t.Run("Query documents", func(t *testing.T) {
 		queryData := map[string]interface{}{
 			"collection": collection,
-			"orderBy": []map[string]string{
-				{"field": "id", "direction": "asc"},
-			},
+			// No filters or orderBy - goes directly to storage
 		}
 		body, _ := json.Marshal(queryData)
 

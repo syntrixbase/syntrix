@@ -105,6 +105,8 @@ const (
 // Stats represents index statistics.
 type Stats = manager.Stats
 
+// IndexManager is the underlying manager type. Exported for testing and advanced operations.
+type IndexManager = manager.Manager
 
 // ChangeEvent is the change event type from Puller.
 type ChangeEvent = manager.ChangeEvent
