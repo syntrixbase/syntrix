@@ -73,6 +73,7 @@ func TestAPIIntegration(t *testing.T) {
 	assert.Nil(t, replacedDoc["age"]) // age should be gone after replace
 
 	// 5. Scenario: Query Document
+	time.Sleep(1 * time.Second) // Wait for indexer to digest changes
 	query := model.Query{
 		Collection: collection,
 		Filters: []model.Filter{
@@ -165,6 +166,8 @@ func TestAPIQueryAdvanced(t *testing.T) {
 		created := env.CreateDocument(t, collection, doc, token)
 		createdIDs = append(createdIDs, created["id"].(string))
 	}
+
+	time.Sleep(1 * time.Second) // Wait for indexer to digest changes
 
 	// Test 1: Query with multiple filters (AND logic)
 	t.Run("MultipleFilters", func(t *testing.T) {

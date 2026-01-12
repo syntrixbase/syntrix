@@ -15,7 +15,7 @@ import (
 // mockLocalService implements LocalService for testing.
 type mockLocalService struct {
 	searchFn func(ctx context.Context, database string, plan manager.Plan) ([]manager.DocRef, error)
-	healthFn func(ctx context.Context) (HealthStatus, error)
+	healthFn func(ctx context.Context) (manager.Health, error)
 	mgr      *manager.Manager
 }
 
@@ -26,11 +26,11 @@ func (m *mockLocalService) Search(ctx context.Context, database string, plan man
 	return nil, nil
 }
 
-func (m *mockLocalService) Health(ctx context.Context) (HealthStatus, error) {
+func (m *mockLocalService) Health(ctx context.Context) (manager.Health, error) {
 	if m.healthFn != nil {
 		return m.healthFn(ctx)
 	}
-	return HealthStatus{Status: "ok"}, nil
+	return manager.Health{Status: "ok"}, nil
 }
 
 func (m *mockLocalService) Manager() *manager.Manager {
@@ -140,8 +140,8 @@ func TestServer_Health(t *testing.T) {
 
 	t.Run("healthy status", func(t *testing.T) {
 		mock := &mockLocalService{
-			healthFn: func(ctx context.Context) (HealthStatus, error) {
-				return HealthStatus{
+			healthFn: func(ctx context.Context) (manager.Health, error) {
+				return manager.Health{
 					Status: "ok",
 				}, nil
 			},
@@ -156,16 +156,16 @@ func TestServer_Health(t *testing.T) {
 	})
 
 	t.Run("with index health", func(t *testing.T) {
-		mgr := manager.New()
-		// Create some indexes
-		mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
-
 		mock := &mockLocalService{
-			healthFn: func(ctx context.Context) (HealthStatus, error) {
-				return HealthStatus{Status: "ok"}, nil
+			healthFn: func(ctx context.Context) (manager.Health, error) {
+				return manager.Health{
+					Status: "ok",
+					Indexes: map[string]manager.IndexHealth{
+						"idx1": {State: "healthy", DocCount: 10},
+						"idx2": {State: "healthy", DocCount: 20},
+					},
+				}, nil
 			},
-			mgr: mgr,
 		}
 
 		server := NewServer(mock)

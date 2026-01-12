@@ -341,11 +341,14 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 
 	// Process events
 	for stream.Next(ctx) {
+		fmt.Println("DEBUG: Puller received event (stream.Next returned true)")
 		var raw normalizer.RawEvent
 		if err := stream.Decode(&raw); err != nil {
+			fmt.Printf("DEBUG: Puller decode error: %v\n", err)
 			logger.Error("failed to decode event", "error", err)
 			continue
 		}
+		fmt.Printf("DEBUG: Puller decoded event op=%v ns=%v\n", raw.OperationType, raw.Namespace)
 
 		// Normalize event
 		evt, err := backend.normalizer.Normalize(&raw)

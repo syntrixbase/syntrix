@@ -35,24 +35,12 @@ func (m *MockIndexerService) Stats(ctx context.Context) (indexer.Stats, error) {
 	return args.Get(0).(indexer.Stats), args.Error(1)
 }
 
-func TestEngine_WithIndexer(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockIndexer := new(MockIndexerService)
-
-	engine := New(mockStorage)
-	assert.Nil(t, engine.indexer)
-
-	result := engine.WithIndexer(mockIndexer)
-	assert.Same(t, engine, result)
-	assert.NotNil(t, engine.indexer)
-}
-
-func TestEngine_ExecuteQuery_WithIndexer_Success(t *testing.T) {
+func TestEngine_ExecuteQuery_Success(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	// Indexer returns document references with IDs
 	refs := []indexer.DocRef{
@@ -91,26 +79,16 @@ func TestEngine_ExecuteQuery_WithIndexer_Success(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_Fallback(t *testing.T) {
+func TestEngine_ExecuteQuery_IndexerError(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	// Indexer returns error
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).
 		Return(nil, errors.New("no matching index"))
-
-	// Storage fallback
-	storedDocs := []*storage.StoredDoc{
-		{
-			Id:       "testdb:users/user1",
-			Fullpath: "users/user1",
-			Data:     map[string]interface{}{"name": "Alice"},
-		},
-	}
-	mockStorage.On("Query", ctx, "testdb", mock.AnythingOfType("model.Query")).Return(storedDocs, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -119,19 +97,21 @@ func TestEngine_ExecuteQuery_WithIndexer_Fallback(t *testing.T) {
 
 	docs, err := engine.ExecuteQuery(ctx, "testdb", query)
 
-	assert.NoError(t, err)
-	assert.Len(t, docs, 1)
+	assert.Error(t, err)
+	assert.Nil(t, docs)
+	assert.Equal(t, "no matching index", err.Error())
 
 	mockIndexer.AssertExpectations(t)
+	// Storage should NOT be called
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_EmptyResults(t *testing.T) {
+func TestEngine_ExecuteQuery_EmptyResults(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{}
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).Return(refs, nil)
@@ -149,12 +129,12 @@ func TestEngine_ExecuteQuery_WithIndexer_EmptyResults(t *testing.T) {
 	mockIndexer.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_GetManyError_Fallback(t *testing.T) {
+func TestEngine_ExecuteQuery_GetManyError(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{{ID: "user1"}}
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).Return(refs, nil)
@@ -163,16 +143,6 @@ func TestEngine_ExecuteQuery_WithIndexer_GetManyError_Fallback(t *testing.T) {
 	mockStorage.On("GetMany", ctx, "testdb", []string{"users/user1"}).
 		Return(nil, errors.New("db error"))
 
-	// Fallback to storage.Query
-	storedDocs := []*storage.StoredDoc{
-		{
-			Id:       "testdb:users/user1",
-			Fullpath: "users/user1",
-			Data:     map[string]interface{}{"name": "Alice"},
-		},
-	}
-	mockStorage.On("Query", ctx, "testdb", mock.AnythingOfType("model.Query")).Return(storedDocs, nil)
-
 	query := model.Query{
 		Collection: "users",
 		Limit:      10,
@@ -180,19 +150,20 @@ func TestEngine_ExecuteQuery_WithIndexer_GetManyError_Fallback(t *testing.T) {
 
 	docs, err := engine.ExecuteQuery(ctx, "testdb", query)
 
-	assert.NoError(t, err)
-	assert.Len(t, docs, 1)
+	assert.Error(t, err)
+	assert.Nil(t, docs)
+	assert.Equal(t, "db error", err.Error())
 
 	mockIndexer.AssertExpectations(t)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_NilDocumentsFiltered(t *testing.T) {
+func TestEngine_ExecuteQuery_NilDocumentsFiltered(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{
 		{ID: "user1"},
@@ -233,7 +204,7 @@ func TestEngine_ExecuteQuery_WithIndexer_NilDocumentsFiltered(t *testing.T) {
 
 func TestEngine_QueryToPlan(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -269,7 +240,7 @@ func TestEngine_QueryToPlan(t *testing.T) {
 
 func TestEngine_QueryToPlan_Ascending(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -286,7 +257,7 @@ func TestEngine_QueryToPlan_Ascending(t *testing.T) {
 
 func TestEngine_QueryToPlan_UnsupportedOpSkipped(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",

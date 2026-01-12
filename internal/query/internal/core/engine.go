@@ -11,6 +11,10 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
+var (
+	ErrIndexerRequired = errors.New("indexer is required")
+)
+
 // Engine handles all business logic and coordinates with the storage backend.
 type Engine struct {
 	storage storage.DocumentStore
@@ -18,16 +22,11 @@ type Engine struct {
 }
 
 // New creates a new Query Engine instance.
-func New(storage storage.DocumentStore) *Engine {
+func New(storage storage.DocumentStore, indexer indexer.Service) *Engine {
 	return &Engine{
 		storage: storage,
+		indexer: indexer,
 	}
-}
-
-// WithIndexer sets the indexer service for accelerated queries.
-func (e *Engine) WithIndexer(idx indexer.Service) *Engine {
-	e.indexer = idx
-	return e
 }
 
 // GetDocument retrieves a document by path.
@@ -140,29 +139,19 @@ func (e *Engine) DeleteDocument(ctx context.Context, database string, path strin
 }
 
 // ExecuteQuery executes a structured query.
-// If an indexer is configured, it attempts to use the index for ordering/filtering.
+// It requires an indexer to function; fallback to storage scan is not supported.
 func (e *Engine) ExecuteQuery(ctx context.Context, database string, q model.Query) ([]model.Document, error) {
-	// Try indexer if available
-	if e.indexer != nil {
-		docs, err := e.executeWithIndexer(ctx, database, q)
-		if err == nil {
-			return docs, nil
-		}
-		// Fallback to storage on indexer error (e.g., no matching index)
+	// Indexer is mandatory
+	if e.indexer == nil {
+		return nil, ErrIndexerRequired
 	}
 
-	// Fallback to storage query
-	storedDocs, err := e.storage.Query(ctx, database, q)
+	docs, err := e.executeWithIndexer(ctx, database, q)
 	if err != nil {
 		return nil, err
 	}
 
-	flatDocs := make([]model.Document, len(storedDocs))
-	for i, d := range storedDocs {
-		flatDocs[i] = helper.FlattenStorageDocument(d)
-	}
-
-	return flatDocs, nil
+	return docs, nil
 }
 
 // executeWithIndexer uses the indexer to find document IDs and fetches them.

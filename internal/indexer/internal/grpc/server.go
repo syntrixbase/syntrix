@@ -18,14 +18,8 @@ import (
 // LocalService is the interface that the gRPC server delegates to.
 type LocalService interface {
 	Search(ctx context.Context, database string, plan manager.Plan) ([]manager.DocRef, error)
-	Health(ctx context.Context) (HealthStatus, error)
+	Health(ctx context.Context) (manager.Health, error)
 	Manager() *manager.Manager
-}
-
-// HealthStatus represents health status returned by the service.
-type HealthStatus struct {
-	Status      string
-	IndexHealth map[string]string
 }
 
 // Server implements the gRPC IndexerServiceServer interface.
@@ -75,16 +69,10 @@ func (s *Server) Health(ctx context.Context, req *indexerv1.HealthRequest) (*ind
 	}
 
 	indexes := make(map[string]*indexerv1.IndexHealth)
-	if mgr := s.svc.Manager(); mgr != nil {
-		for _, dbName := range mgr.ListDatabases() {
-			db := mgr.GetDatabase(dbName)
-			for _, idx := range db.ListIndexes() {
-				key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
-				indexes[key] = &indexerv1.IndexHealth{
-					State:    idx.State().String(),
-					DocCount: int64(idx.Len()),
-				}
-			}
+	for k, v := range health.Indexes {
+		indexes[k] = &indexerv1.IndexHealth{
+			State:    v.State,
+			DocCount: v.DocCount,
 		}
 	}
 

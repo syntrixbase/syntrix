@@ -8,10 +8,10 @@ Index of task planning documents for Syntrix.
 
 ## Tasks
 
-- [017.2025-12-29-index-layer-implementation.md](017.2025-12-29-index-layer-implementation.md) — Index Layer Implementation (Data/Index/Query). Status: Planned. Depends on: 016.
+- [x] [017.2025-12-29-index-layer-implementation.md](017.2025-12-29-index-layer-implementation.md) — Index Layer Implementation (Data/Index/Query). Status: Planned. Depends on: 016.
 - [x] [025.2026-01-03-coverage-improvement.md](025.2026-01-03-coverage-improvement.md) - Coverage Improvement Report
 - [x] [026.2026-01-04-api-server-integration.md](026.2026-01-04-api-server-integration.md) - API Server Integration into Unified Server Layer. Status: Completed.
-- [027.2026-01-05-streamer-service-implementation.md](027.2026-01-05-streamer-service-implementation.md) — Streamer Service Implementation (Replace CSP). Status: Planned. Depends on: Puller.
+- [x] [027.2026-01-05-streamer-service-implementation.md](027.2026-01-05-streamer-service-implementation.md) — Streamer Service Implementation (Replace CSP). Status: Planned. Depends on: Puller.
 - [x] [032.2026-01-08-query-grpc-migration.md](032.2026-01-08-query-grpc-migration.md) — Query Service gRPC Migration. Status: Completed.
-- [033.2026-01-08-unified-grpc-server.md](033.2026-01-08-unified-grpc-server.md) — Unified gRPC Server Migration (Puller & Streamer). Status: Pending.
-- [034.2026-01-11-query-indexer-integration.md](034.2026-01-11-query-indexer-integration.md) — Query-Indexer Integration. Status: Planned. Depends on: 017.
+- [x] [033.2026-01-08-unified-grpc-server.md](033.2026-01-08-unified-grpc-server.md) — Unified gRPC Server Migration (Puller & Streamer). Status: Completed.
+- [ ] [034.2026-01-11-query-indexer-integration.md](034.2026-01-11-query-indexer-integration.md) — Query-Indexer Integration. Status: Completed. Depends on: 017.

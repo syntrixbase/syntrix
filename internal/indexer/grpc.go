@@ -1,43 +1,17 @@
 package indexer
 
 import (
-	"context"
 	"log/slog"
 
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/client"
+	"github.com/syntrixbase/syntrix/internal/indexer/client"
 	internalgrpc "github.com/syntrixbase/syntrix/internal/indexer/internal/grpc"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
 )
 
 // NewGRPCServer creates a gRPC server adapter for the Indexer.
 // The returned server implements indexerv1.IndexerServiceServer.
 func NewGRPCServer(svc LocalService) indexerv1.IndexerServiceServer {
-	return internalgrpc.NewServer(&grpcServiceAdapter{svc})
-}
-
-// grpcServiceAdapter adapts LocalService to the grpc.LocalService interface.
-type grpcServiceAdapter struct {
-	svc LocalService
-}
-
-func (a *grpcServiceAdapter) Search(ctx context.Context, database string, plan manager.Plan) ([]manager.DocRef, error) {
-	return a.svc.Search(ctx, database, Plan(plan))
-}
-
-func (a *grpcServiceAdapter) Health(ctx context.Context) (internalgrpc.HealthStatus, error) {
-	h, err := a.svc.Health(ctx)
-	if err != nil {
-		return internalgrpc.HealthStatus{}, err
-	}
-	return internalgrpc.HealthStatus{
-		Status:      string(h.Status),
-		IndexHealth: h.IndexHealth,
-	}, nil
-}
-
-func (a *grpcServiceAdapter) Manager() *manager.Manager {
-	return a.svc.Manager()
+	return internalgrpc.NewServer(svc)
 }
 
 // Client is a gRPC client for the Indexer service.
@@ -47,6 +21,7 @@ type Client = client.Client
 func NewClient(address string, logger *slog.Logger) (*Client, error) {
 	return client.New(address, logger)
 }
+
 
 // IndexerState contains the complete indexer state.
 type IndexerState = client.IndexerState

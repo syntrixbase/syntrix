@@ -161,9 +161,11 @@ func (m *Manager) MatchTemplatesForCollection(collection string) []template.Matc
 // SelectBestTemplate selects the best template for a query plan.
 // Implements Query-to-Index matching rules.
 func (m *Manager) SelectBestTemplate(plan Plan) (*template.Template, error) {
+	fmt.Printf("DEBUG: SelectBestTemplate for collection=%s filters=%v orderBy=%v\n", plan.Collection, plan.Filters, plan.OrderBy)
 	// Get all matching templates for the collection
 	matches := m.MatchTemplatesForCollection(plan.Collection)
 	if len(matches) == 0 {
+		fmt.Println("DEBUG: No matches for collection")
 		return nil, ErrNoMatchingIndex
 	}
 
@@ -171,15 +173,19 @@ func (m *Manager) SelectBestTemplate(plan Plan) (*template.Template, error) {
 	var compatible []matchCandidate
 	for _, match := range matches {
 		if queryScore := m.computeQueryScore(plan, match.Template); queryScore > 0 {
+			fmt.Printf("DEBUG: Compatible template %s score=%d\n", match.Template.Name, queryScore)
 			compatible = append(compatible, matchCandidate{
 				template:     match.Template,
 				queryScore:   queryScore,
 				patternScore: match.Score,
 			})
+		} else {
+			fmt.Printf("DEBUG: Incompatible template %s score=0\n", match.Template.Name)
 		}
 	}
 
 	if len(compatible) == 0 {
+		fmt.Println("DEBUG: No compatible templates")
 		return nil, ErrNoMatchingIndex
 	}
 
@@ -379,6 +385,31 @@ type Stats struct {
 	DatabaseCount int
 	IndexCount    int
 	TemplateCount int
+	DocumentCount int64 // Total indexed documents
+	LastEventTime int64 // Unix timestamp of last processed event
+	EventsApplied int64 // Total events applied
+}
+
+// HealthStatus represents the health status.
+type HealthStatus string
+
+const (
+	HealthOK        HealthStatus = "ok"
+	HealthDegraded  HealthStatus = "degraded"
+	HealthUnhealthy HealthStatus = "unhealthy"
+)
+
+// IndexHealth represents the health of a single index.
+type IndexHealth struct {
+	State    string
+	DocCount int64
+}
+
+// Health represents the health status of the indexer.
+type Health struct {
+	Status    string                 // Overall status
+	Indexes   map[string]IndexHealth // Per-index status (key: database|pattern|templateID)
+	LastError string                 // Last error message if any
 }
 
 // Stats returns current statistics.

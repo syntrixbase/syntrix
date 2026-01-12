@@ -313,16 +313,26 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 	running := s.running
 	s.mu.RUnlock()
 
-	status := HealthOK
+	status := string(HealthOK)
 	if !running {
-		status = HealthUnhealthy
+		status = string(HealthUnhealthy)
 	}
 
-	// TODO: Check index health, lag status, etc.
+	indexes := make(map[string]manager.IndexHealth)
+	for _, dbName := range s.manager.ListDatabases() {
+		db := s.manager.GetDatabase(dbName)
+		for _, idx := range db.ListIndexes() {
+			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
+			indexes[key] = manager.IndexHealth{
+				State:    idx.State().String(),
+				DocCount: int64(idx.Len()),
+			}
+		}
+	}
 
 	return Health{
-		Status:      status,
-		IndexHealth: make(map[string]string),
+		Status:  status,
+		Indexes: indexes,
 	}, nil
 }
 
@@ -330,13 +340,11 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 func (s *service) Stats(ctx context.Context) (Stats, error) {
 	mgrStats := s.manager.Stats()
 
-	return Stats{
-		DatabaseCount: mgrStats.DatabaseCount,
-		IndexCount:    mgrStats.IndexCount,
-		TemplateCount: mgrStats.TemplateCount,
-		EventsApplied: s.eventsApplied.Load(),
-		LastEventTime: s.lastEventTime.Load(),
-	}, nil
+	// Augment with service-level stats
+	mgrStats.EventsApplied = s.eventsApplied.Load()
+	mgrStats.LastEventTime = s.lastEventTime.Load()
+
+	return mgrStats, nil
 }
 
 // Manager returns the underlying index manager.
