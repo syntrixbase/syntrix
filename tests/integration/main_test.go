@@ -14,6 +14,7 @@ import (
 	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/config"
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
+	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
@@ -142,6 +143,71 @@ match:
 		return nil, fmt.Errorf("failed to write rules file: %w", err)
 	}
 
+	// Create templates.yaml for Indexer
+	templatesContent := `
+templates:
+  - name: default-id
+    collectionPattern: "{collection}"
+    fields:
+      - field: id
+        order: asc
+  - name: default-name
+    collectionPattern: "{collection}"
+    fields:
+      - field: name
+        order: asc
+  - name: nested-id
+    collectionPattern: "{col1}/{doc1}/{col2}"
+    fields:
+      - field: id
+        order: asc
+  - name: nested-name
+    collectionPattern: "{col1}/{doc1}/{col2}"
+    fields:
+      - field: name
+        order: asc
+
+  - name: products-composite
+    collectionPattern: "products"
+    fields:
+      - field: category
+        order: asc
+      - field: price
+        order: asc
+
+  # Additional templates for TestAPIQueryAdvanced
+  - name: products-category-price-desc
+    collectionPattern: "products"
+    fields:
+      - field: category
+        order: asc
+      - field: price
+        order: desc
+
+  - name: products-stock
+    collectionPattern: "products"
+    fields:
+      - field: stock
+        order: asc
+
+  - name: products-id
+    collectionPattern: "products"
+    fields:
+      - field: id
+        order: asc
+
+  - name: products-id-deleted
+    collectionPattern: "products"
+    includeDeleted: true
+    fields:
+      - field: id
+        order: asc
+`
+	templatesFile := tempDir + "/templates.yaml"
+	if err := os.WriteFile(templatesFile, []byte(templatesContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write templates file: %w", err)
+	}
+
 	// Get available ports
 	apiPort, err := getAvailablePort()
 	if err != nil {
@@ -162,6 +228,7 @@ match:
 			QueryServiceURL:    fmt.Sprintf("localhost:%d", grpcPort),
 			PullerServiceURL:   fmt.Sprintf("localhost:%d", grpcPort),
 			StreamerServiceURL: fmt.Sprintf("localhost:%d", grpcPort),
+			IndexerServiceURL:  fmt.Sprintf("localhost:%d", grpcPort),
 		},
 		Storage: config.StorageConfig{
 			Backends: map[string]config.BackendConfig{
@@ -222,6 +289,9 @@ match:
 				MaxSize: "100MB",
 			},
 		},
+		Indexer: indexer.Config{
+			TemplatePath: templatesFile,
+		},
 	}
 
 	// Initialize the unified server
@@ -247,6 +317,7 @@ match:
 		RunTriggerEvaluator: natsAvailable,
 		RunTriggerWorker:    natsAvailable,
 		RunPuller:           true,
+		RunIndexer:          true,
 	}
 
 	manager := services.NewManager(cfg, opts)

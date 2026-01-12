@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -236,6 +237,22 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		return nil
 	}
 
+	// Get the user-facing document ID from Data["id"]
+	// This is different from doc.Id which is the internal storage ID (database:hash)
+	docID, ok := doc.Data["id"].(string)
+	if !ok || docID == "" {
+		// Fallback: extract from Fullpath (collection/id)
+		if doc.Fullpath != "" {
+			parts := strings.Split(doc.Fullpath, "/")
+			if len(parts) > 0 {
+				docID = parts[len(parts)-1]
+			}
+		}
+	}
+	if docID == "" {
+		return nil // Cannot index without a document ID
+	}
+
 	// Skip deleted documents unless template includes them
 	if doc.Deleted && !tmpl.IncludeDeleted {
 		// Delete from index
@@ -245,7 +262,7 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 			tmpl.Identity(),
 			tmpl.CollectionPattern,
 		)
-		idx.Delete(doc.Id)
+		idx.Delete(docID)
 		return nil
 	}
 
@@ -263,8 +280,8 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		tmpl.CollectionPattern,
 	)
 
-	// Upsert document
-	idx.Upsert(doc.Id, orderKey)
+	// Upsert document using the user-facing document ID
+	idx.Upsert(docID, orderKey)
 
 	return nil
 }
@@ -318,11 +335,21 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 		status = HealthUnhealthy
 	}
 
-	// TODO: Check index health, lag status, etc.
+	indexes := make(map[string]manager.IndexHealth)
+	for _, dbName := range s.manager.ListDatabases() {
+		db := s.manager.GetDatabase(dbName)
+		for _, idx := range db.ListIndexes() {
+			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
+			indexes[key] = manager.IndexHealth{
+				State:    idx.State().String(),
+				DocCount: int64(idx.Len()),
+			}
+		}
+	}
 
 	return Health{
-		Status:      status,
-		IndexHealth: make(map[string]string),
+		Status:  status,
+		Indexes: indexes,
 	}, nil
 }
 
@@ -330,13 +357,11 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 func (s *service) Stats(ctx context.Context) (Stats, error) {
 	mgrStats := s.manager.Stats()
 
-	return Stats{
-		DatabaseCount: mgrStats.DatabaseCount,
-		IndexCount:    mgrStats.IndexCount,
-		TemplateCount: mgrStats.TemplateCount,
-		EventsApplied: s.eventsApplied.Load(),
-		LastEventTime: s.lastEventTime.Load(),
-	}, nil
+	// Augment with service-level stats
+	mgrStats.EventsApplied = s.eventsApplied.Load()
+	mgrStats.LastEventTime = s.lastEventTime.Load()
+
+	return mgrStats, nil
 }
 
 // Manager returns the underlying index manager.

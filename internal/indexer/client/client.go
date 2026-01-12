@@ -106,37 +106,31 @@ func (c *Client) translateError(err error) error {
 	}
 }
 
-// Health represents health status.
-type Health struct {
-	Status  string
-	Indexes map[string]IndexHealth
-}
-
-// IndexHealth represents per-index health.
-type IndexHealth struct {
-	State    string
-	DocCount int64
-}
-
 // Health returns the current health status of the indexer.
-func (c *Client) Health(ctx context.Context) (*Health, error) {
+func (c *Client) Health(ctx context.Context) (manager.Health, error) {
 	resp, err := c.client.Health(ctx, &indexerv1.HealthRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("health check failed: %w", err)
+		return manager.Health{}, fmt.Errorf("health check failed: %w", err)
 	}
 
-	indexes := make(map[string]IndexHealth)
+	indexes := make(map[string]manager.IndexHealth)
 	for k, v := range resp.Indexes {
-		indexes[k] = IndexHealth{
+		indexes[k] = manager.IndexHealth{
 			State:    v.State,
 			DocCount: v.DocCount,
 		}
 	}
 
-	return &Health{
-		Status:  resp.Status,
+	return manager.Health{
+		Status:  manager.HealthStatus(resp.Status),
 		Indexes: indexes,
 	}, nil
+}
+
+// Stats returns index statistics.
+func (c *Client) Stats(ctx context.Context) (manager.Stats, error) {
+	// Not implemented in gRPC yet, returning empty stats
+	return manager.Stats{}, nil
 }
 
 // IndexerState contains the complete indexer state.

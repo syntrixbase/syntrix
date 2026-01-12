@@ -15,6 +15,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/config"
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
+	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
+	puller "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -87,6 +89,19 @@ match:
 	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
+	// Create templates.yaml
+	templatesContent := `
+templates:
+  - name: default-ids
+    collectionPattern: "{collection}"
+    fields:
+      - field: id
+        order: asc
+`
+	templatesFile := t.TempDir() + "/templates.yaml"
+	err = os.WriteFile(templatesFile, []byte(templatesContent), 0644)
+	require.NoError(t, err)
+
 	cfg := &config.Config{
 		Server: server.Config{
 			Host:     "localhost",
@@ -129,6 +144,18 @@ match:
 				},
 			},
 		},
+		Puller: puller.Config{
+			Backends: []puller.PullerBackendConfig{
+				{Name: "default"},
+			},
+			Buffer: puller.BufferConfig{
+				Path: t.TempDir() + "/buffer",
+			},
+			Cleaner: puller.CleanerConfig{
+				Retention: 1 * time.Hour,
+				Interval:  1 * time.Minute,
+			},
+		},
 		Identity: identity.Config{
 			AuthN: identity.AuthNConfig{
 				AccessTokenTTL:  15 * time.Minute,
@@ -139,6 +166,9 @@ match:
 			AuthZ: identity.AuthZConfig{
 				RulesFile: rulesFile,
 			},
+		},
+		Indexer: indexer.Config{
+			TemplatePath: templatesFile,
 		},
 	}
 
@@ -157,6 +187,8 @@ match:
 		RunQuery:            false, // No separate Query HTTP server
 		RunTriggerEvaluator: false, // Not testing triggers
 		RunTriggerWorker:    false,
+		RunIndexer:          true,                    // Indexer must run to load templates
+		RunPuller:           true,                    // Puller must run to feed Indexer
 		Mode:                services.ModeStandalone, // Standalone mode
 	}
 
@@ -267,9 +299,11 @@ func TestStandaloneMode_BasicCRUD(t *testing.T) {
 	})
 
 	// Test Query (uses Query service internally)
+	// Query without filters/orderBy goes directly to storage, no need to wait for indexer
 	t.Run("Query documents", func(t *testing.T) {
 		queryData := map[string]interface{}{
 			"collection": collection,
+			// No filters or orderBy - goes directly to storage
 		}
 		body, _ := json.Marshal(queryData)
 

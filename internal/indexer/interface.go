@@ -91,30 +91,22 @@ type OrderField = manager.OrderField
 type DocRef = manager.DocRef
 
 // Health represents the health status of the indexer.
-type Health struct {
-	Status      HealthStatus      // Overall status
-	IndexHealth map[string]string // Per-index status (key: database|pattern|templateID)
-	LastError   string            // Last error message if any
-}
+type Health = manager.Health
 
 // HealthStatus represents the health status.
-type HealthStatus string
+type HealthStatus = manager.HealthStatus
 
 const (
-	HealthOK        HealthStatus = "ok"
-	HealthDegraded  HealthStatus = "degraded"
-	HealthUnhealthy HealthStatus = "unhealthy"
+	HealthOK        = manager.HealthOK
+	HealthDegraded  = manager.HealthDegraded
+	HealthUnhealthy = manager.HealthUnhealthy
 )
 
 // Stats represents index statistics.
-type Stats struct {
-	DatabaseCount int   // Number of databases
-	IndexCount    int   // Total number of indexes
-	TemplateCount int   // Number of loaded templates
-	DocumentCount int64 // Total indexed documents
-	LastEventTime int64 // Unix timestamp of last processed event
-	EventsApplied int64 // Total events applied
-}
+type Stats = manager.Stats
+
+// IndexManager is the underlying manager type. Exported for testing and advanced operations.
+type IndexManager = manager.Manager
 
 // ChangeEvent is the change event type from Puller.
 type ChangeEvent = manager.ChangeEvent

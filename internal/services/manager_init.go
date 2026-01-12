@@ -61,10 +61,9 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 	}
 
 	// Initialize Indexer service (local only, no gRPC)
-	if m.opts.RunIndexer {
-		if err := m.initIndexerService(ctx); err != nil {
-			return err
-		}
+	// Always initialize in standalone because Query Engine requires it
+	if err := m.initIndexerService(ctx); err != nil {
+		return err
 	}
 
 	// Create Streamer service for local access
@@ -197,9 +196,26 @@ func (m *Manager) createQueryService(ctx context.Context) (query.Service, error)
 	if err != nil {
 		return nil, err
 	}
-	service := query.NewService(sf.Document())
-	slog.Info("Initialized Local Query Engine")
-	return service, nil
+
+	if m.opts.Mode == ModeStandalone {
+		// Standalone: direct call to local indexer
+		if m.indexerService == nil {
+			return nil, fmt.Errorf("indexer service required in standalone mode")
+		}
+		return query.NewService(sf.Document(), m.indexerService), nil
+	}
+
+	// Distributed (including --all): must use gRPC client
+	if m.cfg.Gateway.IndexerServiceURL == "" {
+		return nil, fmt.Errorf("gateway.indexer_service_url required in distributed mode")
+	}
+	client, err := indexer.NewClient(m.cfg.Gateway.IndexerServiceURL, slog.Default())
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to indexer: %w", err)
+	}
+	slog.Info("Query Engine using remote Indexer service", "url", m.cfg.Gateway.IndexerServiceURL)
+
+	return query.NewService(sf.Document(), client), nil
 }
 
 // initQueryGRPCServer registers the query service with the unified gRPC server.

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/query/internal/client"
 	"github.com/syntrixbase/syntrix/internal/query/internal/core"
 	"github.com/syntrixbase/syntrix/internal/query/internal/grpc"
@@ -25,8 +26,8 @@ type Service interface {
 }
 
 // NewService creates a new local Query Service.
-func NewService(store storage.DocumentStore) Service {
-	return core.New(store)
+func NewService(store storage.DocumentStore, idx indexer.Service) Service {
+	return core.New(store, idx)
 }
 
 // NewClient creates a new remote Query Service client (gRPC client).

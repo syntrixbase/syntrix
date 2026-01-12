@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 	"google.golang.org/grpc/codes"
@@ -158,6 +159,12 @@ func errorToStatus(err error) error {
 	}
 	if errors.Is(err, model.ErrPermissionDenied) {
 		return status.Error(codes.PermissionDenied, err.Error())
+	}
+	if errors.Is(err, indexer.ErrNoMatchingIndex) {
+		return status.Error(codes.FailedPrecondition, err.Error())
+	}
+	if errors.Is(err, indexer.ErrIndexRebuilding) || errors.Is(err, indexer.ErrIndexNotReady) {
+		return status.Error(codes.Unavailable, err.Error())
 	}
 
 	// Default to internal error

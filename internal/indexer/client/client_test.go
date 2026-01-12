@@ -205,7 +205,7 @@ func TestClient_Health(t *testing.T) {
 	health, err := client.Health(ctx)
 
 	require.NoError(t, err)
-	assert.Equal(t, "ok", health.Status)
+	assert.Equal(t, manager.HealthStatus("ok"), health.Status)
 	assert.Len(t, health.Indexes, 1)
 	assert.Equal(t, "healthy", health.Indexes["db1|users/*/chats|ts:desc"].State)
 	assert.Equal(t, int64(100), health.Indexes["db1|users/*/chats|ts:desc"].DocCount)
@@ -346,7 +346,7 @@ func TestClient_New(t *testing.T) {
 	ctx := context.Background()
 	health, err := client.Health(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, "ok", health.Status)
+	assert.Equal(t, manager.HealthStatus("ok"), health.Status)
 
 	// Close the client
 	err = client.Close()
@@ -530,5 +530,16 @@ func TestClient_TranslateError(t *testing.T) {
 		err := assert.AnError
 		result := client.translateError(err)
 		assert.Equal(t, err, result)
+	})
+}
+
+func TestClient_Stats(t *testing.T) {
+	client := &Client{}
+
+	t.Run("returns empty stats", func(t *testing.T) {
+		stats, err := client.Stats(context.Background())
+		require.NoError(t, err)
+		assert.Equal(t, 0, stats.IndexCount)
+		assert.Equal(t, int64(0), stats.DocumentCount)
 	})
 }

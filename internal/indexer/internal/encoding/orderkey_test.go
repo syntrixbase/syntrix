@@ -382,3 +382,108 @@ func TestBase64Encoding(t *testing.T) {
 		assert.Empty(t, decoded)
 	})
 }
+
+func TestEncodePrefix(t *testing.T) {
+	t.Run("empty fields", func(t *testing.T) {
+		prefix, err := EncodePrefix(nil)
+		require.NoError(t, err)
+		// Should only have version byte
+		assert.Len(t, prefix, 1)
+		assert.Equal(t, Version, prefix[0])
+	})
+
+	t.Run("single string field ascending", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: "electronics", Direction: Asc},
+		})
+		require.NoError(t, err)
+
+		// Should have version + type tag + string content + terminator
+		assert.True(t, len(prefix) > 1)
+		assert.Equal(t, Version, prefix[0])
+		assert.Equal(t, TypeString, prefix[1])
+	})
+
+	t.Run("single number field descending", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: float64(100), Direction: Desc},
+		})
+		require.NoError(t, err)
+
+		// Should have version + type tag + number encoding
+		// For descending order, all bytes are XOR'd with 0xFF
+		assert.True(t, len(prefix) > 1)
+		assert.Equal(t, Version, prefix[0])
+		// Type tag is also XOR'd for descending: TypeNumber(0x02) XOR 0xFF = 0xFD
+		assert.Equal(t, byte(0xFD), prefix[1])
+	})
+
+	t.Run("multiple fields", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: "category", Direction: Asc},
+			{Value: float64(200), Direction: Asc},
+		})
+		require.NoError(t, err)
+
+		// Should have version + field1 + field2
+		assert.True(t, len(prefix) > 2)
+		assert.Equal(t, Version, prefix[0])
+	})
+
+	t.Run("prefix is prefix of full key", func(t *testing.T) {
+		fields := []Field{
+			{Value: "electronics", Direction: Asc},
+			{Value: float64(100), Direction: Asc},
+		}
+
+		prefix, err := EncodePrefix(fields)
+		require.NoError(t, err)
+
+		fullKey, err := Encode(fields, "doc123")
+		require.NoError(t, err)
+
+		// Prefix should be a prefix of the full key
+		assert.True(t, bytes.HasPrefix(fullKey, prefix))
+		// Prefix should be shorter (no doc ID suffix)
+		assert.Less(t, len(prefix), len(fullKey))
+	})
+
+	t.Run("unsupported type returns error", func(t *testing.T) {
+		_, err := EncodePrefix([]Field{
+			{Value: []int{1, 2, 3}, Direction: Asc}, // Slice is unsupported
+		})
+		assert.Error(t, err)
+	})
+
+	t.Run("boolean field", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: true, Direction: Asc},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, TypeBool, prefix[1])
+	})
+
+	t.Run("null field", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: nil, Direction: Asc},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, TypeNull, prefix[1])
+	})
+
+	t.Run("int64 field", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: int64(42), Direction: Asc},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, TypeNumber, prefix[1])
+	})
+
+	t.Run("int field", func(t *testing.T) {
+		prefix, err := EncodePrefix([]Field{
+			{Value: int(42), Direction: Asc},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, TypeNumber, prefix[1])
+	})
+}

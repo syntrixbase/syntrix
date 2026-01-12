@@ -35,24 +35,12 @@ func (m *MockIndexerService) Stats(ctx context.Context) (indexer.Stats, error) {
 	return args.Get(0).(indexer.Stats), args.Error(1)
 }
 
-func TestEngine_WithIndexer(t *testing.T) {
-	mockStorage := new(MockStorageBackend)
-	mockIndexer := new(MockIndexerService)
-
-	engine := New(mockStorage)
-	assert.Nil(t, engine.indexer)
-
-	result := engine.WithIndexer(mockIndexer)
-	assert.Same(t, engine, result)
-	assert.NotNil(t, engine.indexer)
-}
-
-func TestEngine_ExecuteQuery_WithIndexer_Success(t *testing.T) {
+func TestEngine_ExecuteQuery_Success(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	// Indexer returns document references with IDs
 	refs := []indexer.DocRef{
@@ -91,53 +79,47 @@ func TestEngine_ExecuteQuery_WithIndexer_Success(t *testing.T) {
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_Fallback(t *testing.T) {
+func TestEngine_ExecuteQuery_IndexerError(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	// Indexer returns error
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).
 		Return(nil, errors.New("no matching index"))
 
-	// Storage fallback
-	storedDocs := []*storage.StoredDoc{
-		{
-			Id:       "testdb:users/user1",
-			Fullpath: "users/user1",
-			Data:     map[string]interface{}{"name": "Alice"},
-		},
-	}
-	mockStorage.On("Query", ctx, "testdb", mock.AnythingOfType("model.Query")).Return(storedDocs, nil)
-
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
 	docs, err := engine.ExecuteQuery(ctx, "testdb", query)
 
-	assert.NoError(t, err)
-	assert.Len(t, docs, 1)
+	assert.Error(t, err)
+	assert.Nil(t, docs)
+	assert.Equal(t, "no matching index", err.Error())
 
 	mockIndexer.AssertExpectations(t)
+	// Storage should NOT be called
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_EmptyResults(t *testing.T) {
+func TestEngine_ExecuteQuery_EmptyResults(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{}
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).Return(refs, nil)
 
 	query := model.Query{
 		Collection: "users",
+		OrderBy:    []model.Order{{Field: "age", Direction: "asc"}}, // OrderBy to trigger indexer path
 		Limit:      10,
 	}
 
@@ -149,12 +131,12 @@ func TestEngine_ExecuteQuery_WithIndexer_EmptyResults(t *testing.T) {
 	mockIndexer.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_GetManyError_Fallback(t *testing.T) {
+func TestEngine_ExecuteQuery_GetManyError(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{{ID: "user1"}}
 	mockIndexer.On("Search", ctx, "testdb", mock.AnythingOfType("manager.Plan")).Return(refs, nil)
@@ -163,36 +145,28 @@ func TestEngine_ExecuteQuery_WithIndexer_GetManyError_Fallback(t *testing.T) {
 	mockStorage.On("GetMany", ctx, "testdb", []string{"users/user1"}).
 		Return(nil, errors.New("db error"))
 
-	// Fallback to storage.Query
-	storedDocs := []*storage.StoredDoc{
-		{
-			Id:       "testdb:users/user1",
-			Fullpath: "users/user1",
-			Data:     map[string]interface{}{"name": "Alice"},
-		},
-	}
-	mockStorage.On("Query", ctx, "testdb", mock.AnythingOfType("model.Query")).Return(storedDocs, nil)
-
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
 	docs, err := engine.ExecuteQuery(ctx, "testdb", query)
 
-	assert.NoError(t, err)
-	assert.Len(t, docs, 1)
+	assert.Error(t, err)
+	assert.Nil(t, docs)
+	assert.Equal(t, "db error", err.Error())
 
 	mockIndexer.AssertExpectations(t)
 	mockStorage.AssertExpectations(t)
 }
 
-func TestEngine_ExecuteQuery_WithIndexer_NilDocumentsFiltered(t *testing.T) {
+func TestEngine_ExecuteQuery_NilDocumentsFiltered(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageBackend)
 	mockIndexer := new(MockIndexerService)
 
-	engine := New(mockStorage).WithIndexer(mockIndexer)
+	engine := New(mockStorage, mockIndexer)
 
 	refs := []indexer.DocRef{
 		{ID: "user1"},
@@ -219,6 +193,7 @@ func TestEngine_ExecuteQuery_WithIndexer_NilDocumentsFiltered(t *testing.T) {
 
 	query := model.Query{
 		Collection: "users",
+		Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}}, // Filter to trigger indexer path
 		Limit:      10,
 	}
 
@@ -233,7 +208,7 @@ func TestEngine_ExecuteQuery_WithIndexer_NilDocumentsFiltered(t *testing.T) {
 
 func TestEngine_QueryToPlan(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -269,7 +244,7 @@ func TestEngine_QueryToPlan(t *testing.T) {
 
 func TestEngine_QueryToPlan_Ascending(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -286,7 +261,7 @@ func TestEngine_QueryToPlan_Ascending(t *testing.T) {
 
 func TestEngine_QueryToPlan_UnsupportedOpSkipped(t *testing.T) {
 	mockStorage := new(MockStorageBackend)
-	engine := New(mockStorage)
+	engine := New(mockStorage, nil)
 
 	query := model.Query{
 		Collection: "users",
@@ -304,4 +279,93 @@ func TestEngine_QueryToPlan_UnsupportedOpSkipped(t *testing.T) {
 	assert.Len(t, plan.Filters, 2)
 	assert.Equal(t, "status", plan.Filters[0].Field)
 	assert.Equal(t, "age", plan.Filters[1].Field)
+}
+
+func TestEngine_IsIDOnlyQuery(t *testing.T) {
+	mockStorage := new(MockStorageBackend)
+	engine := New(mockStorage, nil)
+
+	tests := []struct {
+		name     string
+		query    model.Query
+		expected bool
+	}{
+		{
+			name: "id == filter only",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "==", Value: "user1"}},
+			},
+			expected: true,
+		},
+		{
+			name: "id in filter only",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "in", Value: []string{"user1", "user2"}}},
+			},
+			expected: true,
+		},
+		{
+			name: "multiple id filters",
+			query: model.Query{
+				Collection: "users",
+				Filters: []model.Filter{
+					{Field: "id", Op: "==", Value: "user1"},
+					{Field: "id", Op: "in", Value: []string{"user2"}},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "id filter with orderBy",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: "==", Value: "user1"}},
+				OrderBy:    []model.Order{{Field: "name", Direction: "asc"}},
+			},
+			expected: false,
+		},
+		{
+			name: "non-id filter",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "status", Op: "==", Value: "active"}},
+			},
+			expected: false,
+		},
+		{
+			name: "mixed id and non-id filters",
+			query: model.Query{
+				Collection: "users",
+				Filters: []model.Filter{
+					{Field: "id", Op: "==", Value: "user1"},
+					{Field: "status", Op: "==", Value: "active"},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "id filter with unsupported op",
+			query: model.Query{
+				Collection: "users",
+				Filters:    []model.Filter{{Field: "id", Op: ">", Value: "user1"}},
+			},
+			expected: false,
+		},
+		{
+			name: "no filters",
+			query: model.Query{
+				Collection: "users",
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := engine.isIDOnlyQuery(tt.query)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

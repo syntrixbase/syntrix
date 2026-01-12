@@ -67,9 +67,7 @@ func TestGrpcServiceAdapter_Search(t *testing.T) {
 		mgr: manager.New(),
 	}
 
-	adapter := &grpcServiceAdapter{svc: mock}
-
-	docs, err := adapter.Search(ctx, "testdb", manager.Plan{
+	docs, err := mock.Search(ctx, "testdb", Plan{
 		Collection: "users/alice/chats",
 	})
 
@@ -85,21 +83,19 @@ func TestGrpcServiceAdapter_Health(t *testing.T) {
 		healthFn: func(ctx context.Context) (Health, error) {
 			return Health{
 				Status: HealthDegraded,
-				IndexHealth: map[string]string{
-					"db1|users/*/chats|ts:desc": "rebuilding",
+				Indexes: map[string]manager.IndexHealth{
+					"db1|users/*/chats|ts:desc": {State: "rebuilding", DocCount: 0},
 				},
 			}, nil
 		},
 		mgr: manager.New(),
 	}
 
-	adapter := &grpcServiceAdapter{svc: mock}
-
-	health, err := adapter.Health(ctx)
+	health, err := mock.Health(ctx)
 
 	require.NoError(t, err)
-	assert.Equal(t, "degraded", health.Status)
-	assert.Equal(t, "rebuilding", health.IndexHealth["db1|users/*/chats|ts:desc"])
+	assert.Equal(t, HealthDegraded, health.Status)
+	assert.Equal(t, "rebuilding", health.Indexes["db1|users/*/chats|ts:desc"].State)
 }
 
 func TestGrpcServiceAdapter_HealthError(t *testing.T) {
@@ -112,9 +108,7 @@ func TestGrpcServiceAdapter_HealthError(t *testing.T) {
 		mgr: manager.New(),
 	}
 
-	adapter := &grpcServiceAdapter{svc: mock}
-
-	_, err := adapter.Health(ctx)
+	_, err := mock.Health(ctx)
 	require.Error(t, err)
 }
 
@@ -122,9 +116,7 @@ func TestGrpcServiceAdapter_Manager(t *testing.T) {
 	mgr := manager.New()
 	mock := &mockLocalService{mgr: mgr}
 
-	adapter := &grpcServiceAdapter{svc: mock}
-
-	assert.Same(t, mgr, adapter.Manager())
+	assert.Same(t, mgr, mock.Manager())
 }
 
 func TestNewGRPCServer_Integration(t *testing.T) {

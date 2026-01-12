@@ -7,9 +7,33 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
+
+// MockIndexerService is a mock implementation of indexer.Service
+type MockIndexerService struct {
+	mock.Mock
+}
+
+func (m *MockIndexerService) Search(ctx context.Context, database string, plan indexer.Plan) ([]indexer.DocRef, error) {
+	args := m.Called(ctx, database, plan)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]indexer.DocRef), args.Error(1)
+}
+
+func (m *MockIndexerService) Health(ctx context.Context) (indexer.Health, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(indexer.Health), args.Error(1)
+}
+
+func (m *MockIndexerService) Stats(ctx context.Context) (indexer.Stats, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(indexer.Stats), args.Error(1)
+}
 
 // MockDocumentStore is a mock implementation of storage.DocumentStore
 type MockDocumentStore struct {
@@ -75,7 +99,8 @@ func (m *MockDocumentStore) Close(ctx context.Context) error {
 
 func TestNewService(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	service := NewService(mockStore)
+	mockIndexer := new(MockIndexerService)
+	service := NewService(mockStore, mockIndexer)
 
 	assert.NotNil(t, service)
 	// Verify that it implements the Service interface
@@ -93,7 +118,8 @@ func TestNewClient(t *testing.T) {
 
 func TestNewGRPCServer(t *testing.T) {
 	mockStore := new(MockDocumentStore)
-	service := NewService(mockStore)
+	mockIndexer := new(MockIndexerService)
+	service := NewService(mockStore, mockIndexer)
 	grpcServer := NewGRPCServer(service)
 
 	assert.NotNil(t, grpcServer)
