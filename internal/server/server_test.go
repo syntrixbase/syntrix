@@ -13,6 +13,7 @@ import (
 
 func TestNew(t *testing.T) {
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 8080,
 		GRPCPort: 9090,
 	}
@@ -23,6 +24,7 @@ func TestNew(t *testing.T) {
 func TestServer_StartStop(t *testing.T) {
 	// Use random ports to avoid conflicts
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0, // Let OS choose
 		GRPCPort: 0, // Let OS choose
 	}
@@ -58,6 +60,7 @@ func TestServer_StartStop(t *testing.T) {
 
 func TestServer_RegisterHTTP(t *testing.T) {
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0,
 	}
 	srv := New(cfg, nil)
@@ -71,7 +74,7 @@ func TestServer_RegisterHTTP(t *testing.T) {
 }
 
 func TestServer_Start_AlreadyStarted(t *testing.T) {
-	cfg := Config{HTTPPort: 0, GRPCPort: 0}
+	cfg := Config{Host: "localhost", HTTPPort: 0, GRPCPort: 0}
 	srv := New(cfg, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,13 +90,14 @@ func TestServer_Start_AlreadyStarted(t *testing.T) {
 
 func TestServer_Start_PortConflict(t *testing.T) {
 	// Start a listener to occupy a port
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	defer l.Close()
 
 	port := l.Addr().(*net.TCPAddr).Port
 
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: port, // Conflict
 		GRPCPort: 0,
 	}
@@ -106,13 +110,14 @@ func TestServer_Start_PortConflict(t *testing.T) {
 
 func TestServer_Start_GRPC_PortConflict(t *testing.T) {
 	// Start a listener to occupy a port
-	l, err := net.Listen("tcp", ":0")
+	l, err := net.Listen("tcp", "localhost:0")
 	require.NoError(t, err)
 	defer l.Close()
 
 	port := l.Addr().(*net.TCPAddr).Port
 
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0,
 		GRPCPort: port, // Conflict
 	}
@@ -125,6 +130,7 @@ func TestServer_Start_GRPC_PortConflict(t *testing.T) {
 
 func TestGlobal(t *testing.T) {
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0,
 	}
 	InitDefault(cfg, nil)
@@ -145,7 +151,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestGlobalHelpers(t *testing.T) {
-	InitDefault(Config{}, nil)
+	InitDefault(Config{Host: "localhost"}, nil)
 	defer func() { defaultService = nil }()
 
 	// Test RegisterHTTP
@@ -168,6 +174,7 @@ func TestGlobalHelpers_NoInit(t *testing.T) {
 
 func TestServer_HTTPMux(t *testing.T) {
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0,
 	}
 	srv := New(cfg, nil).(*serverImpl)
@@ -181,6 +188,7 @@ func TestServer_HTTPMux(t *testing.T) {
 func TestServer_Stop_ContextTimeout(t *testing.T) {
 	// Test Stop with an already cancelled context to trigger timeout path
 	cfg := Config{
+		Host:     "localhost",
 		HTTPPort: 0,
 		GRPCPort: 0,
 	}

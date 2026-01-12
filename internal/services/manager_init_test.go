@@ -265,6 +265,7 @@ func TestManager_initPullerService_Success(t *testing.T) {
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "primary"}}
 
 	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunPuller: true})
+	defer mgr.Shutdown(context.Background())
 
 	err := mgr.initPullerService(context.Background())
 	assert.NoError(t, err)
@@ -934,6 +935,7 @@ func TestManager_initStandalone_WithPuller(t *testing.T) {
 		RunAPI:    true,
 		RunPuller: true,
 	})
+	defer mgr.Shutdown(context.Background())
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
@@ -1065,6 +1067,7 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 		RunPuller:  true,
 		RunIndexer: true,
 	})
+	defer mgr.Shutdown(context.Background())
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
@@ -1098,6 +1101,7 @@ func TestManager_initDistributed_WithIndexer(t *testing.T) {
 		RunPuller:  true,
 		RunIndexer: true,
 	})
+	defer mgr.Shutdown(context.Background())
 
 	err := mgr.initDistributed(context.Background())
 	assert.NoError(t, err)

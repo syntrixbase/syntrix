@@ -85,7 +85,7 @@ func TestPuller_GRPC_Integration(t *testing.T) {
 
 	// 3. Start gRPC Server
 	grpcPort := getFreePort(t)
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", grpcPort))
 	require.NoError(t, err)
 
 	grpcCfg := config.GRPCConfig{

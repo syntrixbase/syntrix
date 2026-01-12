@@ -95,6 +95,7 @@ func TestPuller_BackendNames_NonEmpty(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 
 	backendCfg := config.PullerBackendConfig{
 		Collections: []string{"users"},
@@ -255,6 +256,7 @@ func TestPuller_WatchChangeStream_LoadError(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 	backendCfg := config.PullerBackendConfig{Collections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 
@@ -278,6 +280,7 @@ func TestPuller_WatchChangeStream_WatchError(t *testing.T) {
 	env := setupTestEnv(t)
 	cfg := newTestConfig(t)
 	p := New(cfg, nil)
+	defer p.Stop(context.Background())
 	backendCfg := config.PullerBackendConfig{Collections: []string{"users"}}
 	_ = p.AddBackend("backend1", env.Client, env.DBName, backendCfg)
 

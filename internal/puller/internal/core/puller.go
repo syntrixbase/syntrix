@@ -232,6 +232,17 @@ func (p *Puller) Stop(ctx context.Context) error {
 		p.logger.Info("puller stopped gracefully")
 	case <-ctx.Done():
 		p.logger.Warn("puller stop timed out")
+	}
+
+	// Ensure all backend buffers are closed. This is safe because Buffer.Close is idempotent.
+	// This handles cases where AddBackend was called but Start wasn't (e.g. tests or early failure).
+	for _, backend := range p.backends {
+		if backend.buffer != nil {
+			_ = backend.buffer.Close()
+		}
+	}
+
+	if ctx.Err() != nil {
 		return ctx.Err()
 	}
 

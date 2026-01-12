@@ -34,7 +34,11 @@ type Buffer struct {
 	// closed indicates if the buffer is closed
 	closed bool
 
+	// shutdownOnce ensures resources are fewer closed exactly once
+	shutdownOnce sync.Once
+
 	// batcher manages batched writes
+
 	batchSize     int
 	batchInterval time.Duration
 	queueSize     int
@@ -144,34 +148,36 @@ func NewForBackend(basePath, backendName string, logger *slog.Logger) (*Buffer, 
 // Close closes the buffer.
 func (b *Buffer) Close() error {
 	b.mu.Lock()
-	if b.closed {
-		b.mu.Unlock()
-		return nil
-	}
+	wasClosed := b.closed
 	b.closed = true
 	b.mu.Unlock()
 
-	// Signal batcher to stop
-	close(b.closeCh)
+	if !wasClosed {
+		// Signal batcher to stop
+		close(b.closeCh)
+	}
 
 	// Wait for batcher to finish flushing all pending writes.
 	b.batcherWG.Wait()
 
-	var closeErr error
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				closeErr = fmt.Errorf("%v", r)
-			}
+	var finalErr error
+	b.shutdownOnce.Do(func() {
+		var closeErr error
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					closeErr = fmt.Errorf("%v", r)
+				}
+			}()
+			closeErr = b.db.Close()
 		}()
-		closeErr = b.db.Close()
-	}()
 
-	if closeErr != nil {
-		return fmt.Errorf("failed to close pebble database: %w", closeErr)
-	}
+		if closeErr != nil {
+			finalErr = fmt.Errorf("failed to close pebble database: %w", closeErr)
+		}
+	})
 
-	return nil
+	return finalErr
 }
 
 // Path returns the buffer storage path.
