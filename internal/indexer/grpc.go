@@ -22,7 +22,6 @@ func NewClient(address string, logger *slog.Logger) (*Client, error) {
 	return client.New(address, logger)
 }
 
-
 // IndexerState contains the complete indexer state.
 type IndexerState = client.IndexerState
 
