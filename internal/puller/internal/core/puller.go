@@ -60,6 +60,9 @@ type Puller struct {
 	// wg tracks running goroutines
 	wg sync.WaitGroup
 
+	// cancelMu protects cancel
+	cancelMu sync.Mutex
+
 	// cancel function to stop all backends
 	cancel context.CancelFunc
 
@@ -203,7 +206,9 @@ func (p *Puller) Start(ctx context.Context) error {
 		return fmt.Errorf("no backends configured")
 	}
 
+	p.cancelMu.Lock()
 	ctx, p.cancel = context.WithCancel(ctx)
+	p.cancelMu.Unlock()
 
 	for name, backend := range p.backends {
 		p.wg.Add(1)
@@ -216,8 +221,11 @@ func (p *Puller) Start(ctx context.Context) error {
 
 // Stop stops all backends gracefully.
 func (p *Puller) Stop(ctx context.Context) error {
-	if p.cancel != nil {
-		p.cancel()
+	p.cancelMu.Lock()
+	cancel := p.cancel
+	p.cancelMu.Unlock()
+	if cancel != nil {
+		cancel()
 	}
 
 	// Wait for all backends to stop

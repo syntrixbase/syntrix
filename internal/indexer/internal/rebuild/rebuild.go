@@ -211,7 +211,10 @@ func (o *Orchestrator) StartRebuild(
 	// Check if already rebuilding
 	for _, job := range o.jobs {
 		if job.Database == idxRef.Database && job.Pattern == idxRef.Pattern && job.TemplateID == idxRef.TemplateID {
-			if job.Status == StatusPending || job.Status == StatusRunning {
+			job.mu.Lock()
+			status := job.Status
+			job.mu.Unlock()
+			if status == StatusPending || status == StatusRunning {
 				return "", fmt.Errorf("rebuild already in progress for index %s|%s", idxRef.Pattern, idxRef.TemplateID)
 			}
 		}

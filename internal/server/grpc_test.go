@@ -138,7 +138,7 @@ func TestRegisterGRPCService(t *testing.T) {
 
 func TestRegisterGRPC(t *testing.T) {
 	InitDefault(Config{}, nil)
-	defer func() { defaultService = nil }()
+	defer func() { SetDefault(nil) }()
 
 	desc := &grpc.ServiceDesc{
 		ServiceName: "test.Service",

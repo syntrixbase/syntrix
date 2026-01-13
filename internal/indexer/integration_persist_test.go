@@ -13,7 +13,7 @@ import (
 
 func TestIntegration_Pebble_BasicOperations(t *testing.T) {
 	t.Parallel()
-	const docCount = 100
+	const docCount = 1000
 	dataDir := t.TempDir()
 	mockPullerSvc := newMockPuller(docCount + 100)
 	svc, ctx, cancel := setupIndexerServiceWithPebble(t, mockPullerSvc, dataDir)
@@ -74,7 +74,7 @@ func TestIntegration_Pebble_BasicOperations(t *testing.T) {
 
 func TestIntegration_Pebble_Persistence(t *testing.T) {
 	t.Parallel()
-	const docCount = 50
+	const docCount = 500
 	dataDir := t.TempDir()
 
 	// Phase 1: Create service, insert data, stop
@@ -132,8 +132,8 @@ func TestIntegration_Pebble_Persistence(t *testing.T) {
 	}
 
 	// Verify order is correct
-	if results2[0].ID != "user049" {
-		t.Errorf("expected user049 first after restart, got %s", results2[0].ID)
+	if results2[0].ID != "user499" {
+		t.Errorf("expected user499 first after restart, got %s", results2[0].ID)
 	}
 	if results2[docCount-1].ID != "user000" {
 		t.Errorf("expected user000 last after restart, got %s", results2[docCount-1].ID)
@@ -147,10 +147,10 @@ func TestIntegration_Pebble_ProgressPersistence(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Phase 1: Create service, insert data with progress markers
-	mockPullerSvc1 := newMockPuller(100)
+	mockPullerSvc1 := newMockPuller(500)
 	svc1, _, cancel1 := setupIndexerServiceWithPebble(t, mockPullerSvc1, dataDir)
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 200; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"timestamp": int64(i),
 		})
@@ -168,7 +168,7 @@ func TestIntegration_Pebble_ProgressPersistence(t *testing.T) {
 	cancel1()
 
 	// Phase 2: Restart and verify progress was persisted
-	mockPullerSvc2 := newMockPuller(100)
+	mockPullerSvc2 := newMockPuller(500)
 	svc2, _, cancel2 := setupIndexerServiceWithPebble(t, mockPullerSvc2, dataDir)
 	defer cancel2()
 
@@ -182,8 +182,8 @@ func TestIntegration_Pebble_ProgressPersistence(t *testing.T) {
 	}
 
 	// Progress should be the last checkpoint
-	if progress != "progress-checkpoint-019" {
-		t.Errorf("expected progress 'progress-checkpoint-019', got %s", progress)
+	if progress != "progress-checkpoint-199" {
+		t.Errorf("expected progress 'progress-checkpoint-199', got %s", progress)
 	}
 
 	stopService(t, svc2, mockPullerSvc2)
@@ -191,7 +191,7 @@ func TestIntegration_Pebble_ProgressPersistence(t *testing.T) {
 
 func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 	t.Parallel()
-	const docCount = 50
+	const docCount = 500
 	dataDir := t.TempDir()
 	mockPullerSvc := newMockPuller(docCount*3 + 100)
 	svc, ctx, cancel := setupIndexerServiceWithPebble(t, mockPullerSvc, dataDir)
@@ -267,7 +267,7 @@ func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 	plan := indexer.Plan{
 		Collection: "users",
 		OrderBy:    []indexer.OrderField{{Field: "timestamp", Direction: indexer.Desc}},
-		Limit:      100,
+		Limit:      docCount,
 	}
 
 	results, err := svc.Search(ctx, "db1", plan)
@@ -275,8 +275,8 @@ func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 		t.Fatalf("search failed: %v", err)
 	}
 
-	// Expected: 50 - 10 (deleted) = 40 users
-	expectedCount := 40
+	// Expected: 500 - 10 (deleted) = 490 users
+	expectedCount := docCount - 10
 	if len(results) != expectedCount {
 		t.Fatalf("expected %d results, got %d", expectedCount, len(results))
 	}
@@ -306,8 +306,8 @@ func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 
 func TestIntegration_Pebble_MultiDatabase(t *testing.T) {
 	t.Parallel()
-	const dbCount = 3
-	const docsPerDB = 30
+	const dbCount = 5
+	const docsPerDB = 200
 	totalEvents := dbCount * docsPerDB
 	dataDir := t.TempDir()
 	mockPullerSvc := newMockPuller(totalEvents + 100)
@@ -360,9 +360,9 @@ func TestIntegration_Pebble_MultiDatabase(t *testing.T) {
 			t.Fatalf("db%d: expected %d results, got %d", db, docsPerDB, len(results))
 		}
 
-		// First result should be user029 (highest timestamp in this db)
-		if results[0].ID != "user029" {
-			t.Errorf("db%d: expected user029, got %s", db, results[0].ID)
+		// First result should be user199 (highest timestamp in this db)
+		if results[0].ID != "user199" {
+			t.Errorf("db%d: expected user199, got %s", db, results[0].ID)
 		}
 	}
 
@@ -371,7 +371,7 @@ func TestIntegration_Pebble_MultiDatabase(t *testing.T) {
 
 func TestIntegration_Pebble_LargeDataset(t *testing.T) {
 	t.Parallel()
-	const docCount = 200
+	const docCount = 2000
 	dataDir := t.TempDir()
 	mockPullerSvc := newMockPuller(docCount + 100)
 	svc, ctx, cancel := setupIndexerServiceWithPebble(t, mockPullerSvc, dataDir)
@@ -417,9 +417,9 @@ func TestIntegration_Pebble_LargeDataset(t *testing.T) {
 		t.Fatalf("expected 100 results, got %d", len(results))
 	}
 
-	// First result should be user00199 (highest timestamp)
-	if results[0].ID != "user00199" {
-		t.Errorf("expected user00199, got %s", results[0].ID)
+	// First result should be user01999 (highest timestamp)
+	if results[0].ID != "user01999" {
+		t.Errorf("expected user01999, got %s", results[0].ID)
 	}
 
 	stopService(t, svc, mockPullerSvc)
@@ -427,8 +427,8 @@ func TestIntegration_Pebble_LargeDataset(t *testing.T) {
 
 func TestIntegration_Pebble_PatternMatching(t *testing.T) {
 	t.Parallel()
-	const userCount = 5
-	const chatsPerUser = 20
+	const userCount = 10
+	const chatsPerUser = 100
 	totalEvents := userCount * chatsPerUser
 	dataDir := t.TempDir()
 	mockPullerSvc := newMockPuller(totalEvents + 100)
@@ -500,11 +500,11 @@ func TestIntegration_Pebble_FlushOnStop(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Phase 1: Create, insert data, and stop
-	mockPullerSvc1 := newMockPuller(100)
+	mockPullerSvc1 := newMockPuller(500)
 	svc1, _, cancel1 := setupIndexerServiceWithPebble(t, mockPullerSvc1, dataDir)
 
-	// Insert 30 documents
-	for i := 0; i < 30; i++ {
+	// Insert 300 documents
+	for i := 0; i < 300; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"timestamp": int64(i),
 		})
@@ -519,7 +519,7 @@ func TestIntegration_Pebble_FlushOnStop(t *testing.T) {
 	cancel1()
 
 	// Phase 2: Restart and verify all data was persisted via Flush
-	mockPullerSvc2 := newMockPuller(100)
+	mockPullerSvc2 := newMockPuller(500)
 	svc2, ctx2, cancel2 := setupIndexerServiceWithPebble(t, mockPullerSvc2, dataDir)
 	defer cancel2()
 
@@ -528,7 +528,7 @@ func TestIntegration_Pebble_FlushOnStop(t *testing.T) {
 	plan := indexer.Plan{
 		Collection: "users",
 		OrderBy:    []indexer.OrderField{{Field: "timestamp", Direction: indexer.Desc}},
-		Limit:      100,
+		Limit:      500,
 	}
 
 	results, err := svc2.Search(ctx2, "db1", plan)
@@ -536,9 +536,9 @@ func TestIntegration_Pebble_FlushOnStop(t *testing.T) {
 		t.Fatalf("search after restart failed: %v", err)
 	}
 
-	// All 30 documents should be persisted
-	if len(results) != 30 {
-		t.Fatalf("expected 30 results after restart with flush, got %d", len(results))
+	// All 300 documents should be persisted
+	if len(results) != 300 {
+		t.Fatalf("expected 300 results after restart with flush, got %d", len(results))
 	}
 
 	stopService(t, svc2, mockPullerSvc2)
@@ -546,7 +546,7 @@ func TestIntegration_Pebble_FlushOnStop(t *testing.T) {
 
 func TestIntegration_Pebble_PaginationPersistence(t *testing.T) {
 	t.Parallel()
-	const docCount = 100
+	const docCount = 1000
 	dataDir := t.TempDir()
 
 	// Phase 1: Create service, insert data, paginate, then stop
@@ -637,11 +637,11 @@ func TestIntegration_Pebble_MultiTemplatePersistence(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Phase 1: Create service, add templates dynamically, insert data, stop
-	mockPullerSvc1 := newMockPuller(200)
+	mockPullerSvc1 := newMockPuller(1000)
 	svc1, ctx1, cancel1 := setupIndexerServiceWithPebble(t, mockPullerSvc1, dataDir)
 
 	// Insert users with timestamp
-	for i := 0; i < 30; i++ {
+	for i := 0; i < 300; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"name":      fmt.Sprintf("User %d", i),
 			"timestamp": int64(i),
@@ -697,7 +697,7 @@ templates:
 	}
 
 	// Insert more users - these will be indexed by both templates
-	for i := 30; i < 50; i++ {
+	for i := 300; i < 500; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"name":      fmt.Sprintf("User %d", i),
 			"timestamp": int64(i),
@@ -715,19 +715,19 @@ templates:
 	scorePlan := indexer.Plan{
 		Collection: "users",
 		OrderBy:    []indexer.OrderField{{Field: "score", Direction: indexer.Desc}},
-		Limit:      20,
+		Limit:      100,
 	}
 
 	scoreResults1, err := svc1.Search(ctx1, "db1", scorePlan)
 	if err != nil {
 		t.Fatalf("score search before restart failed: %v", err)
 	}
-	if len(scoreResults1) != 20 {
-		t.Fatalf("expected 20 score results before restart, got %d", len(scoreResults1))
+	if len(scoreResults1) != 100 {
+		t.Fatalf("expected 100 score results before restart, got %d", len(scoreResults1))
 	}
-	// user049 has highest score (490)
-	if scoreResults1[0].ID != "user049" {
-		t.Errorf("expected user049 first by score before restart, got %s", scoreResults1[0].ID)
+	// user499 has highest score (4990)
+	if scoreResults1[0].ID != "user499" {
+		t.Errorf("expected user499 first by score before restart, got %s", scoreResults1[0].ID)
 	}
 
 	// Stop the first service
@@ -735,7 +735,7 @@ templates:
 	cancel1()
 
 	// Phase 2: Restart with same templates and verify both indexes persisted
-	mockPullerSvc2 := newMockPuller(100)
+	mockPullerSvc2 := newMockPuller(500)
 	svc2, ctx2, cancel2 := setupIndexerServiceWithPebble(t, mockPullerSvc2, dataDir)
 	defer cancel2()
 
@@ -751,30 +751,30 @@ templates:
 	timestampPlan := indexer.Plan{
 		Collection: "users",
 		OrderBy:    []indexer.OrderField{{Field: "timestamp", Direction: indexer.Desc}},
-		Limit:      50,
+		Limit:      500,
 	}
 
 	timestampResults, err := svc2.Search(ctx2, "db1", timestampPlan)
 	if err != nil {
 		t.Fatalf("timestamp search after restart failed: %v", err)
 	}
-	if len(timestampResults) != 50 {
-		t.Fatalf("expected 50 timestamp results after restart, got %d", len(timestampResults))
+	if len(timestampResults) != 500 {
+		t.Fatalf("expected 500 timestamp results after restart, got %d", len(timestampResults))
 	}
-	if timestampResults[0].ID != "user049" {
-		t.Errorf("expected user049 first by timestamp after restart, got %s", timestampResults[0].ID)
+	if timestampResults[0].ID != "user499" {
+		t.Errorf("expected user499 first by timestamp after restart, got %s", timestampResults[0].ID)
 	}
 
-	// Verify score-based search still works (only users 30-49 indexed by score template)
+	// Verify score-based search still works (only users 300-499 indexed by score template)
 	scoreResults2, err := svc2.Search(ctx2, "db1", scorePlan)
 	if err != nil {
 		t.Fatalf("score search after restart failed: %v", err)
 	}
-	if len(scoreResults2) != 20 {
-		t.Fatalf("expected 20 score results after restart, got %d", len(scoreResults2))
+	if len(scoreResults2) != 100 {
+		t.Fatalf("expected 100 score results after restart, got %d", len(scoreResults2))
 	}
-	if scoreResults2[0].ID != "user049" {
-		t.Errorf("expected user049 first by score after restart, got %s", scoreResults2[0].ID)
+	if scoreResults2[0].ID != "user499" {
+		t.Errorf("expected user499 first by score after restart, got %s", scoreResults2[0].ID)
 	}
 
 	stopService(t, svc2, mockPullerSvc2)
@@ -785,11 +785,11 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	dataDir := t.TempDir()
 
 	// Phase 1: Create service, insert initial data, stop
-	mockPullerSvc1 := newMockPuller(200)
+	mockPullerSvc1 := newMockPuller(1000)
 	svc1, ctx1, cancel1 := setupIndexerServiceWithPebble(t, mockPullerSvc1, dataDir)
 
-	// Insert first batch of users (0-29)
-	for i := 0; i < 30; i++ {
+	// Insert first batch of users (0-299)
+	for i := 0; i < 300; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"name":      fmt.Sprintf("User %d", i),
 			"timestamp": int64(i),
@@ -806,15 +806,15 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	plan := indexer.Plan{
 		Collection: "users",
 		OrderBy:    []indexer.OrderField{{Field: "timestamp", Direction: indexer.Desc}},
-		Limit:      100,
+		Limit:      1000,
 	}
 
 	results1, err := svc1.Search(ctx1, "db1", plan)
 	if err != nil {
 		t.Fatalf("search before restart failed: %v", err)
 	}
-	if len(results1) != 30 {
-		t.Fatalf("expected 30 results before restart, got %d", len(results1))
+	if len(results1) != 300 {
+		t.Fatalf("expected 300 results before restart, got %d", len(results1))
 	}
 
 	// Check progress was saved
@@ -823,8 +823,8 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load progress: %v", err)
 	}
-	if progress1 != "progress-029" {
-		t.Errorf("expected progress 'progress-029', got %s", progress1)
+	if progress1 != "progress-299" {
+		t.Errorf("expected progress 'progress-299', got %s", progress1)
 	}
 
 	// Stop the first service
@@ -832,7 +832,7 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	cancel1()
 
 	// Phase 2: Restart and continue processing new events
-	mockPullerSvc2 := newMockPuller(200)
+	mockPullerSvc2 := newMockPuller(1000)
 	svc2, ctx2, cancel2 := setupIndexerServiceWithPebble(t, mockPullerSvc2, dataDir)
 	defer cancel2()
 
@@ -843,8 +843,8 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search after restart failed: %v", err)
 	}
-	if len(results2) != 30 {
-		t.Fatalf("expected 30 results after restart (before new events), got %d", len(results2))
+	if len(results2) != 300 {
+		t.Fatalf("expected 300 results after restart (before new events), got %d", len(results2))
 	}
 
 	// Verify progress was restored
@@ -853,12 +853,12 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load progress after restart: %v", err)
 	}
-	if progress2 != "progress-029" {
-		t.Errorf("expected restored progress 'progress-029', got %s", progress2)
+	if progress2 != "progress-299" {
+		t.Errorf("expected restored progress 'progress-299', got %s", progress2)
 	}
 
-	// Insert second batch of users (30-59)
-	for i := 30; i < 60; i++ {
+	// Insert second batch of users (300-599)
+	for i := 300; i < 600; i++ {
 		evt := createTestEvent("db1", "users", fmt.Sprintf("user%03d", i), map[string]any{
 			"name":      fmt.Sprintf("User %d", i),
 			"timestamp": int64(i),
@@ -876,16 +876,16 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search after new events failed: %v", err)
 	}
-	if len(results3) != 60 {
-		t.Fatalf("expected 60 results after new events, got %d", len(results3))
+	if len(results3) != 600 {
+		t.Fatalf("expected 600 results after new events, got %d", len(results3))
 	}
 
-	// Verify ordering - user059 should be first (highest timestamp)
-	if results3[0].ID != "user059" {
-		t.Errorf("expected user059 first after new events, got %s", results3[0].ID)
+	// Verify ordering - user599 should be first (highest timestamp)
+	if results3[0].ID != "user599" {
+		t.Errorf("expected user599 first after new events, got %s", results3[0].ID)
 	}
-	if results3[59].ID != "user000" {
-		t.Errorf("expected user000 last after new events, got %s", results3[59].ID)
+	if results3[599].ID != "user000" {
+		t.Errorf("expected user000 last after new events, got %s", results3[599].ID)
 	}
 
 	// Verify progress was updated
@@ -893,8 +893,8 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load final progress: %v", err)
 	}
-	if progress3 != "progress-059" {
-		t.Errorf("expected final progress 'progress-059', got %s", progress3)
+	if progress3 != "progress-599" {
+		t.Errorf("expected final progress 'progress-599', got %s", progress3)
 	}
 
 	// Stop and restart again to verify all data persisted
@@ -902,7 +902,7 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	cancel2()
 
 	// Phase 3: Final restart to verify everything persisted
-	mockPullerSvc3 := newMockPuller(100)
+	mockPullerSvc3 := newMockPuller(1000)
 	svc3, ctx3, cancel3 := setupIndexerServiceWithPebble(t, mockPullerSvc3, dataDir)
 	defer cancel3()
 
@@ -912,8 +912,8 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("search after final restart failed: %v", err)
 	}
-	if len(results4) != 60 {
-		t.Fatalf("expected 60 results after final restart, got %d", len(results4))
+	if len(results4) != 600 {
+		t.Fatalf("expected 600 results after final restart, got %d", len(results4))
 	}
 
 	mgr3 := svc3.Manager()
@@ -921,8 +921,8 @@ func TestIntegration_Pebble_ContinueProcessingAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to load progress after final restart: %v", err)
 	}
-	if progress4 != "progress-059" {
-		t.Errorf("expected progress 'progress-059' after final restart, got %s", progress4)
+	if progress4 != "progress-599" {
+		t.Errorf("expected progress 'progress-599' after final restart, got %s", progress4)
 	}
 
 	stopService(t, svc3, mockPullerSvc3)

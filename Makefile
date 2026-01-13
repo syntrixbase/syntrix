@@ -30,7 +30,7 @@ run: build
 
 test:
 	@echo Running tests...
-	@go test ./... -count=1
+	@go test -race ./... -count=1
 
 ifeq ($(OS),Windows_NT)
     COVERAGE_CMD = scripts\coverage.cmd detail

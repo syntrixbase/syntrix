@@ -3,29 +3,37 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"sync"
 
 	"google.golang.org/grpc"
 )
 
 var (
-	defaultService Service
+	defaultService   Service
+	defaultServiceMu sync.RWMutex
 )
 
 // InitDefault initializes the global default server instance.
 // This should be called once at application startup.
 func InitDefault(cfg Config, logger *slog.Logger) {
+	defaultServiceMu.Lock()
+	defer defaultServiceMu.Unlock()
 	defaultService = New(cfg, logger)
 }
 
 // Default returns the global default server instance.
 // It returns nil if InitDefault has not been called.
 func Default() Service {
+	defaultServiceMu.RLock()
+	defer defaultServiceMu.RUnlock()
 	return defaultService
 }
 
 // SetDefault sets the global default server instance.
 // This is primarily used for testing or custom initialization.
 func SetDefault(s Service) {
+	defaultServiceMu.Lock()
+	defer defaultServiceMu.Unlock()
 	defaultService = s
 }
 

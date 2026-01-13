@@ -132,6 +132,7 @@ func (m *mockEventReplayer) ReplayFrom(ctx context.Context, startKey string, cal
 }
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 	assert.Equal(t, 500, cfg.BatchSize)
 	assert.Equal(t, 5000, cfg.QPSLimit)
@@ -139,6 +140,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 1000, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -149,6 +151,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_DefaultValues(t *testing.T) {
+	t.Parallel()
 	cfg := Config{} // All zeros
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -158,6 +161,7 @@ func TestNew_DefaultValues(t *testing.T) {
 }
 
 func TestOrchestrator_StartRebuild(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 10, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -202,6 +206,7 @@ func TestOrchestrator_StartRebuild(t *testing.T) {
 }
 
 func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -242,6 +247,7 @@ func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRebuild(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -281,6 +287,7 @@ func TestOrchestrator_CancelRebuild(t *testing.T) {
 }
 
 func TestOrchestrator_ListJobs(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -314,6 +321,7 @@ func TestOrchestrator_ListJobs(t *testing.T) {
 }
 
 func TestOrchestrator_GetJob_NotFound(t *testing.T) {
+	t.Parallel()
 	o := New(DefaultConfig(), &mockKeyBuilder{}, testLogger())
 
 	_, err := o.GetJob("nonexistent")
@@ -322,6 +330,7 @@ func TestOrchestrator_GetJob_NotFound(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRebuild_NotFound(t *testing.T) {
+	t.Parallel()
 	o := New(DefaultConfig(), &mockKeyBuilder{}, testLogger())
 
 	err := o.CancelRebuild("nonexistent")
@@ -330,6 +339,7 @@ func TestOrchestrator_CancelRebuild_NotFound(t *testing.T) {
 }
 
 func TestOrchestrator_CleanupCompletedJobs(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -364,6 +374,7 @@ func TestOrchestrator_CleanupCompletedJobs(t *testing.T) {
 }
 
 func TestOrchestrator_WithEventReplay(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -407,6 +418,7 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 }
 
 func TestOrchestrator_ScannerError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -439,6 +451,7 @@ func TestOrchestrator_ScannerError(t *testing.T) {
 }
 
 func TestOrchestrator_MaxConcurrent(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -492,6 +505,7 @@ func TestOrchestrator_MaxConcurrent(t *testing.T) {
 }
 
 func TestJob_Progress(t *testing.T) {
+	t.Parallel()
 	job := &Job{
 		ID:        "test-job",
 		Status:    StatusRunning,
@@ -508,6 +522,7 @@ func TestJob_Progress(t *testing.T) {
 }
 
 func TestOrchestrator_DeletedEvents(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -551,6 +566,7 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 }
 
 func TestOrchestrator_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 10}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -591,6 +607,7 @@ func TestOrchestrator_ConcurrentAccess(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRunningJob(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -631,6 +648,7 @@ func TestOrchestrator_CancelRunningJob(t *testing.T) {
 }
 
 func TestOrchestrator_CancelCompletedJob(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -658,6 +676,7 @@ func TestOrchestrator_CancelCompletedJob(t *testing.T) {
 }
 
 func TestOrchestrator_ReplayEventsError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -690,6 +709,7 @@ func TestOrchestrator_ReplayEventsError(t *testing.T) {
 }
 
 func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -728,6 +748,7 @@ func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
 }
 
 func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	// Use a key builder that fails
 	o := New(cfg, &mockKeyBuilder{err: errors.New("build key error")}, testLogger())
@@ -772,6 +793,7 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 // before the storage scan, rebuild would replay ALL buffered events instead
 // of only the events that arrived during the rebuild.
 func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -828,6 +850,7 @@ func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
 // TestOrchestrator_ReplayCurrentPositionError verifies that rebuild fails
 // gracefully when CurrentPosition returns an error.
 func TestOrchestrator_ReplayCurrentPositionError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 

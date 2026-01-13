@@ -63,10 +63,10 @@ func (s *serverImpl) Start(ctx context.Context) error {
 		return errors.New("server already started")
 	}
 	s.started = true
-	s.mu.Unlock()
 
-	// Initialize HTTP Server
+	// Initialize HTTP Server while holding the lock
 	s.initHTTPServer()
+	s.mu.Unlock()
 
 	errChan := make(chan error, 2)
 

@@ -85,7 +85,9 @@ func (i *bufferIterator) Err() error {
 
 func (i *bufferIterator) Close() error {
 	if i.iter != nil {
-		return i.iter.Close()
+		err := i.iter.Close()
+		i.iter = nil
+		return err
 	}
 	return nil
 }
@@ -228,5 +230,7 @@ func (i *deduplicatingIterator) Close() error {
 			err = e
 		}
 	}
+	i.iterators = nil
+	i.current = nil
 	return err
 }

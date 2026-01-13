@@ -7,8 +7,9 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"time"
+
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
 
 func setupTestStore(t *testing.T) (*PebbleStore, func()) {
@@ -42,6 +43,7 @@ func setupTestStore(t *testing.T) (*PebbleStore, func()) {
 }
 
 func TestPebbleStoreUpsertAndGet(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -67,6 +69,7 @@ func TestPebbleStoreUpsertAndGet(t *testing.T) {
 }
 
 func TestPebbleStoreUpsertUpdate(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -107,6 +110,7 @@ func TestPebbleStoreUpsertUpdate(t *testing.T) {
 }
 
 func TestPebbleStoreDelete(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -139,6 +143,7 @@ func TestPebbleStoreDelete(t *testing.T) {
 }
 
 func TestPebbleStoreSearch(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -182,6 +187,7 @@ func TestPebbleStoreSearch(t *testing.T) {
 }
 
 func TestPebbleStoreSearchWithBounds(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -246,6 +252,7 @@ func TestPebbleStoreSearchWithBounds(t *testing.T) {
 }
 
 func TestPebbleStoreSearchWithLimit(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -273,6 +280,7 @@ func TestPebbleStoreSearchWithLimit(t *testing.T) {
 }
 
 func TestPebbleStoreSearchWithStartAfter(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -315,6 +323,7 @@ func TestPebbleStoreSearchWithStartAfter(t *testing.T) {
 }
 
 func TestPebbleStoreDeleteIndex(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -361,6 +370,7 @@ func TestPebbleStoreDeleteIndex(t *testing.T) {
 }
 
 func TestPebbleStoreState(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -405,6 +415,7 @@ func TestPebbleStoreState(t *testing.T) {
 }
 
 func TestPebbleStoreProgress(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -450,6 +461,7 @@ func TestPebbleStoreProgress(t *testing.T) {
 }
 
 func TestPebbleStoreMultipleIndexes(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -512,6 +524,7 @@ func TestPebbleStoreMultipleIndexes(t *testing.T) {
 }
 
 func TestPebbleStoreFlush(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -537,6 +550,7 @@ func TestPebbleStoreFlush(t *testing.T) {
 }
 
 func TestPebbleStoreCloseReopen(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -609,6 +623,7 @@ func TestPebbleStoreCloseReopen(t *testing.T) {
 }
 
 func TestPebbleStoreInterfaceCompliance(t *testing.T) {
+	t.Parallel()
 	// Compile-time check is in pebble.go
 	// This test just ensures the interface is properly implemented
 	ps, cleanup := setupTestStore(t)
@@ -618,6 +633,7 @@ func TestPebbleStoreInterfaceCompliance(t *testing.T) {
 }
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 
 	if cfg.Path != "data/indexer/indexes.db" {
@@ -632,12 +648,13 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.QueueSize != 10000 {
 		t.Errorf("QueueSize = %d, want 10000", cfg.QueueSize)
 	}
-	if cfg.BlockCacheSize != 64*1024*1024 {
-		t.Errorf("BlockCacheSize = %d, want 67108864", cfg.BlockCacheSize)
+	if cfg.BlockCacheSize != 128*1024*1024 {
+		t.Errorf("BlockCacheSize = %d, want %d", cfg.BlockCacheSize, 128*1024*1024)
 	}
 }
 
 func TestNewPebbleStoreEmptyPath(t *testing.T) {
+	t.Parallel()
 	cfg := Config{
 		Path: "",
 	}
@@ -649,6 +666,7 @@ func TestNewPebbleStoreEmptyPath(t *testing.T) {
 }
 
 func TestNewPebbleStoreDefaultBatchParams(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -679,6 +697,7 @@ func TestNewPebbleStoreDefaultBatchParams(t *testing.T) {
 }
 
 func TestPebbleStoreGetNotFound(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -690,6 +709,7 @@ func TestPebbleStoreGetNotFound(t *testing.T) {
 }
 
 func TestPebbleStoreSearchEmptyIndex(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -704,6 +724,7 @@ func TestPebbleStoreSearchEmptyIndex(t *testing.T) {
 }
 
 func TestPebbleStoreSearchDefaultLimit(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -731,6 +752,7 @@ func TestPebbleStoreSearchDefaultLimit(t *testing.T) {
 }
 
 func TestPebbleStoreCloseIdempotent(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -744,6 +766,7 @@ func TestPebbleStoreCloseIdempotent(t *testing.T) {
 }
 
 func TestPebbleStoreFlushEmptyPending(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -754,6 +777,7 @@ func TestPebbleStoreFlushEmptyPending(t *testing.T) {
 }
 
 func TestPebbleStoreSpecialCharacters(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -792,6 +816,7 @@ func TestPebbleStoreSpecialCharacters(t *testing.T) {
 }
 
 func TestPebbleStoreConcurrentReads(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -846,6 +871,7 @@ func TestPebbleStoreConcurrentReads(t *testing.T) {
 }
 
 func TestPebbleStoreConcurrentWrites(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -889,6 +915,7 @@ func TestPebbleStoreConcurrentWrites(t *testing.T) {
 }
 
 func TestPebbleStoreSearchWithUpperBoundOnly(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -920,6 +947,7 @@ func TestPebbleStoreSearchWithUpperBoundOnly(t *testing.T) {
 }
 
 func TestPebbleStoreDeleteIndexEmpty(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -930,6 +958,7 @@ func TestPebbleStoreDeleteIndexEmpty(t *testing.T) {
 }
 
 func TestPebbleStoreMultipleDatabases(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -983,6 +1012,7 @@ func TestPebbleStoreMultipleDatabases(t *testing.T) {
 }
 
 func TestPebbleStoreEmptyOrderKey(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1007,6 +1037,7 @@ func TestPebbleStoreEmptyOrderKey(t *testing.T) {
 }
 
 func TestPebbleStoreLargeOrderKey(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1043,104 +1074,8 @@ func TestPebbleStoreLargeOrderKey(t *testing.T) {
 
 // ============ Async Batching Tests ============
 
-func TestPebbleStoreUpsertAsync(t *testing.T) {
-	ps, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	db := "testdb"
-	pattern := "users/*"
-	tmplID := "created_at"
-	docID := "doc1"
-	orderKey := []byte{0x01, 0x02}
-
-	// UpsertAsync - should be immediately visible via Get
-	ps.UpsertAsync(db, pattern, tmplID, docID, orderKey)
-
-	// Should be visible immediately (from pending)
-	got, found := ps.Get(db, pattern, tmplID, docID)
-	if !found {
-		t.Fatal("Get should find document in pending")
-	}
-	if !bytes.Equal(got, orderKey) {
-		t.Errorf("Get returned %v, want %v", got, orderKey)
-	}
-
-	// Should be visible in Search (from pending)
-	results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{Limit: 10})
-	if err != nil {
-		t.Fatalf("Search failed: %v", err)
-	}
-	if len(results) != 1 {
-		t.Errorf("Search returned %d results, want 1", len(results))
-	}
-
-	// Flush and verify persisted
-	if err := ps.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
-
-	// Should still be visible after flush
-	got, found = ps.Get(db, pattern, tmplID, docID)
-	if !found {
-		t.Fatal("Get should find document after flush")
-	}
-	if !bytes.Equal(got, orderKey) {
-		t.Errorf("Get returned %v, want %v", got, orderKey)
-	}
-}
-
-func TestPebbleStoreDeleteAsync(t *testing.T) {
-	ps, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	db := "testdb"
-	pattern := "users/*"
-	tmplID := "created_at"
-	docID := "doc1"
-	orderKey := []byte{0x01, 0x02}
-
-	// First insert synchronously
-	if err := ps.Upsert(db, pattern, tmplID, docID, orderKey, ""); err != nil {
-		t.Fatalf("Upsert failed: %v", err)
-	}
-
-	// Verify exists
-	_, found := ps.Get(db, pattern, tmplID, docID)
-	if !found {
-		t.Fatal("Document should exist")
-	}
-
-	// DeleteAsync
-	ps.DeleteAsync(db, pattern, tmplID, docID)
-
-	// Should not be visible via Get (pending delete)
-	_, found = ps.Get(db, pattern, tmplID, docID)
-	if found {
-		t.Error("Get should not find document after DeleteAsync")
-	}
-
-	// Should not be visible in Search
-	results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{Limit: 10})
-	if err != nil {
-		t.Fatalf("Search failed: %v", err)
-	}
-	if len(results) != 0 {
-		t.Errorf("Search returned %d results, want 0", len(results))
-	}
-
-	// Flush and verify persisted
-	if err := ps.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
-
-	// Should still not be found after flush
-	_, found = ps.Get(db, pattern, tmplID, docID)
-	if found {
-		t.Error("Get should not find document after flush")
-	}
-}
-
 func TestPebbleStoreAsyncBatchFlush(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1169,7 +1104,7 @@ func TestPebbleStoreAsyncBatchFlush(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		docID := string(rune('a' + i))
 		orderKey := []byte{byte(i)}
-		ps.UpsertAsync(db, pattern, tmplID, docID, orderKey)
+		ps.Upsert(db, pattern, tmplID, docID, orderKey, "")
 	}
 
 	// Wait for batch interval to ensure flush
@@ -1185,57 +1120,8 @@ func TestPebbleStoreAsyncBatchFlush(t *testing.T) {
 	}
 }
 
-func TestPebbleStoreAsyncUpdateOverwrite(t *testing.T) {
-	ps, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	db := "testdb"
-	pattern := "users/*"
-	tmplID := "created_at"
-	docID := "doc1"
-
-	// Insert with orderKey1
-	orderKey1 := []byte{0x01}
-	ps.UpsertAsync(db, pattern, tmplID, docID, orderKey1)
-
-	// Update with orderKey2 (before flush)
-	orderKey2 := []byte{0x02}
-	ps.UpsertAsync(db, pattern, tmplID, docID, orderKey2)
-
-	// Should see latest value
-	got, found := ps.Get(db, pattern, tmplID, docID)
-	if !found {
-		t.Fatal("Get should find document")
-	}
-	if !bytes.Equal(got, orderKey2) {
-		t.Errorf("Get returned %v, want %v", got, orderKey2)
-	}
-
-	// Flush
-	if err := ps.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
-
-	// Should still see orderKey2
-	got, found = ps.Get(db, pattern, tmplID, docID)
-	if !found {
-		t.Fatal("Get should find document after flush")
-	}
-	if !bytes.Equal(got, orderKey2) {
-		t.Errorf("Get returned %v, want %v after flush", got, orderKey2)
-	}
-
-	// Search should only have one result
-	results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{Limit: 10})
-	if err != nil {
-		t.Fatalf("Search failed: %v", err)
-	}
-	if len(results) != 1 {
-		t.Errorf("Search returned %d results, want 1", len(results))
-	}
-}
-
 func TestPebbleStoreAsyncInsertThenDelete(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1246,8 +1132,8 @@ func TestPebbleStoreAsyncInsertThenDelete(t *testing.T) {
 	orderKey := []byte{0x01}
 
 	// Insert then delete before flush
-	ps.UpsertAsync(db, pattern, tmplID, docID, orderKey)
-	ps.DeleteAsync(db, pattern, tmplID, docID)
+	ps.Upsert(db, pattern, tmplID, docID, orderKey, "")
+	ps.Delete(db, pattern, tmplID, docID, "")
 
 	// Should not be visible
 	_, found := ps.Get(db, pattern, tmplID, docID)
@@ -1268,6 +1154,7 @@ func TestPebbleStoreAsyncInsertThenDelete(t *testing.T) {
 }
 
 func TestPebbleStoreAsyncSearchMerge(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1288,7 +1175,7 @@ func TestPebbleStoreAsyncSearchMerge(t *testing.T) {
 	for i := 3; i < 6; i++ {
 		docID := string(rune('a' + i))
 		orderKey := []byte{byte(i*2 - 5)} // 1, 3, 5
-		ps.UpsertAsync(db, pattern, tmplID, docID, orderKey)
+		ps.Upsert(db, pattern, tmplID, docID, orderKey, "")
 	}
 
 	// Search should merge both
@@ -1309,6 +1196,7 @@ func TestPebbleStoreAsyncSearchMerge(t *testing.T) {
 }
 
 func TestPebbleStoreAsyncDeleteFromDB(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1326,8 +1214,8 @@ func TestPebbleStoreAsyncDeleteFromDB(t *testing.T) {
 	}
 
 	// Delete some async
-	ps.DeleteAsync(db, pattern, tmplID, "b")
-	ps.DeleteAsync(db, pattern, tmplID, "d")
+	ps.Delete(db, pattern, tmplID, "b", "")
+	ps.Delete(db, pattern, tmplID, "d", "")
 
 	// Search should not include deleted docs
 	results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{Limit: 10})
@@ -1351,39 +1239,10 @@ func TestPebbleStoreAsyncDeleteFromDB(t *testing.T) {
 	}
 }
 
-func TestPebbleStoreAsyncSearchWithBounds(t *testing.T) {
-	ps, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	db := "testdb"
-	pattern := "users/*"
-	tmplID := "created_at"
-
-	// Insert async
-	for i := 0; i < 10; i++ {
-		docID := string(rune('a' + i))
-		orderKey := []byte{byte(i)}
-		ps.UpsertAsync(db, pattern, tmplID, docID, orderKey)
-	}
-
-	// Search with bounds
-	results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{
-		Lower: []byte{0x03},
-		Upper: []byte{0x07},
-		Limit: 10,
-	})
-	if err != nil {
-		t.Fatalf("Search failed: %v", err)
-	}
-	// Should return orderKeys 3, 4, 5, 6 (lower inclusive, upper exclusive)
-	if len(results) != 4 {
-		t.Errorf("Search returned %d results, want 4", len(results))
-	}
-}
-
 // ============ ListDatabases and ListIndexes Tests ============
 
 func TestPebbleStoreListDatabases(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1426,6 +1285,7 @@ func TestPebbleStoreListDatabases(t *testing.T) {
 }
 
 func TestPebbleStoreListDatabasesWithSpecialChars(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1444,6 +1304,7 @@ func TestPebbleStoreListDatabasesWithSpecialChars(t *testing.T) {
 }
 
 func TestPebbleStoreListIndexes(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1511,6 +1372,7 @@ func TestPebbleStoreListIndexes(t *testing.T) {
 }
 
 func TestPebbleStoreListIndexesEmpty(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1522,6 +1384,7 @@ func TestPebbleStoreListIndexesEmpty(t *testing.T) {
 }
 
 func TestPebbleStoreListIndexesAfterDelete(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1553,6 +1416,7 @@ func TestPebbleStoreListIndexesAfterDelete(t *testing.T) {
 }
 
 func TestPebbleStoreProgressViaDelete(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1577,6 +1441,7 @@ func TestPebbleStoreProgressViaDelete(t *testing.T) {
 }
 
 func TestPebbleStoreDeleteNonexistent(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1591,7 +1456,8 @@ func TestPebbleStoreDeleteNonexistent(t *testing.T) {
 	}
 }
 
-func TestPebbleStoreDeleteAsyncWithProgress(t *testing.T) {
+func TestPebbleStoreDeleteWithProgress(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1600,8 +1466,8 @@ func TestPebbleStoreDeleteAsyncWithProgress(t *testing.T) {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
-	// DeleteAsync does not take progress parameter, but let's verify behavior
-	ps.DeleteAsync("testdb", "users/*", "tmpl1", "doc1")
+	// Delete does not take progress parameter, but let's verify behavior
+	ps.Delete("testdb", "users/*", "tmpl1", "doc1", "")
 
 	// Flush to persist
 	if err := ps.Flush(); err != nil {
@@ -1615,24 +1481,8 @@ func TestPebbleStoreDeleteAsyncWithProgress(t *testing.T) {
 	}
 }
 
-func TestPebbleStoreGetFromPending(t *testing.T) {
-	ps, cleanup := setupTestStore(t)
-	defer cleanup()
-
-	// Insert async (goes to pending)
-	ps.UpsertAsync("testdb", "users/*", "tmpl1", "doc1", []byte{0x01, 0x02, 0x03})
-
-	// Get should find in pending
-	got, found := ps.Get("testdb", "users/*", "tmpl1", "doc1")
-	if !found {
-		t.Fatal("Get should find document in pending")
-	}
-	if !bytes.Equal(got, []byte{0x01, 0x02, 0x03}) {
-		t.Errorf("Get returned %v, want [0x01, 0x02, 0x03]", got)
-	}
-}
-
 func TestPebbleStoreGetFromFlushing(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1659,7 +1509,7 @@ func TestPebbleStoreGetFromFlushing(t *testing.T) {
 	}
 
 	// Now insert async (goes to pending)
-	ps.UpsertAsync("testdb", "users/*", "tmpl1", "doc2", []byte{0x02})
+	ps.Upsert("testdb", "users/*", "tmpl1", "doc2", []byte{0x02}, "")
 
 	// Get doc2 should find in pending
 	got, found := ps.Get("testdb", "users/*", "tmpl1", "doc2")
@@ -1681,6 +1531,7 @@ func TestPebbleStoreGetFromFlushing(t *testing.T) {
 }
 
 func TestPebbleStoreMultipleIndexesSameDB(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1711,6 +1562,7 @@ func TestPebbleStoreMultipleIndexesSameDB(t *testing.T) {
 // ============ Flushing Map and Complex Async Scenarios ============
 
 func TestPebbleStoreGetFromFlushingDelete(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1736,7 +1588,7 @@ func TestPebbleStoreGetFromFlushingDelete(t *testing.T) {
 	}
 
 	// Now delete asynchronously (goes to pending)
-	ps.DeleteAsync("testdb", "users/*", "tmpl1", "doc1")
+	ps.Delete("testdb", "users/*", "tmpl1", "doc1", "")
 
 	// Get should return not found (pending delete)
 	_, found := ps.Get("testdb", "users/*", "tmpl1", "doc1")
@@ -1746,6 +1598,7 @@ func TestPebbleStoreGetFromFlushingDelete(t *testing.T) {
 }
 
 func TestPebbleStoreSearchWithPendingUpdate(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1771,7 +1624,7 @@ func TestPebbleStoreSearchWithPendingUpdate(t *testing.T) {
 	}
 
 	// Update the same document asynchronously (goes to pending, with different orderKey)
-	ps.UpsertAsync("testdb", "users/*", "tmpl1", "doc1", []byte{0x05})
+	ps.Upsert("testdb", "users/*", "tmpl1", "doc1", []byte{0x05}, "")
 
 	// Search should find the pending version with the new orderKey
 	results, err := ps.Search("testdb", "users/*", "tmpl1", store.SearchOptions{
@@ -1790,6 +1643,7 @@ func TestPebbleStoreSearchWithPendingUpdate(t *testing.T) {
 }
 
 func TestPebbleStoreSearchPendingUpdateOutOfBounds(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1815,7 +1669,7 @@ func TestPebbleStoreSearchPendingUpdateOutOfBounds(t *testing.T) {
 	}
 
 	// Update to a value outside search bounds
-	ps.UpsertAsync("testdb", "users/*", "tmpl1", "doc1", []byte{0x01})
+	ps.Upsert("testdb", "users/*", "tmpl1", "doc1", []byte{0x01}, "")
 
 	// Search with bounds that exclude the pending value
 	results, err := ps.Search("testdb", "users/*", "tmpl1", store.SearchOptions{
@@ -1833,6 +1687,7 @@ func TestPebbleStoreSearchPendingUpdateOutOfBounds(t *testing.T) {
 }
 
 func TestPebbleStoreUpsertUpdateExistingDoc(t *testing.T) {
+	t.Parallel()
 	ps, cleanup := setupTestStore(t)
 	defer cleanup()
 
@@ -1877,51 +1732,8 @@ func TestPebbleStoreUpsertUpdateExistingDoc(t *testing.T) {
 	}
 }
 
-func TestPebbleStoreDeleteFromPending(t *testing.T) {
-	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	cfg := Config{
-		Path:           filepath.Join(tmpDir, "test.db"),
-		BatchSize:      1000,
-		BatchInterval:  10 * time.Second,
-		BlockCacheSize: 8 * 1024 * 1024,
-	}
-
-	ps, err := NewPebbleStore(cfg)
-	if err != nil {
-		t.Fatalf("NewPebbleStore failed: %v", err)
-	}
-	defer ps.Close()
-
-	// Insert async (goes to pending)
-	ps.UpsertAsync("testdb", "users/*", "tmpl1", "doc1", []byte{0x01})
-
-	// Delete async the same doc (overwrites pending)
-	ps.DeleteAsync("testdb", "users/*", "tmpl1", "doc1")
-
-	// Get should not find it (pending delete)
-	_, found := ps.Get("testdb", "users/*", "tmpl1", "doc1")
-	if found {
-		t.Error("doc should not be found after pending delete")
-	}
-
-	// Flush to persist
-	if err := ps.Flush(); err != nil {
-		t.Fatalf("Flush failed: %v", err)
-	}
-
-	// Still should not find it
-	_, found = ps.Get("testdb", "users/*", "tmpl1", "doc1")
-	if found {
-		t.Error("doc should not be found after flush")
-	}
-}
-
 func TestPebbleStoreSearchWithPendingDelete(t *testing.T) {
+	t.Parallel()
 	tmpDir, err := os.MkdirTemp("", "pebble-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
@@ -1952,7 +1764,7 @@ func TestPebbleStoreSearchWithPendingDelete(t *testing.T) {
 	}
 
 	// Delete doc1 async (pending delete)
-	ps.DeleteAsync("testdb", "users/*", "tmpl1", "doc1")
+	ps.Delete("testdb", "users/*", "tmpl1", "doc1", "")
 
 	// Search should only return doc2
 	results, err := ps.Search("testdb", "users/*", "tmpl1", store.SearchOptions{Limit: 10})
