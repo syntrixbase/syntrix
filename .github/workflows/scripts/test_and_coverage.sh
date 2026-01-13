@@ -8,7 +8,7 @@ threshold_total=90.0
 set -o pipefail
 failed=0
 # Run tests with coverage, excluding cmd/ directory
-go test -covermode=atomic -coverprofile=coverage.out $(go list ./... | \
+go test -race -covermode=atomic -coverprofile=coverage.out $(go list ./... | \
   grep -vE "syntrix/cmd/|syntrix/api/|syntrix/scripts/") | \
   tee test_output.txt || failed=1
 if [ $failed -ne 0 ]; then

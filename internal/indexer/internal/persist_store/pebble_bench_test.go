@@ -71,6 +71,28 @@ func BenchmarkPebbleStore_Upsert(b *testing.B) {
 	}
 }
 
+func BenchmarkPebbleStore_Upsert_Prealloc(b *testing.B) {
+	ps, cleanup := setupBenchStore(b, 1000, 100*time.Millisecond)
+	defer cleanup()
+
+	db := "testdb"
+	pattern := "users/*"
+	tmplID := "created_at"
+
+	// Pre-allocate docIDs and orderKeys
+	docIDs := make([]string, b.N)
+	orderKeys := make([][]byte, b.N)
+	for i := 0; i < b.N; i++ {
+		docIDs[i] = fmt.Sprintf("doc-%d", i)
+		orderKeys[i] = generateOrderKey(i)
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		ps.Upsert(db, pattern, tmplID, docIDs[i], orderKeys[i], "")
+	}
+}
+
 func BenchmarkPebbleStore_Upsert_BatchSizes(b *testing.B) {
 	batchSizes := []int{10, 50, 100, 500, 1000}
 
@@ -645,6 +667,45 @@ func BenchmarkPebbleStore_ListDatabases(b *testing.B) {
 		dbs := ps.ListDatabases()
 		if len(dbs) != numDBs {
 			b.Fatalf("Expected %d databases, got %d", numDBs, len(dbs))
+		}
+	}
+}
+
+// BenchmarkPebbleStore_SearchWithPendingManyIndexes demonstrates the O(1) index lookup
+// optimization. With many indexes having pending operations, searching for a specific
+// index now takes O(pending_for_that_index) instead of O(total_pending_across_all_indexes).
+func BenchmarkPebbleStore_SearchWithPendingManyIndexes(b *testing.B) {
+	ps, cleanup := setupBenchStore(b, 100000, 10*time.Second) // Keep pending
+	defer cleanup()
+
+	db := "testdb"
+	numIndexes := 100
+	docsPerIndex := 100
+
+	// Create many indexes with pending operations
+	for i := 0; i < numIndexes; i++ {
+		pattern := fmt.Sprintf("collection%d/*", i)
+		tmplID := fmt.Sprintf("tmpl%d", i)
+		for j := 0; j < docsPerIndex; j++ {
+			docID := fmt.Sprintf("doc-%d", j)
+			orderKey := generateOrderKey(j)
+			ps.Upsert(db, pattern, tmplID, docID, orderKey, "")
+		}
+	}
+	// Total pending: 100 indexes * 100 docs = 10,000 pending ops
+
+	// Search only the first index
+	pattern := "collection0/*"
+	tmplID := "tmpl0"
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		results, err := ps.Search(db, pattern, tmplID, store.SearchOptions{Limit: 50})
+		if err != nil {
+			b.Fatalf("Search failed: %v", err)
+		}
+		if len(results) != 50 {
+			b.Fatalf("Expected 50 results, got %d", len(results))
 		}
 	}
 }

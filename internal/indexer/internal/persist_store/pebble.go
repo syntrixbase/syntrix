@@ -54,8 +54,8 @@ type PebbleStore struct {
 
 	// Async batching
 	mu                  sync.RWMutex
-	pending             map[string]*pendingOp // key: "{db}|{hash}|{docID}"
-	flushing            map[string]*pendingOp
+	pending             map[string]map[string]*pendingOp // outer: "{db}|{hash}", inner: "{docID}"
+	flushing            map[string]map[string]*pendingOp
 	pendingProgress     string                   // progress to save with next batch
 	pendingIndexDeletes map[string]indexDeleteOp // key: "{db}|{hash}"
 	notifyCh            chan struct{}
@@ -137,8 +137,8 @@ func NewPebbleStore(cfg Config) (*PebbleStore, error) {
 		db:                  db,
 		path:                cfg.Path,
 		logger:              logger,
-		pending:             make(map[string]*pendingOp),
-		flushing:            make(map[string]*pendingOp),
+		pending:             make(map[string]map[string]*pendingOp),
+		flushing:            make(map[string]map[string]*pendingOp),
 		pendingIndexDeletes: make(map[string]indexDeleteOp),
 		notifyCh:            make(chan struct{}, 1),
 		closeCh:             make(chan struct{}),
@@ -247,7 +247,10 @@ func (s *PebbleStore) batcherLoop() {
 // Called from ticker (timeout-based) and notifyCh (triggered).
 func (s *PebbleStore) maybeFlush() {
 	s.mu.RLock()
-	pendingCount := len(s.pending)
+	pendingCount := 0
+	for _, inner := range s.pending {
+		pendingCount += len(inner)
+	}
 	s.mu.RUnlock()
 
 	if pendingCount == 0 {
@@ -262,12 +265,16 @@ func (s *PebbleStore) maybeFlush() {
 func (s *PebbleStore) doFlush() {
 	// Swap pending to flushing and capture progress and index deletes
 	s.mu.Lock()
-	if len(s.pending) == 0 && s.pendingProgress == "" && len(s.pendingIndexDeletes) == 0 {
+	pendingCount := 0
+	for _, inner := range s.pending {
+		pendingCount += len(inner)
+	}
+	if pendingCount == 0 && s.pendingProgress == "" && len(s.pendingIndexDeletes) == 0 {
 		s.mu.Unlock()
 		return
 	}
 	s.flushing = s.pending
-	s.pending = make(map[string]*pendingOp)
+	s.pending = make(map[string]map[string]*pendingOp)
 	progressToSave := s.pendingProgress
 	s.pendingProgress = ""
 	indexDeletes := s.pendingIndexDeletes
@@ -275,11 +282,17 @@ func (s *PebbleStore) doFlush() {
 	s.mu.Unlock()
 
 	// Build and commit batch for document operations
-	if len(s.flushing) > 0 || progressToSave != "" {
+	flushingCount := 0
+	for _, inner := range s.flushing {
+		flushingCount += len(inner)
+	}
+	if flushingCount > 0 || progressToSave != "" {
 		batch := s.db.NewBatch()
-		for _, op := range s.flushing {
-			if err := s.applyOp(batch, op); err != nil {
-				s.logger.Error("failed to apply operation", "error", err)
+		for _, inner := range s.flushing {
+			for _, op := range inner {
+				if err := s.applyOp(batch, op); err != nil {
+					s.logger.Error("failed to apply operation", "error", err)
+				}
 			}
 		}
 
@@ -298,7 +311,7 @@ func (s *PebbleStore) doFlush() {
 
 	// Clear flushing and signal completion
 	s.mu.Lock()
-	s.flushing = make(map[string]*pendingOp)
+	s.flushing = make(map[string]map[string]*pendingOp)
 	s.mu.Unlock()
 
 	// Signal flush completion (non-blocking)
@@ -409,11 +422,11 @@ func (s *PebbleStore) applyOp(batch *pebble.Batch, op *pendingOp) error {
 // Uses async batching for better throughput.
 func (s *PebbleStore) Upsert(db, pattern, tmplID, docID string, orderKey []byte, progress string) error {
 	hash := indexHash(pattern, tmplID)
-	deleteKey := db + "|" + hash
+	idxMapKey := db + "|" + hash
 
 	// Check if this index is pending deletion - skip the upsert but still update progress
 	s.mu.Lock()
-	if _, pendingDelete := s.pendingIndexDeletes[deleteKey]; pendingDelete {
+	if _, pendingDelete := s.pendingIndexDeletes[idxMapKey]; pendingDelete {
 		// Index is being deleted, only update progress if provided
 		if progress != "" {
 			s.pendingProgress = progress
@@ -421,8 +434,6 @@ func (s *PebbleStore) Upsert(db, pattern, tmplID, docID string, orderKey []byte,
 		s.mu.Unlock()
 		return nil
 	}
-
-	opKey := pendingOpKey(db, hash, docID)
 
 	// Make a copy of orderKey
 	orderKeyCopy := make([]byte, len(orderKey))
@@ -440,11 +451,23 @@ func (s *PebbleStore) Upsert(db, pattern, tmplID, docID string, orderKey []byte,
 		mapKey:   mapKey(db, pattern, tmplID),
 	}
 
-	s.pending[opKey] = op
+	// Get or create the inner map for this index
+	inner, ok := s.pending[idxMapKey]
+	if !ok {
+		inner = make(map[string]*pendingOp)
+		s.pending[idxMapKey] = inner
+	}
+	inner[docID] = op
+
 	if progress != "" {
 		s.pendingProgress = progress
 	}
-	pendingCount := len(s.pending)
+
+	// Count total pending ops
+	pendingCount := 0
+	for _, m := range s.pending {
+		pendingCount += len(m)
+	}
 	s.mu.Unlock()
 
 	// Notify batcher if batch size reached
@@ -462,11 +485,11 @@ func (s *PebbleStore) Upsert(db, pattern, tmplID, docID string, orderKey []byte,
 // Uses async batching for better throughput.
 func (s *PebbleStore) Delete(db, pattern, tmplID, docID string, progress string) error {
 	hash := indexHash(pattern, tmplID)
-	deleteKey := db + "|" + hash
+	idxMapKey := db + "|" + hash
 
 	// Check if this index is pending deletion - skip the delete but still update progress
 	s.mu.Lock()
-	if _, pendingDelete := s.pendingIndexDeletes[deleteKey]; pendingDelete {
+	if _, pendingDelete := s.pendingIndexDeletes[idxMapKey]; pendingDelete {
 		// Index is being deleted, only update progress if provided
 		if progress != "" {
 			s.pendingProgress = progress
@@ -474,8 +497,6 @@ func (s *PebbleStore) Delete(db, pattern, tmplID, docID string, progress string)
 		s.mu.Unlock()
 		return nil
 	}
-
-	opKey := pendingOpKey(db, hash, docID)
 
 	op := &pendingOp{
 		db:       db,
@@ -487,11 +508,23 @@ func (s *PebbleStore) Delete(db, pattern, tmplID, docID string, progress string)
 		revKey:   reverseKey(db, pattern, tmplID, docID),
 	}
 
-	s.pending[opKey] = op
+	// Get or create the inner map for this index
+	inner, ok := s.pending[idxMapKey]
+	if !ok {
+		inner = make(map[string]*pendingOp)
+		s.pending[idxMapKey] = inner
+	}
+	inner[docID] = op
+
 	if progress != "" {
 		s.pendingProgress = progress
 	}
-	pendingCount := len(s.pending)
+
+	// Count total pending ops
+	pendingCount := 0
+	for _, m := range s.pending {
+		pendingCount += len(m)
+	}
 	s.mu.Unlock()
 
 	// Notify batcher if batch size reached
@@ -505,45 +538,42 @@ func (s *PebbleStore) Delete(db, pattern, tmplID, docID string, progress string)
 	return nil
 }
 
-// pendingOpKey returns the key for the pending operations map.
-func pendingOpKey(db, hash, docID string) string {
-	return db + "|" + hash + "|" + docID
-}
-
 // Get returns the OrderKey for a document by ID.
 // It checks pending operations first, then falls back to the database.
 func (s *PebbleStore) Get(db, pattern, tmplID, docID string) ([]byte, bool) {
 	hash := indexHash(pattern, tmplID)
-	deleteKey := db + "|" + hash
+	idxMapKey := db + "|" + hash
 
 	// Check if this index is pending deletion
 	s.mu.RLock()
-	if _, pendingDelete := s.pendingIndexDeletes[deleteKey]; pendingDelete {
+	if _, pendingDelete := s.pendingIndexDeletes[idxMapKey]; pendingDelete {
 		s.mu.RUnlock()
 		return nil, false // Index is being deleted
 	}
 
-	opKey := pendingOpKey(db, hash, docID)
-
 	// Check pending operations first (newest to oldest)
 	// Check pending first (newest), then flushing (older)
-	if op, ok := s.pending[opKey]; ok {
-		s.mu.RUnlock()
-		if op.orderKey == nil {
-			return nil, false // Pending delete
+	if inner, ok := s.pending[idxMapKey]; ok {
+		if op, found := inner[docID]; found {
+			s.mu.RUnlock()
+			if op.orderKey == nil {
+				return nil, false // Pending delete
+			}
+			result := make([]byte, len(op.orderKey))
+			copy(result, op.orderKey)
+			return result, true
 		}
-		result := make([]byte, len(op.orderKey))
-		copy(result, op.orderKey)
-		return result, true
 	}
-	if op, ok := s.flushing[opKey]; ok {
-		s.mu.RUnlock()
-		if op.orderKey == nil {
-			return nil, false // Pending delete
+	if inner, ok := s.flushing[idxMapKey]; ok {
+		if op, found := inner[docID]; found {
+			s.mu.RUnlock()
+			if op.orderKey == nil {
+				return nil, false // Pending delete
+			}
+			result := make([]byte, len(op.orderKey))
+			copy(result, op.orderKey)
+			return result, true
 		}
-		result := make([]byte, len(op.orderKey))
-		copy(result, op.orderKey)
-		return result, true
 	}
 	s.mu.RUnlock()
 
@@ -562,39 +592,37 @@ func (s *PebbleStore) Get(db, pattern, tmplID, docID string) ([]byte, bool) {
 }
 
 // Search returns documents within the specified bounds.
-// It merges pending operations with database results.
+// It merges pending operations with database results using streaming merge.
 func (s *PebbleStore) Search(db, pattern, tmplID string, opts store.SearchOptions) ([]store.DocRef, error) {
 	hash := indexHash(pattern, tmplID)
-	deleteKey := db + "|" + hash
+	idxMapKey := db + "|" + hash
 
 	// Check if this index is pending deletion
 	s.mu.RLock()
-	if _, pendingDelete := s.pendingIndexDeletes[deleteKey]; pendingDelete {
+	if _, pendingDelete := s.pendingIndexDeletes[idxMapKey]; pendingDelete {
 		s.mu.RUnlock()
 		return nil, nil // Index is being deleted, return empty
+	}
+
+	// Snapshot pending operations for this index using O(1) lookup
+	memOps := make(map[string]*pendingOp)
+	// Copy flushing first (older)
+	if inner, ok := s.flushing[idxMapKey]; ok {
+		for docID, op := range inner {
+			memOps[docID] = op
+		}
+	}
+	// Copy pending (newer overwrites)
+	if inner, ok := s.pending[idxMapKey]; ok {
+		for docID, op := range inner {
+			memOps[docID] = op
+		}
 	}
 	s.mu.RUnlock()
 
 	prefix := indexKeyPrefix(db, pattern, tmplID)
 
-	// 1. Snapshot pending operations for this index
-	s.mu.RLock()
-	memOps := make(map[string]*pendingOp)
-	// Copy flushing first (older)
-	for _, v := range s.flushing {
-		if v.db == db && v.hash == hash {
-			memOps[v.docID] = v
-		}
-	}
-	// Copy pending (newer overwrites)
-	for _, v := range s.pending {
-		if v.db == db && v.hash == hash {
-			memOps[v.docID] = v
-		}
-	}
-	s.mu.RUnlock()
-
-	// 2. Build lower and upper bounds
+	// Build lower and upper bounds for iterator
 	var lower, upper []byte
 	if opts.Lower != nil {
 		lower = append(prefix, opts.Lower...)
@@ -604,7 +632,6 @@ func (s *PebbleStore) Search(db, pattern, tmplID string, opts store.SearchOption
 	if opts.Upper != nil {
 		upper = append(prefix, opts.Upper...)
 	} else {
-		// Use prefix + 0xFF... as upper bound
 		upper = make([]byte, len(prefix))
 		copy(upper, prefix)
 		upper[len(upper)-1]++
@@ -634,49 +661,37 @@ func (s *PebbleStore) Search(db, pattern, tmplID string, opts store.SearchOption
 		limit = 1000
 	}
 
-	// 3. Collect results from database, checking memOps
-	seenDocs := make(map[string]bool)
-	var results []store.DocRef
+	// Fast path: no pending operations, just stream from iterator
+	if len(memOps) == 0 {
+		return s.searchFastPath(iter, prefix, opts, limit)
+	}
 
-	for iter.First(); iter.Valid(); iter.Next() {
+	// Slow path: merge DB results with pending operations using heap
+	return s.searchWithPending(iter, prefix, opts, limit, memOps)
+}
+
+// searchFastPath handles search when there are no pending operations.
+// It streams directly from the iterator, stopping at limit.
+func (s *PebbleStore) searchFastPath(iter *pebble.Iterator, prefix []byte, opts store.SearchOptions, limit int) ([]store.DocRef, error) {
+	results := make([]store.DocRef, 0, limit)
+
+	for iter.First(); iter.Valid() && len(results) < limit; iter.Next() {
 		key := iter.Key()
-		value := iter.Value()
 
 		// Skip StartAfter cursor itself (exclusive)
 		if opts.StartAfter != nil {
 			orderKey := parseIndexKey(key, prefix)
-			if len(orderKey) > 0 && string(orderKey) == string(opts.StartAfter) {
+			if len(orderKey) > 0 && bytes.Equal(orderKey, opts.StartAfter) {
 				continue
 			}
 		}
 
-		// Extract orderKey from key, docID from value
 		orderKey := parseIndexKey(key, prefix)
-		docID := string(value)
+		docID := string(iter.Value())
 
-		// Check if this doc has pending operation
-		if op, ok := memOps[docID]; ok {
-			if op.orderKey == nil {
-				// Pending delete - skip this doc
-				seenDocs[docID] = true
-				continue
-			}
-			// Pending update - use pending version instead
-			// Check if pending orderKey is in bounds
-			if isInBounds(op.orderKey, opts) {
-				results = append(results, store.DocRef{
-					ID:       docID,
-					OrderKey: append([]byte(nil), op.orderKey...),
-				})
-			}
-			seenDocs[docID] = true
-			continue
-		}
-
-		seenDocs[docID] = true
 		results = append(results, store.DocRef{
 			ID:       docID,
-			OrderKey: append([]byte(nil), orderKey...), // Copy
+			OrderKey: append([]byte(nil), orderKey...),
 		})
 	}
 
@@ -684,32 +699,106 @@ func (s *PebbleStore) Search(db, pattern, tmplID string, opts store.SearchOption
 		return nil, fmt.Errorf("iterator error: %w", err)
 	}
 
-	// 4. Add new inserts from memOps not in DB
+	return results, nil
+}
+
+// searchWithPending merges DB results with pending operations using a heap.
+func (s *PebbleStore) searchWithPending(iter *pebble.Iterator, prefix []byte, opts store.SearchOptions, limit int, memOps map[string]*pendingOp) ([]store.DocRef, error) {
+	// Build sorted slice of pending inserts/updates that are in bounds
+	pendingDocs := make([]store.DocRef, 0, len(memOps))
+	pendingDeletes := make(map[string]bool)
+
 	for docID, op := range memOps {
-		if seenDocs[docID] {
-			continue
-		}
 		if op.orderKey == nil {
-			// Delete for non-existent doc - skip
+			pendingDeletes[docID] = true
 			continue
 		}
-		// Check if in bounds
 		if isInBounds(op.orderKey, opts) {
-			results = append(results, store.DocRef{
+			pendingDocs = append(pendingDocs, store.DocRef{
 				ID:       docID,
 				OrderKey: append([]byte(nil), op.orderKey...),
 			})
 		}
 	}
 
-	// 5. Sort by orderKey
-	sort.Slice(results, func(i, j int) bool {
-		return bytes.Compare(results[i].OrderKey, results[j].OrderKey) < 0
+	// Sort pending docs by orderKey
+	sort.Slice(pendingDocs, func(i, j int) bool {
+		return bytes.Compare(pendingDocs[i].OrderKey, pendingDocs[j].OrderKey) < 0
 	})
 
-	// 6. Apply limit
-	if len(results) > limit {
-		results = results[:limit]
+	// Merge: iterate DB and pending simultaneously
+	results := make([]store.DocRef, 0, limit)
+	seenDocs := make(map[string]bool)
+	pendingIdx := 0
+	iterValid := iter.First()
+
+	for len(results) < limit {
+		// Get current DB entry (skip deleted/updated docs)
+		var dbDoc *store.DocRef
+		for iterValid {
+			key := iter.Key()
+			orderKey := parseIndexKey(key, prefix)
+			docID := string(iter.Value())
+
+			// Skip StartAfter cursor
+			if opts.StartAfter != nil && bytes.Equal(orderKey, opts.StartAfter) {
+				iterValid = iter.Next()
+				continue
+			}
+
+			// Skip if pending delete or update (will be handled from pendingDocs)
+			if _, hasPending := memOps[docID]; hasPending {
+				seenDocs[docID] = true
+				iterValid = iter.Next()
+				continue
+			}
+
+			if !seenDocs[docID] {
+				dbDoc = &store.DocRef{
+					ID:       docID,
+					OrderKey: append([]byte(nil), orderKey...),
+				}
+				break
+			}
+			iterValid = iter.Next()
+		}
+
+		// Get current pending entry (skip already seen)
+		var pendingDoc *store.DocRef
+		for pendingIdx < len(pendingDocs) {
+			if !seenDocs[pendingDocs[pendingIdx].ID] {
+				pendingDoc = &pendingDocs[pendingIdx]
+				break
+			}
+			pendingIdx++
+		}
+
+		// Pick smaller one
+		if dbDoc == nil && pendingDoc == nil {
+			break
+		}
+
+		if dbDoc == nil {
+			seenDocs[pendingDoc.ID] = true
+			results = append(results, *pendingDoc)
+			pendingIdx++
+		} else if pendingDoc == nil {
+			seenDocs[dbDoc.ID] = true
+			results = append(results, *dbDoc)
+			iterValid = iter.Next()
+		} else if bytes.Compare(dbDoc.OrderKey, pendingDoc.OrderKey) <= 0 {
+			seenDocs[dbDoc.ID] = true
+			results = append(results, *dbDoc)
+			iterValid = iter.Next()
+		} else {
+			seenDocs[pendingDoc.ID] = true
+			results = append(results, *pendingDoc)
+			pendingIdx++
+		}
+	}
+
+	if err := iter.Error(); err != nil {
+		return nil, fmt.Errorf("iterator error: %w", err)
 	}
 
 	return results, nil
@@ -733,18 +822,14 @@ func isInBounds(orderKey []byte, opts store.SearchOptions) bool {
 // The deletion is queued and processed by the batcher.
 func (s *PebbleStore) DeleteIndex(db, pattern, tmplID string) error {
 	hash := indexHash(pattern, tmplID)
-	deleteKey := db + "|" + hash
+	idxMapKey := db + "|" + hash
 
 	s.mu.Lock()
-	// 1. Clear any pending operations for this index
-	for key, op := range s.pending {
-		if op.db == db && op.hash == hash {
-			delete(s.pending, key)
-		}
-	}
+	// 1. Clear any pending operations for this index (O(1) lookup)
+	delete(s.pending, idxMapKey)
 
 	// 2. Queue the index delete operation
-	s.pendingIndexDeletes[deleteKey] = indexDeleteOp{
+	s.pendingIndexDeletes[idxMapKey] = indexDeleteOp{
 		db:      db,
 		pattern: pattern,
 		tmplID:  tmplID,
@@ -848,14 +933,18 @@ func (s *PebbleStore) ListDatabases() []string {
 
 	// 1. Collect from pending operations
 	s.mu.RLock()
-	for _, op := range s.flushing {
-		if op.orderKey != nil { // Only upserts, not deletes
-			dbSet[op.db] = struct{}{}
+	for _, inner := range s.flushing {
+		for _, op := range inner {
+			if op.orderKey != nil { // Only upserts, not deletes
+				dbSet[op.db] = struct{}{}
+			}
 		}
 	}
-	for _, op := range s.pending {
-		if op.orderKey != nil {
-			dbSet[op.db] = struct{}{}
+	for _, inner := range s.pending {
+		for _, op := range inner {
+			if op.orderKey != nil {
+				dbSet[op.db] = struct{}{}
+			}
 		}
 	}
 	s.mu.RUnlock()
@@ -915,22 +1004,26 @@ func (s *PebbleStore) ListIndexes(db string) []store.IndexInfo {
 
 	// 1. Collect from pending operations
 	s.mu.RLock()
-	for _, op := range s.flushing {
-		if op.db == db && op.orderKey != nil { // Only upserts for this db
-			key := op.pattern + "|" + op.tmplID
-			indexSet[key] = struct {
-				pattern string
-				tmplID  string
-			}{op.pattern, op.tmplID}
+	for _, inner := range s.flushing {
+		for _, op := range inner {
+			if op.db == db && op.orderKey != nil { // Only upserts for this db
+				key := op.pattern + "|" + op.tmplID
+				indexSet[key] = struct {
+					pattern string
+					tmplID  string
+				}{op.pattern, op.tmplID}
+			}
 		}
 	}
-	for _, op := range s.pending {
-		if op.db == db && op.orderKey != nil {
-			key := op.pattern + "|" + op.tmplID
-			indexSet[key] = struct {
-				pattern string
-				tmplID  string
-			}{op.pattern, op.tmplID}
+	for _, inner := range s.pending {
+		for _, op := range inner {
+			if op.db == db && op.orderKey != nil {
+				key := op.pattern + "|" + op.tmplID
+				indexSet[key] = struct {
+					pattern string
+					tmplID  string
+				}{op.pattern, op.tmplID}
+			}
 		}
 	}
 	s.mu.RUnlock()
@@ -1005,18 +1098,19 @@ func (s *PebbleStore) ListIndexes(db string) []store.IndexInfo {
 // countDocs counts the number of documents in an index.
 func (s *PebbleStore) countDocs(db, pattern, tmplID string) int {
 	hash := indexHash(pattern, tmplID)
+	idxMapKey := db + "|" + hash
 	docSet := make(map[string]bool) // true = exists, false = deleted
 
-	// 1. Count from pending operations
+	// 1. Count from pending operations (O(1) lookup for the index)
 	s.mu.RLock()
-	for _, op := range s.flushing {
-		if op.db == db && op.hash == hash {
-			docSet[op.docID] = op.orderKey != nil // nil = delete
+	if inner, ok := s.flushing[idxMapKey]; ok {
+		for docID, op := range inner {
+			docSet[docID] = op.orderKey != nil // nil = delete
 		}
 	}
-	for _, op := range s.pending {
-		if op.db == db && op.hash == hash {
-			docSet[op.docID] = op.orderKey != nil
+	if inner, ok := s.pending[idxMapKey]; ok {
+		for docID, op := range inner {
+			docSet[docID] = op.orderKey != nil
 		}
 	}
 	s.mu.RUnlock()
