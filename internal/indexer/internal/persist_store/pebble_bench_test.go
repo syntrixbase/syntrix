@@ -363,6 +363,20 @@ func BenchmarkPebbleStore_SearchWithPagination(b *testing.B) {
 	}
 }
 
+// BenchmarkPebbleStore_SearchWithPending benchmarks searching when a single index has
+// many pending operations (5000 docs). This is an EXTREME scenario that rarely occurs
+// in practice because:
+//  1. Pending operations are flushed every 100ms (default BatchInterval)
+//  2. Pending operations are flushed when reaching 100 ops (default BatchSize)
+//
+// The ~2.4ms latency comes from:
+//   - Iterating 5000 pending ops to build pendingDocs slice: O(n)
+//   - Sorting 5000 pending docs by orderKey: O(n log n)
+//   - Memory allocations: ~700KB, ~5000 allocs
+//
+// In realistic scenarios with <100 pending ops per index, this path is much faster.
+// See BenchmarkPebbleStore_SearchWithPendingManyIndexes for the O(1) index lookup
+// optimization which helps when pending ops are spread across many indexes.
 func BenchmarkPebbleStore_SearchWithPending(b *testing.B) {
 	ps, cleanup := setupBenchStore(b, 100000, 10*time.Second) // Keep pending
 	defer cleanup()
