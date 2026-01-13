@@ -1,5 +1,5 @@
 // Package index provides the in-memory index implementation.
-package index
+package mem_store
 
 import (
 	"bytes"
@@ -44,8 +44,8 @@ func lessFunc(a, b btreeItem) bool {
 	return a.id < b.id
 }
 
-// New creates a new index.
-func New(pattern, templateID, rawPattern string) *Index {
+// NewIndex creates a new index.
+func NewIndex(pattern, templateID, rawPattern string) *Index {
 	return &Index{
 		Pattern:    pattern,
 		TemplateID: templateID,

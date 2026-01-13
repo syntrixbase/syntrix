@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/rebuild"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 )
 
@@ -41,6 +41,7 @@ type Operation struct {
 	Database   string
 	Pattern    string
 	TemplateID string
+	RawPattern string
 	Template   *template.Template
 	Status     OpStatus
 	Progress   int
@@ -228,7 +229,8 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 // computeDiff computes the operations needed to reconcile desired and actual state.
 func (r *Reconciler) computeDiff() []Operation {
 	templates := r.mgr.Templates()
-	databases := r.mgr.ListDatabases()
+	st := r.mgr.Store()
+	databases := st.ListDatabases()
 
 	// Build set of desired indexes (pattern|templateID -> template)
 	desiredMap := make(map[string]*template.Template)
@@ -238,11 +240,10 @@ func (r *Reconciler) computeDiff() []Operation {
 		desiredMap[key] = t
 	}
 
-	// Build set of actual indexes (database|pattern|templateID -> index)
-	actualMap := make(map[string]*index.Index)
+	// Build set of actual indexes (database|pattern|templateID -> indexInfo)
+	actualMap := make(map[string]store.IndexInfo)
 	for _, dbName := range databases {
-		db := r.mgr.GetDatabase(dbName)
-		for _, idx := range db.ListIndexes() {
+		for _, idx := range st.ListIndexes(dbName) {
 			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
 			actualMap[key] = idx
 		}
@@ -256,12 +257,13 @@ func (r *Reconciler) computeDiff() []Operation {
 			fullKey := dbName + "|" + key
 			if idx, exists := actualMap[fullKey]; exists {
 				// Check if needs rebuild
-				if idx.State() == index.StateFailed {
+				if idx.State == store.IndexStateFailed {
 					ops = append(ops, Operation{
 						Type:       OpRebuild,
 						Database:   dbName,
 						Pattern:    tmpl.NormalizedPattern(),
 						TemplateID: tmpl.Identity(),
+						RawPattern: tmpl.CollectionPattern,
 						Template:   tmpl,
 						Status:     StatusPending,
 					})
@@ -273,6 +275,7 @@ func (r *Reconciler) computeDiff() []Operation {
 					Database:   dbName,
 					Pattern:    tmpl.NormalizedPattern(),
 					TemplateID: tmpl.Identity(),
+					RawPattern: tmpl.CollectionPattern,
 					Template:   tmpl,
 					Status:     StatusPending,
 				})
@@ -293,6 +296,7 @@ func (r *Reconciler) computeDiff() []Operation {
 				Database:   dbName,
 				Pattern:    idx.Pattern,
 				TemplateID: idx.TemplateID,
+				RawPattern: idx.RawPattern,
 				Status:     StatusPending,
 			})
 		}
@@ -355,50 +359,52 @@ func (r *Reconciler) executeCreate(ctx context.Context, op *Operation) error {
 		return fmt.Errorf("template not provided")
 	}
 
-	// Create the index
-	idx := r.mgr.GetOrCreateIndex(
-		op.Database,
-		op.Pattern,
-		op.TemplateID,
-		op.Template.CollectionPattern,
-	)
+	st := r.mgr.Store()
 
 	// Mark as rebuilding
-	idx.SetState(index.StateRebuilding)
+	st.SetState(op.Database, op.Pattern, op.TemplateID, store.IndexStateRebuilding)
 
 	// Trigger rebuild if rebuilder is available
 	if r.rebuild != nil && r.scanner != nil {
-		_, err := r.rebuild.StartRebuild(ctx, idx, op.Template, op.Database, r.scanner, r.replayer)
+		idxRef := rebuild.IndexRef{
+			Database:   op.Database,
+			Pattern:    op.Pattern,
+			TemplateID: op.TemplateID,
+			RawPattern: op.RawPattern,
+		}
+		_, err := r.rebuild.StartRebuild(ctx, idxRef, op.Template, st, r.scanner, r.replayer)
 		return err
 	}
 
 	// No rebuilder, just mark as healthy
-	idx.SetState(index.StateHealthy)
+	st.SetState(op.Database, op.Pattern, op.TemplateID, store.IndexStateHealthy)
 	return nil
 }
 
 // executeDelete removes an index.
 func (r *Reconciler) executeDelete(ctx context.Context, op *Operation) error {
-	db := r.mgr.GetDatabase(op.Database)
-	db.DeleteIndex(op.Pattern, op.TemplateID)
-	return nil
+	st := r.mgr.Store()
+	return st.DeleteIndex(op.Database, op.Pattern, op.TemplateID)
 }
 
 // executeRebuild rebuilds an existing index.
 func (r *Reconciler) executeRebuild(ctx context.Context, op *Operation) error {
-	idx := r.mgr.GetIndex(op.Database, op.Pattern, op.TemplateID)
-	if idx == nil {
-		return fmt.Errorf("index not found")
-	}
+	st := r.mgr.Store()
 
 	// Trigger rebuild if rebuilder is available
 	if r.rebuild != nil && op.Template != nil && r.scanner != nil {
-		_, err := r.rebuild.StartRebuild(ctx, idx, op.Template, op.Database, r.scanner, r.replayer)
+		idxRef := rebuild.IndexRef{
+			Database:   op.Database,
+			Pattern:    op.Pattern,
+			TemplateID: op.TemplateID,
+			RawPattern: op.RawPattern,
+		}
+		_, err := r.rebuild.StartRebuild(ctx, idxRef, op.Template, st, r.scanner, r.replayer)
 		return err
 	}
 
 	// No rebuilder or template, just clear and mark as healthy
-	idx.Clear()
-	idx.SetState(index.StateHealthy)
+	st.DeleteIndex(op.Database, op.Pattern, op.TemplateID)
+	st.SetState(op.Database, op.Pattern, op.TemplateID, store.IndexStateHealthy)
 	return nil
 }

@@ -21,7 +21,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
@@ -67,6 +67,7 @@ type Job struct {
 	Database   string // Database name
 	Pattern    string // Normalized collection pattern
 	TemplateID string // Template identity
+	RawPattern string // Original pattern for storage scan
 	Template   *template.Template
 
 	Status    Status
@@ -183,13 +184,21 @@ func New(cfg Config, keyBuilder OrderKeyBuilder, logger *slog.Logger) *Orchestra
 	}
 }
 
+// IndexRef identifies a specific index.
+type IndexRef struct {
+	Database   string
+	Pattern    string
+	TemplateID string
+	RawPattern string
+}
+
 // StartRebuild initiates a rebuild job for an index.
 // Returns the job ID for tracking.
 func (o *Orchestrator) StartRebuild(
 	ctx context.Context,
-	idx *index.Index,
+	idxRef IndexRef,
 	tmpl *template.Template,
-	database string,
+	st store.Store,
 	scanner StorageScanner,
 	replayer EventReplayer,
 ) (string, error) {
@@ -197,22 +206,23 @@ func (o *Orchestrator) StartRebuild(
 	defer o.mu.Unlock()
 
 	// Generate job ID
-	jobID := fmt.Sprintf("%s|%s|%s|%d", database, idx.Pattern, idx.TemplateID, time.Now().UnixNano())
+	jobID := fmt.Sprintf("%s|%s|%s|%d", idxRef.Database, idxRef.Pattern, idxRef.TemplateID, time.Now().UnixNano())
 
 	// Check if already rebuilding
 	for _, job := range o.jobs {
-		if job.Database == database && job.Pattern == idx.Pattern && job.TemplateID == idx.TemplateID {
+		if job.Database == idxRef.Database && job.Pattern == idxRef.Pattern && job.TemplateID == idxRef.TemplateID {
 			if job.Status == StatusPending || job.Status == StatusRunning {
-				return "", fmt.Errorf("rebuild already in progress for index %s|%s", idx.Pattern, idx.TemplateID)
+				return "", fmt.Errorf("rebuild already in progress for index %s|%s", idxRef.Pattern, idxRef.TemplateID)
 			}
 		}
 	}
 
 	job := &Job{
 		ID:         jobID,
-		Database:   database,
-		Pattern:    idx.Pattern,
-		TemplateID: idx.TemplateID,
+		Database:   idxRef.Database,
+		Pattern:    idxRef.Pattern,
+		TemplateID: idxRef.TemplateID,
+		RawPattern: idxRef.RawPattern,
 		Template:   tmpl,
 		Status:     StatusPending,
 	}
@@ -221,13 +231,13 @@ func (o *Orchestrator) StartRebuild(
 	// Check if we can start immediately
 	if o.running < o.cfg.MaxConcurrent {
 		o.running++
-		go o.runJob(ctx, job, idx, scanner, replayer)
+		go o.runJob(ctx, job, st, scanner, replayer)
 	} else {
 		o.pending = append(o.pending, job)
 		o.logger.Info("rebuild job queued",
 			"jobID", jobID,
-			"database", database,
-			"pattern", idx.Pattern)
+			"database", idxRef.Database,
+			"pattern", idxRef.Pattern)
 	}
 
 	return jobID, nil
@@ -237,7 +247,7 @@ func (o *Orchestrator) StartRebuild(
 func (o *Orchestrator) runJob(
 	ctx context.Context,
 	job *Job,
-	idx *index.Index,
+	st store.Store,
 	scanner StorageScanner,
 	replayer EventReplayer,
 ) {
@@ -254,13 +264,13 @@ func (o *Orchestrator) runJob(
 		"pattern", job.Pattern)
 
 	// Mark index as rebuilding
-	idx.SetState(index.StateRebuilding)
+	st.SetState(job.Database, job.Pattern, job.TemplateID, store.IndexStateRebuilding)
 
-	// Clear existing data
-	idx.Clear()
+	// Clear existing data by deleting and recreating the index
+	st.DeleteIndex(job.Database, job.Pattern, job.TemplateID)
 
 	// Run the rebuild
-	err := o.doRebuild(jobCtx, job, idx, scanner, replayer)
+	err := o.doRebuild(jobCtx, job, st, scanner, replayer)
 
 	// Update job status
 	job.mu.Lock()
@@ -271,14 +281,14 @@ func (o *Orchestrator) runJob(
 		} else {
 			job.Status = StatusFailed
 			job.Error = err.Error()
-			idx.SetState(index.StateFailed)
+			st.SetState(job.Database, job.Pattern, job.TemplateID, store.IndexStateFailed)
 		}
 		o.logger.Error("rebuild job failed",
 			"jobID", job.ID,
 			"error", err)
 	} else {
 		job.Status = StatusCompleted
-		idx.SetState(index.StateHealthy)
+		st.SetState(job.Database, job.Pattern, job.TemplateID, store.IndexStateHealthy)
 		o.logger.Info("rebuild job completed",
 			"jobID", job.ID,
 			"duration", job.EndTime.Sub(job.StartTime),
@@ -305,7 +315,7 @@ func (o *Orchestrator) runJob(
 func (o *Orchestrator) doRebuild(
 	ctx context.Context,
 	job *Job,
-	idx *index.Index,
+	st store.Store,
 	scanner StorageScanner,
 	replayer EventReplayer,
 ) error {
@@ -326,14 +336,14 @@ func (o *Orchestrator) doRebuild(
 
 	// Step 2: Scan storage with pagination
 	if scanner != nil {
-		if err := o.scanStorage(ctx, job, idx, scanner); err != nil {
+		if err := o.scanStorage(ctx, job, st, scanner); err != nil {
 			return fmt.Errorf("storage scan failed: %w", err)
 		}
 	}
 
 	// Step 3: Replay buffered events from the recorded position
 	if replayer != nil {
-		if err := o.replayEvents(ctx, job, idx, replayer, startKey); err != nil {
+		if err := o.replayEvents(ctx, job, st, replayer, startKey); err != nil {
 			return fmt.Errorf("event replay failed: %w", err)
 		}
 	}
@@ -345,7 +355,7 @@ func (o *Orchestrator) doRebuild(
 func (o *Orchestrator) scanStorage(
 	ctx context.Context,
 	job *Job,
-	idx *index.Index,
+	st store.Store,
 	scanner StorageScanner,
 ) error {
 	var startAfter string
@@ -361,7 +371,7 @@ func (o *Orchestrator) scanStorage(
 		default:
 		}
 
-		iter, err := scanner.ScanCollection(ctx, job.Database, idx.RawPattern, o.cfg.BatchSize, startAfter)
+		iter, err := scanner.ScanCollection(ctx, job.Database, job.RawPattern, o.cfg.BatchSize, startAfter)
 		if err != nil {
 			return err
 		}
@@ -388,8 +398,8 @@ func (o *Orchestrator) scanStorage(
 				continue
 			}
 
-			// Add to index
-			idx.Upsert(doc.Id, orderKey)
+			// Add to index via store interface
+			st.Upsert(job.Database, job.Pattern, job.TemplateID, doc.Id, orderKey, "")
 
 			job.mu.Lock()
 			job.DocsAdded++
@@ -435,7 +445,7 @@ func (o *Orchestrator) scanStorage(
 func (o *Orchestrator) replayEvents(
 	ctx context.Context,
 	job *Job,
-	idx *index.Index,
+	st store.Store,
 	replayer EventReplayer,
 	startKey string,
 ) error {
@@ -455,7 +465,7 @@ func (o *Orchestrator) replayEvents(
 		}
 
 		if evt.Deleted {
-			idx.Delete(evt.DocID)
+			st.Delete(job.Database, job.Pattern, job.TemplateID, evt.DocID, "")
 		} else {
 			orderKey, err := o.keyBuilder.BuildOrderKey(evt.Data, job.Template)
 			if err != nil {
@@ -464,7 +474,7 @@ func (o *Orchestrator) replayEvents(
 					"error", err)
 				return nil
 			}
-			idx.Upsert(evt.DocID, orderKey)
+			st.Upsert(job.Database, job.Pattern, job.TemplateID, evt.DocID, orderKey, "")
 		}
 
 		eventsReplayed++

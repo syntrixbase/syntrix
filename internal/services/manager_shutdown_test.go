@@ -174,7 +174,10 @@ func TestManager_Shutdown_IndexerService(t *testing.T) {
 	mgr := NewManager(cfg, Options{RunIndexer: true})
 
 	// Use a real indexer service since LocalService has internal types
-	mockIndexer := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mockIndexer, err := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create indexer service: %v", err)
+	}
 	mgr.indexerService = mockIndexer
 
 	// Should not panic and should stop the indexer

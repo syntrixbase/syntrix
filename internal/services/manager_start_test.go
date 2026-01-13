@@ -496,7 +496,10 @@ func TestManager_Start_IndexerService(t *testing.T) {
 	mgr := NewManager(cfg, Options{RunIndexer: true})
 
 	// Use a real indexer service instead of a stub since LocalService has internal types
-	mockIndexer := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mockIndexer, err := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create indexer service: %v", err)
+	}
 	mgr.indexerService = mockIndexer
 
 	bgCtx, cancel := context.WithCancel(context.Background())

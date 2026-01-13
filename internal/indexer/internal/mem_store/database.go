@@ -1,7 +1,9 @@
-package index
+package mem_store
 
 import (
 	"sync"
+
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
 
 // Database represents an isolated index namespace for a database.
@@ -54,7 +56,7 @@ func (d *Database) GetOrCreateIndex(pattern, templateID, rawPattern string) *Ind
 		return idx
 	}
 
-	idx := New(pattern, templateID, rawPattern)
+	idx := NewIndex(pattern, templateID, rawPattern)
 	d.indexes[key] = idx
 	return idx
 }
@@ -66,14 +68,29 @@ func (d *Database) DeleteIndex(pattern, templateID string) {
 	delete(d.indexes, IndexKey(pattern, templateID))
 }
 
-// ListIndexes returns all indexes in the database.
-func (d *Database) ListIndexes() []*Index {
+// ListIndexes returns metadata for all indexes in the database.
+func (d *Database) ListIndexes() []store.IndexInfo {
 	d.mu.RLock()
 	defer d.mu.RUnlock()
 
-	indexes := make([]*Index, 0, len(d.indexes))
+	indexes := make([]store.IndexInfo, 0, len(d.indexes))
 	for _, idx := range d.indexes {
-		indexes = append(indexes, idx)
+		var state store.IndexState
+		switch idx.State() {
+		case StateRebuilding:
+			state = store.IndexStateRebuilding
+		case StateFailed:
+			state = store.IndexStateFailed
+		default:
+			state = store.IndexStateHealthy
+		}
+		indexes = append(indexes, store.IndexInfo{
+			Pattern:    idx.Pattern,
+			TemplateID: idx.TemplateID,
+			RawPattern: idx.RawPattern,
+			State:      state,
+			DocCount:   idx.Len(),
+		})
 	}
 	return indexes
 }

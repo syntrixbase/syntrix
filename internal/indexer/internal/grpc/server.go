@@ -8,8 +8,8 @@ import (
 
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -129,10 +129,10 @@ func (s *Server) InvalidateIndex(ctx context.Context, req *indexerv1.InvalidateI
 		return nil, status.Error(codes.Internal, "manager not available")
 	}
 
+	st := mgr.Store()
 	count := 0
-	db := mgr.GetDatabase(req.Database)
 
-	for _, idx := range db.ListIndexes() {
+	for _, idx := range st.ListIndexes(req.Database) {
 		// Match by pattern
 		if req.Pattern != "" && idx.Pattern != req.Pattern {
 			continue
@@ -143,7 +143,7 @@ func (s *Server) InvalidateIndex(ctx context.Context, req *indexerv1.InvalidateI
 		}
 
 		// Mark as failed to trigger rebuild
-		idx.SetState(index.StateFailed)
+		st.SetState(req.Database, idx.Pattern, idx.TemplateID, store.IndexStateFailed)
 		count++
 	}
 
@@ -267,15 +267,15 @@ func (s *Server) buildDesiredState(mgr *manager.Manager, filterDB, filterPattern
 // buildActualState builds the actual index info from in-memory indexes.
 func (s *Server) buildActualState(mgr *manager.Manager, filterDB, filterPattern string) []*indexerv1.IndexInfo {
 	var infos []*indexerv1.IndexInfo
+	st := mgr.Store()
 
-	for _, dbName := range mgr.ListDatabases() {
+	for _, dbName := range st.ListDatabases() {
 		// Apply database filter
 		if filterDB != "" && dbName != filterDB {
 			continue
 		}
 
-		db := mgr.GetDatabase(dbName)
-		for _, idx := range db.ListIndexes() {
+		for _, idx := range st.ListIndexes(dbName) {
 			// Apply pattern filter
 			if filterPattern != "" && idx.Pattern != filterPattern {
 				continue
@@ -285,8 +285,8 @@ func (s *Server) buildActualState(mgr *manager.Manager, filterDB, filterPattern 
 				Database:   dbName,
 				Pattern:    idx.Pattern,
 				TemplateId: idx.TemplateID,
-				State:      idx.State().String(),
-				DocCount:   int64(idx.Len()),
+				State:      string(idx.State),
+				DocCount:   int64(idx.DocCount),
 			})
 		}
 	}

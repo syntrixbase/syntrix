@@ -50,8 +50,9 @@ type LocalService interface {
 	Stop(ctx context.Context) error
 
 	// ApplyEvent applies a single change event to the indexes.
+	// The progress marker is saved atomically with the index updates.
 	// This is called by the Puller subscription handler.
-	ApplyEvent(ctx context.Context, evt *ChangeEvent) error
+	ApplyEvent(ctx context.Context, evt *ChangeEvent, progress string) error
 
 	// Manager returns the underlying index manager for advanced operations.
 	Manager() *manager.Manager

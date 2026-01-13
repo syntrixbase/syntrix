@@ -454,7 +454,11 @@ func (m *Manager) initIndexerService(ctx context.Context) error {
 		pullerSvc = m.pullerService
 	}
 
-	m.indexerService = indexer.NewService(cfg, pullerSvc, slog.Default())
+	svc, err := indexer.NewService(cfg, pullerSvc, slog.Default())
+	if err != nil {
+		return fmt.Errorf("failed to create indexer service: %w", err)
+	}
+	m.indexerService = svc
 	slog.Info("Initialized Indexer Service")
 
 	return nil

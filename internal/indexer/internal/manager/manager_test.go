@@ -9,7 +9,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 )
 
@@ -39,14 +40,16 @@ templates:
 `
 
 func TestNew(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	assert.NotNil(t, m)
-	assert.Empty(t, m.ListDatabases())
+	assert.Empty(t, m.Store().ListDatabases())
 	assert.Empty(t, m.Templates())
 }
 
 func TestManager_LoadTemplatesFromBytes(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	err := m.LoadTemplatesFromBytes([]byte(testTemplatesYAML))
 	require.NoError(t, err)
@@ -56,48 +59,66 @@ func TestManager_LoadTemplatesFromBytes(t *testing.T) {
 }
 
 func TestManager_LoadTemplatesFromBytes_Invalid(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	err := m.LoadTemplatesFromBytes([]byte("invalid: yaml: ["))
 	assert.ErrorIs(t, err, ErrTemplateLoadFailed)
 }
 
-func TestManager_GetDatabase(t *testing.T) {
-	m := New()
+func TestManager_DatabaseCreation(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
 
-	// First call creates database
-	db1 := m.GetDatabase("myapp")
-	assert.NotNil(t, db1)
-	assert.Equal(t, "myapp", db1.Name)
+	// Initially no databases
+	assert.Empty(t, m.Store().ListDatabases())
 
-	// Second call returns same database
-	db2 := m.GetDatabase("myapp")
-	assert.Same(t, db1, db2)
+	// Upsert creates database implicitly
+	err := m.Store().Upsert("myapp", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
 
-	// Different name creates different database
-	db3 := m.GetDatabase("other")
-	assert.NotSame(t, db1, db3)
+	// Database now exists
+	dbs := m.Store().ListDatabases()
+	assert.Len(t, dbs, 1)
+	assert.Contains(t, dbs, "myapp")
 
-	assert.Len(t, m.ListDatabases(), 2)
+	// Second database
+	err = m.Store().Upsert("other", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+
+	dbs = m.Store().ListDatabases()
+	assert.Len(t, dbs, 2)
+	assert.Contains(t, dbs, "myapp")
+	assert.Contains(t, dbs, "other")
 }
 
-func TestManager_DeleteDatabase(t *testing.T) {
-	m := New()
+func TestManager_DeleteIndex(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
 
-	m.GetDatabase("myapp")
-	m.GetDatabase("other")
-	assert.Len(t, m.ListDatabases(), 2)
+	// Create indexes in two databases
+	err := m.Store().Upsert("myapp", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = m.Store().Upsert("other", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+	assert.Len(t, m.Store().ListDatabases(), 2)
 
-	m.DeleteDatabase("myapp")
-	assert.Len(t, m.ListDatabases(), 1)
+	// Delete index from myapp
+	err = m.Store().DeleteIndex("myapp", "test/*", "tmpl1")
+	require.NoError(t, err)
+
+	// Index should be empty (database may still exist in list)
+	indexes := m.Store().ListIndexes("myapp")
+	assert.Empty(t, indexes)
 
 	// Deleting again is a no-op
-	m.DeleteDatabase("myapp")
-	assert.Len(t, m.ListDatabases(), 1)
+	err = m.Store().DeleteIndex("myapp", "test/*", "tmpl1")
+	require.NoError(t, err)
 }
 
 func TestManager_MatchTemplatesForCollection(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
 	t.Run("matches generic pattern", func(t *testing.T) {
@@ -121,7 +142,8 @@ func TestManager_MatchTemplatesForCollection(t *testing.T) {
 }
 
 func TestManager_SelectBestTemplate(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
 	t.Run("select by orderBy", func(t *testing.T) {
@@ -186,7 +208,8 @@ func TestManager_SelectBestTemplate(t *testing.T) {
 }
 
 func TestManager_SelectBestTemplate_WithFilters(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
 	t.Run("equality filter allows skipping prefix", func(t *testing.T) {
@@ -241,7 +264,8 @@ templates:
     fields:
       - { field: name, order: asc }
 `
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(yaml)))
 
 	plan := Plan{
@@ -255,14 +279,17 @@ templates:
 }
 
 func TestManager_Search(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
-	// Create index and add data
-	s := m.GetOrCreateIndex("mydb", "users/*/chats", "chats_by_timestamp", "users/{uid}/chats")
-	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
-	s.Upsert("doc2", []byte{0x01, 0x00, 0x20})
-	s.Upsert("doc3", []byte{0x01, 0x00, 0x30})
+	// Create index and add data via store
+	err := st.Upsert("mydb", "users/*/chats", "chats_by_timestamp", "doc1", []byte{0x01, 0x00, 0x10}, "")
+	require.NoError(t, err)
+	err = st.Upsert("mydb", "users/*/chats", "chats_by_timestamp", "doc2", []byte{0x01, 0x00, 0x20}, "")
+	require.NoError(t, err)
+	err = st.Upsert("mydb", "users/*/chats", "chats_by_timestamp", "doc3", []byte{0x01, 0x00, 0x30}, "")
+	require.NoError(t, err)
 
 	t.Run("basic search", func(t *testing.T) {
 		plan := Plan{
@@ -347,43 +374,41 @@ func TestManager_Search(t *testing.T) {
 	})
 }
 
-func TestManager_GetIndex(t *testing.T) {
-	m := New()
+func TestManager_IndexOperations(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
 
-	// Index doesn't exist
-	s := m.GetIndex("mydb", "users/*/chats", "ts:desc")
-	assert.Nil(t, s)
+	// Index doesn't exist - ListIndexes returns empty
+	indexes := m.Store().ListIndexes("mydb")
+	assert.Empty(t, indexes)
 
-	// Create index
-	created := m.GetOrCreateIndex("mydb", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	assert.NotNil(t, created)
+	// Create index via Upsert
+	err := st.Upsert("mydb", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
 
 	// Now it exists
-	found := m.GetIndex("mydb", "users/*/chats", "ts:desc")
-	assert.Same(t, created, found)
+	indexes = m.Store().ListIndexes("mydb")
+	assert.Len(t, indexes, 1)
+	assert.Equal(t, "users/*/chats", indexes[0].Pattern)
+	assert.Equal(t, "ts:desc", indexes[0].TemplateID)
 }
 
 func TestManager_Stats(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	stats := m.Stats()
-	assert.Equal(t, 0, stats.DatabaseCount)
-	assert.Equal(t, 0, stats.IndexCount)
 	assert.Equal(t, 0, stats.TemplateCount)
 
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
-	m.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	m.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
-	m.GetOrCreateIndex("db2", "users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	stats = m.Stats()
-	assert.Equal(t, 2, stats.DatabaseCount)
-	assert.Equal(t, 3, stats.IndexCount)
 	assert.Equal(t, 4, stats.TemplateCount)
 }
 
 func TestManager_ComputeQueryScore(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(testTemplatesYAML)))
 
 	t.Run("orderBy prefix match scores positive", func(t *testing.T) {
@@ -446,7 +471,8 @@ templates:
 		require.NoError(t, err)
 		tmpFile.Close()
 
-		m := New()
+		st := mem_store.New()
+		m := New(st)
 		err = m.LoadTemplates(tmpFile.Name())
 		require.NoError(t, err)
 
@@ -455,7 +481,8 @@ templates:
 	})
 
 	t.Run("nonexistent file", func(t *testing.T) {
-		m := New()
+		st := mem_store.New()
+		m := New(st)
 		err := m.LoadTemplates("/nonexistent/path/templates.yaml")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrTemplateLoadFailed)
@@ -463,18 +490,22 @@ templates:
 }
 
 func TestManager_ListDatabases(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	// Initially empty
-	names := m.ListDatabases()
+	names := m.Store().ListDatabases()
 	assert.Empty(t, names)
 
-	// Add databases
-	m.GetDatabase("db1")
-	m.GetDatabase("db2")
-	m.GetDatabase("db3")
+	// Add databases via Upsert
+	err := st.Upsert("db1", "test/*", "tmpl", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = st.Upsert("db2", "test/*", "tmpl", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = st.Upsert("db3", "test/*", "tmpl", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
 
-	names = m.ListDatabases()
+	names = m.Store().ListDatabases()
 	assert.Len(t, names, 3)
 	assert.Contains(t, names, "db1")
 	assert.Contains(t, names, "db2")
@@ -482,7 +513,8 @@ func TestManager_ListDatabases(t *testing.T) {
 }
 
 func TestManager_SelectBestTemplate_Tie(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	// Templates with identical scores - should choose by name
 	templateYAML := `
@@ -510,7 +542,8 @@ templates:
 }
 
 func TestManager_Search_InvalidCursor(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: test
@@ -521,8 +554,7 @@ templates:
 	require.NoError(t, m.LoadTemplatesFromBytes([]byte(templateYAML)))
 
 	// Create index and add data
-	index := m.GetOrCreateIndex("mydb", "test/docs", "test", "test/docs")
-	index.Upsert("doc1", []byte{0x01, 0x02, 0x03})
+	st.Upsert("mydb", "test/docs", "test", "doc1", []byte{0x01, 0x02, 0x03}, "")
 
 	t.Run("invalid base64 cursor", func(t *testing.T) {
 		plan := Plan{
@@ -547,38 +579,33 @@ templates:
 	})
 }
 
-func TestManager_GetDatabase_Concurrent(t *testing.T) {
-	m := New()
+func TestManager_Upsert_Concurrent(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
 
-	// Run many goroutines concurrently trying to get/create the same database
-	// This should trigger the double-check path
+	// Run many goroutines concurrently trying to upsert to the same database
 	const numGoroutines = 100
-	done := make(chan *index.Database, numGoroutines)
+	done := make(chan struct{}, numGoroutines)
 
 	for i := 0; i < numGoroutines; i++ {
-		go func() {
-			done <- m.GetDatabase("concurrent-db")
-		}()
+		go func(idx int) {
+			m.Store().Upsert("concurrent-db", "test/*", "tmpl", "doc"+string(rune('a'+idx)), []byte{byte(idx)}, "")
+			done <- struct{}{}
+		}(i)
 	}
 
-	// Collect all results
-	var dbs []*index.Database
+	// Wait for all goroutines
 	for i := 0; i < numGoroutines; i++ {
-		dbs = append(dbs, <-done)
-	}
-
-	// All should return the same database instance
-	first := dbs[0]
-	for i, db := range dbs {
-		assert.Same(t, first, db, "goroutine %d got different database", i)
+		<-done
 	}
 
 	// Should only have one database
-	assert.Len(t, m.ListDatabases(), 1)
+	assert.Len(t, m.Store().ListDatabases(), 1)
 }
 
 func TestManager_SelectBestTemplate_PatternPriority(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 
 	// More specific pattern should win over generic
 	templateYAML := `
@@ -609,7 +636,8 @@ templates:
 // ============================================================================
 
 func TestManager_BuildSearchOptions_NoFilters(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -638,7 +666,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_DefaultLimit(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -664,7 +693,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_EqualityFilter(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_price
@@ -700,7 +730,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_MultipleEqualityFilters(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_brand_price
@@ -733,7 +764,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_RangeFilter_Asc(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -809,7 +841,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_RangeFilter_Desc(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price_desc
@@ -891,7 +924,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_EqualityPlusRange(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_price
@@ -923,7 +957,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_StartAfter(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -952,7 +987,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_InvalidCursor(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -978,7 +1014,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_StringValues(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: users_by_name
@@ -1008,7 +1045,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_IntegerValues(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: orders_by_count
@@ -1038,7 +1076,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_BooleanValues(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: users_by_active
@@ -1067,7 +1106,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_EqualityWithLowerRangeBound(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_price
@@ -1105,7 +1145,8 @@ templates:
 // ============================================================================
 
 func TestManager_BuildSearchOptions_Integration_EqualitySearch(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_price
@@ -1121,7 +1162,7 @@ templates:
 		Collection: "products",
 		Filters:    []Filter{{Field: "category", Op: FilterEq, Value: "electronics"}},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	docs := []struct {
 		id       string
@@ -1142,7 +1183,7 @@ templates:
 			{Value: doc.price, Direction: encoding.Asc},
 		}, doc.id)
 		require.NoError(t, err)
-		idx.Upsert(doc.id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), doc.id, key, "")
 	}
 
 	// Search for electronics only
@@ -1168,7 +1209,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_Integration_RangeSearch_Asc(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -1182,7 +1224,7 @@ templates:
 		Collection: "products",
 		Filters:    []Filter{{Field: "price", Op: FilterGte, Value: float64(100)}},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	docs := []struct {
 		id    string
@@ -1201,7 +1243,7 @@ templates:
 			{Value: doc.price, Direction: encoding.Asc},
 		}, doc.id)
 		require.NoError(t, err)
-		idx.Upsert(doc.id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), doc.id, key, "")
 	}
 
 	tests := []struct {
@@ -1268,7 +1310,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_Integration_RangeSearch_Desc(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price_desc
@@ -1282,7 +1325,7 @@ templates:
 		Collection: "products",
 		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Desc}},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	docs := []struct {
 		id    string
@@ -1301,7 +1344,7 @@ templates:
 			{Value: doc.price, Direction: encoding.Desc},
 		}, doc.id)
 		require.NoError(t, err)
-		idx.Upsert(doc.id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), doc.id, key, "")
 	}
 
 	tests := []struct {
@@ -1361,7 +1404,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_Integration_EqualityPlusRange(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_price
@@ -1379,7 +1423,7 @@ templates:
 			{Field: "price", Op: FilterGte, Value: float64(100)},
 		},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	docs := []struct {
 		id       string
@@ -1400,7 +1444,7 @@ templates:
 			{Value: doc.price, Direction: encoding.Asc},
 		}, doc.id)
 		require.NoError(t, err)
-		idx.Upsert(doc.id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), doc.id, key, "")
 	}
 
 	tests := []struct {
@@ -1456,7 +1500,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_Integration_MultipleEquality(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_category_brand_price
@@ -1475,7 +1520,7 @@ templates:
 			{Field: "brand", Op: FilterEq, Value: "sony"},
 		},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	docs := []struct {
 		id       string
@@ -1497,7 +1542,7 @@ templates:
 			{Value: doc.price, Direction: encoding.Asc},
 		}, doc.id)
 		require.NoError(t, err)
-		idx.Upsert(doc.id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), doc.id, key, "")
 	}
 
 	plan := Plan{
@@ -1520,7 +1565,8 @@ templates:
 }
 
 func TestManager_BuildSearchOptions_Integration_Pagination(t *testing.T) {
-	m := New()
+	st := mem_store.New()
+	m := New(st)
 	templateYAML := `
 templates:
   - name: products_by_price
@@ -1534,7 +1580,7 @@ templates:
 		Collection: "products",
 		OrderBy:    []OrderField{{Field: "price", Direction: encoding.Asc}},
 	})
-	idx := m.GetOrCreateIndex("testdb", "products", tmpl.Identity(), tmpl.CollectionPattern)
+	// Using store for index operations (testdb, products, tmpl.Identity())
 
 	// Insert 10 documents
 	for i := 1; i <= 10; i++ {
@@ -1544,7 +1590,7 @@ templates:
 			{Value: price, Direction: encoding.Asc},
 		}, id)
 		require.NoError(t, err)
-		idx.Upsert(id, key)
+		st.Upsert("testdb", "products", tmpl.Identity(), id, key, "")
 	}
 
 	// First page (limit 3)
@@ -1619,43 +1665,136 @@ func TestManager_AppendMaxSuffix(t *testing.T) {
 	}
 }
 
-func TestManager_IncrementBytes(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []byte
-		expected []byte
-	}{
-		{
-			name:     "empty",
-			input:    []byte{},
-			expected: nil,
-		},
-		{
-			name:     "simple increment",
-			input:    []byte{0x01},
-			expected: []byte{0x02},
-		},
-		{
-			name:     "carry over",
-			input:    []byte{0xFF},
-			expected: []byte{0x00, 0x00},
-		},
-		{
-			name:     "partial carry",
-			input:    []byte{0x01, 0xFF},
-			expected: []byte{0x02, 0x00},
-		},
-		{
-			name:     "all FF",
-			input:    []byte{0xFF, 0xFF},
-			expected: []byte{0x00, 0x00, 0x00},
-		},
+// ============================================================================
+// Manager Wrapper Methods Tests
+// ============================================================================
+
+func TestManager_Upsert(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	err := m.Upsert("testdb", "users/*", "tmpl1", "doc1", []byte{0x01, 0x02}, "event-123")
+	require.NoError(t, err)
+
+	// Verify via store
+	orderKey, found := st.Get("testdb", "users/*", "tmpl1", "doc1")
+	require.True(t, found)
+	assert.Equal(t, []byte{0x01, 0x02}, orderKey)
+
+	// Verify progress
+	progress, err := st.LoadProgress()
+	require.NoError(t, err)
+	assert.Equal(t, "event-123", progress)
+}
+
+func TestManager_Delete(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Insert first
+	err := m.Upsert("testdb", "users/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+
+	// Delete
+	err = m.Delete("testdb", "users/*", "tmpl1", "doc1", "event-456")
+	require.NoError(t, err)
+
+	// Verify deleted
+	_, found := st.Get("testdb", "users/*", "tmpl1", "doc1")
+	assert.False(t, found)
+
+	// Verify progress
+	progress, err := st.LoadProgress()
+	require.NoError(t, err)
+	assert.Equal(t, "event-456", progress)
+}
+
+func TestManager_DeleteIndex_Wrapper(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Insert some data
+	for i := 0; i < 5; i++ {
+		err := m.Upsert("testdb", "users/*", "tmpl1", string(rune('a'+i)), []byte{byte(i)}, "")
+		require.NoError(t, err)
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := incrementBytes(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
+	// Delete the index
+	err := m.DeleteIndex("testdb", "users/*", "tmpl1")
+	require.NoError(t, err)
+
+	// Verify all documents are gone
+	for i := 0; i < 5; i++ {
+		_, found := st.Get("testdb", "users/*", "tmpl1", string(rune('a'+i)))
+		assert.False(t, found, "doc %d should be deleted", i)
 	}
+}
+
+func TestManager_SetState(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Set state
+	err := m.SetState("testdb", "users/*", "tmpl1", store.IndexStateRebuilding)
+	require.NoError(t, err)
+
+	// Get state via manager
+	state, err := m.GetState("testdb", "users/*", "tmpl1")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateRebuilding, state)
+}
+
+func TestManager_GetState(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Default state is healthy
+	state, err := m.GetState("testdb", "users/*", "tmpl1")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
+
+	// Set to failed
+	err = m.SetState("testdb", "users/*", "tmpl1", store.IndexStateFailed)
+	require.NoError(t, err)
+
+	state, err = m.GetState("testdb", "users/*", "tmpl1")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateFailed, state)
+}
+
+func TestManager_LoadProgress(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Initially empty
+	progress, err := m.LoadProgress()
+	require.NoError(t, err)
+	assert.Empty(t, progress)
+
+	// Upsert with progress
+	err = m.Upsert("testdb", "users/*", "tmpl1", "doc1", []byte{0x01}, "event-789")
+	require.NoError(t, err)
+
+	// Load via manager
+	progress, err = m.LoadProgress()
+	require.NoError(t, err)
+	assert.Equal(t, "event-789", progress)
+}
+
+func TestManager_Flush(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Flush is a no-op for mem_store
+	err := m.Flush()
+	require.NoError(t, err)
+}
+
+func TestManager_Close(t *testing.T) {
+	st := mem_store.New()
+	m := New(st)
+
+	// Close is a no-op for mem_store
+	err := m.Close()
+	require.NoError(t, err)
 }

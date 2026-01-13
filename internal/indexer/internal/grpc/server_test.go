@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
 
 // mockLocalService implements LocalService for testing.
@@ -51,7 +53,7 @@ func TestServer_Search(t *testing.T) {
 					{ID: "doc2", OrderKey: []byte{0x03, 0x04}},
 				}, nil
 			},
-			mgr: manager.New(),
+			mgr: manager.New(mem_store.New()),
 		}
 
 		server := NewServer(mock)
@@ -78,7 +80,7 @@ func TestServer_Search(t *testing.T) {
 				assert.Equal(t, "active", plan.Filters[0].Value)
 				return nil, nil
 			},
-			mgr: manager.New(),
+			mgr: manager.New(mem_store.New()),
 		}
 
 		server := NewServer(mock)
@@ -101,7 +103,7 @@ func TestServer_Search(t *testing.T) {
 				assert.Equal(t, "timestamp", plan.OrderBy[0].Field)
 				return nil, nil
 			},
-			mgr: manager.New(),
+			mgr: manager.New(mem_store.New()),
 		}
 
 		server := NewServer(mock)
@@ -121,7 +123,7 @@ func TestServer_Search(t *testing.T) {
 			searchFn: func(ctx context.Context, database string, plan manager.Plan) ([]manager.DocRef, error) {
 				return nil, manager.ErrNoMatchingIndex
 			},
-			mgr: manager.New(),
+			mgr: manager.New(mem_store.New()),
 		}
 
 		server := NewServer(mock)
@@ -145,7 +147,7 @@ func TestServer_Health(t *testing.T) {
 					Status: "ok",
 				}, nil
 			},
-			mgr: manager.New(),
+			mgr: manager.New(mem_store.New()),
 		}
 
 		server := NewServer(mock)
@@ -181,9 +183,10 @@ func TestServer_GetState(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns actual state", func(t *testing.T) {
-		mgr := manager.New()
-		mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db2", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+		st := mem_store.New()
+		mgr := manager.New(st)
+		st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+		st.Upsert("db2", "rooms/*/messages", "ts:desc", "doc2", []byte{0x01}, "")
 
 		mock := &mockLocalService{mgr: mgr}
 		server := NewServer(mock)
@@ -195,9 +198,10 @@ func TestServer_GetState(t *testing.T) {
 	})
 
 	t.Run("filters by database", func(t *testing.T) {
-		mgr := manager.New()
-		mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db2", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+		st := mem_store.New()
+		mgr := manager.New(st)
+		st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+		st.Upsert("db2", "rooms/*/messages", "ts:desc", "doc2", []byte{0x01}, "")
 
 		mock := &mockLocalService{mgr: mgr}
 		server := NewServer(mock)
@@ -212,9 +216,10 @@ func TestServer_GetState(t *testing.T) {
 	})
 
 	t.Run("filters by pattern", func(t *testing.T) {
-		mgr := manager.New()
-		mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+		st := mem_store.New()
+		mgr := manager.New(st)
+		st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+		st.Upsert("db1", "rooms/*/messages", "ts:desc", "doc2", []byte{0x01}, "")
 
 		mock := &mockLocalService{mgr: mgr}
 		server := NewServer(mock)
@@ -233,9 +238,10 @@ func TestServer_InvalidateIndex(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("invalidates specific index", func(t *testing.T) {
-		mgr := manager.New()
-		idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+		st := mem_store.New()
+		mgr := manager.New(st)
+		st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+		st.Upsert("db1", "rooms/*/messages", "ts:desc", "doc2", []byte{0x01}, "")
 
 		mock := &mockLocalService{mgr: mgr}
 		server := NewServer(mock)
@@ -248,14 +254,17 @@ func TestServer_InvalidateIndex(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, int32(1), resp.IndexesInvalidated)
-		assert.False(t, idx.IsHealthy())
+		state, err := st.GetState("db1", "users/*/chats", "ts:desc")
+		require.NoError(t, err)
+		assert.NotEqual(t, store.IndexStateHealthy, state)
 	})
 
 	t.Run("invalidates all indexes for pattern", func(t *testing.T) {
-		mgr := manager.New()
-		idx1 := mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-		idx2 := mgr.GetOrCreateIndex("db1", "users/*/chats", "name:asc", "users/{uid}/chats")
-		mgr.GetOrCreateIndex("db1", "rooms/*/messages", "ts:desc", "rooms/{rid}/messages")
+		st := mem_store.New()
+		mgr := manager.New(st)
+		st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+		st.Upsert("db1", "users/*/chats", "name:asc", "doc2", []byte{0x01}, "")
+		st.Upsert("db1", "rooms/*/messages", "ts:desc", "doc3", []byte{0x01}, "")
 
 		mock := &mockLocalService{mgr: mgr}
 		server := NewServer(mock)
@@ -267,8 +276,12 @@ func TestServer_InvalidateIndex(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, int32(2), resp.IndexesInvalidated)
-		assert.False(t, idx1.IsHealthy())
-		assert.False(t, idx2.IsHealthy())
+		state1, err := st.GetState("db1", "users/*/chats", "ts:desc")
+		require.NoError(t, err)
+		assert.NotEqual(t, store.IndexStateHealthy, state1)
+		state2, err := st.GetState("db1", "users/*/chats", "name:asc")
+		require.NoError(t, err)
+		assert.NotEqual(t, store.IndexStateHealthy, state2)
 	})
 }
 
@@ -276,7 +289,7 @@ func TestServer_Reload(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("returns current template count", func(t *testing.T) {
-		mgr := manager.New()
+		mgr := manager.New(mem_store.New())
 		mgr.LoadTemplatesFromBytes([]byte(`
 templates:
   - name: test
@@ -324,7 +337,7 @@ func TestParseFilterOp(t *testing.T) {
 }
 
 func TestServer_ConvertError(t *testing.T) {
-	server := NewServer(&mockLocalService{mgr: manager.New()})
+	server := NewServer(&mockLocalService{mgr: manager.New(mem_store.New())})
 
 	tests := []struct {
 		name    string
@@ -348,7 +361,8 @@ func TestServer_ConvertError(t *testing.T) {
 func TestServer_GetState_WithTemplates(t *testing.T) {
 	ctx := context.Background()
 
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	err := mgr.LoadTemplatesFromBytes([]byte(`
 templates:
   - name: chat-ts
@@ -361,8 +375,8 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create an index
-	mgr.GetOrCreateIndex("db1", "users/*/chats", "chat-ts", "users/{uid}/chats")
+	// Create an index by upserting a document
+	st.Upsert("db1", "users/*/chats", "chat-ts", "doc1", []byte{0x01}, "")
 
 	mock := &mockLocalService{mgr: mgr}
 	server := NewServer(mock)
@@ -382,7 +396,8 @@ templates:
 func TestServer_Search_IndexStatus(t *testing.T) {
 	ctx := context.Background()
 
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	// Load template
 	err := mgr.LoadTemplatesFromBytes([]byte(`
 templates:
@@ -394,9 +409,8 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create index
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "chat-ts", "users/{uid}/chats")
-	idx.Upsert("doc1", []byte{0x01})
+	// Create index by upserting a document
+	st.Upsert("db1", "users/*/chats", "chat-ts", "doc1", []byte{0x01}, "")
 
 	mock := &mockLocalService{
 		searchFn: func(ctx context.Context, database string, plan manager.Plan) ([]manager.DocRef, error) {
