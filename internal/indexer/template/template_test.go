@@ -375,3 +375,52 @@ func TestValidateTemplate_EmptyFieldName(t *testing.T) {
 	err := ValidateTemplate(&tmpl)
 	assert.Error(t, err)
 }
+
+func TestMatchTemplates_Wildcard(t *testing.T) {
+	templates := []Template{
+		{
+			Name:              "wildcard_chats",
+			CollectionPattern: "users/*/chats",
+			Fields:            []Field{{Field: "ts", Order: Desc}},
+		},
+		{
+			Name:              "specific_chats",
+			CollectionPattern: "users/alice/chats",
+			Fields:            []Field{{Field: "ts", Order: Desc}},
+		},
+		{
+			Name:              "variable_chats",
+			CollectionPattern: "users/{uid}/chats",
+			Fields:            []Field{{Field: "ts", Order: Desc}},
+		},
+	}
+
+	t.Run("matches wildcard", func(t *testing.T) {
+		results := MatchTemplates("users/bob/chats", templates)
+
+		foundWildcard := false
+		for _, r := range results {
+			if r.Template.Name == "wildcard_chats" {
+				foundWildcard = true
+				break
+			}
+		}
+		assert.True(t, foundWildcard, "should match wildcard template")
+	})
+
+	t.Run("specific matches all", func(t *testing.T) {
+		results := MatchTemplates("users/alice/chats", templates)
+
+		// If specific is highest, it should be first
+		require.NotEmpty(t, results)
+		assert.Equal(t, "specific_chats", results[0].Template.Name)
+
+		foundWildcard := false
+		for _, r := range results {
+			if r.Template.Name == "wildcard_chats" {
+				foundWildcard = true
+			}
+		}
+		assert.True(t, foundWildcard, "should match wildcard template even for specific path")
+	})
+}

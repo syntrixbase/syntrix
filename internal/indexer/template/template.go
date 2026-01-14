@@ -236,7 +236,7 @@ func MatchTemplates(path string, templates []Template) []MatchResult {
 // segmentsMatch checks if path segments match pattern segments.
 func segmentsMatch(path, pattern []string) bool {
 	for i := range path {
-		if varPattern.MatchString(pattern[i]) {
+		if varPattern.MatchString(pattern[i]) || pattern[i] == "*" {
 			// Variable matches any single segment
 			continue
 		}
@@ -251,7 +251,7 @@ func segmentsMatch(path, pattern []string) bool {
 func calculateScore(segments []string) PatternScore {
 	fixed := 0
 	for _, seg := range segments {
-		if !varPattern.MatchString(seg) {
+		if !varPattern.MatchString(seg) && seg != "*" {
 			fixed++
 		}
 	}

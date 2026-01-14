@@ -1,0 +1,48 @@
+templates:
+  - name: orch-chats-by-updated
+    collectionPattern: "users/*/orch-chats"
+    fields:
+      - field: updatedAt
+        order: desc
+
+  - name: messages-by-created
+    collectionPattern: "users/*/orch-chats/*/messages"
+    fields:
+      - field: createdAt
+        order: desc
+
+  - name: tasks-by-updated
+    collectionPattern: "users/*/orch-chats/*/tasks"
+    fields:
+      - field: updatedAt
+        order: desc
+
+  - name: toolcalls-by-updated
+    collectionPattern: "users/*/orch-chats/*/tool-calls"
+    fields:
+      - field: createdAt
+        order: desc
+
+  - name: subagent-by-updated
+    collectionPattern: "users/*/orch-chats/*/sub-agents"
+    fields:
+      - field: createdAt
+        order: desc
+
+  - name: subagent-tasks-by-created
+    collectionPattern: "users/*/orch-chats/*/sub-agents/*/tasks"
+    fields:
+      - field: updatedAt
+        order: desc
+
+  - name: subagent-messages-by-created
+    collectionPattern: "users/*/orch-chats/*/sub-agents/*/messages"
+    fields:
+      - field: createdAt
+        order: desc
+
+  - name: subagent-toolcalls-by-updated
+    collectionPattern: "users/*/orch-chats/*/sub-agents/*/tool-calls"
+    fields:
+      - field: createdAt
+        order: desc

@@ -124,7 +124,7 @@ func TestStartHealthServer(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		_ = StartHealthServer(ctx, ":0", hc)
+		_ = StartHealthServer(ctx, "localhost:0", hc)
 	}()
 }
 
