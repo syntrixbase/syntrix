@@ -539,7 +539,6 @@ func TestClient_Stats(t *testing.T) {
 	t.Run("returns empty stats", func(t *testing.T) {
 		stats, err := client.Stats(context.Background())
 		require.NoError(t, err)
-		assert.Equal(t, 0, stats.IndexCount)
-		assert.Equal(t, int64(0), stats.DocumentCount)
+		assert.Equal(t, 0, stats.TemplateCount)
 	})
 }

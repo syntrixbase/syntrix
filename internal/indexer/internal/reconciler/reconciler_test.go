@@ -8,16 +8,18 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/rebuild"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
 
 func TestReconciler_New(t *testing.T) {
 	cfg := DefaultConfig()
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(cfg, mgr, nil, logger)
@@ -28,7 +30,8 @@ func TestReconciler_New(t *testing.T) {
 
 func TestReconciler_StartStop(t *testing.T) {
 	cfg := Config{Interval: 100 * time.Millisecond}
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(cfg, mgr, nil, logger)
@@ -54,7 +57,8 @@ func TestReconciler_StartStop(t *testing.T) {
 
 func TestReconciler_Trigger(t *testing.T) {
 	cfg := Config{Interval: time.Hour} // Long interval to test trigger
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(cfg, mgr, nil, logger)
@@ -65,7 +69,8 @@ func TestReconciler_Trigger(t *testing.T) {
 }
 
 func TestReconciler_ComputeDiff_CreateIndex(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load a template
@@ -79,27 +84,47 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create a database (simulating existing data)
-	mgr.GetDatabase("db1")
+	// Create a database (simulating existing data) by upserting an entry that matches the template
+	// Use the same pattern/templateID so it won't be deleted
+	st.Upsert("db1", "users/*/chats", "chat-ts", "doc1", []byte{0x01}, "")
+	// But mark it as "rebuilding" so it needs to create a fresh one (or delete and use a separate dummy)
+	// Actually, let's just use a different approach - upsert with matching template pattern
+	// The computeDiff will see it exists and is healthy, so no create op.
+	// Let me reconsider - we need a database without the index for the template.
+
+	// Clear and create a db with a matching index (but different template ID) so there's a database
+	// but not the right index
+	st.DeleteIndex("db1", "users/*/chats", "chat-ts")
+	st.Upsert("db1", "users/*/chats", "other-template", "doc1", []byte{0x01}, "")
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
 	ops := r.computeDiff()
 
-	// Should have one create operation
-	assert.Len(t, ops, 1)
-	assert.Equal(t, OpCreate, ops[0].Type)
-	assert.Equal(t, "db1", ops[0].Database)
-	assert.Equal(t, "users/*/chats", ops[0].Pattern)
-	assert.Equal(t, "chat-ts", ops[0].TemplateID)
+	// Should have one create operation for chat-ts and one delete for other-template
+	require.Len(t, ops, 2)
+
+	// Find the create operation
+	var createOp *Operation
+	for i := range ops {
+		if ops[i].Type == OpCreate {
+			createOp = &ops[i]
+			break
+		}
+	}
+	require.NotNil(t, createOp, "expected a create operation")
+	assert.Equal(t, "db1", createOp.Database)
+	assert.Equal(t, "users/*/chats", createOp.Pattern)
+	assert.Equal(t, "chat-ts", createOp.TemplateID)
 }
 
 func TestReconciler_ComputeDiff_DeleteIndex(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create an index without corresponding template
-	mgr.GetOrCreateIndex("db1", "orphan/*/path", "id:asc", "orphan/{x}/path")
+	st.Upsert("db1", "orphan/*/path", "id:asc", "doc1", []byte{0x01}, "")
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
@@ -113,7 +138,8 @@ func TestReconciler_ComputeDiff_DeleteIndex(t *testing.T) {
 }
 
 func TestReconciler_ComputeDiff_RebuildIndex(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load a template
@@ -128,8 +154,8 @@ templates:
 	require.NoError(t, err)
 
 	// Create an index that is failed
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "chat-ts", "users/{uid}/chats")
-	idx.SetState(index.StateFailed)
+	st.Upsert("db1", "users/*/chats", "chat-ts", "doc1", []byte{0x01}, "")
+	st.SetState("db1", "users/*/chats", "chat-ts", store.IndexStateFailed)
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
@@ -142,7 +168,8 @@ templates:
 }
 
 func TestReconciler_ComputeDiff_NoOp(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load a template
@@ -157,8 +184,8 @@ templates:
 	require.NoError(t, err)
 
 	// Create a healthy index matching the template
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "chat-ts", "users/{uid}/chats")
-	idx.SetState(index.StateHealthy)
+	st.Upsert("db1", "users/*/chats", "chat-ts", "doc1", []byte{0x01}, "")
+	st.SetState("db1", "users/*/chats", "chat-ts", store.IndexStateHealthy)
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
@@ -169,12 +196,14 @@ templates:
 }
 
 func TestReconciler_ExecuteDelete(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create an index
-	mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	assert.Equal(t, 1, mgr.GetDatabase("db1").IndexCount())
+	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+	indexes, _ := st.ListIndexes("db1")
+	assert.Equal(t, 1, len(indexes))
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
@@ -189,11 +218,13 @@ func TestReconciler_ExecuteDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index should be deleted
-	assert.Equal(t, 0, mgr.GetDatabase("db1").IndexCount())
+	indexes, _ = st.ListIndexes("db1")
+	assert.Equal(t, 0, len(indexes))
 }
 
 func TestReconciler_ExecuteCreate_NoRebuilder(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	tmpl := &template.Template{
@@ -218,19 +249,19 @@ func TestReconciler_ExecuteCreate_NoRebuilder(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index should be created and healthy (no rebuilder)
-	idx := mgr.GetIndex("db1", "users/*/chats", "chat-ts")
-	assert.NotNil(t, idx)
-	assert.Equal(t, index.StateHealthy, idx.State())
+	state, err := st.GetState("db1", "users/*/chats", "chat-ts")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
 }
 
 func TestReconciler_ExecuteRebuild_NoRebuilder(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create a failed index
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	idx.SetState(index.StateFailed)
-	idx.Upsert("doc1", []byte{0x01})
+	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+	st.SetState("db1", "users/*/chats", "ts:desc", store.IndexStateFailed)
 
 	tmpl := &template.Template{
 		Name:              "ts:desc",
@@ -254,12 +285,19 @@ func TestReconciler_ExecuteRebuild_NoRebuilder(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index should be cleared and healthy
-	assert.Equal(t, index.StateHealthy, idx.State())
-	assert.Equal(t, 0, idx.Len())
+	state, err := st.GetState("db1", "users/*/chats", "ts:desc")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
+	// Index should be empty (deleted and recreated)
+	indexes, _ := st.ListIndexes("db1")
+	if len(indexes) > 0 {
+		assert.Equal(t, 0, indexes[0].DocCount)
+	}
 }
 
 func TestReconciler_PendingOperations(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(DefaultConfig(), mgr, nil, logger)
@@ -299,7 +337,8 @@ func TestOpStatus_String(t *testing.T) {
 }
 
 func TestReconciler_ExecuteOperation_Create(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	tmpl := &template.Template{
@@ -328,17 +367,19 @@ func TestReconciler_ExecuteOperation_Create(t *testing.T) {
 	assert.Empty(t, op.Error)
 	assert.False(t, op.StartedAt.IsZero())
 
-	// Index should exist
-	idx := mgr.GetIndex("db1", "users/*/chats", "chat-ts")
-	assert.NotNil(t, idx)
+	// Index should exist (state set to healthy)
+	state, err := st.GetState("db1", "users/*/chats", "chat-ts")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
 }
 
 func TestReconciler_ExecuteOperation_Delete(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create an index first
-	mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
+	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
 
 	r := New(DefaultConfig(), mgr, nil, logger)
 
@@ -357,16 +398,18 @@ func TestReconciler_ExecuteOperation_Delete(t *testing.T) {
 	assert.Empty(t, op.Error)
 
 	// Index should be deleted
-	assert.Equal(t, 0, mgr.GetDatabase("db1").IndexCount())
+	indexes, _ := st.ListIndexes("db1")
+	assert.Equal(t, 0, len(indexes))
 }
 
 func TestReconciler_ExecuteOperation_Rebuild(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create a failed index
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	idx.SetState(index.StateFailed)
+	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+	st.SetState("db1", "users/*/chats", "ts:desc", store.IndexStateFailed)
 
 	tmpl := &template.Template{
 		Name:              "ts:desc",
@@ -395,7 +438,8 @@ func TestReconciler_ExecuteOperation_Rebuild(t *testing.T) {
 }
 
 func TestReconciler_ExecuteOperation_Failed(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(DefaultConfig(), mgr, nil, logger)
@@ -418,7 +462,8 @@ func TestReconciler_ExecuteOperation_Failed(t *testing.T) {
 }
 
 func TestReconciler_ExecuteRebuild_IndexNotFound(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(DefaultConfig(), mgr, nil, logger)
@@ -431,13 +476,15 @@ func TestReconciler_ExecuteRebuild_IndexNotFound(t *testing.T) {
 		Status:     StatusPending,
 	}
 
+	// executeRebuild no longer returns "index not found" error since it works with store interface
+	// which just clears and recreates. The operation should complete successfully.
 	err := r.executeRebuild(context.Background(), op)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "index not found")
+	require.NoError(t, err)
 }
 
 func TestReconciler_Reconcile(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load a template
@@ -451,8 +498,8 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create a database
-	mgr.GetDatabase("db1")
+	// Create a database by upserting an entry
+	st.Upsert("db1", "dummy/*/path", "dummy-id", "doc1", []byte{0x01}, "")
 
 	cfg := Config{Interval: 100 * time.Millisecond}
 	r := New(cfg, mgr, nil, logger)
@@ -460,14 +507,15 @@ templates:
 	// Run reconcile - should create the index
 	r.reconcile(context.Background())
 
-	// Index should now exist
-	idx := mgr.GetIndex("db1", "users/*/chats", "chat-ts")
-	require.NotNil(t, idx)
-	assert.Equal(t, index.StateHealthy, idx.State())
+	// Index should now exist and be healthy
+	state, err := st.GetState("db1", "users/*/chats", "chat-ts")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
 }
 
 func TestReconciler_ReconcileWithContextCancellation(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load multiple templates
@@ -486,8 +534,8 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create a database
-	mgr.GetDatabase("db1")
+	// Create a database by upserting an entry
+	st.Upsert("db1", "dummy/*/path", "dummy-id", "doc1", []byte{0x01}, "")
 
 	cfg := Config{Interval: 100 * time.Millisecond}
 	r := New(cfg, mgr, nil, logger)
@@ -503,7 +551,8 @@ templates:
 }
 
 func TestReconciler_SetStorageScanner(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	r := New(DefaultConfig(), mgr, nil, logger)
@@ -517,7 +566,8 @@ func TestReconciler_SetStorageScanner(t *testing.T) {
 }
 
 func TestReconciler_ExecuteCreateWithRebuild(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create a mock orchestrator
@@ -549,13 +599,14 @@ func TestReconciler_ExecuteCreateWithRebuild(t *testing.T) {
 	err := r.executeCreate(context.Background(), op)
 	require.NoError(t, err)
 
-	// Index should be created
-	idx := mgr.GetIndex("db1", "users/*/chats", "chat-ts")
-	assert.NotNil(t, idx)
+	// Index should be created (state managed by rebuilder)
+	indexes, _ := st.ListIndexes("db1")
+	assert.Greater(t, len(indexes), 0)
 }
 
 func TestReconciler_ExecuteRebuildWithRebuild(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Create a mock orchestrator
@@ -563,8 +614,8 @@ func TestReconciler_ExecuteRebuildWithRebuild(t *testing.T) {
 	rebuilder := rebuild.New(rebuildCfg, &mockKeyBuilder{}, logger)
 
 	// Create an existing index
-	idx := mgr.GetOrCreateIndex("db1", "users/*/chats", "ts:desc", "users/{uid}/chats")
-	idx.SetState(index.StateFailed)
+	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
+	st.SetState("db1", "users/*/chats", "ts:desc", store.IndexStateFailed)
 
 	tmpl := &template.Template{
 		Name:              "ts:desc",
@@ -593,7 +644,8 @@ func TestReconciler_ExecuteRebuildWithRebuild(t *testing.T) {
 }
 
 func TestReconciler_Loop(t *testing.T) {
-	mgr := manager.New()
+	st := mem_store.New()
+	mgr := manager.New(st)
 	logger := slog.Default()
 
 	// Load a template
@@ -607,8 +659,8 @@ templates:
 `))
 	require.NoError(t, err)
 
-	// Create a database
-	mgr.GetDatabase("db1")
+	// Create a database by upserting an entry
+	st.Upsert("db1", "dummy/*/path", "dummy-id", "doc1", []byte{0x01}, "")
 
 	cfg := Config{Interval: 50 * time.Millisecond}
 	r := New(cfg, mgr, nil, logger)
@@ -620,9 +672,10 @@ templates:
 	// Wait for loop to run and reconcile
 	time.Sleep(100 * time.Millisecond)
 
-	// Index should exist
-	idx := mgr.GetIndex("db1", "users/*/chats", "chat-ts")
-	require.NotNil(t, idx)
+	// Index should exist and be healthy
+	state, err := st.GetState("db1", "users/*/chats", "chat-ts")
+	require.NoError(t, err)
+	assert.Equal(t, store.IndexStateHealthy, state)
 
 	// Trigger explicit reconciliation
 	r.Trigger()

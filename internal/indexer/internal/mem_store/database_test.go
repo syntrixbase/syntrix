@@ -1,4 +1,4 @@
-package index
+package mem_store
 
 import (
 	"sync"

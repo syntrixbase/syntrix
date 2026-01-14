@@ -137,7 +137,7 @@ func TestGlobal(t *testing.T) {
 	assert.NotNil(t, Default())
 
 	// Clean up
-	defaultService = nil
+	SetDefault(nil)
 }
 
 func TestDefaultConfig(t *testing.T) {
@@ -152,7 +152,7 @@ func TestDefaultConfig(t *testing.T) {
 
 func TestGlobalHelpers(t *testing.T) {
 	InitDefault(Config{Host: "localhost"}, nil)
-	defer func() { defaultService = nil }()
+	defer func() { SetDefault(nil) }()
 
 	// Test RegisterHTTP
 	RegisterHTTP("/test-http", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))

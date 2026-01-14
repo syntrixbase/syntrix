@@ -33,15 +33,13 @@ var (
 
 // GlobalTestEnv holds the shared test environment
 type GlobalTestEnv struct {
-	APIURL    string
-	QueryURL  string
-	Manager   *services.Manager
-	MongoURI  string
-	DBName    string
-	cancel    context.CancelFunc
-	rulesFile string
-	keysDir   string
-	bufferDir string
+	APIURL   string
+	QueryURL string
+	Manager  *services.Manager
+	MongoURI string
+	DBName   string
+	cancel   context.CancelFunc
+	tempDir  string
 }
 
 // TestMain sets up the global test environment before running tests
@@ -291,6 +289,12 @@ templates:
 		},
 		Indexer: indexer.Config{
 			TemplatePath: templatesFile,
+			StorageMode:  indexer.StorageModePebble,
+			Store: indexer.StoreConfig{
+				Path:          tempDir + "/indexer.db",
+				BatchSize:     100,
+				BatchInterval: 50 * time.Millisecond,
+			},
 		},
 	}
 
@@ -340,15 +344,13 @@ templates:
 		apiPort, grpcPort, dbName)
 
 	return &GlobalTestEnv{
-		APIURL:    fmt.Sprintf("http://localhost:%d", apiPort),
-		QueryURL:  fmt.Sprintf("localhost:%d", grpcPort),
-		Manager:   manager,
-		MongoURI:  mongoURI,
-		DBName:    dbName,
-		cancel:    mgrCancel,
-		rulesFile: rulesFile,
-		keysDir:   keysDir,
-		bufferDir: bufferDir,
+		APIURL:   fmt.Sprintf("http://localhost:%d", apiPort),
+		QueryURL: fmt.Sprintf("localhost:%d", grpcPort),
+		Manager:  manager,
+		MongoURI: mongoURI,
+		DBName:   dbName,
+		cancel:   mgrCancel,
+		tempDir:  tempDir,
 	}, nil
 }
 
@@ -376,8 +378,8 @@ func (e *GlobalTestEnv) Shutdown() {
 	}
 
 	// Cleanup temp files
-	if e.rulesFile != "" {
-		os.RemoveAll(e.rulesFile)
+	if e.tempDir != "" {
+		os.RemoveAll(e.tempDir)
 	}
 
 	log.Printf("[Integration Test] Global environment shutdown complete")

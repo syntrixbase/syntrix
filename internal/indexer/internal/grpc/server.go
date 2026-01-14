@@ -8,8 +8,8 @@ import (
 
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -129,10 +129,15 @@ func (s *Server) InvalidateIndex(ctx context.Context, req *indexerv1.InvalidateI
 		return nil, status.Error(codes.Internal, "manager not available")
 	}
 
+	st := mgr.Store()
 	count := 0
-	db := mgr.GetDatabase(req.Database)
 
-	for _, idx := range db.ListIndexes() {
+	indexes, err := st.ListIndexes(req.Database)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list indexes: %v", err)
+	}
+
+	for _, idx := range indexes {
 		// Match by pattern
 		if req.Pattern != "" && idx.Pattern != req.Pattern {
 			continue
@@ -143,7 +148,7 @@ func (s *Server) InvalidateIndex(ctx context.Context, req *indexerv1.InvalidateI
 		}
 
 		// Mark as failed to trigger rebuild
-		idx.SetState(index.StateFailed)
+		st.SetState(req.Database, idx.Pattern, idx.TemplateID, store.IndexStateFailed)
 		count++
 	}
 
@@ -267,15 +272,25 @@ func (s *Server) buildDesiredState(mgr *manager.Manager, filterDB, filterPattern
 // buildActualState builds the actual index info from in-memory indexes.
 func (s *Server) buildActualState(mgr *manager.Manager, filterDB, filterPattern string) []*indexerv1.IndexInfo {
 	var infos []*indexerv1.IndexInfo
+	st := mgr.Store()
 
-	for _, dbName := range mgr.ListDatabases() {
+	databases, err := st.ListDatabases()
+	if err != nil {
+		return nil
+	}
+
+	for _, dbName := range databases {
 		// Apply database filter
 		if filterDB != "" && dbName != filterDB {
 			continue
 		}
 
-		db := mgr.GetDatabase(dbName)
-		for _, idx := range db.ListIndexes() {
+		indexes, err := st.ListIndexes(dbName)
+		if err != nil {
+			continue // Skip database on error
+		}
+
+		for _, idx := range indexes {
 			// Apply pattern filter
 			if filterPattern != "" && idx.Pattern != filterPattern {
 				continue
@@ -285,8 +300,8 @@ func (s *Server) buildActualState(mgr *manager.Manager, filterDB, filterPattern 
 				Database:   dbName,
 				Pattern:    idx.Pattern,
 				TemplateId: idx.TemplateID,
-				State:      idx.State().String(),
-				DocCount:   int64(idx.Len()),
+				State:      string(idx.State),
+				DocCount:   int64(idx.DocCount),
 			})
 		}
 	}

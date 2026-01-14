@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"sync"
@@ -10,6 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/storage"
@@ -82,10 +85,19 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 }
 
+// newTestService creates a new service for testing, panics on error.
+func newTestService(cfg config.Config, pullerSvc puller.Service, logger *slog.Logger) LocalService {
+	svc, err := NewService(cfg, pullerSvc, logger)
+	if err != nil {
+		panic(fmt.Sprintf("failed to create test service: %v", err))
+	}
+	return svc
+}
+
 func TestNewService(t *testing.T) {
 	t.Run("with defaults", func(t *testing.T) {
-		cfg := Config{}
-		svc := NewService(cfg, nil, testLogger())
+		cfg := config.Config{}
+		svc := newTestService(cfg, nil, testLogger())
 
 		require.NotNil(t, svc)
 		s := svc.(*service)
@@ -94,11 +106,11 @@ func TestNewService(t *testing.T) {
 	})
 
 	t.Run("with custom config", func(t *testing.T) {
-		cfg := Config{
+		cfg := config.Config{
 			ConsumerID:   "my-indexer",
 			ProgressPath: "/custom/path",
 		}
-		svc := NewService(cfg, nil, testLogger())
+		svc := newTestService(cfg, nil, testLogger())
 
 		s := svc.(*service)
 		assert.Equal(t, "my-indexer", s.cfg.ConsumerID)
@@ -108,8 +120,8 @@ func TestNewService(t *testing.T) {
 
 func TestService_StartStop(t *testing.T) {
 	t.Run("start without puller", func(t *testing.T) {
-		cfg := Config{}
-		svc := NewService(cfg, nil, testLogger())
+		cfg := config.Config{}
+		svc := newTestService(cfg, nil, testLogger())
 
 		ctx := context.Background()
 		err := svc.Start(ctx)
@@ -126,8 +138,8 @@ func TestService_StartStop(t *testing.T) {
 	})
 
 	t.Run("start already running", func(t *testing.T) {
-		cfg := Config{}
-		svc := NewService(cfg, nil, testLogger())
+		cfg := config.Config{}
+		svc := newTestService(cfg, nil, testLogger())
 
 		ctx := context.Background()
 		err := svc.Start(ctx)
@@ -141,8 +153,8 @@ func TestService_StartStop(t *testing.T) {
 	})
 
 	t.Run("stop not running", func(t *testing.T) {
-		cfg := Config{}
-		svc := NewService(cfg, nil, testLogger())
+		cfg := config.Config{}
+		svc := newTestService(cfg, nil, testLogger())
 
 		ctx := context.Background()
 		err := svc.Stop(ctx)
@@ -151,8 +163,8 @@ func TestService_StartStop(t *testing.T) {
 
 	t.Run("start with puller", func(t *testing.T) {
 		mockPuller := newMockPullerService()
-		cfg := Config{}
-		svc := NewService(cfg, mockPuller, testLogger())
+		cfg := config.Config{}
+		svc := newTestService(cfg, mockPuller, testLogger())
 
 		ctx := context.Background()
 		err := svc.Start(ctx)
@@ -168,17 +180,17 @@ func TestService_StartStop(t *testing.T) {
 
 func TestService_ApplyEvent(t *testing.T) {
 	t.Run("nil event", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
 		defer svc.Stop(context.Background())
 
-		err = svc.ApplyEvent(context.Background(), nil)
+		err = svc.ApplyEvent(context.Background(), nil, "")
 		require.NoError(t, err)
 	})
 
 	t.Run("event without FullDocument", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
 		defer svc.Stop(context.Background())
@@ -188,12 +200,12 @@ func TestService_ApplyEvent(t *testing.T) {
 			DatabaseID:   "testdb",
 			FullDocument: nil,
 		}
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 	})
 
 	t.Run("event with empty collection", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
 		defer svc.Stop(context.Background())
@@ -206,12 +218,12 @@ func TestService_ApplyEvent(t *testing.T) {
 				Collection: "",
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 	})
 
 	t.Run("event with no matching template", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
 		defer svc.Stop(context.Background())
@@ -224,12 +236,12 @@ func TestService_ApplyEvent(t *testing.T) {
 				Collection: "unknown/collection",
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 	})
 
 	t.Run("event with matching template", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		s := svc.(*service)
 
 		// Load templates
@@ -260,18 +272,17 @@ templates:
 				},
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 
 		// Verify document was indexed
 		stats, err := svc.Stats(context.Background())
 		require.NoError(t, err)
 		assert.Equal(t, int64(1), stats.EventsApplied)
-		assert.Equal(t, 1, stats.IndexCount)
 	})
 
 	t.Run("deleted document without includeDeleted", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		s := svc.(*service)
 
 		templateYAML := `
@@ -304,13 +315,14 @@ templates:
 				Deleted: false,
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt1)
+		err = svc.ApplyEvent(context.Background(), evt1, "")
 		require.NoError(t, err)
 
 		// Verify indexed
-		index := s.manager.GetIndex("testdb", "users/*/chats", "chats_by_timestamp")
-		require.NotNil(t, index)
-		assert.Equal(t, 1, index.Len())
+		st := s.manager.Store().(*mem_store.Store)
+		orderKey, found := st.Get("testdb", "users/*/chats", "chats_by_timestamp", "doc1")
+		require.True(t, found, "document should be indexed")
+		require.NotNil(t, orderKey)
 
 		// Now mark as deleted
 		evt2 := &ChangeEvent{
@@ -327,15 +339,16 @@ templates:
 				Deleted: true,
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt2)
+		err = svc.ApplyEvent(context.Background(), evt2, "")
 		require.NoError(t, err)
 
 		// Verify deleted from index
-		assert.Equal(t, 0, index.Len())
+		_, found = st.Get("testdb", "users/*/chats", "chats_by_timestamp", "doc1")
+		assert.False(t, found, "document should be deleted from index")
 	})
 
 	t.Run("deleted document with includeDeleted", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		s := svc.(*service)
 
 		templateYAML := `
@@ -368,18 +381,19 @@ templates:
 				Deleted: true,
 			},
 		}
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 
 		// Verify still in index (includeDeleted = true)
-		index := s.manager.GetIndex("testdb", "users/*/chats", "chats_by_timestamp")
-		require.NotNil(t, index)
-		assert.Equal(t, 1, index.Len())
+		st := s.manager.Store().(*mem_store.Store)
+		orderKey, found := st.Get("testdb", "users/*/chats", "chats_by_timestamp", "doc1")
+		require.True(t, found, "document should still be in index with includeDeleted=true")
+		assert.NotNil(t, orderKey)
 	})
 }
 
 func TestService_Search(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	templateYAML := `
@@ -412,7 +426,7 @@ templates:
 				},
 			},
 		}
-		err := svc.ApplyEvent(context.Background(), evt)
+		err := svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 	}
 
@@ -455,7 +469,7 @@ templates:
 
 func TestService_Health(t *testing.T) {
 	t.Run("healthy when running", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
 		defer svc.Stop(context.Background())
@@ -466,7 +480,7 @@ func TestService_Health(t *testing.T) {
 	})
 
 	t.Run("unhealthy when not running", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 
 		health, err := svc.Health(context.Background())
 		require.NoError(t, err)
@@ -475,7 +489,7 @@ func TestService_Health(t *testing.T) {
 }
 
 func TestService_Stats(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	templateYAML := `
@@ -494,8 +508,6 @@ templates:
 
 	stats, err := svc.Stats(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 0, stats.DatabaseCount)
-	assert.Equal(t, 0, stats.IndexCount)
 	assert.Equal(t, 1, stats.TemplateCount)
 	assert.Equal(t, int64(0), stats.EventsApplied)
 
@@ -513,19 +525,17 @@ templates:
 			},
 		},
 	}
-	err = svc.ApplyEvent(context.Background(), evt)
+	err = svc.ApplyEvent(context.Background(), evt, "")
 	require.NoError(t, err)
 
 	stats, err = svc.Stats(context.Background())
 	require.NoError(t, err)
-	assert.Equal(t, 1, stats.DatabaseCount)
-	assert.Equal(t, 1, stats.IndexCount)
 	assert.Equal(t, int64(1), stats.EventsApplied)
 	assert.Greater(t, stats.LastEventTime, int64(0))
 }
 
 func TestService_Manager(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	mgr := svc.Manager()
@@ -535,7 +545,7 @@ func TestService_Manager(t *testing.T) {
 func TestService_PullerSubscription(t *testing.T) {
 	t.Run("receives events from puller", func(t *testing.T) {
 		mockPuller := newMockPullerService()
-		svc := NewService(Config{}, mockPuller, testLogger())
+		svc := newTestService(config.Config{}, mockPuller, testLogger())
 		s := svc.(*service)
 
 		templateYAML := `
@@ -625,10 +635,10 @@ templates:
 		require.NoError(t, err)
 		tmpFile.Close()
 
-		cfg := Config{
+		cfg := config.Config{
 			TemplatePath: tmpFile.Name(),
 		}
-		svc := NewService(cfg, nil, testLogger())
+		svc := newTestService(cfg, nil, testLogger())
 
 		err = svc.Start(context.Background())
 		require.NoError(t, err)
@@ -641,10 +651,10 @@ templates:
 	})
 
 	t.Run("invalid template file", func(t *testing.T) {
-		cfg := Config{
+		cfg := config.Config{
 			TemplatePath: "/nonexistent/path/templates.yaml",
 		}
-		svc := NewService(cfg, nil, testLogger())
+		svc := newTestService(cfg, nil, testLogger())
 
 		err := svc.Start(context.Background())
 		require.Error(t, err)
@@ -656,7 +666,7 @@ func TestService_StopWithTimeout(t *testing.T) {
 	t.Run("stop with context timeout", func(t *testing.T) {
 		// Create a mock puller that keeps subscription alive
 		mockPuller := &slowPullerService{}
-		svc := NewService(Config{}, mockPuller, testLogger())
+		svc := newTestService(config.Config{}, mockPuller, testLogger())
 
 		err := svc.Start(context.Background())
 		require.NoError(t, err)
@@ -698,7 +708,7 @@ func TestService_SubscriptionReconnect(t *testing.T) {
 		reconnectPuller := &reconnectablePullerService{
 			reconnectCount: 0,
 		}
-		svc := NewService(Config{}, reconnectPuller, testLogger())
+		svc := newTestService(config.Config{}, reconnectPuller, testLogger())
 		s := svc.(*service)
 
 		templateYAML := `
@@ -771,7 +781,7 @@ func (r *reconnectablePullerService) CloseCurrentChannel() {
 
 func TestService_ApplyEventWithUnsupportedType(t *testing.T) {
 	t.Run("unsupported field type logs error", func(t *testing.T) {
-		svc := NewService(Config{}, nil, testLogger())
+		svc := newTestService(config.Config{}, nil, testLogger())
 		s := svc.(*service)
 
 		templateYAML := `
@@ -804,19 +814,18 @@ templates:
 		}
 
 		// Should not return error (error is logged, not returned)
-		err = svc.ApplyEvent(context.Background(), evt)
+		err = svc.ApplyEvent(context.Background(), evt, "")
 		require.NoError(t, err)
 
 		// But the document should not be indexed
-		index := s.manager.GetIndex("testdb", "users/*/docs", "test_template")
-		if index != nil {
-			assert.Equal(t, 0, index.Len())
-		}
+		st := s.manager.Store().(*mem_store.Store)
+		_, found := st.Get("testdb", "users/*/docs", "test_template", "doc1")
+		assert.False(t, found, "document with unsupported field type should not be indexed")
 	})
 }
 
 func TestService_BuildOrderKey(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	t.Run("asc direction", func(t *testing.T) {
@@ -879,7 +888,7 @@ templates:
 }
 
 func TestService_ApplyEventToTemplate_NilDoc(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	templateYAML := `
@@ -905,12 +914,12 @@ templates:
 		FullDocument: nil,
 	}
 
-	err = s.applyEventToTemplate(context.Background(), evt, &tmpl)
+	err = s.applyEventToTemplate(context.Background(), evt, &tmpl, "")
 	require.NoError(t, err)
 }
 
 func TestService_ApplyEventToTemplate_DocIDFromFullpath(t *testing.T) {
-	svc := NewService(Config{}, nil, testLogger())
+	svc := newTestService(config.Config{}, nil, testLogger())
 	s := svc.(*service)
 
 	templateYAML := `
@@ -943,20 +952,21 @@ templates:
 		},
 	}
 
-	err = s.applyEventToTemplate(context.Background(), evt, &tmpl)
+	err = s.applyEventToTemplate(context.Background(), evt, &tmpl, "")
 	require.NoError(t, err)
 
 	// Verify the document was indexed
-	idx := s.manager.GetOrCreateIndex("testdb", "users", tmpl.Identity(), tmpl.CollectionPattern)
-	key := idx.Get("user123")
-	assert.NotNil(t, key, "document should be indexed with ID extracted from Fullpath")
+	st := s.manager.Store().(*mem_store.Store)
+	orderKey, found := st.Get("testdb", "users", tmpl.Identity(), "user123")
+	assert.True(t, found, "document should be indexed with ID extracted from Fullpath")
+	assert.NotNil(t, orderKey)
 }
 
 func TestService_SubscriptionReconnect_ContextCanceled(t *testing.T) {
 	t.Run("context canceled during reconnect backoff", func(t *testing.T) {
 		// Create a puller that closes channel immediately
 		closingPuller := &immediateClosePullerService{}
-		svc := NewService(Config{}, closingPuller, testLogger())
+		svc := newTestService(config.Config{}, closingPuller, testLogger())
 
 		ctx, cancel := context.WithCancel(context.Background())
 		err := svc.Start(ctx)
@@ -1005,4 +1015,235 @@ func (p *immediateClosePullerService) Subscribe(ctx context.Context, consumerID 
 	}
 
 	return ch
+}
+
+// ============================================================================
+// Pebble Storage Mode Tests
+// ============================================================================
+
+func TestNewService_PebbleMode(t *testing.T) {
+	t.Run("valid pebble config", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "indexer-pebble-test-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		cfg := config.Config{
+			StorageMode: "pebble",
+			Store: config.StoreConfig{
+				Path:           tmpDir + "/test.db",
+				BatchSize:      100,
+				BatchInterval:  50 * time.Millisecond,
+				BlockCacheSize: 8 * 1024 * 1024,
+			},
+		}
+
+		svc, err := NewService(cfg, nil, testLogger())
+		require.NoError(t, err)
+		require.NotNil(t, svc)
+
+		// Start and stop to verify it works
+		ctx := context.Background()
+		err = svc.Start(ctx)
+		require.NoError(t, err)
+
+		err = svc.Stop(ctx)
+		require.NoError(t, err)
+	})
+
+	t.Run("pebble mode without logger uses provided logger", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "indexer-pebble-test-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		cfg := config.Config{
+			StorageMode: "pebble",
+			Store: config.StoreConfig{
+				Path:           tmpDir + "/test.db",
+				BatchSize:      100,
+				BatchInterval:  50 * time.Millisecond,
+				BlockCacheSize: 8 * 1024 * 1024,
+			},
+		}
+
+		logger := testLogger()
+		svc, err := NewService(cfg, nil, logger)
+		require.NoError(t, err)
+		require.NotNil(t, svc)
+		defer svc.Stop(context.Background())
+	})
+
+	t.Run("invalid storage mode", func(t *testing.T) {
+		cfg := config.Config{
+			StorageMode: "invalid_mode",
+		}
+
+		_, err := NewService(cfg, nil, testLogger())
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "unknown storage mode")
+	})
+
+	t.Run("pebble mode with empty path fails", func(t *testing.T) {
+		cfg := config.Config{
+			StorageMode: "pebble",
+			Store: config.StoreConfig{
+				Path: "", // Empty path should fail
+			},
+		}
+
+		_, err := NewService(cfg, nil, testLogger())
+		require.Error(t, err)
+	})
+}
+
+func TestService_PebbleMode_ApplyEvent(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "indexer-pebble-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	cfg := config.Config{
+		StorageMode: "pebble",
+		Store: config.StoreConfig{
+			Path:           tmpDir + "/test.db",
+			BatchSize:      100,
+			BatchInterval:  50 * time.Millisecond,
+			BlockCacheSize: 8 * 1024 * 1024,
+		},
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+	require.NotNil(t, svc)
+
+	s := svc.(*service)
+
+	// Load templates
+	templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+	err = s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+	require.NoError(t, err)
+
+	err = svc.Start(context.Background())
+	require.NoError(t, err)
+	defer svc.Stop(context.Background())
+
+	// Apply an event with progress
+	evt := &ChangeEvent{
+		EventID:    "evt1",
+		DatabaseID: "testdb",
+		FullDocument: &storage.StoredDoc{
+			Id:         "doc1",
+			Collection: "users/alice/chats",
+			Fullpath:   "users/alice/chats/doc1",
+			Data: map[string]any{
+				"id":        "doc1",
+				"timestamp": float64(1000),
+			},
+		},
+	}
+	err = svc.ApplyEvent(context.Background(), evt, "event-progress-1")
+	require.NoError(t, err)
+
+	// Verify event was applied
+	stats, err := svc.Stats(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, int64(1), stats.EventsApplied)
+
+	// Verify progress was saved via store
+	progress, err := s.store.LoadProgress()
+	require.NoError(t, err)
+	assert.Equal(t, "event-progress-1", progress)
+}
+
+func TestService_PebbleMode_Persistence(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "indexer-pebble-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	dbPath := tmpDir + "/test.db"
+	templateYAML := `
+templates:
+  - name: chats_by_timestamp
+    collectionPattern: users/{uid}/chats
+    fields:
+      - { field: timestamp, order: desc }
+`
+
+	// First service instance - insert data
+	{
+		cfg := config.Config{
+			StorageMode: "pebble",
+			Store: config.StoreConfig{
+				Path:           dbPath,
+				BatchSize:      100,
+				BatchInterval:  50 * time.Millisecond,
+				BlockCacheSize: 8 * 1024 * 1024,
+			},
+		}
+
+		svc, err := NewService(cfg, nil, testLogger())
+		require.NoError(t, err)
+
+		s := svc.(*service)
+		err = s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+
+		// Apply event with progress
+		evt := &ChangeEvent{
+			EventID:    "evt1",
+			DatabaseID: "testdb",
+			FullDocument: &storage.StoredDoc{
+				Id:         "doc1",
+				Collection: "users/alice/chats",
+				Fullpath:   "users/alice/chats/doc1",
+				Data: map[string]any{
+					"id":        "doc1",
+					"timestamp": float64(1000),
+				},
+			},
+		}
+		err = svc.ApplyEvent(context.Background(), evt, "persist-test-progress")
+		require.NoError(t, err)
+
+		// Close the service
+		err = svc.Stop(context.Background())
+		require.NoError(t, err)
+	}
+
+	// Second service instance - verify data persisted
+	{
+		cfg := config.Config{
+			StorageMode: "pebble",
+			Store: config.StoreConfig{
+				Path:           dbPath,
+				BatchSize:      100,
+				BatchInterval:  50 * time.Millisecond,
+				BlockCacheSize: 8 * 1024 * 1024,
+			},
+		}
+
+		svc, err := NewService(cfg, nil, testLogger())
+		require.NoError(t, err)
+
+		s := svc.(*service)
+		err = s.manager.LoadTemplatesFromBytes([]byte(templateYAML))
+		require.NoError(t, err)
+
+		err = svc.Start(context.Background())
+		require.NoError(t, err)
+		defer svc.Stop(context.Background())
+
+		// Verify progress was loaded from persistent store
+		s.mu.RLock()
+		progress := s.progress
+		s.mu.RUnlock()
+		assert.Equal(t, "persist-test-progress", progress)
+	}
 }

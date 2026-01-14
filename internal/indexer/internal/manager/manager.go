@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
@@ -69,18 +69,23 @@ type DocRef struct {
 	OrderKey []byte // Encoded sort key
 }
 
-// Manager manages index databases and indexes.
+// Manager manages index operations through the Store interface.
 type Manager struct {
 	mu        sync.RWMutex
-	databases map[string]*index.Database
+	store     store.Store
 	templates []template.Template
 }
 
-// New creates a new index manager.
-func New() *Manager {
+// New creates a new index manager with the given store.
+func New(s store.Store) *Manager {
 	return &Manager{
-		databases: make(map[string]*index.Database),
+		store: s,
 	}
+}
+
+// Store returns the underlying store.
+func (m *Manager) Store() store.Store {
+	return m.store
 }
 
 // LoadTemplates loads templates from a YAML file.
@@ -112,43 +117,6 @@ func (m *Manager) Templates() []template.Template {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.templates
-}
-
-// GetDatabase returns a database by name, creating it if needed.
-func (m *Manager) GetDatabase(name string) *index.Database {
-	m.mu.RLock()
-	if db, ok := m.databases[name]; ok {
-		m.mu.RUnlock()
-		return db
-	}
-	m.mu.RUnlock()
-
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if db, ok := m.databases[name]; ok {
-		return db
-	}
-	db := index.NewDatabase(name)
-	m.databases[name] = db
-	return db
-}
-
-// DeleteDatabase removes a database and all its indexes.
-func (m *Manager) DeleteDatabase(name string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	delete(m.databases, name)
-}
-
-// ListDatabases returns all database names.
-func (m *Manager) ListDatabases() []string {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	names := make([]string, 0, len(m.databases))
-	for name := range m.databases {
-		names = append(names, name)
-	}
-	return names
 }
 
 // MatchTemplatesForCollection returns templates that match a collection path.
@@ -343,7 +311,7 @@ func (m *Manager) computeQueryScore(plan Plan, tmpl *template.Template) int {
 	return score
 }
 
-// Search executes a search on the index.
+// Search executes a search using the Store interface.
 func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]DocRef, error) {
 	if err := m.validatePlan(plan); err != nil {
 		return nil, err
@@ -355,17 +323,8 @@ func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]Doc
 		return nil, err
 	}
 
-	// Get or create database
-	db := m.GetDatabase(database)
-
-	// Get index
 	pattern := tmpl.NormalizedPattern()
-	idx := db.GetIndex(pattern, tmpl.Identity())
-	if idx == nil {
-		// Index doesn't exist yet - no documents have been indexed for this pattern
-		// Return empty results instead of error
-		return []DocRef{}, nil
-	}
+	tmplID := tmpl.Identity()
 
 	// Build search options
 	opts, err := m.buildSearchOptions(plan, tmpl)
@@ -373,10 +332,13 @@ func (m *Manager) Search(ctx context.Context, database string, plan Plan) ([]Doc
 		return nil, err
 	}
 
-	// Execute search
-	results := idx.Search(opts)
+	// Execute search via Store interface
+	results, err := m.store.Search(database, pattern, tmplID, opts)
+	if err != nil {
+		return nil, err
+	}
 
-	// Convert to DocRef
+	// Convert store.DocRef to manager.DocRef
 	docRefs := make([]DocRef, len(results))
 	for i, r := range results {
 		docRefs[i] = DocRef{ID: r.ID, OrderKey: r.OrderKey}
@@ -392,8 +354,8 @@ func (m *Manager) validatePlan(plan Plan) error {
 	return nil
 }
 
-func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (index.SearchOptions, error) {
-	opts := index.SearchOptions{
+func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (store.SearchOptions, error) {
+	opts := store.SearchOptions{
 		Limit: plan.Limit,
 	}
 	if opts.Limit <= 0 {
@@ -569,22 +531,15 @@ func (m *Manager) buildSearchOptions(plan Plan, tmpl *template.Template) (index.
 			opts.Upper = upper
 		}
 	}
-	// Note: The case where len(lowerFields) > 0 && len(upperFields) == 0 with equality filters
-	// is not possible because equality filters always add to both lower and upper fields.
-	// Range-only queries with just a lower bound (e.g., price > 100) scan to the end,
-	// which is the expected behavior for unbounded range queries.
 
 	return opts, nil
 }
 
 // appendMaxSuffix appends 0xFF bytes to create an upper bound that includes all keys with the given prefix.
-// This is used instead of incrementing because variable-length encodings make increment tricky.
 func appendMaxSuffix(b []byte) []byte {
 	if len(b) == 0 {
 		return nil
 	}
-	// Append enough 0xFF bytes to exceed any possible suffix
-	// Using 64 bytes should be more than enough for any document ID
 	result := make([]byte, len(b)+64)
 	copy(result, b)
 	for i := len(b); i < len(result); i++ {
@@ -593,47 +548,51 @@ func appendMaxSuffix(b []byte) []byte {
 	return result
 }
 
-// incrementBytes returns a byte slice that is lexicographically just after the input.
-// Used to create exclusive upper bounds from inclusive prefixes.
-func incrementBytes(b []byte) []byte {
-	if len(b) == 0 {
-		return nil
-	}
-	result := make([]byte, len(b))
-	copy(result, b)
-
-	// Increment from the rightmost byte
-	for i := len(result) - 1; i >= 0; i-- {
-		if result[i] < 0xFF {
-			result[i]++
-			return result
-		}
-		result[i] = 0
-	}
-	// Overflow - append a byte
-	return append(result, 0x00)
+// Upsert inserts or updates a document in the index.
+func (m *Manager) Upsert(database, pattern, tmplID, docID string, orderKey []byte, progress string) error {
+	return m.store.Upsert(database, pattern, tmplID, docID, orderKey, progress)
 }
 
-// GetIndex returns an index for the given database, pattern, and template.
-func (m *Manager) GetIndex(database, pattern, templateID string) *index.Index {
-	db := m.GetDatabase(database)
-	return db.GetIndex(pattern, templateID)
+// Delete removes a document from the index.
+func (m *Manager) Delete(database, pattern, tmplID, docID string, progress string) error {
+	return m.store.Delete(database, pattern, tmplID, docID, progress)
 }
 
-// GetOrCreateIndex returns or creates an index.
-func (m *Manager) GetOrCreateIndex(database, pattern, templateID, rawPattern string) *index.Index {
-	db := m.GetDatabase(database)
-	return db.GetOrCreateIndex(pattern, templateID, rawPattern)
+// DeleteIndex removes all data for an index.
+func (m *Manager) DeleteIndex(database, pattern, tmplID string) error {
+	return m.store.DeleteIndex(database, pattern, tmplID)
+}
+
+// SetState sets the state of an index.
+func (m *Manager) SetState(database, pattern, tmplID string, state store.IndexState) error {
+	return m.store.SetState(database, pattern, tmplID, state)
+}
+
+// GetState returns the state of an index.
+func (m *Manager) GetState(database, pattern, tmplID string) (store.IndexState, error) {
+	return m.store.GetState(database, pattern, tmplID)
+}
+
+// LoadProgress loads the event processing progress.
+func (m *Manager) LoadProgress() (string, error) {
+	return m.store.LoadProgress()
+}
+
+// Flush flushes pending writes to storage.
+func (m *Manager) Flush() error {
+	return m.store.Flush()
+}
+
+// Close closes the store.
+func (m *Manager) Close() error {
+	return m.store.Close()
 }
 
 // Stats returns manager statistics.
 type Stats struct {
-	DatabaseCount int
-	IndexCount    int
 	TemplateCount int
-	DocumentCount int64 // Total indexed documents
-	LastEventTime int64 // Unix timestamp of last processed event
-	EventsApplied int64 // Total events applied
+	EventsApplied int64
+	LastEventTime int64
 }
 
 // HealthStatus represents the health status.
@@ -663,14 +622,7 @@ func (m *Manager) Stats() Stats {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
-	indexCount := 0
-	for _, db := range m.databases {
-		indexCount += db.IndexCount()
-	}
-
 	return Stats{
-		DatabaseCount: len(m.databases),
-		IndexCount:    indexCount,
 		TemplateCount: len(m.templates),
 	}
 }

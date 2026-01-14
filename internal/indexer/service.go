@@ -10,35 +10,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/persist_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/puller"
 )
 
-// Config holds the Indexer service configuration.
-type Config struct {
-	// TemplatePath is the path to the index templates YAML file.
-	TemplatePath string
-
-	// PullerAddress is the gRPC address of the Puller service.
-	// If empty, uses in-process Puller (LocalService).
-	PullerAddress string
-
-	// ProgressPath is the path to store progress markers.
-	// Defaults to "data/indexer/progress".
-	ProgressPath string
-
-	// ConsumerID is the ID used when subscribing to Puller.
-	// Defaults to "indexer".
-	ConsumerID string
-}
-
 // service implements LocalService.
 type service struct {
-	cfg     Config
+	cfg     config.Config
 	logger  *slog.Logger
 	manager *manager.Manager
+	store   store.Store
 
 	// Puller subscription
 	pullerSvc puller.Service
@@ -57,7 +44,7 @@ type service struct {
 
 // NewService creates a new Indexer service.
 // pullerSvc can be nil if not subscribing to Puller (for testing).
-func NewService(cfg Config, pullerSvc puller.Service, logger *slog.Logger) LocalService {
+func NewService(cfg config.Config, pullerSvc puller.Service, logger *slog.Logger) (LocalService, error) {
 	if cfg.ConsumerID == "" {
 		cfg.ConsumerID = "indexer"
 	}
@@ -65,11 +52,30 @@ func NewService(cfg Config, pullerSvc puller.Service, logger *slog.Logger) Local
 		cfg.ProgressPath = "data/indexer/progress"
 	}
 
+	// Create store based on storage mode
+	st, err := newStore(cfg, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create store: %w", err)
+	}
+
 	return &service{
 		cfg:       cfg,
 		logger:    logger.With("component", "indexer"),
-		manager:   manager.New(),
+		manager:   manager.New(st),
+		store:     st,
 		pullerSvc: pullerSvc,
+	}, nil
+}
+
+// newStore creates a store based on the storage mode configuration.
+func newStore(cfg config.Config, logger *slog.Logger) (store.Store, error) {
+	switch cfg.StorageMode {
+	case config.StorageModeMemory, "":
+		return mem_store.New(), nil
+	case config.StorageModePebble:
+		return persist_store.NewPebbleStore(cfg.Store, logger)
+	default:
+		return nil, fmt.Errorf("unknown storage mode: %s", cfg.StorageMode)
 	}
 }
 
@@ -92,7 +98,13 @@ func (s *service) Start(ctx context.Context) error {
 			"count", len(s.manager.Templates()))
 	}
 
-	// TODO: Load progress marker from disk
+	// Load progress from store
+	if savedProgress, err := s.store.LoadProgress(); err != nil {
+		s.logger.Warn("failed to load progress from store", "error", err)
+	} else if savedProgress != "" {
+		s.progress = savedProgress
+		s.logger.Info("loaded progress from store", "progress", savedProgress)
+	}
 
 	// Start Puller subscription if configured
 	if s.pullerSvc != nil {
@@ -133,6 +145,12 @@ func (s *service) Stop(ctx context.Context) error {
 
 	select {
 	case <-done:
+		// Close the store
+		if s.store != nil {
+			if err := s.store.Close(); err != nil {
+				s.logger.Error("failed to close store", "error", err)
+			}
+		}
 		s.logger.Info("indexer service stopped")
 		return nil
 	case <-ctx.Done():
@@ -168,26 +186,27 @@ func (s *service) subscriptionLoop(ctx context.Context) {
 			}
 
 			if evt.Change != nil {
-				if err := s.ApplyEvent(ctx, evt.Change); err != nil {
+				if err := s.ApplyEvent(ctx, evt.Change, evt.Progress); err != nil {
 					s.logger.Error("failed to apply event",
 						"eventID", evt.Change.EventID,
 						"error", err)
+					// Don't update progress if ApplyEvent failed
+					continue
 				}
 			}
 
-			// Update progress marker
+			// Update in-memory progress marker
 			if evt.Progress != "" {
 				s.mu.Lock()
 				s.progress = evt.Progress
 				s.mu.Unlock()
-				// TODO: Persist progress marker to disk periodically
 			}
 		}
 	}
 }
 
 // ApplyEvent applies a single change event to the indexes.
-func (s *service) ApplyEvent(ctx context.Context, evt *ChangeEvent) error {
+func (s *service) ApplyEvent(ctx context.Context, evt *ChangeEvent, progress string) error {
 	if evt == nil {
 		return nil
 	}
@@ -214,8 +233,14 @@ func (s *service) ApplyEvent(ctx context.Context, evt *ChangeEvent) error {
 	}
 
 	// Process each matching template
-	for _, match := range matches {
-		if err := s.applyEventToTemplate(ctx, evt, match.Template); err != nil {
+	// Pass progress only to the last template operation
+	for i, match := range matches {
+		// Only pass progress on the last operation to avoid duplicate writes
+		var opProgress string
+		if i == len(matches)-1 {
+			opProgress = progress
+		}
+		if err := s.applyEventToTemplate(ctx, evt, match.Template, opProgress); err != nil {
 			s.logger.Error("failed to apply event to template",
 				"template", match.Template.Name,
 				"eventID", evt.EventID,
@@ -231,7 +256,7 @@ func (s *service) ApplyEvent(ctx context.Context, evt *ChangeEvent) error {
 }
 
 // applyEventToTemplate applies an event to a specific template's index.
-func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tmpl *template.Template) error {
+func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tmpl *template.Template, progress string) error {
 	doc := evt.FullDocument
 	if doc == nil {
 		return nil
@@ -253,16 +278,14 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		return nil // Cannot index without a document ID
 	}
 
+	st := s.manager.Store()
+	pattern := tmpl.NormalizedPattern()
+	tmplID := tmpl.Identity()
+
 	// Skip deleted documents unless template includes them
 	if doc.Deleted && !tmpl.IncludeDeleted {
 		// Delete from index
-		idx := s.manager.GetOrCreateIndex(
-			evt.DatabaseID,
-			tmpl.NormalizedPattern(),
-			tmpl.Identity(),
-			tmpl.CollectionPattern,
-		)
-		idx.Delete(docID)
+		st.Delete(evt.DatabaseID, pattern, tmplID, docID, progress)
 		return nil
 	}
 
@@ -272,16 +295,8 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 		return fmt.Errorf("failed to build order key: %w", err)
 	}
 
-	// Get or create index
-	idx := s.manager.GetOrCreateIndex(
-		evt.DatabaseID,
-		tmpl.NormalizedPattern(),
-		tmpl.Identity(),
-		tmpl.CollectionPattern,
-	)
-
 	// Upsert document using the user-facing document ID
-	idx.Upsert(docID, orderKey)
+	st.Upsert(evt.DatabaseID, pattern, tmplID, docID, orderKey, progress)
 
 	return nil
 }
@@ -335,14 +350,22 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 		status = HealthUnhealthy
 	}
 
+	st := s.manager.Store()
 	indexes := make(map[string]manager.IndexHealth)
-	for _, dbName := range s.manager.ListDatabases() {
-		db := s.manager.GetDatabase(dbName)
-		for _, idx := range db.ListIndexes() {
+	databases, err := st.ListDatabases()
+	if err != nil {
+		return Health{Status: HealthUnhealthy}, err
+	}
+	for _, dbName := range databases {
+		dbIndexes, err := st.ListIndexes(dbName)
+		if err != nil {
+			continue
+		}
+		for _, idx := range dbIndexes {
 			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
 			indexes[key] = manager.IndexHealth{
-				State:    idx.State().String(),
-				DocCount: int64(idx.Len()),
+				State:    string(idx.State),
+				DocCount: int64(idx.DocCount),
 			}
 		}
 	}

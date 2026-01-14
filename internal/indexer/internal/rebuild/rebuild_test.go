@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/index"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
 )
@@ -131,6 +132,7 @@ func (m *mockEventReplayer) ReplayFrom(ctx context.Context, startKey string, cal
 }
 
 func TestDefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultConfig()
 	assert.Equal(t, 500, cfg.BatchSize)
 	assert.Equal(t, 5000, cfg.QPSLimit)
@@ -138,6 +140,7 @@ func TestDefaultConfig(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 1000, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -148,6 +151,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestNew_DefaultValues(t *testing.T) {
+	t.Parallel()
 	cfg := Config{} // All zeros
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -157,10 +161,17 @@ func TestNew_DefaultValues(t *testing.T) {
 }
 
 func TestOrchestrator_StartRebuild(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 10, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("users/*/chats", "test_template", "users/{uid}/chats")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "users/*/chats",
+		TemplateID: "test_template",
+		RawPattern: "users/{uid}/chats",
+	}
 	tmpl := &template.Template{
 		Name:              "test_template",
 		CollectionPattern: "users/{uid}/chats",
@@ -175,7 +186,7 @@ func TestOrchestrator_StartRebuild(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 	assert.NotEmpty(t, jobID)
 
@@ -190,15 +201,22 @@ func TestOrchestrator_StartRebuild(t *testing.T) {
 	assert.Equal(t, int64(3), progress.DocsAdded)
 
 	// Index should be healthy
-	assert.Equal(t, index.StateHealthy, s.State())
-	assert.Equal(t, 3, s.Len())
+	state, _ := st.GetState(idxRef.Database, idxRef.Pattern, idxRef.TemplateID)
+	assert.Equal(t, store.IndexStateHealthy, state)
 }
 
 func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("users/*/chats", "test_template", "users/{uid}/chats")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "users/*/chats",
+		TemplateID: "test_template",
+		RawPattern: "users/{uid}/chats",
+	}
 	tmpl := &template.Template{
 		Name:              "test_template",
 		CollectionPattern: "users/{uid}/chats",
@@ -212,11 +230,11 @@ func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
 	scanner := &mockStorageScanner{docs: docs}
 
 	ctx := context.Background()
-	jobID1, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID1, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Try to start another rebuild for same index
-	_, err = o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	_, err = o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already in progress")
 
@@ -229,10 +247,17 @@ func TestOrchestrator_StartRebuild_AlreadyRunning(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRebuild(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	// Scanner with many docs
@@ -243,7 +268,7 @@ func TestOrchestrator_CancelRebuild(t *testing.T) {
 	scanner := &mockStorageScanner{docs: docs}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for job to start
@@ -262,18 +287,30 @@ func TestOrchestrator_CancelRebuild(t *testing.T) {
 }
 
 func TestOrchestrator_ListJobs(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s1 := index.New("a", "id", "a")
-	s2 := index.New("b", "id", "b")
+	st := mem_store.New()
+	idxRef1 := IndexRef{
+		Database:   "db1",
+		Pattern:    "a",
+		TemplateID: "id",
+		RawPattern: "a",
+	}
+	idxRef2 := IndexRef{
+		Database:   "db2",
+		Pattern:    "b",
+		TemplateID: "id",
+		RawPattern: "b",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
 	ctx := context.Background()
-	_, err := o.StartRebuild(ctx, s1, tmpl, "db1", scanner, nil)
+	_, err := o.StartRebuild(ctx, idxRef1, tmpl, st, scanner, nil)
 	require.NoError(t, err)
-	_, err = o.StartRebuild(ctx, s2, tmpl, "db2", scanner, nil)
+	_, err = o.StartRebuild(ctx, idxRef2, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -284,6 +321,7 @@ func TestOrchestrator_ListJobs(t *testing.T) {
 }
 
 func TestOrchestrator_GetJob_NotFound(t *testing.T) {
+	t.Parallel()
 	o := New(DefaultConfig(), &mockKeyBuilder{}, testLogger())
 
 	_, err := o.GetJob("nonexistent")
@@ -292,6 +330,7 @@ func TestOrchestrator_GetJob_NotFound(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRebuild_NotFound(t *testing.T) {
+	t.Parallel()
 	o := New(DefaultConfig(), &mockKeyBuilder{}, testLogger())
 
 	err := o.CancelRebuild("nonexistent")
@@ -300,15 +339,22 @@ func TestOrchestrator_CancelRebuild_NotFound(t *testing.T) {
 }
 
 func TestOrchestrator_CleanupCompletedJobs(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
 	ctx := context.Background()
-	_, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	_, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -328,10 +374,17 @@ func TestOrchestrator_CleanupCompletedJobs(t *testing.T) {
 }
 
 func TestOrchestrator_WithEventReplay(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -348,7 +401,7 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -359,14 +412,23 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 3 docs (1 from storage + 2 from replay)
-	assert.Equal(t, 3, s.Len())
+	indexes, _ := st.ListIndexes(idxRef.Database)
+	require.Len(t, indexes, 1)
+	assert.Equal(t, 3, indexes[0].DocCount)
 }
 
 func TestOrchestrator_ScannerError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -374,7 +436,7 @@ func TestOrchestrator_ScannerError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -384,10 +446,12 @@ func TestOrchestrator_ScannerError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, StatusFailed, progress.Status)
 	assert.Contains(t, progress.Error, "storage error")
-	assert.Equal(t, index.StateFailed, s.State())
+	state, _ := st.GetState(idxRef.Database, idxRef.Pattern, idxRef.TemplateID)
+	assert.Equal(t, store.IndexStateFailed, state)
 }
 
 func TestOrchestrator_MaxConcurrent(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -398,21 +462,32 @@ func TestOrchestrator_MaxConcurrent(t *testing.T) {
 	}
 	scanner := &mockStorageScanner{docs: docs}
 
-	s1 := index.New("a", "id", "a")
-	s2 := index.New("b", "id", "b")
+	st := mem_store.New()
+	idxRef1 := IndexRef{
+		Database:   "db1",
+		Pattern:    "a",
+		TemplateID: "id",
+		RawPattern: "a",
+	}
+	idxRef2 := IndexRef{
+		Database:   "db2",
+		Pattern:    "b",
+		TemplateID: "id",
+		RawPattern: "b",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	ctx := context.Background()
 
 	// Start first job
-	jobID1, err := o.StartRebuild(ctx, s1, tmpl, "db1", scanner, nil)
+	jobID1, err := o.StartRebuild(ctx, idxRef1, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for it to start
 	time.Sleep(50 * time.Millisecond)
 
 	// Start second job (should be queued)
-	jobID2, err := o.StartRebuild(ctx, s2, tmpl, "db2", scanner, nil)
+	jobID2, err := o.StartRebuild(ctx, idxRef2, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Second job should be pending
@@ -430,6 +505,7 @@ func TestOrchestrator_MaxConcurrent(t *testing.T) {
 }
 
 func TestJob_Progress(t *testing.T) {
+	t.Parallel()
 	job := &Job{
 		ID:        "test-job",
 		Status:    StatusRunning,
@@ -446,10 +522,17 @@ func TestJob_Progress(t *testing.T) {
 }
 
 func TestOrchestrator_DeletedEvents(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	scanner := &mockStorageScanner{
@@ -466,7 +549,7 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -477,10 +560,13 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 1 doc (doc2 only, doc1 was deleted)
-	assert.Equal(t, 1, s.Len())
+	indexes, _ := st.ListIndexes(idxRef.Database)
+	require.Len(t, indexes, 1)
+	assert.Equal(t, 1, indexes[0].DocCount)
 }
 
 func TestOrchestrator_ConcurrentAccess(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 10}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -495,8 +581,14 @@ func TestOrchestrator_ConcurrentAccess(t *testing.T) {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
-			s := index.New(string(rune('a'+idx)), "id", string(rune('a'+idx)))
-			_, err := o.StartRebuild(ctx, s, tmpl, "db", scanner, nil)
+			st := mem_store.New()
+			idxRef := IndexRef{
+				Database:   "db",
+				Pattern:    string(rune('a' + idx)),
+				TemplateID: "id",
+				RawPattern: string(rune('a' + idx)),
+			}
+			_, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 			assert.NoError(t, err)
 		}(i)
 	}
@@ -515,6 +607,7 @@ func TestOrchestrator_ConcurrentAccess(t *testing.T) {
 }
 
 func TestOrchestrator_CancelRunningJob(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 1, QPSLimit: 1, MaxConcurrent: 1}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
@@ -525,11 +618,17 @@ func TestOrchestrator_CancelRunningJob(t *testing.T) {
 	}
 	scanner := &mockStorageScanner{docs: docs}
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for it to start running
@@ -549,15 +648,22 @@ func TestOrchestrator_CancelRunningJob(t *testing.T) {
 }
 
 func TestOrchestrator_CancelCompletedJob(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, nil)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, nil)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -570,10 +676,17 @@ func TestOrchestrator_CancelCompletedJob(t *testing.T) {
 }
 
 func TestOrchestrator_ReplayEventsError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -583,7 +696,7 @@ func TestOrchestrator_ReplayEventsError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -596,10 +709,17 @@ func TestOrchestrator_ReplayEventsError(t *testing.T) {
 }
 
 func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -611,7 +731,7 @@ func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -622,15 +742,24 @@ func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 0 docs (event was from different database)
-	assert.Equal(t, 0, s.Len())
+	indexes, _ := st.ListIndexes(idxRef.Database)
+	assert.Len(t, indexes, 1)
+	assert.Equal(t, 0, indexes[0].DocCount)
 }
 
 func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	// Use a key builder that fails
 	o := New(cfg, &mockKeyBuilder{err: errors.New("build key error")}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -641,7 +770,7 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -653,7 +782,9 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Doc should not be added due to key build error
-	assert.Equal(t, 0, s.Len())
+	indexes, _ := st.ListIndexes(idxRef.Database)
+	assert.Len(t, indexes, 1)
+	assert.Equal(t, 0, indexes[0].DocCount)
 }
 
 // TestOrchestrator_ReplayUsesCurrentPosition verifies that rebuild uses the
@@ -662,10 +793,17 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 // before the storage scan, rebuild would replay ALL buffered events instead
 // of only the events that arrived during the rebuild.
 func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 
 	// Storage has some documents
@@ -686,7 +824,7 @@ func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion
@@ -704,16 +842,25 @@ func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
 		"ReplayFrom should be called with the startKey from CurrentPosition, not empty string")
 
 	// Should have 3 docs (2 from storage + 1 from replay)
-	assert.Equal(t, 3, s.Len())
+	indexes, _ := st.ListIndexes(idxRef.Database)
+	require.Len(t, indexes, 1)
+	assert.Equal(t, 3, indexes[0].DocCount)
 }
 
 // TestOrchestrator_ReplayCurrentPositionError verifies that rebuild fails
 // gracefully when CurrentPosition returns an error.
 func TestOrchestrator_ReplayCurrentPositionError(t *testing.T) {
+	t.Parallel()
 	cfg := Config{BatchSize: 100, QPSLimit: 10000, MaxConcurrent: 2}
 	o := New(cfg, &mockKeyBuilder{}, testLogger())
 
-	s := index.New("test", "id", "test")
+	st := mem_store.New()
+	idxRef := IndexRef{
+		Database:   "testdb",
+		Pattern:    "test",
+		TemplateID: "id",
+		RawPattern: "test",
+	}
 	tmpl := &template.Template{Name: "test"}
 	scanner := &mockStorageScanner{docs: []*types.StoredDoc{}}
 
@@ -723,7 +870,7 @@ func TestOrchestrator_ReplayCurrentPositionError(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	jobID, err := o.StartRebuild(ctx, s, tmpl, "testdb", scanner, replayer)
+	jobID, err := o.StartRebuild(ctx, idxRef, tmpl, st, scanner, replayer)
 	require.NoError(t, err)
 
 	// Wait for completion

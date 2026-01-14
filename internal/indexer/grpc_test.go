@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
 )
 
 // mockLocalService implements LocalService for testing.
@@ -19,7 +20,7 @@ type mockLocalService struct {
 
 func (m *mockLocalService) Start(ctx context.Context) error { return nil }
 func (m *mockLocalService) Stop(ctx context.Context) error  { return nil }
-func (m *mockLocalService) ApplyEvent(ctx context.Context, evt *ChangeEvent) error {
+func (m *mockLocalService) ApplyEvent(ctx context.Context, evt *ChangeEvent, progress string) error {
 	return nil
 }
 func (m *mockLocalService) Stats(ctx context.Context) (Stats, error) {
@@ -46,7 +47,7 @@ func (m *mockLocalService) Manager() *manager.Manager {
 
 func TestNewGRPCServer(t *testing.T) {
 	mock := &mockLocalService{
-		mgr: manager.New(),
+		mgr: manager.New(mem_store.New()),
 	}
 
 	server := NewGRPCServer(mock)
@@ -64,7 +65,7 @@ func TestGrpcServiceAdapter_Search(t *testing.T) {
 				{ID: "doc1", OrderKey: []byte{0x01, 0x02}},
 			}, nil
 		},
-		mgr: manager.New(),
+		mgr: manager.New(mem_store.New()),
 	}
 
 	docs, err := mock.Search(ctx, "testdb", Plan{
@@ -88,7 +89,7 @@ func TestGrpcServiceAdapter_Health(t *testing.T) {
 				},
 			}, nil
 		},
-		mgr: manager.New(),
+		mgr: manager.New(mem_store.New()),
 	}
 
 	health, err := mock.Health(ctx)
@@ -105,7 +106,7 @@ func TestGrpcServiceAdapter_HealthError(t *testing.T) {
 		healthFn: func(ctx context.Context) (Health, error) {
 			return Health{}, assert.AnError
 		},
-		mgr: manager.New(),
+		mgr: manager.New(mem_store.New()),
 	}
 
 	_, err := mock.Health(ctx)
@@ -113,7 +114,7 @@ func TestGrpcServiceAdapter_HealthError(t *testing.T) {
 }
 
 func TestGrpcServiceAdapter_Manager(t *testing.T) {
-	mgr := manager.New()
+	mgr := manager.New(mem_store.New())
 	mock := &mockLocalService{mgr: mgr}
 
 	assert.Same(t, mgr, mock.Manager())
@@ -129,7 +130,7 @@ func TestNewGRPCServer_Integration(t *testing.T) {
 		healthFn: func(ctx context.Context) (Health, error) {
 			return Health{Status: HealthOK}, nil
 		},
-		mgr: manager.New(),
+		mgr: manager.New(mem_store.New()),
 	}
 
 	server := NewGRPCServer(mock)

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -435,14 +436,24 @@ func TestServeSSE_HubClosed(t *testing.T) {
 
 type FailWriter struct {
 	http.ResponseWriter
+	mu          sync.Mutex
 	failOnWrite bool
 }
 
 func (w *FailWriter) Write(b []byte) (int, error) {
-	if w.failOnWrite {
+	w.mu.Lock()
+	fail := w.failOnWrite
+	w.mu.Unlock()
+	if fail {
 		return 0, errors.New("write failed")
 	}
 	return w.ResponseWriter.Write(b)
+}
+
+func (w *FailWriter) setFailOnWrite(v bool) {
+	w.mu.Lock()
+	w.failOnWrite = v
+	w.mu.Unlock()
 }
 
 func (w *FailWriter) Flush() {
@@ -491,7 +502,7 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Now enable failure
-	w.failOnWrite = true
+	w.setFailOnWrite(true)
 
 	// Manually inject subscription to ensure delivery
 	var client *Client

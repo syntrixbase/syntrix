@@ -29,6 +29,8 @@ IMMEDIATELY STOP and ask user when:
 - **Integration Tests**: Direct calls to internal service components in `tests/integration` directly.
 - Start coding without a **confirmed plan** from the user.
 - Adding "Generated with Claude Code", "via Happy", or any co-author credits in commit messages.
+- **Git commits without explicit single-use authorization**: Each git commit instruction only authorizes ONE commit. Never auto-commit or batch commit without explicit user consent for each commit.
+- **Git add without explicit authorization**: Never run `git add` without explicit user consent. Each git staging operation requires separate authorization.
 
 ## 🔄 DECISION TREE
 
@@ -50,7 +52,7 @@ Before ANY change:
 
 ## Preference
 
-- Use "github.com/stretchr/testify" for Golang tests.
+- Use `github.com/stretchr/testify` for Golang tests.
 - Uses `bun` for frontend package scripts.
 - Tasks are located in `tasks` folder
 - Design docs are located in `docs\design` folder

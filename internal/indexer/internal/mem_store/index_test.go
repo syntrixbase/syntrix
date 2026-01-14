@@ -1,4 +1,4 @@
-package index
+package mem_store
 
 import (
 	"fmt"
@@ -9,7 +9,7 @@ import (
 )
 
 func TestNew(t *testing.T) {
-	s := New("users/*/chats", "timestamp:desc", "users/{uid}/chats")
+	s := NewIndex("users/*/chats", "timestamp:desc", "users/{uid}/chats")
 
 	assert.Equal(t, "users/*/chats", s.Pattern)
 	assert.Equal(t, "timestamp:desc", s.TemplateID)
@@ -18,7 +18,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestIndex_Upsert(t *testing.T) {
-	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
+	s := NewIndex("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	// Insert first document
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
@@ -36,7 +36,7 @@ func TestIndex_Upsert(t *testing.T) {
 }
 
 func TestIndex_Delete(t *testing.T) {
-	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
+	s := NewIndex("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
 	s.Upsert("doc2", []byte{0x01, 0x00, 0x20})
@@ -58,7 +58,7 @@ func TestIndex_Delete(t *testing.T) {
 }
 
 func TestIndex_Search_Basic(t *testing.T) {
-	s := New("users/*/chats", "ts:desc", "users/{uid}/chats")
+	s := NewIndex("users/*/chats", "ts:desc", "users/{uid}/chats")
 
 	// Insert documents with different OrderKeys
 	s.Upsert("doc1", []byte{0x01, 0x00, 0x10})
@@ -76,7 +76,7 @@ func TestIndex_Search_Basic(t *testing.T) {
 }
 
 func TestIndex_Search_Limit(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	for i := 0; i < 10; i++ {
 		s.Upsert(fmt.Sprintf("doc%d", i), []byte{byte(i)})
@@ -90,7 +90,7 @@ func TestIndex_Search_Limit(t *testing.T) {
 }
 
 func TestIndex_Search_LowerBound(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -109,7 +109,7 @@ func TestIndex_Search_LowerBound(t *testing.T) {
 }
 
 func TestIndex_Search_UpperBound(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -128,7 +128,7 @@ func TestIndex_Search_UpperBound(t *testing.T) {
 }
 
 func TestIndex_Search_Range(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -148,7 +148,7 @@ func TestIndex_Search_Range(t *testing.T) {
 }
 
 func TestIndex_Search_StartAfter(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -167,7 +167,7 @@ func TestIndex_Search_StartAfter(t *testing.T) {
 }
 
 func TestIndex_Search_StartAfter_NotFound(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -185,7 +185,7 @@ func TestIndex_Search_StartAfter_NotFound(t *testing.T) {
 }
 
 func TestIndex_Search_DefaultLimit(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	for i := 0; i < 2000; i++ {
 		key := make([]byte, 2)
@@ -200,7 +200,7 @@ func TestIndex_Search_DefaultLimit(t *testing.T) {
 }
 
 func TestIndex_Clear(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	s.Upsert("a", []byte{0x10})
 	s.Upsert("b", []byte{0x20})
@@ -217,7 +217,7 @@ func TestIndex_Clear(t *testing.T) {
 }
 
 func TestIndex_ConcurrentAccess(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 	done := make(chan bool)
 
 	// Writer goroutine
@@ -251,7 +251,7 @@ func TestIndex_ConcurrentAccess(t *testing.T) {
 }
 
 func TestIndex_OrderPreservation(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	// Insert documents in random order
 	keys := [][]byte{
@@ -278,7 +278,7 @@ func TestIndex_OrderPreservation(t *testing.T) {
 }
 
 func TestIndex_UpdateChangesOrder(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	// Insert documents
 	s.Upsert("doc1", []byte{0x10})
@@ -300,7 +300,7 @@ func TestIndex_UpdateChangesOrder(t *testing.T) {
 }
 
 func TestIndex_Search_EmptyIndex(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	results := s.Search(SearchOptions{Limit: 100})
 	assert.Len(t, results, 0)
@@ -326,7 +326,7 @@ func TestIndex_SameOrderKeyDifferentDocs(t *testing.T) {
 	// When two documents have the same OrderKey, they should still be stored separately
 	// Note: In practice, OrderKey should include docID as tie-breaker to prevent this.
 	// But the index itself should handle this gracefully by using (orderKey, id) as the key.
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	// Insert two docs with same OrderKey but different IDs
 	// The second insert will update doc1's position in the tree but they're different docs
@@ -345,7 +345,7 @@ func TestIndex_SameOrderKeyDifferentDocs(t *testing.T) {
 }
 
 func TestIndex_State(t *testing.T) {
-	s := New("test", "id", "test")
+	s := NewIndex("test", "id", "test")
 
 	// Default state is healthy (zero value)
 	assert.Equal(t, StateHealthy, s.State())

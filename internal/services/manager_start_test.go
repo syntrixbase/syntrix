@@ -16,6 +16,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/indexer"
+	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
@@ -354,6 +355,7 @@ func (m *MockServerService) HTTPMux() *http.ServeMux {
 
 type MockStreamerService struct {
 	mock.Mock
+	streamCalls atomic.Int32
 }
 
 func (m *MockStreamerService) Start(ctx context.Context) error {
@@ -363,6 +365,7 @@ func (m *MockStreamerService) Stop(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
 func (m *MockStreamerService) Stream(ctx context.Context) (streamer.Stream, error) {
+	m.streamCalls.Add(1)
 	args := m.Called(ctx)
 	if s := args.Get(0); s != nil {
 		return s.(streamer.Stream), args.Error(1)
@@ -480,6 +483,10 @@ func TestManager_Start_RealtimeRetry(t *testing.T) {
 	// Wait for context timeout (200ms)
 	<-ctx.Done()
 
+	// Wait a bit for background goroutines to finish after context cancellation
+	// This prevents race between goroutine calling Stream() and us reading Calls
+	time.Sleep(100 * time.Millisecond)
+
 	// Stream should have been called multiple times due to retry
 	// 50ms initial sleep + 50ms retry wait.
 	// 0ms: Start (sleep 50ms)
@@ -488,7 +495,7 @@ func TestManager_Start_RealtimeRetry(t *testing.T) {
 	// 150ms: Attempt 3 -> Stream -> Error -> Wait 50ms
 	// 200ms: Context done.
 	// Expect at least 2 calls.
-	assert.GreaterOrEqual(t, len(mockStreamer.Calls), 2, "Should attempt retry at least once")
+	assert.GreaterOrEqual(t, int(mockStreamer.streamCalls.Load()), 2, "Should attempt retry at least once")
 }
 
 func TestManager_Start_IndexerService(t *testing.T) {
@@ -496,7 +503,10 @@ func TestManager_Start_IndexerService(t *testing.T) {
 	mgr := NewManager(cfg, Options{RunIndexer: true})
 
 	// Use a real indexer service instead of a stub since LocalService has internal types
-	mockIndexer := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mockIndexer, err := indexer.NewService(indexer_config.Config{}, nil, slog.Default())
+	if err != nil {
+		t.Fatalf("failed to create indexer service: %v", err)
+	}
 	mgr.indexerService = mockIndexer
 
 	bgCtx, cancel := context.WithCancel(context.Background())

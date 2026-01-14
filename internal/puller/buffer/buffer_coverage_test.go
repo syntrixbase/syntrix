@@ -257,11 +257,7 @@ func TestBuffer_Write_Atomicity(t *testing.T) {
 
 func TestBuffer_ScanFrom_Bounds(t *testing.T) {
 	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-bounds-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
+	dir := t.TempDir()
 
 	buf, err := New(Options{
 		Path:          dir,

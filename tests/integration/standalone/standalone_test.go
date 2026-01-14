@@ -169,6 +169,12 @@ templates:
 		},
 		Indexer: indexer.Config{
 			TemplatePath: templatesFile,
+			StorageMode:  indexer.StorageModePebble,
+			Store: indexer.StoreConfig{
+				Path:          t.TempDir() + "/indexer.db",
+				BatchSize:     100,
+				BatchInterval: 50 * time.Millisecond,
+			},
 		},
 	}
 
