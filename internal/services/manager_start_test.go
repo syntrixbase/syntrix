@@ -16,6 +16,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/indexer"
+	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
@@ -502,7 +503,7 @@ func TestManager_Start_IndexerService(t *testing.T) {
 	mgr := NewManager(cfg, Options{RunIndexer: true})
 
 	// Use a real indexer service instead of a stub since LocalService has internal types
-	mockIndexer, err := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	mockIndexer, err := indexer.NewService(indexer_config.Config{}, nil, slog.Default())
 	if err != nil {
 		t.Fatalf("failed to create indexer service: %v", err)
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/identity"
 	"github.com/syntrixbase/syntrix/internal/indexer"
+	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -1143,7 +1144,7 @@ func TestManager_initIndexerGRPCServer(t *testing.T) {
 	})
 
 	// Create a real indexer service - simpler than mocking the internal interface
-	svc, err := indexer.NewService(indexer.Config{}, nil, slog.Default())
+	svc, err := indexer.NewService(indexer_config.Config{}, nil, slog.Default())
 	if err != nil {
 		t.Fatalf("failed to create indexer service: %v", err)
 	}

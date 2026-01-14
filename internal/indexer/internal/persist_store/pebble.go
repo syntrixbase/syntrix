@@ -11,40 +11,9 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
-
-// Config configures the PebbleStore.
-type Config struct {
-	// Path is the directory to store the database.
-	Path string `yaml:"path"`
-
-	// BatchSize is the max number of operations per batch.
-	BatchSize int `yaml:"batch_size"`
-
-	// BatchInterval is the max time to wait before flushing a batch.
-	BatchInterval time.Duration `yaml:"batch_interval"`
-
-	// QueueSize is the buffer for pending writes.
-	QueueSize int `yaml:"queue_size"`
-
-	// BlockCacheSize is the size of the block cache in bytes.
-	BlockCacheSize int64 `yaml:"block_cache_size"`
-
-	// Logger for store operations.
-	Logger *slog.Logger `yaml:"-"`
-}
-
-// DefaultConfig returns the default configuration.
-func DefaultConfig() Config {
-	return Config{
-		Path:           "data/indexer/indexes.db",
-		BatchSize:      100,
-		BatchInterval:  100 * time.Millisecond,
-		QueueSize:      10000,
-		BlockCacheSize: 128 * 1024 * 1024, // 128MB
-	}
-}
 
 // PebbleStore implements Store using PebbleDB.
 type PebbleStore struct {
@@ -92,14 +61,9 @@ type pendingOp struct {
 }
 
 // NewPebbleStore creates a new PebbleStore.
-func NewPebbleStore(cfg Config) (*PebbleStore, error) {
+func NewPebbleStore(cfg config.StoreConfig, logger *slog.Logger) (*PebbleStore, error) {
 	if cfg.Path == "" {
 		return nil, fmt.Errorf("store path is required")
-	}
-
-	logger := cfg.Logger
-	if logger == nil {
-		logger = slog.Default()
 	}
 	logger = logger.With("component", "index-store")
 

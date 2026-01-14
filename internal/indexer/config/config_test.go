@@ -29,3 +29,24 @@ func TestConfig_Fields(t *testing.T) {
 	assert.Equal(t, "custom-indexer", cfg.ConsumerID)
 	assert.Equal(t, 10*time.Second, cfg.ReconcileInterval)
 }
+
+func TestDefaultStoreConfig(t *testing.T) {
+	t.Parallel()
+	cfg := DefaultStoreConfig()
+
+	if cfg.Path != "data/indexer/indexes.db" {
+		t.Errorf("Path = %q, want data/indexer/indexes.db", cfg.Path)
+	}
+	if cfg.BatchSize != 100 {
+		t.Errorf("BatchSize = %d, want 100", cfg.BatchSize)
+	}
+	if cfg.BatchInterval != 100*time.Millisecond {
+		t.Errorf("BatchInterval = %v, want 100ms", cfg.BatchInterval)
+	}
+	if cfg.QueueSize != 10000 {
+		t.Errorf("QueueSize = %d, want 10000", cfg.QueueSize)
+	}
+	if cfg.BlockCacheSize != 128*1024*1024 {
+		t.Errorf("BlockCacheSize = %d, want %d", cfg.BlockCacheSize, 128*1024*1024)
+	}
+}

@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
@@ -19,35 +20,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller"
 )
 
-// Config holds the Indexer service configuration.
-type Config struct {
-	// TemplatePath is the path to the index templates YAML file.
-	TemplatePath string
-
-	// PullerAddress is the gRPC address of the Puller service.
-	// If empty, uses in-process Puller (LocalService).
-	PullerAddress string
-
-	// ProgressPath is the path to store progress markers.
-	// Defaults to "data/indexer/progress".
-	ProgressPath string
-
-	// ConsumerID is the ID used when subscribing to Puller.
-	// Defaults to "indexer".
-	ConsumerID string
-
-	// StorageMode selects the storage backend: "memory" or "pebble".
-	// Defaults to "memory".
-	StorageMode string
-
-	// Store configures the PebbleDB storage backend.
-	// Only used when StorageMode is "pebble".
-	Store persist_store.Config
-}
-
 // service implements LocalService.
 type service struct {
-	cfg     Config
+	cfg     config.Config
 	logger  *slog.Logger
 	manager *manager.Manager
 	store   store.Store
@@ -69,7 +44,7 @@ type service struct {
 
 // NewService creates a new Indexer service.
 // pullerSvc can be nil if not subscribing to Puller (for testing).
-func NewService(cfg Config, pullerSvc puller.Service, logger *slog.Logger) (LocalService, error) {
+func NewService(cfg config.Config, pullerSvc puller.Service, logger *slog.Logger) (LocalService, error) {
 	if cfg.ConsumerID == "" {
 		cfg.ConsumerID = "indexer"
 	}
@@ -93,16 +68,12 @@ func NewService(cfg Config, pullerSvc puller.Service, logger *slog.Logger) (Loca
 }
 
 // newStore creates a store based on the storage mode configuration.
-func newStore(cfg Config, logger *slog.Logger) (store.Store, error) {
+func newStore(cfg config.Config, logger *slog.Logger) (store.Store, error) {
 	switch cfg.StorageMode {
-	case "memory", "":
+	case config.StorageModeMemory, "":
 		return mem_store.New(), nil
-	case "pebble":
-		storeCfg := cfg.Store
-		if storeCfg.Logger == nil {
-			storeCfg.Logger = logger
-		}
-		return persist_store.NewPebbleStore(storeCfg)
+	case config.StorageModePebble:
+		return persist_store.NewPebbleStore(cfg.Store, logger)
 	default:
 		return nil, fmt.Errorf("unknown storage mode: %s", cfg.StorageMode)
 	}

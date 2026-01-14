@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/indexer"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/persist_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/storage"
 )
@@ -111,7 +111,7 @@ func setupIndexerService(t *testing.T, mockPullerSvc *mockPuller) (indexer.Local
 	}
 	tmpFile.Close()
 
-	cfg := indexer.Config{
+	cfg := config.Config{
 		TemplatePath: tmpFile.Name(),
 		ConsumerID:   "test-indexer",
 	}
@@ -162,11 +162,11 @@ func setupIndexerServiceWithPebble(t *testing.T, mockPullerSvc *mockPuller, data
 	}
 	tmpFile.Close()
 
-	cfg := indexer.Config{
+	cfg := config.Config{
 		TemplatePath: tmpFile.Name(),
 		ConsumerID:   "test-indexer-pebble",
 		StorageMode:  "pebble",
-		Store: persist_store.Config{
+		Store: config.StoreConfig{
 			Path:          dataDir,
 			BatchSize:     10,
 			BatchInterval: 10 * time.Millisecond,

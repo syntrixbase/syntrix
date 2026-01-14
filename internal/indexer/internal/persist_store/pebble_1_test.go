@@ -2,6 +2,7 @@ package persist_store
 
 import (
 	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,6 +10,7 @@ import (
 
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
 
@@ -20,7 +22,7 @@ func setupTestStore(t *testing.T) (*PebbleStore, func()) {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      100,
 		BatchInterval:  50 * time.Millisecond, // 50ms for tests
@@ -28,7 +30,7 @@ func setupTestStore(t *testing.T) (*PebbleStore, func()) {
 		BlockCacheSize: 8 * 1024 * 1024, // 8MB for tests
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		os.RemoveAll(tmpDir)
 		t.Fatalf("failed to create store: %v", err)
@@ -558,7 +560,7 @@ func TestPebbleStoreCloseReopen(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	dbPath := filepath.Join(tmpDir, "test.db")
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           dbPath,
 		BatchSize:      100,
 		BatchInterval:  100,
@@ -571,7 +573,7 @@ func TestPebbleStoreCloseReopen(t *testing.T) {
 	tmplID := "created_at"
 
 	// First open: insert data with progress
-	ps1, err := NewPebbleStore(cfg)
+	ps1, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -588,7 +590,7 @@ func TestPebbleStoreCloseReopen(t *testing.T) {
 	}
 
 	// Second open: verify data persisted
-	ps2, err := NewPebbleStore(cfg)
+	ps2, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("failed to reopen store: %v", err)
 	}
@@ -632,34 +634,13 @@ func TestPebbleStoreInterfaceCompliance(t *testing.T) {
 	var _ store.Store = ps
 }
 
-func TestDefaultConfig(t *testing.T) {
-	t.Parallel()
-	cfg := DefaultConfig()
-
-	if cfg.Path != "data/indexer/indexes.db" {
-		t.Errorf("Path = %q, want data/indexer/indexes.db", cfg.Path)
-	}
-	if cfg.BatchSize != 100 {
-		t.Errorf("BatchSize = %d, want 100", cfg.BatchSize)
-	}
-	if cfg.BatchInterval != 100*time.Millisecond {
-		t.Errorf("BatchInterval = %v, want 100ms", cfg.BatchInterval)
-	}
-	if cfg.QueueSize != 10000 {
-		t.Errorf("QueueSize = %d, want 10000", cfg.QueueSize)
-	}
-	if cfg.BlockCacheSize != 128*1024*1024 {
-		t.Errorf("BlockCacheSize = %d, want %d", cfg.BlockCacheSize, 128*1024*1024)
-	}
-}
-
 func TestNewPebbleStoreEmptyPath(t *testing.T) {
 	t.Parallel()
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path: "",
 	}
 
-	_, err := NewPebbleStore(cfg)
+	_, err := NewPebbleStore(cfg, slog.Default())
 	if err == nil {
 		t.Error("NewPebbleStore should fail with empty path")
 	}
@@ -674,14 +655,14 @@ func TestNewPebbleStoreDefaultBatchParams(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create with zero batch params - should use defaults
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      0, // Should default to 100
 		BatchInterval:  0, // Should default to 100ms
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1083,14 +1064,14 @@ func TestPebbleStoreAsyncBatchFlush(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create store with small batch size
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      5, // Small batch size for testing
 		BatchInterval:  50 * time.Millisecond,
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1490,14 +1471,14 @@ func TestPebbleStoreGetFromFlushing(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create store with long batch interval
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      1000,             // Large batch size
 		BatchInterval:  10 * time.Second, // Long interval
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1569,14 +1550,14 @@ func TestPebbleStoreGetFromFlushingDelete(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      1000,             // Large batch size to prevent auto-flush
 		BatchInterval:  10 * time.Second, // Long interval
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1605,14 +1586,14 @@ func TestPebbleStoreSearchWithPendingUpdate(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      1000,             // Large batch size to prevent auto-flush
 		BatchInterval:  10 * time.Second, // Long interval
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1650,14 +1631,14 @@ func TestPebbleStoreSearchPendingUpdateOutOfBounds(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      1000,
 		BatchInterval:  10 * time.Second,
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}
@@ -1740,14 +1721,14 @@ func TestPebbleStoreSearchWithPendingDelete(t *testing.T) {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "test.db"),
 		BatchSize:      1000,
 		BatchInterval:  10 * time.Second,
 		BlockCacheSize: 8 * 1024 * 1024,
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		t.Fatalf("NewPebbleStore failed: %v", err)
 	}

@@ -2,6 +2,7 @@ package persist_store
 
 import (
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
 )
 
@@ -21,7 +23,7 @@ func setupBenchStore(b *testing.B, batchSize int, batchInterval time.Duration) (
 		b.Fatalf("failed to create temp dir: %v", err)
 	}
 
-	cfg := Config{
+	cfg := config.StoreConfig{
 		Path:           filepath.Join(tmpDir, "bench.db"),
 		BatchSize:      batchSize,
 		BatchInterval:  batchInterval,
@@ -29,7 +31,7 @@ func setupBenchStore(b *testing.B, batchSize int, batchInterval time.Duration) (
 		BlockCacheSize: 64 * 1024 * 1024, // 64MB for benchmarks
 	}
 
-	ps, err := NewPebbleStore(cfg)
+	ps, err := NewPebbleStore(cfg, slog.Default())
 	if err != nil {
 		os.RemoveAll(tmpDir)
 		b.Fatalf("failed to create store: %v", err)

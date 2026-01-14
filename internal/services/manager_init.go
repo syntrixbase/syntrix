@@ -441,20 +441,13 @@ func (m *Manager) initPullerGRPCServer() {
 func (m *Manager) initIndexerService(ctx context.Context) error {
 	slog.Info("Initializing Indexer Service...")
 
-	// Create Indexer config from app config
-	cfg := indexer.Config{
-		TemplatePath: m.cfg.Indexer.TemplatePath,
-		ProgressPath: m.cfg.Indexer.ProgressPath,
-		ConsumerID:   m.cfg.Indexer.ConsumerID,
-	}
-
 	// Use local Puller service if available
 	var pullerSvc puller.Service
 	if m.pullerService != nil {
 		pullerSvc = m.pullerService
 	}
 
-	svc, err := indexer.NewService(cfg, pullerSvc, slog.Default())
+	svc, err := indexer.NewService(m.cfg.Indexer, pullerSvc, slog.Default())
 	if err != nil {
 		return fmt.Errorf("failed to create indexer service: %w", err)
 	}

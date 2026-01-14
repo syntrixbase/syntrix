@@ -3,6 +3,13 @@ package config
 
 import "time"
 
+type StorageMode string
+
+const (
+	StorageModeMemory StorageMode = "memory"
+	StorageModePebble StorageMode = "pebble"
+)
+
 // Config holds the Indexer service configuration.
 type Config struct {
 	// TemplatePath is the path to the index templates YAML file.
@@ -22,7 +29,7 @@ type Config struct {
 
 	// StorageMode selects the storage backend: "memory" or "pebble".
 	// Defaults to "memory".
-	StorageMode string `yaml:"storage_mode"`
+	StorageMode StorageMode `yaml:"storage_mode"`
 
 	// Store configures the PebbleDB storage backend.
 	// Only used when StorageMode is "pebble".
@@ -59,7 +66,7 @@ func DefaultConfig() Config {
 		ProgressPath:      "data/indexer/progress",
 		ConsumerID:        "indexer",
 		ReconcileInterval: 5 * time.Second,
-		StorageMode:       "memory",
+		StorageMode:       StorageModeMemory,
 		Store:             DefaultStoreConfig(),
 	}
 }
@@ -71,6 +78,6 @@ func DefaultStoreConfig() StoreConfig {
 		BatchSize:      100,
 		BatchInterval:  100 * time.Millisecond,
 		QueueSize:      10000,
-		BlockCacheSize: 64 * 1024 * 1024, // 64MB
+		BlockCacheSize: 128 * 1024 * 1024, // 128MB
 	}
 }
