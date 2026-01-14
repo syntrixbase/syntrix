@@ -20,17 +20,19 @@ threshold_package=85.0
 threshold_print=85.0
 threshold_total=90.0
 
-# Use a temp file to capture output for sorting
+# Use temp files to capture output
 TMP_OUTPUT=$(mktemp)
-trap 'rm -f "$TMP_OUTPUT"' EXIT
+TMP_JSON=$(mktemp)
+trap 'rm -f "$TMP_OUTPUT" "$TMP_JSON"' EXIT
 
-# Run tests, allow failure to capture output, but record exit code
+# Run tests with -json for both coverage and test counting in one pass
 set +e
-go test ${PKGS} -covermode=atomic -coverprofile="$COVERPROFILE" > "$TMP_OUTPUT" 2>&1
-EXIT_CODE=$?
+go test ${PKGS} -json -covermode=atomic -coverprofile="$COVERPROFILE" 2>&1 | tee "$TMP_JSON" | \
+    jq -r 'select(.Action == "output") | .Output // empty' | grep -E '^(ok|FAIL|\?)' > "$TMP_OUTPUT"
+EXIT_CODE=${PIPESTATUS[0]}
 set -e
 
-sed 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT" > "$TMP_OUTPUT.tmp" && mv "$TMP_OUTPUT.tmp" "$TMP_OUTPUT"
+sed -i 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT"
 
 echo
 echo "Package coverage summary:"
@@ -120,8 +122,10 @@ echo "Functions with 95%-100% coverage: $COUNT_95_100"
 echo "Functions with 85%-95% coverage: $COUNT_85_95"
 echo "Functions with <85% coverage: $COUNT_LE_85"
 
-TOTAL_TESTS=$(go test ${PKGS} -list '^Test' | grep -c '^Test')
-echo "Total tests: $TOTAL_TESTS"
+# Count tests from the JSON output (already captured, no need to re-run)
+TOP_LEVEL_TESTS=$(jq -s '[.[] | select(.Action == "run") | select(.Test != null) | select(.Test | contains("/") | not)] | length' "$TMP_JSON" 2>/dev/null || echo 0)
+TOTAL_TESTS=$(jq -s '[.[] | select(.Action == "pass") | select(.Test != null)] | length' "$TMP_JSON" 2>/dev/null || echo 0)
+echo "Total tests: $TOTAL_TESTS (including subtests, $TOP_LEVEL_TESTS top-level)"
 
 # Generate HTML report or print function details based on mode
 go tool cover -html=$COVERPROFILE -o test_coverage.html
