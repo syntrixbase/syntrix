@@ -9,16 +9,26 @@ if (-not $gitDir) {
 }
 
 $hooksDir = Join-Path $gitDir 'hooks'
-$hookPath = Join-Path $hooksDir 'pre-commit'
+New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
 
-$hookScript = @(
+# Install pre-commit hook
+$preCommitPath = Join-Path $hooksDir 'pre-commit'
+$preCommitScript = @(
     '#!/bin/sh',
     'REPO_ROOT="$(git rev-parse --show-toplevel)"',
     'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/gofmt-pre-commit.sh"',
     'exec "$HOOK_SCRIPT"'
 ) -join "`n"
+[System.IO.File]::WriteAllText($preCommitPath, $preCommitScript, [System.Text.Encoding]::ASCII)
+Write-Output "Pre-commit hook installed successfully at $preCommitPath"
 
-New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
-[System.IO.File]::WriteAllText($hookPath, $hookScript, [System.Text.Encoding]::ASCII)
-
-Write-Output "Pre-commit hook installed successfully at $hookPath"
+# Install commit-msg hook
+$commitMsgPath = Join-Path $hooksDir 'commit-msg'
+$commitMsgScript = @(
+    '#!/bin/sh',
+    'REPO_ROOT="$(git rev-parse --show-toplevel)"',
+    'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/commit-msg.sh"',
+    'exec "$HOOK_SCRIPT" "$1"'
+) -join "`n"
+[System.IO.File]::WriteAllText($commitMsgPath, $commitMsgScript, [System.Text.Encoding]::ASCII)
+Write-Output "Commit-msg hook installed successfully at $commitMsgPath"
