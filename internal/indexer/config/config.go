@@ -12,6 +12,11 @@ const (
 
 // Config holds the Indexer service configuration.
 type Config struct {
+	// PullerAddr is the address of the Puller gRPC service.
+	// Used in distributed mode to connect to Puller.
+	// Defaults to "localhost:9000".
+	PullerAddr string `yaml:"puller_addr"`
+
 	// TemplatePath is the path to the index templates YAML file.
 	TemplatePath string `yaml:"template_path"`
 
@@ -62,6 +67,7 @@ type StoreConfig struct {
 // DefaultConfig returns the default Indexer configuration.
 func DefaultConfig() Config {
 	return Config{
+		PullerAddr:        "localhost:9000",
 		TemplatePath:      "config/index_templates.yaml",
 		ProgressPath:      "data/indexer/progress",
 		ConsumerID:        "indexer",

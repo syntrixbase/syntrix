@@ -69,7 +69,7 @@ func (m *mockBidiStream) RecvMsg(interface{}) error    { return nil }
 
 func TestGRPCStream_ContextCanceled(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -91,7 +91,7 @@ func TestGRPCStream_ContextCanceled(t *testing.T) {
 
 func TestGRPCStream_RecvError(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -107,7 +107,7 @@ func TestGRPCStream_RecvError(t *testing.T) {
 
 func TestGRPCStream_SubscribeMessage(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -145,7 +145,7 @@ func TestGRPCStream_SubscribeMessage(t *testing.T) {
 
 func TestGRPCStream_HeartbeatMessage(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -187,7 +187,7 @@ func TestGRPCStream_HeartbeatMessage(t *testing.T) {
 
 func TestGRPCStream_SendError(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -210,7 +210,7 @@ func TestGRPCStream_SendError(t *testing.T) {
 
 func TestGRPCStream_ServiceStopped(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -232,7 +232,7 @@ func TestGRPCStream_ServiceStopped(t *testing.T) {
 
 func TestGRPCStream_UnsubscribeMessage(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -266,7 +266,7 @@ func TestGRPCStream_UnsubscribeMessage(t *testing.T) {
 func TestGRPCStream_SubscribeWithError(t *testing.T) {
 	t.Parallel()
 	// Create a service with a mock manager that returns errors
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -315,7 +315,7 @@ func TestGRPCStream_SubscribeWithError(t *testing.T) {
 func TestGRPCStream_MultipleHeartbeats(t *testing.T) {
 	t.Parallel()
 	// Test that multiple heartbeat messages are handled correctly
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -353,7 +353,7 @@ func TestGRPCStream_MultipleHeartbeats(t *testing.T) {
 // TestGRPCAdapter_OutgoingEvents tests the outgoing event delivery path.
 func TestGRPCAdapter_OutgoingEvents(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -382,7 +382,7 @@ func TestGRPCAdapter_OutgoingEvents(t *testing.T) {
 // TestGRPCAdapter_OutgoingDelivery tests the delivery sending through gRPC.
 func TestGRPCAdapter_OutgoingDelivery(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -452,7 +452,7 @@ func TestGRPCAdapter_OutgoingDelivery(t *testing.T) {
 // TestGRPCAdapter_OutgoingSendError tests error handling when sending fails.
 func TestGRPCAdapter_OutgoingSendError(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -516,7 +516,7 @@ func TestGRPCAdapter_OutgoingSendError(t *testing.T) {
 // TestGRPCAdapter_SubscribeAutoGenerateID tests that subscription ID is auto-generated if empty.
 func TestGRPCAdapter_SubscribeAutoGenerateID(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -561,7 +561,7 @@ func TestGRPCAdapter_SubscribeAutoGenerateID(t *testing.T) {
 // TestGRPCAdapter_OutgoingChannelClosed tests behavior when outgoing channel is closed.
 func TestGRPCAdapter_OutgoingChannelClosed(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -586,7 +586,7 @@ func TestGRPCAdapter_OutgoingChannelClosed(t *testing.T) {
 // TestGRPCAdapter_Subscribe_ManagerError tests handleProtoMessage when manager.Subscribe returns error.
 func TestGRPCAdapter_Subscribe_ManagerError(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -650,7 +650,7 @@ func TestGRPCAdapter_Subscribe_ManagerError(t *testing.T) {
 
 func TestNewGRPCServer(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	grpcServer := NewGRPCServer(s)
@@ -684,7 +684,7 @@ func (m *mockStreamerServer) Stop(ctx context.Context) error {
 
 func TestGRPCServerAdapter_Stream(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	grpcServer := NewGRPCServer(s)

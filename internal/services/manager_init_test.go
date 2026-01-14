@@ -90,7 +90,7 @@ func TestManager_InitAuthService_GenerateKey(t *testing.T) {
 	}
 	defer func() {
 		storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-			return storage.NewFactory(ctx, cfg)
+			return storage.NewFactory(ctx, cfg.Storage)
 		}
 	}()
 
@@ -529,6 +529,7 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
 		RunAPI: true,
@@ -559,6 +560,7 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
 		RunAPI: true,
@@ -570,7 +572,7 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	// The Unified Server (server.Default()) handles all HTTP routing.
 }
 
-func TestManager_createQueryService(t *testing.T) {
+func TestManager_initQueryService(t *testing.T) {
 	fakeDocStore := &fakeDocumentStore{}
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
@@ -584,12 +586,12 @@ func TestManager_createQueryService(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunQuery: true})
 
-	service, err := mgr.createQueryService(context.Background())
+	service, err := mgr.initQueryService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
 }
 
-func TestManager_createQueryService_StandaloneMode(t *testing.T) {
+func TestManager_initQueryService_StandaloneMode(t *testing.T) {
 	fakeDocStore := &fakeDocumentStore{}
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
@@ -605,12 +607,12 @@ func TestManager_createQueryService_StandaloneMode(t *testing.T) {
 	// Set indexerService to a non-nil value
 	mgr.indexerService = &stubIndexerService{}
 
-	service, err := mgr.createQueryService(context.Background())
+	service, err := mgr.initQueryService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
 }
 
-func TestManager_createQueryService_StandaloneMissingIndexer(t *testing.T) {
+func TestManager_initQueryService_StandaloneMissingIndexer(t *testing.T) {
 	fakeDocStore := &fakeDocumentStore{}
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
@@ -625,12 +627,12 @@ func TestManager_createQueryService_StandaloneMissingIndexer(t *testing.T) {
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunQuery: true})
 	// indexerService is nil
 
-	_, err := mgr.createQueryService(context.Background())
+	_, err := mgr.initQueryService(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
 }
 
-func TestManager_createQueryService_DistributedMissingURL(t *testing.T) {
+func TestManager_initQueryService_DistributedMissingURL(t *testing.T) {
 	fakeDocStore := &fakeDocumentStore{}
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
@@ -642,15 +644,15 @@ func TestManager_createQueryService_DistributedMissingURL(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	cfg.Gateway.IndexerServiceURL = "" // Clear the URL
+	cfg.Query.IndexerAddr = "" // Clear the URL
 	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunQuery: true})
 
-	_, err := mgr.createQueryService(context.Background())
+	_, err := mgr.initQueryService(context.Background())
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "gateway.indexer_service_url required in distributed mode")
+	assert.Contains(t, err.Error(), "query.indexer_addr required in distributed mode")
 }
 
-func TestManager_createQueryService_StorageError(t *testing.T) {
+func TestManager_initQueryService_StorageError(t *testing.T) {
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
 
@@ -661,7 +663,7 @@ func TestManager_createQueryService_StorageError(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunQuery: true})
 
-	_, err := mgr.createQueryService(context.Background())
+	_, err := mgr.initQueryService(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "storage connection failed")
 }
@@ -697,6 +699,7 @@ func TestManager_initStandalone_APIServerError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = "/nonexistent/rules/file.yaml"
+	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
 		Mode:   ModeStandalone,
 		RunAPI: true,
@@ -815,7 +818,7 @@ func (m *mockPullerService) Replay(ctx context.Context, after map[string]string,
 	return nil, nil
 }
 
-func TestManager_createStreamerService(t *testing.T) {
+func TestManager_initStreamerService_Standalone(t *testing.T) {
 	done := make(chan bool)
 	go func() {
 		cfg := config.LoadConfig()
@@ -824,28 +827,31 @@ func TestManager_createStreamerService(t *testing.T) {
 		mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 		// Case 1: No Puller Service (already nil)
-		svc1, err1 := mgr.createStreamerService()
+		err1 := mgr.initStreamerService()
 		assert.NoError(t, err1)
-		assert.NotNil(t, svc1)
+		assert.NotNil(t, mgr.streamerService)
+
+		// Reset for Case 2
+		mgr.streamerService = nil
 
 		// Case 2: With Puller Service
 		mgr.pullerService = &mockPullerService{}
-		svc2, err2 := mgr.createStreamerService()
+		err2 := mgr.initStreamerService()
 		assert.NoError(t, err2)
-		assert.NotNil(t, svc2)
+		assert.NotNil(t, mgr.streamerService)
 		done <- true
 	}()
 	select {
 	case <-done:
 	case <-time.After(500 * time.Millisecond):
-		t.Fatal("TestManager_createStreamerService timed out")
+		t.Fatal("TestManager_initStreamerService_Standalone timed out")
 	}
 }
 
-func TestManager_initStreamerService(t *testing.T) {
+func TestManager_initStreamerService_Distributed(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.GRPCPort = 0
-	cfg.Gateway.PullerServiceURL = "localhost:50051"
+	cfg.Streamer.Server.PullerAddr = "localhost:50051"
 
 	// Initialize the unified server first
 	server.InitDefault(cfg.Server, nil)
@@ -860,7 +866,7 @@ func TestManager_initStreamerService(t *testing.T) {
 func TestManager_initStreamerService_NoPuller(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.GRPCPort = 0
-	cfg.Gateway.PullerServiceURL = "" // No Puller URL configured
+	cfg.Streamer.Server.PullerAddr = "" // No Puller URL configured
 
 	// Initialize the unified server first
 	server.InitDefault(cfg.Server, nil)
@@ -907,7 +913,7 @@ func TestManager_initGateway(t *testing.T) {
 func TestManager_initDistributed_RunStreamer(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.GRPCPort = 0
-	cfg.Gateway.PullerServiceURL = "localhost:50051"
+	cfg.Streamer.Server.PullerAddr = "localhost:50051"
 
 	// Initialize the unified server first
 	server.InitDefault(cfg.Server, nil)
@@ -932,7 +938,7 @@ func TestManager_initDistributed_RunQueryAndStreamer(t *testing.T) {
 
 	cfg := config.LoadConfig()
 	cfg.Server.GRPCPort = 0
-	cfg.Gateway.PullerServiceURL = "localhost:50051"
+	cfg.Streamer.Server.PullerAddr = "localhost:50051"
 
 	// Initialize the unified server first
 	server.InitDefault(cfg.Server, nil)
@@ -966,8 +972,8 @@ func TestManager_initDistributed_AllServices(t *testing.T) {
 	cfg.Server.GRPCPort = 0
 	cfg.Server.HTTPPort = 0
 	cfg.Gateway.QueryServiceURL = "localhost:50051"
-	cfg.Gateway.PullerServiceURL = "localhost:50051"
 	cfg.Gateway.StreamerServiceURL = "localhost:50051"
+	cfg.Streamer.Server.PullerAddr = "localhost:50051"
 	cfg.Identity.AuthZ.RulesFile = ""
 
 	// Initialize the unified server first
@@ -1004,6 +1010,7 @@ func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	// Configure NATS to fail connection
 	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
 

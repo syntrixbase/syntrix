@@ -31,7 +31,7 @@ var triggerFactoryFactory = func(store storage.DocumentStore, nats *nats.Conn, a
 	return triggerengine.NewFactory(store, nats, auth, append(defaultOpts, opts...)...)
 }
 var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-	return storage.NewFactory(ctx, cfg)
+	return storage.NewFactory(ctx, cfg.Storage)
 }
 
 func (m *Manager) Init(ctx context.Context) error {
@@ -66,16 +66,13 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		return err
 	}
 
-	// Create Streamer service for local access
-	streamerSvc, err := m.createStreamerService()
-	if err != nil {
+	// Initialize Streamer service (local only, no gRPC)
+	if err := m.initStreamerService(); err != nil {
 		return err
 	}
-	m.streamerService = streamerSvc
-	slog.Info("Initialized Streamer Service (local)")
 
-	// Create query service
-	queryService, err := m.createQueryService(ctx)
+	// Initialize Query service and API server
+	queryService, err := m.initQueryService(ctx)
 	if err != nil {
 		return err
 	}
@@ -117,20 +114,21 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		m.initIndexerGRPCServer()
 	}
 
-	// Initialize local Query service and register gRPC server
+	// Initialize Query service and register gRPC server
 	if m.opts.RunQuery {
-		queryService, err := m.createQueryService(ctx)
+		queryService, err := m.initQueryService(ctx)
 		if err != nil {
 			return err
 		}
 		m.initQueryGRPCServer(queryService)
 	}
 
-	// Initialize local Streamer service and register gRPC server
+	// Initialize Streamer service and register gRPC server
 	if m.opts.RunStreamer {
 		if err := m.initStreamerService(); err != nil {
 			return err
 		}
+		m.initStreamerGRPCServer()
 	}
 
 	// Initialize API Gateway - uses gRPC clients to connect to remote services
@@ -189,9 +187,9 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 	return nil
 }
 
-// createQueryService creates a query engine service.
-// This separates service creation from HTTP server setup for standalone mode support.
-func (m *Manager) createQueryService(ctx context.Context) (query.Service, error) {
+// initQueryService creates and returns a query engine service.
+// In standalone mode, uses local Indexer; in distributed mode, uses gRPC client.
+func (m *Manager) initQueryService(ctx context.Context) (query.Service, error) {
 	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
 		return nil, err
@@ -206,14 +204,14 @@ func (m *Manager) createQueryService(ctx context.Context) (query.Service, error)
 	}
 
 	// Distributed (including --all): must use gRPC client
-	if m.cfg.Gateway.IndexerServiceURL == "" {
-		return nil, fmt.Errorf("gateway.indexer_service_url required in distributed mode")
+	if m.cfg.Query.IndexerAddr == "" {
+		return nil, fmt.Errorf("query.indexer_addr required in distributed mode")
 	}
-	client, err := indexer.NewClient(m.cfg.Gateway.IndexerServiceURL, slog.Default())
+	client, err := indexer.NewClient(m.cfg.Query.IndexerAddr, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to indexer: %w", err)
 	}
-	slog.Info("Query Engine using remote Indexer service", "url", m.cfg.Gateway.IndexerServiceURL)
+	slog.Info("Query Engine using remote Indexer service", "url", m.cfg.Query.IndexerAddr)
 
 	return query.NewService(sf.Document(), client), nil
 }
@@ -259,22 +257,32 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 	return nil
 }
 
-// initStreamerService creates a local Streamer service and registers it with the gRPC server.
-// This is called when RunStreamer=true in distributed mode.
+// initStreamerService creates the Streamer service and sets m.streamerService.
+// In standalone mode, uses local Puller; in distributed mode, uses gRPC client.
 func (m *Manager) initStreamerService() error {
-	cfg := streamer.DefaultServiceConfig()
+	cfg := m.cfg.Streamer.Server
 	var opts []streamer.ServiceConfigOption
 
-	// In distributed mode, Streamer always connects to Puller via gRPC
-	if m.cfg.Gateway.PullerServiceURL != "" {
-		pullerClient, err := puller.NewClient(m.cfg.Gateway.PullerServiceURL, nil)
-		if err != nil {
-			return fmt.Errorf("failed to create Puller gRPC client: %w", err)
+	if m.opts.Mode == ModeStandalone {
+		// Standalone mode: use local Puller service
+		if m.pullerService != nil {
+			opts = append(opts, streamer.WithPullerClient(m.pullerService))
+			slog.Info("Streamer using local Puller service")
+		} else {
+			slog.Warn("Streamer running without Puller - realtime events will not be available")
 		}
-		opts = append(opts, streamer.WithPullerClient(pullerClient))
-		slog.Info("Streamer using remote Puller service", "url", m.cfg.Gateway.PullerServiceURL)
 	} else {
-		slog.Warn("Streamer running without Puller - realtime events will not be available")
+		// Distributed mode: connect to Puller via gRPC
+		if cfg.PullerAddr != "" {
+			pullerClient, err := puller.NewClient(cfg.PullerAddr, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create Puller gRPC client: %w", err)
+			}
+			opts = append(opts, streamer.WithPullerClient(pullerClient))
+			slog.Info("Streamer using remote Puller service", "url", cfg.PullerAddr)
+		} else {
+			slog.Warn("Streamer running without Puller - realtime events will not be available")
+		}
 	}
 
 	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
@@ -282,13 +290,16 @@ func (m *Manager) initStreamerService() error {
 		return fmt.Errorf("failed to create streamer service: %w", err)
 	}
 	m.streamerService = svc
-
-	// Register with unified gRPC server
-	grpcServer := streamer.NewGRPCServer(svc)
-	server.Default().RegisterGRPCService(&streamerv1.StreamerService_ServiceDesc, grpcServer)
-	slog.Info("Registered Streamer Service (gRPC)")
+	slog.Info("Initialized Streamer Service")
 
 	return nil
+}
+
+// initStreamerGRPCServer registers the Streamer service with the unified gRPC server.
+func (m *Manager) initStreamerGRPCServer() {
+	grpcServer := streamer.NewGRPCServer(m.streamerService)
+	server.Default().RegisterGRPCService(&streamerv1.StreamerService_ServiceDesc, grpcServer)
+	slog.Info("Registered Streamer Service (gRPC)")
 }
 
 // initGateway initializes the API Gateway with gRPC clients for remote services.
@@ -301,15 +312,17 @@ func (m *Manager) initGateway() error {
 	}
 	slog.Info("Gateway using remote Query service", "url", m.cfg.Gateway.QueryServiceURL)
 
-	// Create Streamer gRPC client
-	streamerCfg := streamer.DefaultClientConfig()
-	streamerCfg.StreamerAddr = m.cfg.Gateway.StreamerServiceURL
+	// Create Streamer gRPC client using streamer.client config
+	streamerCfg := m.cfg.Streamer.Client
+	if m.cfg.Gateway.StreamerServiceURL != "" {
+		streamerCfg.StreamerAddr = m.cfg.Gateway.StreamerServiceURL
+	}
 	streamerClient, err := streamer.NewClient(streamerCfg, slog.Default())
 	if err != nil {
 		return fmt.Errorf("failed to create Streamer gRPC client: %w", err)
 	}
 	m.streamerClient = streamerClient
-	slog.Info("Gateway using remote Streamer service", "url", m.cfg.Gateway.StreamerServiceURL)
+	slog.Info("Gateway using remote Streamer service", "url", streamerCfg.StreamerAddr)
 
 	// Initialize API server with gRPC clients
 	if err := m.initAPIServer(queryClient); err != nil {
@@ -317,29 +330,6 @@ func (m *Manager) initGateway() error {
 	}
 
 	return nil
-}
-
-// createStreamerService creates a Streamer service for standalone mode.
-// In standalone mode, it uses the local Puller service directly.
-func (m *Manager) createStreamerService() (streamer.StreamerServer, error) {
-	cfg := streamer.DefaultServiceConfig()
-
-	var opts []streamer.ServiceConfigOption
-
-	// Use local Puller service in standalone mode
-	if m.pullerService != nil {
-		opts = append(opts, streamer.WithPullerClient(m.pullerService))
-		slog.Info("Streamer using local Puller service")
-	} else {
-		slog.Warn("Streamer running without Puller - realtime events will not be available")
-	}
-
-	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create streamer service: %w", err)
-	}
-
-	return svc, nil
 }
 
 // initTriggerServices initializes trigger evaluator and worker services.
@@ -438,13 +428,33 @@ func (m *Manager) initPullerGRPCServer() {
 }
 
 // initIndexerService creates the Indexer service.
+// In standalone mode, it uses local Puller service if available.
+// In distributed mode, it must connect to Puller via gRPC.
 func (m *Manager) initIndexerService(ctx context.Context) error {
 	slog.Info("Initializing Indexer Service...")
 
-	// Use local Puller service if available
 	var pullerSvc puller.Service
-	if m.pullerService != nil {
-		pullerSvc = m.pullerService
+
+	if m.opts.Mode == ModeStandalone {
+		// Standalone mode: use local Puller service if available
+		if m.pullerService != nil {
+			pullerSvc = m.pullerService
+			slog.Info("Indexer using local Puller service")
+		} else {
+			slog.Warn("Indexer running without Puller - index updates will not be available")
+		}
+	} else {
+		// Distributed mode: must connect via gRPC
+		if m.cfg.Indexer.PullerAddr != "" {
+			client, err := puller.NewClient(m.cfg.Indexer.PullerAddr, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create Puller gRPC client for Indexer: %w", err)
+			}
+			pullerSvc = client
+			slog.Info("Indexer using remote Puller service", "url", m.cfg.Indexer.PullerAddr)
+		} else {
+			slog.Warn("Indexer running without Puller - index updates will not be available")
+		}
 	}
 
 	svc, err := indexer.NewService(m.cfg.Indexer, pullerSvc, slog.Default())

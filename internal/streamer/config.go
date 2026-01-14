@@ -1,14 +1,14 @@
 package streamer
 
 type Config struct {
-	// Service configuration for the Streamer service.
-	Service ServiceConfig `yaml:"service"`
-	Client  ClientConfig  `yaml:"client"`
+	// Server configuration for the Streamer service.
+	Server ServerConfig `yaml:"server"`
+	Client ClientConfig `yaml:"client"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Service: DefaultServiceConfig(),
-		Client:  DefaultClientConfig(),
+		Server: DefaultServiceConfig(),
+		Client: DefaultClientConfig(),
 	}
 }

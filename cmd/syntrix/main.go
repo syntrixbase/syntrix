@@ -19,7 +19,9 @@ func main() {
 	runQuery := flag.Bool("query", false, "Run Query Service")
 	runTriggerEvaluator := flag.Bool("trigger-evaluator", false, "Run Trigger Evaluator Service")
 	runTriggerWorker := flag.Bool("trigger-worker", false, "Run Trigger Worker Service")
+	runIndexer := flag.Bool("indexer", false, "Run Indexer Service")
 	runPuller := flag.Bool("puller", false, "Run Change Stream Puller Service")
+	runStreamer := flag.Bool("streamer", false, "Run Streamer Service")
 	runAll := flag.Bool("all", false, "Run All Services")
 	standalone := flag.Bool("standalone", false, "Run in standalone mode (single process, no inter-service HTTP)")
 	flag.Parse()
@@ -47,6 +49,8 @@ func main() {
 		*runTriggerEvaluator = true
 		*runTriggerWorker = true
 		*runPuller = true
+		*runIndexer = true
+		*runStreamer = true
 	}
 
 	log.Println("Starting Syntrix Services...")
@@ -65,6 +69,9 @@ func main() {
 	if *runPuller {
 		log.Println("- Change Stream Puller Service: Enabled")
 	}
+	if *runIndexer {
+		log.Println("- Indexer Service: Enabled")
+	}
 
 	// 2. Initialize Service Manager
 	opts := services.Options{
@@ -73,6 +80,8 @@ func main() {
 		RunTriggerEvaluator: *runTriggerEvaluator,
 		RunTriggerWorker:    *runTriggerWorker,
 		RunPuller:           *runPuller,
+		RunIndexer:          *runIndexer,
+		RunStreamer:         *runStreamer,
 	}
 	runServer(cfg, opts)
 }
