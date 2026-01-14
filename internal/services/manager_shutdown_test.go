@@ -9,12 +9,12 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
-	"github.com/syntrixbase/syntrix/internal/storage"
-	"github.com/syntrixbase/syntrix/internal/storage/types"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 
 	"github.com/stretchr/testify/assert"

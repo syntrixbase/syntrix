@@ -8,8 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	storage "github.com/syntrixbase/syntrix/internal/core/storage/config"
 	services_config "github.com/syntrixbase/syntrix/internal/services/config"
-	storage "github.com/syntrixbase/syntrix/internal/storage/config"
 )
 
 func TestLoadConfig_Defaults(t *testing.T) {

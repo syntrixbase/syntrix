@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
-	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestIntegration_LargeDataset(t *testing.T) {

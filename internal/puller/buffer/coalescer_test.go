@@ -3,8 +3,8 @@ package buffer
 import (
 	"testing"
 
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestCoalescer_Add_FirstEvent(t *testing.T) {

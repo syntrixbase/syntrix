@@ -11,11 +11,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer/config"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/mem_store"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // mockPullerService is a mock implementation of puller.Service for testing.

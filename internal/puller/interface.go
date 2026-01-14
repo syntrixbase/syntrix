@@ -41,12 +41,12 @@ import (
 	"log/slog"
 
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
+	"github.com/syntrixbase/syntrix/internal/puller/client"
 	"github.com/syntrixbase/syntrix/internal/puller/config"
+	"github.com/syntrixbase/syntrix/internal/puller/core"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/puller/internal/client"
-	"github.com/syntrixbase/syntrix/internal/puller/internal/core"
-	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/internal/grpc"
-	"github.com/syntrixbase/syntrix/internal/puller/internal/health"
+	pullergrpc "github.com/syntrixbase/syntrix/internal/puller/grpc"
+	"github.com/syntrixbase/syntrix/internal/puller/health"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 

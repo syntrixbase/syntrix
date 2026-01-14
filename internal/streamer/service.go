@@ -14,8 +14,8 @@ import (
 	"github.com/syntrixbase/syntrix/internal/helper"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	celengine "github.com/syntrixbase/syntrix/internal/streamer/internal/cel"
-	"github.com/syntrixbase/syntrix/internal/streamer/internal/manager"
+	celengine "github.com/syntrixbase/syntrix/internal/streamer/cel"
+	"github.com/syntrixbase/syntrix/internal/streamer/manager"
 	"github.com/syntrixbase/syntrix/pkg/model"
 	"google.golang.org/grpc"
 )

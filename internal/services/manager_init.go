@@ -9,15 +9,15 @@ import (
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
-	"github.com/syntrixbase/syntrix/internal/api"
-	"github.com/syntrixbase/syntrix/internal/api/realtime"
 	"github.com/syntrixbase/syntrix/internal/config"
-	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/gateway"
+	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
-	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	triggerengine "github.com/syntrixbase/syntrix/internal/trigger/engine"
@@ -251,8 +251,8 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 		m.authService, m.cfg.Gateway.Realtime)
 
 	// Register API routes to the unified server
-	apiServer := api.NewServer(queryService, m.authService, authzEngine, m.rtServer)
-	apiServer.RegisterRoutes(server.Default().HTTPMux())
+	gateway := gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
+	gateway.RegisterRoutes(server.Default().HTTPMux())
 
 	return nil
 }

@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
+	"github.com/syntrixbase/syntrix/internal/indexer/encoding"
 	"github.com/syntrixbase/syntrix/internal/puller"
-	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 func TestIntegration_Pebble_BasicOperations(t *testing.T) {

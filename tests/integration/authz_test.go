@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/storage"
-	storage_config "github.com/syntrixbase/syntrix/internal/storage/config"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
+	storage_config "github.com/syntrixbase/syntrix/internal/core/storage/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

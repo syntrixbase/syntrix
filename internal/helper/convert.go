@@ -3,7 +3,7 @@ package helper
 import (
 	"strings"
 
-	storetypes "github.com/syntrixbase/syntrix/internal/storage/types"
+	storetypes "github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 

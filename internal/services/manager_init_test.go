@@ -11,13 +11,13 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/config"
-	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
-	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"

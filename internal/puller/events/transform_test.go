@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 )
 
 func TestTransform_Insert(t *testing.T) {

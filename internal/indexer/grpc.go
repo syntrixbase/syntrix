@@ -5,7 +5,7 @@ import (
 
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	"github.com/syntrixbase/syntrix/internal/indexer/client"
-	internalgrpc "github.com/syntrixbase/syntrix/internal/indexer/internal/grpc"
+	internalgrpc "github.com/syntrixbase/syntrix/internal/indexer/grpc"
 )
 
 // NewGRPCServer creates a gRPC server adapter for the Indexer.

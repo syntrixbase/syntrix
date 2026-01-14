@@ -21,8 +21,8 @@ package indexer
 import (
 	"context"
 
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/encoding"
+	"github.com/syntrixbase/syntrix/internal/indexer/manager"
 )
 
 // Service defines the interface for the Indexer service.

@@ -4,11 +4,11 @@ import (
 	"context"
 
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
-	"github.com/syntrixbase/syntrix/internal/query/internal/client"
-	"github.com/syntrixbase/syntrix/internal/query/internal/core"
-	"github.com/syntrixbase/syntrix/internal/query/internal/grpc"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/query/client"
+	"github.com/syntrixbase/syntrix/internal/query/core"
+	"github.com/syntrixbase/syntrix/internal/query/grpc"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 

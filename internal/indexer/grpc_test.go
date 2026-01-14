@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/mem_store"
 )
 
 // mockLocalService implements LocalService for testing.

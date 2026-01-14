@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/syntrixbase/syntrix/internal/config"
-	"github.com/syntrixbase/syntrix/internal/identity"
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/engine"
 

@@ -1,0 +1,490 @@
+package mongo
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"time"
+
+	"github.com/syntrixbase/syntrix/internal/core/storage/types"
+	"github.com/syntrixbase/syntrix/internal/helper"
+	"github.com/syntrixbase/syntrix/pkg/model"
+
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
+)
+
+type documentStore struct {
+	client              *mongo.Client
+	db                  *mongo.Database
+	dataCollection      string
+	sysCollection       string
+	softDeleteRetention time.Duration
+	openStream          func(context.Context, *mongo.Collection, mongo.Pipeline, *options.ChangeStreamOptions) (changeStream, error)
+}
+
+// NewDocumentStore initializes a new MongoDB document store
+func NewDocumentStore(client *mongo.Client, db *mongo.Database, dataColl string, sysColl string, softDeleteRetention time.Duration) types.DocumentStore {
+	return &documentStore{
+		client:              client,
+		db:                  db,
+		dataCollection:      dataColl,
+		sysCollection:       sysColl,
+		softDeleteRetention: softDeleteRetention,
+	}
+}
+
+type changeStream interface {
+	Next(context.Context) bool
+	Decode(any) error
+	Err() error
+	Close(context.Context) error
+}
+
+func (m *documentStore) getCollection(nameOrPath string) *mongo.Collection {
+	if nameOrPath == "sys" || strings.HasPrefix(nameOrPath, "sys/") {
+		return m.db.Collection(m.sysCollection)
+	}
+	return m.db.Collection(m.dataCollection)
+}
+
+func (m *documentStore) Get(ctx context.Context, database string, fullpath string) (*types.StoredDoc, error) {
+	collection := m.getCollection(fullpath)
+	id := types.CalculateDatabaseID(database, fullpath)
+
+	var doc types.StoredDoc
+	err := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database, "deleted": bson.M{"$ne": true}}).Decode(&doc)
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, model.ErrNotFound
+		}
+		return nil, err
+	}
+
+	return &doc, nil
+}
+
+func (m *documentStore) GetMany(ctx context.Context, database string, paths []string) ([]*types.StoredDoc, error) {
+	if len(paths) == 0 {
+		return []*types.StoredDoc{}, nil
+	}
+	ids := make([]string, len(paths))
+	for i, path := range paths {
+		ids[i] = types.CalculateDatabaseID(database, path)
+	}
+	collection := m.getCollection(paths[0])
+	filter := bson.M{
+		"_id":         bson.M{"$in": ids},
+		"database_id": database,
+		"deleted":     bson.M{"$ne": true},
+	}
+	cursor, err := collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	docMap := make(map[string]*types.StoredDoc)
+	for cursor.Next(ctx) {
+		var doc types.StoredDoc
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, err
+		}
+		docMap[doc.Id] = &doc
+	}
+	if err := cursor.Err(); err != nil {
+		return nil, err
+	}
+	result := make([]*types.StoredDoc, len(paths))
+	for i, id := range ids {
+		result[i] = docMap[id]
+	}
+	return result, nil
+}
+
+func (m *documentStore) Create(ctx context.Context, database string, doc types.StoredDoc) error {
+	collection := m.getCollection(doc.Collection)
+
+	// Ensure derived fields are populated
+	if doc.CollectionHash == "" {
+		doc.CollectionHash = types.CalculateCollectionHash(doc.Collection)
+	}
+	doc.DatabaseID = database
+
+	// Ensure soft-delete fields are reset
+	doc.Deleted = false
+
+	_, err := collection.InsertOne(ctx, doc)
+	if mongo.IsDuplicateKeyError(err) {
+		// Check if the document exists but is soft-deleted
+		id := types.CalculateDatabaseID(database, doc.Fullpath)
+		var existingDoc types.StoredDoc
+		if findErr := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database}).Decode(&existingDoc); findErr == nil {
+			if existingDoc.Deleted {
+				// Overwrite the soft-deleted document
+				_, replaceErr := collection.ReplaceOne(ctx, bson.M{"_id": id, "database_id": database}, doc)
+				return replaceErr
+			}
+		}
+		return model.ErrExists
+	}
+	return err
+}
+
+func (m *documentStore) Update(ctx context.Context, database string, path string, data map[string]interface{}, precond model.Filters) error {
+	collection := m.getCollection(path)
+	id := types.CalculateDatabaseID(database, path)
+
+	filter := makeFilterBSON(precond)
+	filter["_id"] = id
+	filter["database_id"] = database
+	filter["deleted"] = bson.M{"$ne": true}
+
+	update := bson.M{
+		"$set": bson.M{
+			"data":       data,
+			"updated_at": time.Now().UnixMilli(),
+		},
+		"$inc": bson.M{
+			"version": 1,
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		if count == 0 {
+			return model.ErrNotFound
+		}
+		return model.ErrPreconditionFailed
+	}
+
+	return nil
+}
+
+func (m *documentStore) Patch(ctx context.Context, database string, path string, data map[string]interface{}, precond model.Filters) error {
+	collection := m.getCollection(path)
+	id := types.CalculateDatabaseID(database, path)
+
+	filter := makeFilterBSON(precond)
+	filter["_id"] = id
+	filter["database_id"] = database
+	filter["deleted"] = bson.M{"$ne": true}
+
+	updates := bson.M{
+		"updated_at": time.Now().UnixMilli(),
+	}
+	for k, v := range data {
+		updates["data."+k] = v
+	}
+
+	update := bson.M{
+		"$set": updates,
+		"$inc": bson.M{
+			"version": 1,
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		if count == 0 {
+			return model.ErrNotFound
+		}
+		return model.ErrPreconditionFailed
+	}
+
+	return nil
+}
+
+func (m *documentStore) Delete(ctx context.Context, database string, path string, precond model.Filters) error {
+	collection := m.getCollection(path)
+	id := types.CalculateDatabaseID(database, path)
+
+	filter := makeFilterBSON(precond)
+	filter["_id"] = id
+	filter["database_id"] = database
+	filter["deleted"] = bson.M{"$ne": true}
+
+	update := bson.M{
+		"$set": bson.M{
+			"deleted":        true,
+			"data":           bson.M{},
+			"updated_at":     time.Now().UnixMilli(),
+			"sys_expires_at": time.Now().Add(m.softDeleteRetention),
+		},
+		"$inc": bson.M{
+			"version": 1,
+		},
+	}
+
+	result, err := collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return err
+	}
+
+	if result.MatchedCount == 0 {
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		if count == 0 {
+			return model.ErrNotFound
+		}
+		// If document exists but matched count is 0, it means version conflict or already deleted
+		// We can check if it is already deleted
+		var doc types.StoredDoc
+		if err := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database}).Decode(&doc); err == nil {
+			if doc.Deleted {
+				return model.ErrNotFound // Already deleted
+			}
+		}
+		return model.ErrPreconditionFailed
+	}
+
+	return nil
+}
+
+func (m *documentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
+	collection := m.getCollection(q.Collection)
+
+	filter := makeFilterBSON(q.Filters)
+	filter["database_id"] = database
+	filter["collection_hash"] = types.CalculateCollectionHash(q.Collection)
+	if !q.ShowDeleted {
+		filter["deleted"] = bson.M{"$ne": true}
+	}
+
+	findOptions := options.Find()
+	if q.Limit > 0 {
+		findOptions.SetLimit(int64(q.Limit))
+	}
+
+	if len(q.OrderBy) > 0 {
+		sort := bson.D{}
+		for _, o := range q.OrderBy {
+			dir := 1
+			if o.Direction == "desc" {
+				dir = -1
+			}
+			sort = append(sort, bson.E{Key: mapField(o.Field), Value: dir})
+		}
+		findOptions.SetSort(sort)
+	}
+
+	// TODO: Implement StartAfter (Cursor)
+
+	cursor, err := collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+
+	var docs []*types.StoredDoc
+	if err := cursor.All(ctx, &docs); err != nil {
+		return nil, err
+	}
+
+	for _, d := range docs {
+		d.Collection = q.Collection // Ensure collection is set
+	}
+
+	return docs, nil
+}
+
+func (m *documentStore) Watch(ctx context.Context, database string, collectionName string, resumeToken interface{}, opts types.WatchOptions) (<-chan types.Event, error) {
+	pipeline := mongo.Pipeline{}
+
+	// Database filter
+	if database != "" {
+		databaseMatch := bson.D{
+			{Key: "$or", Value: bson.A{
+				bson.D{
+					{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"insert", "update", "replace"}}}},
+					{Key: "fullDocument.database_id", Value: database},
+				},
+				bson.D{
+					{Key: "operationType", Value: "delete"},
+					{Key: "documentKey._id", Value: bson.D{{Key: "$regex", Value: "^" + database + ":"}}},
+				},
+			}},
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: databaseMatch}})
+	}
+
+	if collectionName != "" {
+		// Filter by fullDocument.collection for insert/update/replace
+		// OR operationType is delete (since we can't filter deletes by collection with hash ID)
+		match := bson.D{
+			{Key: "$or", Value: bson.A{
+				bson.D{{Key: "fullDocument.collection", Value: collectionName}},
+				bson.D{{Key: "operationType", Value: "delete"}},
+			}},
+		}
+		pipeline = append(pipeline, bson.D{{Key: "$match", Value: match}})
+	}
+
+	// We need 'updateLookup' to get the full document after an update
+	changeStreamOpts := options.ChangeStream().SetFullDocument(options.UpdateLookup)
+	if opts.IncludeBefore {
+		changeStreamOpts.SetFullDocumentBeforeChange("whenAvailable")
+	}
+	if resumeToken != nil {
+		changeStreamOpts.SetResumeAfter(resumeToken)
+	}
+	if m.openStream == nil {
+		m.openStream = func(ctx context.Context, coll *mongo.Collection, pipeline mongo.Pipeline, opts *options.ChangeStreamOptions) (changeStream, error) {
+			return coll.Watch(ctx, pipeline, opts)
+		}
+	}
+	collection := m.getCollection(collectionName)
+	stream, err := m.openStream(ctx, collection, pipeline, changeStreamOpts)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make(chan types.Event)
+
+	go func() {
+		defer close(out)
+		defer stream.Close(ctx)
+
+		for stream.Next(ctx) {
+			var changeEvent changeStreamEvent
+			if err := stream.Decode(&changeEvent); err != nil {
+				continue
+			}
+
+			evt, ok := m.convertChangeEvent(changeEvent, database, collectionName)
+			if !ok {
+				continue
+			}
+
+			if evt.Document != nil {
+				coll, _, _ := helper.ExplodeFullpath(evt.Document.Fullpath)
+				evt.Document.Collection = coll
+			}
+
+			select {
+			case out <- *evt:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return out, nil
+}
+
+type changeStreamEvent struct {
+	ID                       interface{}      `bson:"_id"`
+	OperationType            string           `bson:"operationType"`
+	FullDocument             *types.StoredDoc `bson:"fullDocument"`
+	FullDocumentBeforeChange *types.StoredDoc `bson:"fullDocumentBeforeChange"`
+	DocumentKey              struct {
+		ID string `bson:"_id"`
+	} `bson:"documentKey"`
+	ClusterTime interface{} `bson:"clusterTime"` // Timestamp
+}
+
+func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, database string, collectionName string) (*types.Event, bool) {
+	// Client-side filtering for database (double check)
+	if database != "" {
+		if changeEvent.OperationType == "delete" {
+			if !strings.HasPrefix(changeEvent.DocumentKey.ID, database+":") {
+				return nil, false
+			}
+		} else {
+			if changeEvent.FullDocument == nil || changeEvent.FullDocument.DatabaseID != database {
+				return nil, false
+			}
+		}
+	}
+
+	// Client-side filtering for collection (double check)
+	if collectionName != "" && changeEvent.OperationType != "delete" {
+		if changeEvent.FullDocument == nil || changeEvent.FullDocument.Collection != collectionName {
+			return nil, false
+		}
+	}
+
+	// If database arg is empty, try to get it from document
+	eventDatabase := database
+	if eventDatabase == "" {
+		if changeEvent.FullDocument != nil {
+			eventDatabase = changeEvent.FullDocument.DatabaseID
+		} else if strings.Contains(changeEvent.DocumentKey.ID, ":") {
+			parts := strings.SplitN(changeEvent.DocumentKey.ID, ":", 2)
+			eventDatabase = parts[0]
+		}
+	}
+
+	evt := types.Event{
+		Id:          changeEvent.DocumentKey.ID,
+		DatabaseID:  eventDatabase,
+		ResumeToken: changeEvent.ID,
+		Timestamp:   time.Now().UnixNano(),
+		Before:      changeEvent.FullDocumentBeforeChange,
+	}
+
+	switch changeEvent.OperationType {
+	case "insert":
+		evt.Type = types.EventCreate
+		evt.Document = changeEvent.FullDocument
+	case "update", "replace":
+		if changeEvent.FullDocument != nil && changeEvent.FullDocument.Deleted {
+			evt.Type = types.EventDelete
+		} else if changeEvent.OperationType == "replace" {
+			// Replace operation on a non-deleted document is treated as a Create (re-creation)
+			// This happens when overwriting a soft-deleted document
+			evt.Type = types.EventCreate
+			evt.Document = changeEvent.FullDocument
+		} else if changeEvent.FullDocumentBeforeChange != nil && changeEvent.FullDocumentBeforeChange.Deleted {
+			evt.Type = types.EventCreate
+			evt.Document = changeEvent.FullDocument
+		} else {
+			evt.Type = types.EventUpdate
+			evt.Document = changeEvent.FullDocument
+		}
+	case "delete":
+		evt.Type = types.EventDelete
+	default:
+		return nil, false
+	}
+
+	return &evt, true
+}
+
+// EnsureIndexes creates necessary indexes
+func (s *documentStore) EnsureIndexes(ctx context.Context) error {
+	coll := s.getCollection("")
+
+	// (database_id, collection_hash)
+	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "collection_hash", Value: 1}},
+		Options: options.Index().SetUnique(false),
+	})
+	if err != nil {
+		return err
+	}
+
+	// Revocation TTL index (wait, revocation is separate now. But soft delete uses sys_expires_at)
+	// "sys_expires_at" is used for soft delete retention.
+	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
+		Keys:    bson.D{{Key: "sys_expires_at", Value: 1}},
+		Options: options.Index().SetExpireAfterSeconds(0),
+	})
+	return err
+}
+
+func (m *documentStore) Close(ctx context.Context) error {
+	if m.client != nil {
+		return m.client.Disconnect(ctx)
+	}
+	return nil
+}
