@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage/config"
 	"github.com/syntrixbase/syntrix/internal/storage/internal/mongo"
 	"github.com/syntrixbase/syntrix/internal/storage/internal/router"
 	"github.com/syntrixbase/syntrix/internal/storage/types"
@@ -32,7 +32,7 @@ type factory struct {
 	mu        sync.Mutex
 }
 
-func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error) {
+func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) {
 	f := &factory{
 		providers: make(map[string]Provider),
 	}
@@ -44,7 +44,7 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	}()
 
 	// 1. Initialize Providers
-	for name, backendCfg := range cfg.Storage.Backends {
+	for name, backendCfg := range cfg.Backends {
 		if backendCfg.Type == "mongo" {
 			p, err := newMongoProvider(ctx, backendCfg.Mongo.URI, backendCfg.Mongo.DatabaseName)
 			if err != nil {
@@ -57,13 +57,13 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 	}
 
 	// 2. Initialize Document Store
-	defaultDocRouter, err := f.createDocumentRouter(cfg.Storage.Topology.Document)
+	defaultDocRouter, err := f.createDocumentRouter(cfg.Topology.Document)
 	if err != nil {
 		return nil, err
 	}
 
 	databaseDocRouters := make(map[string]types.DocumentRouter)
-	for tID, tCfg := range cfg.Storage.Databases {
+	for tID, tCfg := range cfg.Databases {
 		if tID == model.DefaultDatabaseID {
 			continue
 		}
@@ -71,19 +71,19 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		if err != nil {
 			return nil, err
 		}
-		store := mongo.NewDocumentStore(p.Client(), p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.Document.DataCollection, cfg.Storage.Topology.Document.SysCollection, cfg.Storage.Topology.Document.SoftDeleteRetention)
+		store := mongo.NewDocumentStore(p.Client(), p.Client().Database(p.DatabaseName()), cfg.Topology.Document.DataCollection, cfg.Topology.Document.SysCollection, cfg.Topology.Document.SoftDeleteRetention)
 		databaseDocRouters[tID] = router.NewSingleDocumentRouter(store)
 	}
 	f.docStore = router.NewRoutedDocumentStore(router.NewDatabaseDocumentRouter(defaultDocRouter, databaseDocRouters))
 
 	// 3. Initialize User Store
-	defaultUserRouter, err := f.createUserRouter(cfg.Storage.Topology.User)
+	defaultUserRouter, err := f.createUserRouter(cfg.Topology.User)
 	if err != nil {
 		return nil, err
 	}
 
 	databaseUserRouters := make(map[string]types.UserRouter)
-	for tID, tCfg := range cfg.Storage.Databases {
+	for tID, tCfg := range cfg.Databases {
 		if tID == model.DefaultDatabaseID {
 			continue
 		}
@@ -91,19 +91,19 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		if err != nil {
 			return nil, err
 		}
-		store := mongo.NewUserStore(p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.User.Collection)
+		store := mongo.NewUserStore(p.Client().Database(p.DatabaseName()), cfg.Topology.User.Collection)
 		databaseUserRouters[tID] = router.NewSingleUserRouter(store)
 	}
 	f.usrStore = router.NewRoutedUserStore(router.NewDatabaseUserRouter(defaultUserRouter, databaseUserRouters))
 
 	// 4. Initialize Revocation Store
-	defaultRevRouter, err := f.createRevocationRouter(cfg.Storage.Topology.Revocation)
+	defaultRevRouter, err := f.createRevocationRouter(cfg.Topology.Revocation)
 	if err != nil {
 		return nil, err
 	}
 
 	databaseRevRouters := make(map[string]types.RevocationRouter)
-	for tID, tCfg := range cfg.Storage.Databases {
+	for tID, tCfg := range cfg.Databases {
 		if tID == model.DefaultDatabaseID {
 			continue
 		}
@@ -111,7 +111,7 @@ func NewFactory(ctx context.Context, cfg *config.Config) (StorageFactory, error)
 		if err != nil {
 			return nil, err
 		}
-		store := mongo.NewRevocationStore(p.Client().Database(p.DatabaseName()), cfg.Storage.Topology.Revocation.Collection)
+		store := mongo.NewRevocationStore(p.Client().Database(p.DatabaseName()), cfg.Topology.Revocation.Collection)
 		databaseRevRouters[tID] = router.NewSingleRevocationRouter(store)
 	}
 	f.revStore = router.NewRoutedRevocationStore(router.NewDatabaseRevocationRouter(defaultRevRouter, databaseRevRouters))

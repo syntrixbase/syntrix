@@ -11,66 +11,31 @@ import (
 	identity "github.com/syntrixbase/syntrix/internal/identity/config"
 	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
 	puller "github.com/syntrixbase/syntrix/internal/puller/config"
+	query "github.com/syntrixbase/syntrix/internal/query/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	services "github.com/syntrixbase/syntrix/internal/services/config"
+	storage "github.com/syntrixbase/syntrix/internal/storage/config"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	trigger "github.com/syntrixbase/syntrix/internal/trigger/config"
 	"gopkg.in/yaml.v3"
 )
 
 // Config holds the application configuration
 type Config struct {
-	Server     server.Config             `yaml:"server"`
-	Storage    StorageConfig             `yaml:"storage"`
-	Identity   identity.Config           `yaml:"identity"`
 	Deployment services.DeploymentConfig `yaml:"deployment"`
-	Gateway    api.GatewayConfig         `yaml:"gateway"`
-	Trigger    trigger.Config            `yaml:"trigger"`
-	Puller     puller.Config             `yaml:"puller"`
-	Indexer    indexer.Config            `yaml:"indexer"`
-}
+	Server     server.Config             `yaml:"server"`
 
-type StorageConfig struct {
-	Backends  map[string]BackendConfig  `yaml:"backends"`
-	Topology  TopologyConfig            `yaml:"topology"`
-	Databases map[string]DatabaseConfig `yaml:"databases"`
-}
+	// Services
+	Query    query.Config      `yaml:"query"`
+	Indexer  indexer.Config    `yaml:"indexer"`
+	Gateway  api.GatewayConfig `yaml:"gateway"`
+	Trigger  trigger.Config    `yaml:"trigger"`
+	Puller   puller.Config     `yaml:"puller"`
+	Streamer streamer.Config   `yaml:"streamer"`
 
-type DatabaseConfig struct {
-	Backend string `yaml:"backend"`
-}
-
-type BackendConfig struct {
-	Type  string      `yaml:"type"` // "mongo"
-	Mongo MongoConfig `yaml:"mongo"`
-}
-
-type TopologyConfig struct {
-	Document   DocumentTopology   `yaml:"document"`
-	User       CollectionTopology `yaml:"user"`
-	Revocation CollectionTopology `yaml:"revocation"`
-}
-
-type BaseTopology struct {
-	Strategy string `yaml:"strategy"` // "single", "read_write_split"
-	Primary  string `yaml:"primary"`
-	Replica  string `yaml:"replica"`
-}
-
-type DocumentTopology struct {
-	BaseTopology        `yaml:",inline"`
-	DataCollection      string        `yaml:"data_collection"`
-	SysCollection       string        `yaml:"sys_collection"`
-	SoftDeleteRetention time.Duration `yaml:"soft_delete_retention"`
-}
-
-type CollectionTopology struct {
-	BaseTopology `yaml:",inline"`
-	Collection   string `yaml:"collection"`
-}
-
-type MongoConfig struct {
-	URI          string `yaml:"uri"`
-	DatabaseName string `yaml:"database_name"`
+	// Components
+	Storage  storage.Config  `yaml:"storage"`
+	Identity identity.Config `yaml:"identity"`
 }
 
 // LoadConfig loads configuration from files and environment variables
@@ -78,19 +43,19 @@ type MongoConfig struct {
 func LoadConfig() *Config {
 	// 1. Defaults
 	cfg := &Config{
-		Storage: StorageConfig{
-			Backends: map[string]BackendConfig{
+		Storage: storage.Config{
+			Backends: map[string]storage.BackendConfig{
 				"default_mongo": {
 					Type: "mongo",
-					Mongo: MongoConfig{
+					Mongo: storage.MongoConfig{
 						URI:          "mongodb://localhost:27017",
 						DatabaseName: "syntrix",
 					},
 				},
 			},
-			Topology: TopologyConfig{
-				Document: DocumentTopology{
-					BaseTopology: BaseTopology{
+			Topology: storage.TopologyConfig{
+				Document: storage.DocumentTopology{
+					BaseTopology: storage.BaseTopology{
 						Strategy: "single",
 						Primary:  "default_mongo",
 					},
@@ -98,22 +63,22 @@ func LoadConfig() *Config {
 					SysCollection:       "sys",
 					SoftDeleteRetention: 5 * time.Minute,
 				},
-				User: CollectionTopology{
-					BaseTopology: BaseTopology{
+				User: storage.CollectionTopology{
+					BaseTopology: storage.BaseTopology{
 						Strategy: "single",
 						Primary:  "default_mongo",
 					},
 					Collection: "users",
 				},
-				Revocation: CollectionTopology{
-					BaseTopology: BaseTopology{
+				Revocation: storage.CollectionTopology{
+					BaseTopology: storage.BaseTopology{
 						Strategy: "single",
 						Primary:  "default_mongo",
 					},
 					Collection: "revocations",
 				},
 			},
-			Databases: map[string]DatabaseConfig{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {
 					Backend: "default_mongo",
 				},
@@ -121,10 +86,12 @@ func LoadConfig() *Config {
 		},
 		Identity:   identity.DefaultConfig(),
 		Server:     server.DefaultConfig(),
+		Query:      query.DefaultConfig(),
 		Gateway:    api.DefaultGatewayConfig(),
 		Trigger:    trigger.DefaultConfig(),
 		Deployment: services.DefaultDeploymentConfig(),
 		Puller:     puller.DefaultConfig(),
+		Streamer:   streamer.DefaultConfig(),
 		Indexer:    indexer.DefaultConfig(),
 	}
 

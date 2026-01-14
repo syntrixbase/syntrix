@@ -1,5 +1,5 @@
 server:
-  host: "0.0.0.0"
+  host: "localhost"
   http_port: 8080
   http_read_timeout: 10s
   http_write_timeout: 10s
@@ -44,10 +44,14 @@ identity:
     rules_file: "security.yaml"
 
 gateway:
-  query_service_url: "http://localhost:8082"
+  query_service_url: "localhost:9000"
+  streamer_service_url: "localhost:9000"
   realtime:
     transport: "both"
     per_message_deflate: true
+
+query:
+  indexer_addr: "localhost:9000"
 
 trigger:
   nats_url: "nats://localhost:4222"
@@ -83,3 +87,30 @@ puller:
   health:
     port: 8081
     path: "/health"
+
+streamer:
+  server:
+    puller_addr: "localhost:9000"
+    send_timeout: 5s
+  client:
+    streamer_addr: "localhost:9000"
+    initial_backoff: 1s
+    max_backoff: 30s
+    backoff_multiplier: 2.0
+    max_retries: 0
+    heartbeat_interval: 30s
+    activity_timeout: 90s
+
+indexer:
+  puller_addr: "localhost:9000"
+  template_path: "index_templates.yaml"
+  progress_path: "data/indexer/progress"
+  consumer_id: "indexer"
+  reconcile_interval: 5s
+  storage_mode: "memory"
+  store:
+    path: "data/indexer/indexes.db"
+    batch_size: 100
+    batch_interval: 100ms
+    queue_size: 10000
+    block_cache_size: 134217728

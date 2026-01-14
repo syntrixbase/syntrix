@@ -33,8 +33,6 @@ type Options struct {
 	RunPuller           bool
 	RunIndexer          bool
 
-	ForceQueryClient bool
-
 	// Mode specifies the deployment mode (distributed or standalone).
 	Mode DeploymentMode
 }

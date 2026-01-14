@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/storage"
+	storage_config "github.com/syntrixbase/syntrix/internal/storage/config"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -45,40 +45,38 @@ match:
 	connCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"default": {
-					Type: "mongo",
-					Mongo: config.MongoConfig{
-						URI:          env.MongoURI,
-						DatabaseName: env.DBName,
-					},
+	cfg := storage_config.Config{
+		Backends: map[string]storage_config.BackendConfig{
+			"default": {
+				Type: "mongo",
+				Mongo: storage_config.MongoConfig{
+					URI:          env.MongoURI,
+					DatabaseName: env.DBName,
 				},
 			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					DataCollection: "documents",
-					SysCollection:  "sys",
+		},
+		Topology: storage_config.TopologyConfig{
+			Document: storage_config.DocumentTopology{
+				BaseTopology: storage_config.BaseTopology{
+					Strategy: "single",
+					Primary:  "default",
 				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					Collection: "users",
+				DataCollection: "documents",
+				SysCollection:  "sys",
+			},
+			User: storage_config.CollectionTopology{
+				BaseTopology: storage_config.BaseTopology{
+					Strategy: "single",
+					Primary:  "default",
 				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "default",
-					},
-					Collection: "revocations",
+				Collection: "users",
+			},
+			Revocation: storage_config.CollectionTopology{
+				BaseTopology: storage_config.BaseTopology{
+					Strategy: "single",
+					Primary:  "default",
 				},
+				Collection: "revocations",
 			},
 		},
 	}

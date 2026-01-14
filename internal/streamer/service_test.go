@@ -54,7 +54,7 @@ func testSyntrixEvent(eventID, database, collection, docID string, eventType eve
 }
 
 func TestNewService(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, nil)
+	s, err := NewService(ServerConfig{}, nil)
 	require.NoError(t, err)
 	require.NotNil(t, s)
 }
@@ -64,7 +64,7 @@ func getInternalService(s StreamerServer) *streamerService {
 }
 
 func TestService_Stream(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -76,7 +76,7 @@ func TestService_Stream(t *testing.T) {
 }
 
 func TestService_Stream_Subscribe(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -89,7 +89,7 @@ func TestService_Stream_Subscribe(t *testing.T) {
 }
 
 func TestService_Stream_SubscribeWithFilters(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -104,7 +104,7 @@ func TestService_Stream_SubscribeWithFilters(t *testing.T) {
 }
 
 func TestService_ProcessEvent_NoSubscriptions(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -113,7 +113,7 @@ func TestService_ProcessEvent_NoSubscriptions(t *testing.T) {
 }
 
 func TestService_ProcessEvent_WithSubscription(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -139,7 +139,7 @@ func TestService_ProcessEvent_WithSubscription(t *testing.T) {
 }
 
 func TestService_ProcessEvent_MultipleStreams(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -163,7 +163,7 @@ func TestService_ProcessEvent_MultipleStreams(t *testing.T) {
 }
 
 func TestService_Stop(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, _ := s.Stream(context.Background())
@@ -174,7 +174,7 @@ func TestService_Stop(t *testing.T) {
 }
 
 func TestService_SubscribeWithManager(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -194,7 +194,7 @@ func TestService_SubscribeWithManager(t *testing.T) {
 }
 
 func TestService_Start(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	err = s.Start(context.Background())
@@ -202,7 +202,7 @@ func TestService_Start(t *testing.T) {
 }
 
 func TestService_Stream_Unsubscribe(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -217,7 +217,7 @@ func TestService_Stream_Unsubscribe(t *testing.T) {
 }
 
 func TestService_Stream_CloseAndSubscribe(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -231,7 +231,7 @@ func TestService_Stream_CloseAndSubscribe(t *testing.T) {
 }
 
 func TestService_Stream_ContextCancel(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -246,7 +246,7 @@ func TestService_Stream_ContextCancel(t *testing.T) {
 }
 
 func TestService_Recv_ContextCanceled(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -260,7 +260,7 @@ func TestService_Recv_ContextCanceled(t *testing.T) {
 }
 
 func TestService_ProcessEventJSON(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -300,7 +300,7 @@ func TestService_ProcessEventJSON(t *testing.T) {
 }
 
 func TestService_ProcessEventJSON_InvalidJSON(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -310,7 +310,7 @@ func TestService_ProcessEventJSON_InvalidJSON(t *testing.T) {
 }
 
 func TestService_ProcessEventJSON_TransformError(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -332,7 +332,7 @@ func TestService_ProcessEventJSON_TransformError(t *testing.T) {
 }
 
 func TestService_ProcessEventJSON_DeleteIgnored(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -353,7 +353,7 @@ func TestService_ProcessEventJSON_DeleteIgnored(t *testing.T) {
 }
 
 func TestService_Unsubscribe_Closed(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -366,7 +366,7 @@ func TestService_Unsubscribe_Closed(t *testing.T) {
 }
 
 func TestService_Recv_Closed(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -380,7 +380,7 @@ func TestService_Recv_Closed(t *testing.T) {
 }
 
 func TestService_Recv_WithEvent(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -401,7 +401,7 @@ func TestService_Recv_WithEvent(t *testing.T) {
 }
 
 func TestService_ProcessEvent_Timeout(t *testing.T) {
-	s, err := NewService(ServiceConfig{SendTimeout: 10 * time.Millisecond}, slog.Default())
+	s, err := NewService(ServerConfig{SendTimeout: 10 * time.Millisecond}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -420,7 +420,7 @@ func TestService_ProcessEvent_Timeout(t *testing.T) {
 }
 
 func TestService_Unsubscribe_NotFound(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -434,7 +434,7 @@ func TestService_Unsubscribe_NotFound(t *testing.T) {
 }
 
 func TestService_Subscribe_Error(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -448,7 +448,7 @@ func TestService_Subscribe_Error(t *testing.T) {
 }
 
 func TestService_MultipleSubscriptions(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -475,7 +475,7 @@ func TestService_MultipleSubscriptions(t *testing.T) {
 }
 
 func TestService_RecvWithFilters(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -500,7 +500,7 @@ func TestService_RecvWithFilters(t *testing.T) {
 }
 
 func TestService_RecvNoMatch(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -535,7 +535,7 @@ func TestService_RecvNoMatch(t *testing.T) {
 }
 
 func TestService_Close_CancelsContext(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -555,7 +555,7 @@ func TestService_Close_CancelsContext(t *testing.T) {
 }
 
 func TestService_ProcessEvent_NoMatchingSubscriptions(t *testing.T) {
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -566,7 +566,7 @@ func TestService_ProcessEvent_NoMatchingSubscriptions(t *testing.T) {
 
 func TestService_ProcessEvent_DeleteOperation(t *testing.T) {
 	t.Parallel()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -618,7 +618,7 @@ func TestStart_WithMockPuller(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -637,7 +637,7 @@ func TestStart_WithMockPuller(t *testing.T) {
 func TestStart_StandaloneMode(t *testing.T) {
 	t.Parallel()
 	// No puller configured - standalone mode
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -649,7 +649,7 @@ func TestStart_WithPullerAddr(t *testing.T) {
 	t.Parallel()
 	// Test that Start creates a puller client from address.
 	// gRPC connection is lazy, so NewClient won't fail even if server doesn't exist.
-	s, err := NewService(ServiceConfig{
+	s, err := NewService(ServerConfig{
 		PullerAddr: "localhost:50051", // Server may not exist, but gRPC is lazy
 	}, slog.Default())
 	require.NoError(t, err)
@@ -669,7 +669,7 @@ func TestConsumePullerEvents_ProcessEvent(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	// Start the service
@@ -699,7 +699,7 @@ func TestConsumePullerEvents_ContextDone(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -716,7 +716,7 @@ func TestConsumePullerEvents_ChannelClose(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -734,7 +734,7 @@ func TestConsumePullerEvents_NilChange(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -756,7 +756,7 @@ func TestConsumePullerEvents_ServiceStopped(t *testing.T) {
 	t.Parallel()
 	mockPuller := newTestPullerService()
 
-	s, err := NewService(ServiceConfig{}, slog.Default(), WithPullerClient(mockPuller))
+	s, err := NewService(ServerConfig{}, slog.Default(), WithPullerClient(mockPuller))
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -775,7 +775,7 @@ func TestConsumePullerEvents_ServiceStopped(t *testing.T) {
 func TestService_Subscribe_FilterCompileError(t *testing.T) {
 	t.Parallel()
 	// Test subscribe with invalid filter that causes compilation failure
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
 	stream, err := s.Stream(context.Background())
@@ -796,7 +796,7 @@ func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
 	t.Parallel()
 	// Test subscribe error handling when manager returns non-nil error
 	// This tests the err != nil branch in subscribe()
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 
@@ -812,7 +812,7 @@ func TestService_Subscribe_ManagerReturnsError(t *testing.T) {
 func TestService_ConsumePullerEvents_ServiceContextDone(t *testing.T) {
 	t.Parallel()
 	// Test that consumePullerEvents stops when service context is done
-	s, err := NewService(ServiceConfig{}, slog.Default())
+	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 	internal := getInternalService(s)
 

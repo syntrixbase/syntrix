@@ -47,32 +47,32 @@ type StateChangeCallback func(state ConnectionState, err error)
 // ClientConfig configures the Streamer client.
 type ClientConfig struct {
 	// StreamerAddr is the address of the Streamer gRPC server.
-	StreamerAddr string
+	StreamerAddr string `yaml:"streamer_addr"`
 
 	// InitialBackoff is the initial wait time before first reconnect attempt.
 	// Defaults to 1 second.
-	InitialBackoff time.Duration
+	InitialBackoff time.Duration `yaml:"initial_backoff"`
 
 	// MaxBackoff is the maximum wait time between reconnect attempts.
 	// Defaults to 30 seconds.
-	MaxBackoff time.Duration
+	MaxBackoff time.Duration `yaml:"max_backoff"`
 
 	// BackoffMultiplier is the factor by which backoff increases after each failure.
 	// Defaults to 2.0.
-	BackoffMultiplier float64
+	BackoffMultiplier float64 `yaml:"backoff_multiplier"`
 
 	// MaxRetries is the maximum number of consecutive reconnect attempts.
 	// Set to 0 for unlimited retries. Defaults to 0 (unlimited).
-	MaxRetries int
+	MaxRetries int `yaml:"max_retries"`
 
 	// HeartbeatInterval is the time between heartbeat messages.
 	// If > 0, client sends periodic heartbeats to detect stale connections.
 	// Defaults to 30 seconds.
-	HeartbeatInterval time.Duration
+	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
 
 	// ActivityTimeout is the maximum time to wait for any message before
 	// considering the connection stale. Defaults to 90 seconds.
-	ActivityTimeout time.Duration
+	ActivityTimeout time.Duration `yaml:"activity_timeout"`
 
 	// OnStateChange is called when connection state changes. Optional.
 	OnStateChange StateChangeCallback

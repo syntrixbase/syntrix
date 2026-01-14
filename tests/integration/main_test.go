@@ -13,11 +13,14 @@ import (
 
 	api_config "github.com/syntrixbase/syntrix/internal/api/config"
 	"github.com/syntrixbase/syntrix/internal/config"
-	identity "github.com/syntrixbase/syntrix/internal/identity/config"
-	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
+	identity_config "github.com/syntrixbase/syntrix/internal/identity/config"
+	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
+	query_config "github.com/syntrixbase/syntrix/internal/query/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
+	storage_config "github.com/syntrixbase/syntrix/internal/storage/config"
+	"github.com/syntrixbase/syntrix/internal/streamer"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -224,38 +227,39 @@ templates:
 		},
 		Gateway: api_config.GatewayConfig{
 			QueryServiceURL:    fmt.Sprintf("localhost:%d", grpcPort),
-			PullerServiceURL:   fmt.Sprintf("localhost:%d", grpcPort),
 			StreamerServiceURL: fmt.Sprintf("localhost:%d", grpcPort),
-			IndexerServiceURL:  fmt.Sprintf("localhost:%d", grpcPort),
 		},
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
+		Query: query_config.Config{
+			IndexerAddr: fmt.Sprintf("localhost:%d", grpcPort),
+		},
+		Storage: storage_config.Config{
+			Backends: map[string]storage_config.BackendConfig{
 				"default": {
 					Type: "mongo",
-					Mongo: config.MongoConfig{
+					Mongo: storage_config.MongoConfig{
 						URI:          mongoURI,
 						DatabaseName: dbName,
 					},
 				},
 			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
+			Topology: storage_config.TopologyConfig{
+				Document: storage_config.DocumentTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
 					DataCollection: "documents",
 					SysCollection:  "sys",
 				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
+				User: storage_config.CollectionTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
 					Collection: "users",
 				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
+				Revocation: storage_config.CollectionTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
@@ -263,14 +267,14 @@ templates:
 				},
 			},
 		},
-		Identity: identity.Config{
-			AuthN: identity.AuthNConfig{
+		Identity: identity_config.Config{
+			AuthN: identity_config.AuthNConfig{
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
 				PrivateKeyFile:  keysDir + "/auth_private.pem",
 			},
-			AuthZ: identity.AuthZConfig{
+			AuthZ: identity_config.AuthZConfig{
 				RulesFile: rulesFile,
 			},
 		},
@@ -287,13 +291,19 @@ templates:
 				MaxSize: "100MB",
 			},
 		},
-		Indexer: indexer.Config{
+		Indexer: indexer_config.Config{
+			PullerAddr:   fmt.Sprintf("localhost:%d", grpcPort),
 			TemplatePath: templatesFile,
-			StorageMode:  indexer.StorageModePebble,
-			Store: indexer.StoreConfig{
+			StorageMode:  indexer_config.StorageModePebble,
+			Store: indexer_config.StoreConfig{
 				Path:          tempDir + "/indexer.db",
 				BatchSize:     100,
 				BatchInterval: 50 * time.Millisecond,
+			},
+		},
+		Streamer: streamer.Config{
+			Server: streamer.ServerConfig{
+				PullerAddr: fmt.Sprintf("localhost:%d", grpcPort),
 			},
 		},
 	}
@@ -301,25 +311,13 @@ templates:
 	// Initialize the unified server
 	server.InitDefault(cfg.Server, nil)
 
-	// Check if NATS is available
-	natsAvailable := false
-	if os.Getenv("NATS_URL") != "" {
-		natsAvailable = true
-	} else {
-		conn, err := net.DialTimeout("tcp", "localhost:4222", 100*time.Millisecond)
-		if err == nil {
-			conn.Close()
-			natsAvailable = true
-		}
-	}
-
 	opts := services.Options{
 		Mode:                services.ModeDistributed, // Services communicate via gRPC even in same process
 		RunAPI:              true,
 		RunQuery:            true,
-		RunStreamer:         true, // Run Streamer service locally
-		RunTriggerEvaluator: natsAvailable,
-		RunTriggerWorker:    natsAvailable,
+		RunStreamer:         true,  // Run Streamer service locally
+		RunTriggerEvaluator: false, // Disable trigger services by default
+		RunTriggerWorker:    false,
 		RunPuller:           true,
 		RunIndexer:          true,
 	}

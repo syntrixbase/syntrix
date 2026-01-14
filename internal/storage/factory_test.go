@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/storage/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -54,40 +54,38 @@ func TestNewFactory(t *testing.T) {
 	setupMockProvider()
 	defer teardownMockProvider()
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"primary": {
-					Type: "mongo",
-					Mongo: config.MongoConfig{
-						URI:          testMongoURI,
-						DatabaseName: testDBName,
-					},
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {
+				Type: "mongo",
+				Mongo: config.MongoConfig{
+					URI:          testMongoURI,
+					DatabaseName: testDBName,
 				},
 			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "primary",
-					},
-					DataCollection: "docs",
-					SysCollection:  "sys",
+		},
+		Topology: config.TopologyConfig{
+			Document: config.DocumentTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
 				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "primary",
-					},
-					Collection: "users",
+				DataCollection: "docs",
+				SysCollection:  "sys",
+			},
+			User: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
 				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "single",
-						Primary:  "primary",
-					},
-					Collection: "revocations",
+				Collection: "users",
+			},
+			Revocation: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
 				},
+				Collection: "revocations",
 			},
 		},
 	}
@@ -108,20 +106,18 @@ func TestNewFactory_DatabaseConfig(t *testing.T) {
 	setupMockProvider()
 	defer teardownMockProvider()
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"primary":   {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
-				"database1": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
-			},
-			Topology: config.TopologyConfig{
-				Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-			},
-			Databases: map[string]config.DatabaseConfig{
-				"t1": {Backend: "database1"},
-			},
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary":   {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+			"database1": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
+		},
+		Topology: config.TopologyConfig{
+			Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+		},
+		Databases: map[string]config.DatabaseConfig{
+			"t1": {Backend: "database1"},
 		},
 	}
 
@@ -134,11 +130,9 @@ func TestNewFactory_Errors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Unsupported Backend Type", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"bad": {Type: "redis"},
-				},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"bad": {Type: "redis"},
 			},
 		}
 		_, err := NewFactory(ctx, cfg)
@@ -146,13 +140,11 @@ func TestNewFactory_Errors(t *testing.T) {
 	})
 
 	t.Run("Document Backend Not Found", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{
-						BaseTopology: config.BaseTopology{Primary: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{
+					BaseTopology: config.BaseTopology{Primary: "missing"},
 				},
 			},
 		}
@@ -171,44 +163,42 @@ func TestNewFactory_ReadWriteSplit(t *testing.T) {
 		return &mockMongoProvider{client: client, dbName: dbName}, nil
 	}
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"primary": {
-					Type:  "mongo",
-					Mongo: config.MongoConfig{URI: "mongodb://primary", DatabaseName: "db"},
-				},
-				"replica": {
-					Type:  "mongo",
-					Mongo: config.MongoConfig{URI: "mongodb://replica", DatabaseName: "db"},
-				},
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {
+				Type:  "mongo",
+				Mongo: config.MongoConfig{URI: "mongodb://primary", DatabaseName: "db"},
 			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "read_write_split",
-						Primary:  "primary",
-						Replica:  "replica",
-					},
-					DataCollection: "docs",
-					SysCollection:  "sys",
+			"replica": {
+				Type:  "mongo",
+				Mongo: config.MongoConfig{URI: "mongodb://replica", DatabaseName: "db"},
+			},
+		},
+		Topology: config.TopologyConfig{
+			Document: config.DocumentTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "read_write_split",
+					Primary:  "primary",
+					Replica:  "replica",
 				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "read_write_split",
-						Primary:  "primary",
-						Replica:  "replica",
-					},
-					Collection: "users",
+				DataCollection: "docs",
+				SysCollection:  "sys",
+			},
+			User: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "read_write_split",
+					Primary:  "primary",
+					Replica:  "replica",
 				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
-						Strategy: "read_write_split",
-						Primary:  "primary",
-						Replica:  "replica",
-					},
-					Collection: "revocations",
+				Collection: "users",
+			},
+			Revocation: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "read_write_split",
+					Primary:  "primary",
+					Replica:  "replica",
 				},
+				Collection: "revocations",
 			},
 		},
 	}
@@ -233,11 +223,9 @@ func TestNewFactory_ProviderInitError(t *testing.T) {
 		return nil, errors.New("connection failed")
 	}
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://fail", DatabaseName: "db"}},
-			},
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://fail", DatabaseName: "db"}},
 		},
 	}
 
@@ -258,15 +246,13 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Document Unsupported Strategy", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
 				},
 			},
 		}
@@ -275,15 +261,13 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Document Replica Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
 				},
 			},
 		}
@@ -292,16 +276,14 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("User Primary Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "missing"},
 				},
 			},
 		}
@@ -310,16 +292,14 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("User Unsupported Strategy", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
 				},
 			},
 		}
@@ -328,16 +308,14 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("User Replica Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
 				},
 			},
 		}
@@ -346,17 +324,15 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Revocation Primary Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					Revocation: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				Revocation: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "missing"},
 				},
 			},
 		}
@@ -365,17 +341,15 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Revocation Unsupported Strategy", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					Revocation: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				Revocation: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
 				},
 			},
 		}
@@ -384,17 +358,15 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Revocation Replica Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-					Revocation: config.CollectionTopology{
-						BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
-					},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				Revocation: config.CollectionTopology{
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
 				},
 			},
 		}
@@ -415,17 +387,15 @@ func TestNewFactory_DatabaseErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("Database Document Backend Missing", func(t *testing.T) {
-		cfg := &config.Config{
-			Storage: config.StorageConfig{
-				Backends: map[string]config.BackendConfig{
-					"primary": {Type: "mongo"},
-				},
-				Topology: config.TopologyConfig{
-					Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				},
-				Databases: map[string]config.DatabaseConfig{
-					"t1": {Backend: "missing"},
-				},
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary": {Type: "mongo"},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+			},
+			Databases: map[string]config.DatabaseConfig{
+				"t1": {Backend: "missing"},
 			},
 		}
 		_, err := NewFactory(ctx, cfg)
@@ -437,19 +407,17 @@ func TestNewFactory_DefaultDatabaseSkipped(t *testing.T) {
 	setupMockProvider()
 	defer teardownMockProvider()
 
-	cfg := &config.Config{
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
-			},
-			Topology: config.TopologyConfig{
-				Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-			},
-			Databases: map[string]config.DatabaseConfig{
-				"default": {Backend: "primary"}, // Should be skipped
-			},
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+		},
+		Topology: config.TopologyConfig{
+			Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+		},
+		Databases: map[string]config.DatabaseConfig{
+			"default": {Backend: "primary"}, // Should be skipped
 		},
 	}
 

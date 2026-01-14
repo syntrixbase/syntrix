@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	services_config "github.com/syntrixbase/syntrix/internal/services/config"
+	storage "github.com/syntrixbase/syntrix/internal/storage/config"
 )
 
 func TestLoadConfig_Defaults(t *testing.T) {
@@ -102,8 +103,8 @@ func TestResolvePath(t *testing.T) {
 func TestValidate(t *testing.T) {
 	// Case 1: Missing default database
 	cfg := &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{},
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{},
 		},
 	}
 	err := cfg.Validate()
@@ -112,11 +113,11 @@ func TestValidate(t *testing.T) {
 
 	// Case 2: Database references unknown backend
 	cfg = &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {Backend: "unknown_backend"},
 			},
-			Backends: map[string]BackendConfig{
+			Backends: map[string]storage.BackendConfig{
 				"existing_backend": {},
 			},
 		},
@@ -127,11 +128,11 @@ func TestValidate(t *testing.T) {
 
 	// Case 3: Valid config
 	cfg = &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
-			Backends: map[string]BackendConfig{
+			Backends: map[string]storage.BackendConfig{
 				"existing_backend": {},
 			},
 		},
@@ -141,11 +142,11 @@ func TestValidate(t *testing.T) {
 
 	// Case 4: Invalid deployment mode
 	cfg = &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
-			Backends: map[string]BackendConfig{
+			Backends: map[string]storage.BackendConfig{
 				"existing_backend": {},
 			},
 		},
@@ -159,11 +160,11 @@ func TestValidate(t *testing.T) {
 
 	// Case 5: Valid standalone mode
 	cfg = &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
-			Backends: map[string]BackendConfig{
+			Backends: map[string]storage.BackendConfig{
 				"existing_backend": {},
 			},
 		},
@@ -176,11 +177,11 @@ func TestValidate(t *testing.T) {
 
 	// Case 6: Valid distributed mode
 	cfg = &Config{
-		Storage: StorageConfig{
-			Databases: map[string]DatabaseConfig{
+		Storage: storage.Config{
+			Databases: map[string]storage.DatabaseConfig{
 				"default": {Backend: "existing_backend"},
 			},
-			Backends: map[string]BackendConfig{
+			Backends: map[string]storage.BackendConfig{
 				"existing_backend": {},
 			},
 		},

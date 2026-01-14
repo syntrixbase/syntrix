@@ -14,11 +14,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/config"
-	identity "github.com/syntrixbase/syntrix/internal/identity/config"
-	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
-	puller "github.com/syntrixbase/syntrix/internal/puller/config"
+	identity_config "github.com/syntrixbase/syntrix/internal/identity/config"
+	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
+	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
+	storage_config "github.com/syntrixbase/syntrix/internal/storage/config"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -109,34 +110,34 @@ templates:
 		},
 		// Query and CSP configs don't need ports in standalone mode
 		// as they don't expose HTTP servers
-		Storage: config.StorageConfig{
-			Backends: map[string]config.BackendConfig{
+		Storage: storage_config.Config{
+			Backends: map[string]storage_config.BackendConfig{
 				"default": {
 					Type: "mongo",
-					Mongo: config.MongoConfig{
+					Mongo: storage_config.MongoConfig{
 						URI:          mongoURI,
 						DatabaseName: dbName,
 					},
 				},
 			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{
-					BaseTopology: config.BaseTopology{
+			Topology: storage_config.TopologyConfig{
+				Document: storage_config.DocumentTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
 					DataCollection: "documents",
 					SysCollection:  "sys",
 				},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
+				User: storage_config.CollectionTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
 					Collection: "users",
 				},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{
+				Revocation: storage_config.CollectionTopology{
+					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
 						Primary:  "default",
 					},
@@ -144,33 +145,33 @@ templates:
 				},
 			},
 		},
-		Puller: puller.Config{
-			Backends: []puller.PullerBackendConfig{
+		Puller: puller_config.Config{
+			Backends: []puller_config.PullerBackendConfig{
 				{Name: "default"},
 			},
-			Buffer: puller.BufferConfig{
+			Buffer: puller_config.BufferConfig{
 				Path: t.TempDir() + "/buffer",
 			},
-			Cleaner: puller.CleanerConfig{
+			Cleaner: puller_config.CleanerConfig{
 				Retention: 1 * time.Hour,
 				Interval:  1 * time.Minute,
 			},
 		},
-		Identity: identity.Config{
-			AuthN: identity.AuthNConfig{
+		Identity: identity_config.Config{
+			AuthN: identity_config.AuthNConfig{
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
 				PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
 			},
-			AuthZ: identity.AuthZConfig{
+			AuthZ: identity_config.AuthZConfig{
 				RulesFile: rulesFile,
 			},
 		},
-		Indexer: indexer.Config{
+		Indexer: indexer_config.Config{
 			TemplatePath: templatesFile,
-			StorageMode:  indexer.StorageModePebble,
-			Store: indexer.StoreConfig{
+			StorageMode:  indexer_config.StorageModePebble,
+			Store: indexer_config.StoreConfig{
 				Path:          t.TempDir() + "/indexer.db",
 				BatchSize:     100,
 				BatchInterval: 50 * time.Millisecond,

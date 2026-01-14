@@ -20,16 +20,16 @@ import (
 	"google.golang.org/grpc"
 )
 
-// ServiceConfig configures the Streamer service.
-type ServiceConfig struct {
+// ServerConfig configures the Streamer service.
+type ServerConfig struct {
 	// PullerAddr is the address of the Puller gRPC server.
 	// If empty, Streamer runs in standalone mode without event ingestion.
-	PullerAddr string
+	PullerAddr string `yaml:"puller_addr"`
 
 	// SendTimeout is the maximum time to wait for a gateway to accept an event.
 	// If the timeout is exceeded, the gateway is considered slow and should be disconnected.
 	// Default: 5 seconds.
-	SendTimeout time.Duration
+	SendTimeout time.Duration `yaml:"send_timeout"`
 
 	// pullerClient is an optional pre-configured Puller client.
 	// If provided, it will be used instead of creating a new client from PullerAddr.
@@ -37,19 +37,19 @@ type ServiceConfig struct {
 	pullerClient puller.Service
 }
 
-func DefaultServiceConfig() ServiceConfig {
-	return ServiceConfig{
-		PullerAddr:  "",
+func DefaultServiceConfig() ServerConfig {
+	return ServerConfig{
+		PullerAddr:  "http://localhost:9000",
 		SendTimeout: 5 * time.Second,
 	}
 }
 
 // ServiceConfigOption is a functional option for ServiceConfig.
-type ServiceConfigOption func(*ServiceConfig)
+type ServiceConfigOption func(*ServerConfig)
 
 // WithPullerClient sets a pre-configured Puller client (for testing).
 func WithPullerClient(client puller.Service) ServiceConfigOption {
-	return func(c *ServiceConfig) {
+	return func(c *ServerConfig) {
 		c.pullerClient = client
 	}
 }
@@ -58,7 +58,7 @@ func WithPullerClient(client puller.Service) ServiceConfigOption {
 type streamerService struct {
 	pb.UnimplementedStreamerServiceServer
 
-	config  ServiceConfig
+	config  ServerConfig
 	manager *manager.Manager
 
 	// streams maps gatewayID to its localStream
@@ -76,7 +76,7 @@ type streamerService struct {
 }
 
 // NewService creates a new streamerService and returns the StreamerServer interface.
-func NewService(config ServiceConfig, logger *slog.Logger, opts ...ServiceConfigOption) (StreamerServer, error) {
+func NewService(config ServerConfig, logger *slog.Logger, opts ...ServiceConfigOption) (StreamerServer, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
