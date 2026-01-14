@@ -5,26 +5,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 )
 
 // jetStreamPublisher implements pubsub.Publisher using NATS JetStream.
 type jetStreamPublisher struct {
-	js   jetstream.JetStream
+	js   JetStream
 	opts pubsub.PublisherOptions
 }
 
 // NewPublisher creates a new Publisher backed by NATS JetStream.
-func NewPublisher(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
-	if nc == nil {
-		return nil, fmt.Errorf("nats connection cannot be nil")
-	}
-
-	js, err := JetStreamNew(nc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create jetstream context: %w", err)
+func NewPublisher(js JetStream, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	if js == nil {
+		return nil, fmt.Errorf("jetstream cannot be nil")
 	}
 
 	// Ensure stream exists
@@ -34,7 +28,7 @@ func NewPublisher(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher
 			subjects = []string{opts.SubjectPrefix + ".>"}
 		}
 
-		_, err = js.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
+		_, err := js.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
 			Name:     opts.StreamName,
 			Subjects: subjects,
 			Storage:  jetstream.MemoryStorage,

@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -14,18 +13,23 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 )
 
+func TestNewPublisher_NilJetStream(t *testing.T) {
+	_, err := NewPublisher(nil, pubsub.PublisherOptions{
+		StreamName: "TEST",
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "jetstream cannot be nil")
+}
+
 func TestNewPublisher_WithMock(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.MatchedBy(func(cfg jetstream.StreamConfig) bool {
 		return cfg.Name == "TEST" && len(cfg.Subjects) > 0 && cfg.Subjects[0] == "PREFIX.>"
 	})).Return(nil, nil)
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName:    "TEST",
 		SubjectPrefix: "PREFIX",
 	})
@@ -35,30 +39,12 @@ func TestNewPublisher_WithMock(t *testing.T) {
 	mockJS.AssertExpectations(t)
 }
 
-func TestNewPublisher_JetStreamError(t *testing.T) {
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return nil, errors.New("jetstream error")
-	})
-	defer cleanup()
-
-	_, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
-		StreamName: "TEST",
-	})
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "jetstream error")
-}
-
 func TestNewPublisher_StreamCreationError(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, errors.New("stream error"))
 
-	_, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	_, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName: "TEST",
 	})
 
@@ -68,15 +54,11 @@ func TestNewPublisher_StreamCreationError(t *testing.T) {
 
 func TestPublisher_Publish(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("Publish", mock.Anything, "PREFIX.test.subject", []byte("hello")).Return(&jetstream.PubAck{}, nil)
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName:    "TEST",
 		SubjectPrefix: "PREFIX",
 	})
@@ -89,15 +71,11 @@ func TestPublisher_Publish(t *testing.T) {
 
 func TestPublisher_PublishError(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("Publish", mock.Anything, mock.Anything, mock.Anything).Return(nil, errors.New("publish failed"))
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName:    "TEST",
 		SubjectPrefix: "PREFIX",
 	})
@@ -110,10 +88,6 @@ func TestPublisher_PublishError(t *testing.T) {
 
 func TestPublisher_OnPublishCallback_WithMock(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("Publish", mock.Anything, mock.Anything, mock.Anything).Return(&jetstream.PubAck{}, nil)
@@ -122,7 +96,7 @@ func TestPublisher_OnPublishCallback_WithMock(t *testing.T) {
 	var calledErr error
 	var calledLatency time.Duration
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName:    "TEST",
 		SubjectPrefix: "PREFIX",
 		OnPublish: func(subject string, err error, latency time.Duration) {
@@ -143,14 +117,10 @@ func TestPublisher_OnPublishCallback_WithMock(t *testing.T) {
 
 func TestPublisher_Close(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName: "TEST",
 	})
 	require.NoError(t, err)
@@ -159,14 +129,19 @@ func TestPublisher_Close(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+func TestNewConsumer_NilJetStream(t *testing.T) {
+	_, err := NewConsumer(nil, pubsub.ConsumerOptions{
+		StreamName: "TEST",
+	})
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "jetstream cannot be nil")
+}
+
 func TestNewConsumer_WithMock(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -175,28 +150,10 @@ func TestNewConsumer_WithMock(t *testing.T) {
 	assert.NotNil(t, consumer)
 }
 
-func TestNewConsumer_JetStreamError(t *testing.T) {
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return nil, errors.New("jetstream error")
-	})
-	defer cleanup()
-
-	_, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
-		StreamName: "TEST",
-	})
-
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "jetstream error")
-}
-
 func TestNewConsumer_RequiresStreamName(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
-	_, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	_, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName: "", // Empty stream name
 	})
 
@@ -206,12 +163,8 @@ func TestNewConsumer_RequiresStreamName(t *testing.T) {
 
 func TestNewConsumer_DefaultOptions(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName: "TEST",
 		// All other options left at zero values
 	})
@@ -226,16 +179,12 @@ func TestNewConsumer_DefaultOptions(t *testing.T) {
 
 func TestPublisher_NoPrefix(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	// Without prefix, subject should not be prefixed
 	mockJS.On("Publish", mock.Anything, "test.subject", []byte("hello")).Return(&jetstream.PubAck{}, nil)
 
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName:    "TEST",
 		SubjectPrefix: "", // No prefix
 	})
@@ -248,13 +197,9 @@ func TestPublisher_NoPrefix(t *testing.T) {
 
 func TestPublisher_NoStreamName(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	// Without stream name, CreateOrUpdateStream should not be called
-	pub, err := NewPublisher(&nats.Conn{}, pubsub.PublisherOptions{
+	pub, err := NewPublisher(mockJS, pubsub.PublisherOptions{
 		StreamName: "", // No stream name
 	})
 
@@ -265,14 +210,10 @@ func TestPublisher_NoStreamName(t *testing.T) {
 
 func TestConsumer_Subscribe_StreamError(t *testing.T) {
 	mockJS := new(MockJetStream)
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, errors.New("stream error"))
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -285,17 +226,11 @@ func TestConsumer_Subscribe_StreamError(t *testing.T) {
 
 func TestConsumer_Subscribe_ConsumerCreationError(t *testing.T) {
 	mockJS := new(MockJetStream)
-	mockConsumer := NewMockConsumer()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(nil, errors.New("consumer error"))
-	_ = mockConsumer // unused but shows pattern
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -309,16 +244,12 @@ func TestConsumer_Subscribe_ConsumerCreationError(t *testing.T) {
 func TestConsumer_Subscribe_ConsumeError(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(mockConsumer, nil)
 	mockConsumer.On("Consume", mock.Anything).Return(nil, errors.New("consume error"))
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -333,17 +264,13 @@ func TestConsumer_Subscribe_Success(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(mockConsumer, nil)
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -371,10 +298,6 @@ func TestConsumer_Subscribe_WithFilterSubject(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.MatchedBy(func(cfg jetstream.StreamConfig) bool {
 		return cfg.Name == "TEST" && len(cfg.Subjects) > 0 && cfg.Subjects[0] == "custom.subject.>"
@@ -385,7 +308,7 @@ func TestConsumer_Subscribe_WithFilterSubject(t *testing.T) {
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:    "TEST",
 		ConsumerName:  "test-consumer",
 		FilterSubject: "custom.subject.>",
@@ -406,10 +329,6 @@ func TestConsumer_Subscribe_DefaultConsumerName(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.MatchedBy(func(cfg jetstream.ConsumerConfig) bool {
@@ -418,7 +337,7 @@ func TestConsumer_Subscribe_DefaultConsumerName(t *testing.T) {
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "", // Empty, should use default
 	})
@@ -437,17 +356,13 @@ func TestConsumer_Subscribe_ReceivesMessages(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(mockConsumer, nil)
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -487,17 +402,13 @@ func TestConsumer_Subscribe_ChannelClosedOnCancel(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(mockConsumer, nil)
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:   "TEST",
 		ConsumerName: "test-consumer",
 	})
@@ -523,17 +434,13 @@ func TestConsumer_Subscribe_NakOnContextDone(t *testing.T) {
 	mockJS := new(MockJetStream)
 	mockConsumer := NewMockConsumer()
 	mockCC := NewMockConsumeContext()
-	cleanup := SetJetStreamNew(func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	})
-	defer cleanup()
 
 	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, nil)
 	mockJS.On("CreateOrUpdateConsumer", mock.Anything, "TEST", mock.Anything).Return(mockConsumer, nil)
 	mockConsumer.On("Consume", mock.Anything).Return(mockCC, nil)
 	mockCC.On("Stop").Return()
 
-	consumer, err := NewConsumer(&nats.Conn{}, pubsub.ConsumerOptions{
+	consumer, err := NewConsumer(mockJS, pubsub.ConsumerOptions{
 		StreamName:     "TEST",
 		ConsumerName:   "test-consumer",
 		ChannelBufSize: 1, // Small buffer

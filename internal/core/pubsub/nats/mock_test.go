@@ -9,11 +9,9 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-// MockJetStream is a mock implementation of jetstream.JetStream for testing.
-// Embeds the interface to avoid implementing all methods.
+// MockJetStream is a mock implementation of the JetStream interface for testing.
 type MockJetStream struct {
 	mock.Mock
-	jetstream.JetStream
 }
 
 func (m *MockJetStream) CreateOrUpdateStream(ctx context.Context, cfg jetstream.StreamConfig) (jetstream.Stream, error) {

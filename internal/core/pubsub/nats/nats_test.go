@@ -4,16 +4,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 )
 
-func TestNewPublisher_NilConnection(t *testing.T) {
+func TestNewPublisher_NilJetStream_Basic(t *testing.T) {
 	_, err := NewPublisher(nil, pubsub.PublisherOptions{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nats connection cannot be nil")
+	assert.Contains(t, err.Error(), "jetstream cannot be nil")
 }
 
 func TestPublisher_SubjectPrefix(t *testing.T) {
@@ -56,10 +57,10 @@ func TestPublisher_OnPublishCallback_Basic(t *testing.T) {
 	assert.Equal(t, 100*time.Millisecond, calledLatency)
 }
 
-func TestNewConsumer_NilConnection(t *testing.T) {
+func TestNewConsumer_NilJetStream_Basic(t *testing.T) {
 	_, err := NewConsumer(nil, pubsub.ConsumerOptions{})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nats connection cannot be nil")
+	assert.Contains(t, err.Error(), "jetstream cannot be nil")
 }
 
 func TestNewConsumer_RequiresStreamName_Basic(t *testing.T) {
@@ -120,13 +121,21 @@ func TestPublisherOptions(t *testing.T) {
 	assert.Equal(t, "PREFIX", opts.SubjectPrefix)
 }
 
-func TestJetStreamNew_Variable(t *testing.T) {
-	// Verify JetStreamNew is a variable that can be overridden for testing
-	original := JetStreamNew
-	defer func() { JetStreamNew = original }()
+func TestNewJetStream_NilConnection(t *testing.T) {
+	// NewJetStream with nil connection should return an error
+	js, err := NewJetStream(nil)
+	assert.Error(t, err)
+	assert.Nil(t, js)
+	assert.Contains(t, err.Error(), "nats connection cannot be nil")
+}
 
-	// Verify the variable exists and has the expected type signature
-	assert.NotNil(t, JetStreamNew)
+func TestNewJetStream_WithConnection(t *testing.T) {
+	// NewJetStream with a non-nil connection should succeed
+	// Note: This uses an unconnected nats.Conn which jetstream.New accepts
+	nc := &nats.Conn{}
+	js, err := NewJetStream(nc)
+	assert.NoError(t, err)
+	assert.NotNil(t, js)
 }
 
 func TestNatsMessage_Data(t *testing.T) {

@@ -6,26 +6,20 @@ import (
 	"log"
 	"sync/atomic"
 
-	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 )
 
 // jetStreamConsumer implements pubsub.Consumer using NATS JetStream.
 type jetStreamConsumer struct {
-	js   jetstream.JetStream
+	js   JetStream
 	opts pubsub.ConsumerOptions
 }
 
 // NewConsumer creates a new Consumer backed by NATS JetStream.
-func NewConsumer(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
-	if nc == nil {
-		return nil, fmt.Errorf("nats connection cannot be nil")
-	}
-
-	js, err := JetStreamNew(nc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create jetstream context: %w", err)
+func NewConsumer(js JetStream, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	if js == nil {
+		return nil, fmt.Errorf("jetstream cannot be nil")
 	}
 
 	// Apply defaults
