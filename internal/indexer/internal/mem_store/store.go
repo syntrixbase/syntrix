@@ -1,6 +1,7 @@
 package mem_store
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
@@ -210,7 +211,7 @@ func (s *Store) Close() error {
 }
 
 // ListDatabases returns all database names.
-func (s *Store) ListDatabases() []string {
+func (s *Store) ListDatabases() ([]string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -218,20 +219,20 @@ func (s *Store) ListDatabases() []string {
 	for name := range s.databases {
 		result = append(result, name)
 	}
-	return result
+	return result, nil
 }
 
 // ListIndexes returns metadata for all indexes in a database.
-func (s *Store) ListIndexes(db string) []store.IndexInfo {
+func (s *Store) ListIndexes(db string) ([]store.IndexInfo, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	d, ok := s.databases[db]
 	if !ok {
-		return nil
+		return nil, errors.New("database not found")
 	}
 
-	return d.ListIndexes()
+	return d.ListIndexes(), nil
 }
 
 // Compile-time check that Store implements store.Store.

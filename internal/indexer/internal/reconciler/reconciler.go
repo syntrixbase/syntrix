@@ -230,7 +230,7 @@ func (r *Reconciler) reconcile(ctx context.Context) {
 func (r *Reconciler) computeDiff() []Operation {
 	templates := r.mgr.Templates()
 	st := r.mgr.Store()
-	databases := st.ListDatabases()
+	databases, _ := st.ListDatabases()
 
 	// Build set of desired indexes (pattern|templateID -> template)
 	desiredMap := make(map[string]*template.Template)
@@ -243,7 +243,8 @@ func (r *Reconciler) computeDiff() []Operation {
 	// Build set of actual indexes (database|pattern|templateID -> indexInfo)
 	actualMap := make(map[string]store.IndexInfo)
 	for _, dbName := range databases {
-		for _, idx := range st.ListIndexes(dbName) {
+		indexes, _ := st.ListIndexes(dbName)
+		for _, idx := range indexes {
 			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
 			actualMap[key] = idx
 		}

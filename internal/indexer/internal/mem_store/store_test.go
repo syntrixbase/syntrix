@@ -509,7 +509,7 @@ func TestStore_ListDatabases(t *testing.T) {
 	s := New()
 
 	// Initially empty
-	dbs := s.ListDatabases()
+	dbs, _ := s.ListDatabases()
 	assert.Empty(t, dbs)
 
 	// Create databases
@@ -520,7 +520,7 @@ func TestStore_ListDatabases(t *testing.T) {
 	err = s.Upsert("db3", "users/*", "tmpl1", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
 
-	dbs = s.ListDatabases()
+	dbs, _ = s.ListDatabases()
 	assert.Len(t, dbs, 3)
 	assert.Contains(t, dbs, "db1")
 	assert.Contains(t, dbs, "db2")
@@ -531,7 +531,7 @@ func TestStore_ListIndexes(t *testing.T) {
 	s := New()
 
 	// Non-existent database returns nil
-	indexes := s.ListIndexes("nonexistent")
+	indexes, _ := s.ListIndexes("nonexistent")
 	assert.Nil(t, indexes)
 
 	// Create database with multiple indexes
@@ -540,7 +540,7 @@ func TestStore_ListIndexes(t *testing.T) {
 	err = s.Upsert("testdb", "posts/*", "tmpl2", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
 
-	indexes = s.ListIndexes("testdb")
+	indexes, _ = s.ListIndexes("testdb")
 	assert.Len(t, indexes, 2)
 
 	// Verify index info

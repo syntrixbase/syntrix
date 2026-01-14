@@ -381,8 +381,16 @@ func (s *service) Health(ctx context.Context) (Health, error) {
 
 	st := s.manager.Store()
 	indexes := make(map[string]manager.IndexHealth)
-	for _, dbName := range st.ListDatabases() {
-		for _, idx := range st.ListIndexes(dbName) {
+	databases, err := st.ListDatabases()
+	if err != nil {
+		return Health{Status: HealthUnhealthy}, err
+	}
+	for _, dbName := range databases {
+		dbIndexes, err := st.ListIndexes(dbName)
+		if err != nil {
+			continue
+		}
+		for _, idx := range dbIndexes {
 			key := dbName + "|" + idx.Pattern + "|" + idx.TemplateID
 			indexes[key] = manager.IndexHealth{
 				State:    string(idx.State),

@@ -650,7 +650,7 @@ func BenchmarkPebbleStore_ListIndexes(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		indexes := ps.ListIndexes(db)
+		indexes, _ := ps.ListIndexes(db)
 		if len(indexes) != numIndexes {
 			b.Fatalf("Expected %d indexes, got %d", numIndexes, len(indexes))
 		}
@@ -678,7 +678,7 @@ func BenchmarkPebbleStore_ListDatabases(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		dbs := ps.ListDatabases()
+		dbs, _ := ps.ListDatabases()
 		if len(dbs) != numDBs {
 			b.Fatalf("Expected %d databases, got %d", numDBs, len(dbs))
 		}

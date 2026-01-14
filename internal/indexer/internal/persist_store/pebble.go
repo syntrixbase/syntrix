@@ -48,7 +48,7 @@ func DefaultConfig() Config {
 
 // PebbleStore implements Store using PebbleDB.
 type PebbleStore struct {
-	db     *pebble.DB
+	db     DB
 	path   string
 	logger *slog.Logger
 
@@ -134,7 +134,7 @@ func NewPebbleStore(cfg Config) (*PebbleStore, error) {
 	}
 
 	s := &PebbleStore{
-		db:                  db,
+		db:                  &PebbleDB{db: db},
 		path:                cfg.Path,
 		logger:              logger,
 		pending:             make(map[string]map[string]*pendingOp),
@@ -358,7 +358,7 @@ func (s *PebbleStore) executeIndexDelete(delOp indexDeleteOp) error {
 }
 
 // applyOp applies a single pending operation to the batch.
-func (s *PebbleStore) applyOp(batch *pebble.Batch, op *pendingOp) error {
+func (s *PebbleStore) applyOp(batch Batch, op *pendingOp) error {
 	if op.orderKey == nil {
 		// Delete operation
 		// Need to look up existing orderKey to delete idx entry
@@ -672,7 +672,7 @@ func (s *PebbleStore) Search(db, pattern, tmplID string, opts store.SearchOption
 
 // searchFastPath handles search when there are no pending operations.
 // It streams directly from the iterator, stopping at limit.
-func (s *PebbleStore) searchFastPath(iter *pebble.Iterator, prefix []byte, opts store.SearchOptions, limit int) ([]store.DocRef, error) {
+func (s *PebbleStore) searchFastPath(iter Iterator, prefix []byte, opts store.SearchOptions, limit int) ([]store.DocRef, error) {
 	results := make([]store.DocRef, 0, limit)
 
 	for iter.First(); iter.Valid() && len(results) < limit; iter.Next() {
@@ -703,7 +703,7 @@ func (s *PebbleStore) searchFastPath(iter *pebble.Iterator, prefix []byte, opts 
 }
 
 // searchWithPending merges DB results with pending operations using a heap.
-func (s *PebbleStore) searchWithPending(iter *pebble.Iterator, prefix []byte, opts store.SearchOptions, limit int, memOps map[string]*pendingOp) ([]store.DocRef, error) {
+func (s *PebbleStore) searchWithPending(iter Iterator, prefix []byte, opts store.SearchOptions, limit int, memOps map[string]*pendingOp) ([]store.DocRef, error) {
 	// Build sorted slice of pending inserts/updates that are in bounds
 	pendingDocs := make([]store.DocRef, 0, len(memOps))
 	pendingDeletes := make(map[string]bool)
@@ -928,7 +928,7 @@ func (s *PebbleStore) LoadProgress() (string, error) {
 }
 
 // ListDatabases returns all database names.
-func (s *PebbleStore) ListDatabases() []string {
+func (s *PebbleStore) ListDatabases() ([]string, error) {
 	dbSet := make(map[string]struct{})
 
 	// 1. Collect from pending operations
@@ -961,12 +961,7 @@ func (s *PebbleStore) ListDatabases() []string {
 	})
 	if err != nil {
 		s.logger.Error("failed to create iterator for ListDatabases", "error", err)
-		// Return what we have from pending
-		result := make([]string, 0, len(dbSet))
-		for db := range dbSet {
-			result = append(result, db)
-		}
-		return result
+		return nil, err
 	}
 	defer iter.Close()
 
@@ -991,11 +986,11 @@ func (s *PebbleStore) ListDatabases() []string {
 	for db := range dbSet {
 		result = append(result, db)
 	}
-	return result
+	return result, nil
 }
 
 // ListIndexes returns metadata for all indexes in a database.
-func (s *PebbleStore) ListIndexes(db string) []store.IndexInfo {
+func (s *PebbleStore) ListIndexes(db string) ([]store.IndexInfo, error) {
 	// indexKey is pattern + "|" + tmplID
 	indexSet := make(map[string]struct {
 		pattern string
@@ -1041,6 +1036,7 @@ func (s *PebbleStore) ListIndexes(db string) []store.IndexInfo {
 	})
 	if err != nil {
 		s.logger.Error("failed to create iterator for ListIndexes", "error", err)
+		return nil, err
 	} else {
 		defer iter.Close()
 		for iter.First(); iter.Valid(); iter.Next() {
@@ -1092,7 +1088,7 @@ func (s *PebbleStore) ListIndexes(db string) []store.IndexInfo {
 		})
 	}
 
-	return results
+	return results, nil
 }
 
 // countDocs counts the number of documents in an index.

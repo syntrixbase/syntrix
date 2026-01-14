@@ -19,8 +19,8 @@ type Store interface {
 	GetState(db, pattern, tmplID string) (IndexState, error)
 
 	// Index enumeration (for reconciliation)
-	ListDatabases() []string
-	ListIndexes(db string) []IndexInfo
+	ListDatabases() ([]string, error)
+	ListIndexes(db string) ([]IndexInfo, error)
 
 	// Checkpoint for event progress
 	// LoadProgress loads the last saved progress marker.

@@ -412,7 +412,7 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 3 docs (1 from storage + 2 from replay)
-	indexes := st.ListIndexes(idxRef.Database)
+	indexes, _ := st.ListIndexes(idxRef.Database)
 	require.Len(t, indexes, 1)
 	assert.Equal(t, 3, indexes[0].DocCount)
 }
@@ -560,7 +560,7 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 1 doc (doc2 only, doc1 was deleted)
-	indexes := st.ListIndexes(idxRef.Database)
+	indexes, _ := st.ListIndexes(idxRef.Database)
 	require.Len(t, indexes, 1)
 	assert.Equal(t, 1, indexes[0].DocCount)
 }
@@ -742,7 +742,7 @@ func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Should have 0 docs (event was from different database)
-	indexes := st.ListIndexes(idxRef.Database)
+	indexes, _ := st.ListIndexes(idxRef.Database)
 	assert.Len(t, indexes, 1)
 	assert.Equal(t, 0, indexes[0].DocCount)
 }
@@ -782,7 +782,7 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 	assert.Equal(t, StatusCompleted, progress.Status)
 
 	// Doc should not be added due to key build error
-	indexes := st.ListIndexes(idxRef.Database)
+	indexes, _ := st.ListIndexes(idxRef.Database)
 	assert.Len(t, indexes, 1)
 	assert.Equal(t, 0, indexes[0].DocCount)
 }
@@ -842,7 +842,7 @@ func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
 		"ReplayFrom should be called with the startKey from CurrentPosition, not empty string")
 
 	// Should have 3 docs (2 from storage + 1 from replay)
-	indexes := st.ListIndexes(idxRef.Database)
+	indexes, _ := st.ListIndexes(idxRef.Database)
 	require.Len(t, indexes, 1)
 	assert.Equal(t, 3, indexes[0].DocCount)
 }

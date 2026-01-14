@@ -1247,7 +1247,7 @@ func TestPebbleStoreListDatabases(t *testing.T) {
 	defer cleanup()
 
 	// Initially empty
-	dbs := ps.ListDatabases()
+	dbs, _ := ps.ListDatabases()
 	if len(dbs) != 0 {
 		t.Errorf("expected empty database list, got %d", len(dbs))
 	}
@@ -1263,7 +1263,7 @@ func TestPebbleStoreListDatabases(t *testing.T) {
 		t.Fatalf("Upsert db3 failed: %v", err)
 	}
 
-	dbs = ps.ListDatabases()
+	dbs, _ = ps.ListDatabases()
 	if len(dbs) != 3 {
 		t.Errorf("expected 3 databases, got %d", len(dbs))
 	}
@@ -1294,7 +1294,7 @@ func TestPebbleStoreListDatabasesWithSpecialChars(t *testing.T) {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
-	dbs := ps.ListDatabases()
+	dbs, _ := ps.ListDatabases()
 	if len(dbs) != 1 {
 		t.Errorf("expected 1 database, got %d", len(dbs))
 	}
@@ -1329,7 +1329,7 @@ func TestPebbleStoreListIndexes(t *testing.T) {
 		t.Fatalf("SetState failed: %v", err)
 	}
 
-	indexes := ps.ListIndexes(db)
+	indexes, _ := ps.ListIndexes(db)
 	if len(indexes) != 2 {
 		t.Errorf("expected 2 indexes, got %d", len(indexes))
 	}
@@ -1377,7 +1377,7 @@ func TestPebbleStoreListIndexesEmpty(t *testing.T) {
 	defer cleanup()
 
 	// Non-existent database
-	indexes := ps.ListIndexes("nonexistent")
+	indexes, _ := ps.ListIndexes("nonexistent")
 	if len(indexes) != 0 {
 		t.Errorf("expected 0 indexes for non-existent db, got %d", len(indexes))
 	}
@@ -1395,7 +1395,7 @@ func TestPebbleStoreListIndexesAfterDelete(t *testing.T) {
 		t.Fatalf("Upsert failed: %v", err)
 	}
 
-	indexes := ps.ListIndexes(db)
+	indexes, _ := ps.ListIndexes(db)
 	if len(indexes) != 1 {
 		t.Errorf("expected 1 index, got %d", len(indexes))
 	}
@@ -1407,7 +1407,7 @@ func TestPebbleStoreListIndexesAfterDelete(t *testing.T) {
 
 	// Note: The map entry may still exist after DeleteIndex depending on implementation
 	// Check that docCount is 0 if the index still appears
-	indexes = ps.ListIndexes(db)
+	indexes, _ = ps.ListIndexes(db)
 	for _, idx := range indexes {
 		if idx.Pattern == "users/*" && idx.DocCount != 0 {
 			t.Errorf("expected docCount 0 after delete, got %d", idx.DocCount)
@@ -1547,13 +1547,13 @@ func TestPebbleStoreMultipleIndexesSameDB(t *testing.T) {
 	}
 
 	// ListIndexes should show all 5
-	indexes := ps.ListIndexes(db)
+	indexes, _ := ps.ListIndexes(db)
 	if len(indexes) != 5 {
 		t.Errorf("expected 5 indexes, got %d", len(indexes))
 	}
 
 	// ListDatabases should show 1
-	dbs := ps.ListDatabases()
+	dbs, _ := ps.ListDatabases()
 	if len(dbs) != 1 {
 		t.Errorf("expected 1 database, got %d", len(dbs))
 	}

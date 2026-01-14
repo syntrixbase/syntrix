@@ -202,7 +202,7 @@ func TestReconciler_ExecuteDelete(t *testing.T) {
 
 	// Create an index
 	st.Upsert("db1", "users/*/chats", "ts:desc", "doc1", []byte{0x01}, "")
-	indexes := st.ListIndexes("db1")
+	indexes, _ := st.ListIndexes("db1")
 	assert.Equal(t, 1, len(indexes))
 
 	r := New(DefaultConfig(), mgr, nil, logger)
@@ -218,7 +218,7 @@ func TestReconciler_ExecuteDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index should be deleted
-	indexes = st.ListIndexes("db1")
+	indexes, _ = st.ListIndexes("db1")
 	assert.Equal(t, 0, len(indexes))
 }
 
@@ -289,7 +289,7 @@ func TestReconciler_ExecuteRebuild_NoRebuilder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, store.IndexStateHealthy, state)
 	// Index should be empty (deleted and recreated)
-	indexes := st.ListIndexes("db1")
+	indexes, _ := st.ListIndexes("db1")
 	if len(indexes) > 0 {
 		assert.Equal(t, 0, indexes[0].DocCount)
 	}
@@ -398,7 +398,7 @@ func TestReconciler_ExecuteOperation_Delete(t *testing.T) {
 	assert.Empty(t, op.Error)
 
 	// Index should be deleted
-	indexes := st.ListIndexes("db1")
+	indexes, _ := st.ListIndexes("db1")
 	assert.Equal(t, 0, len(indexes))
 }
 
@@ -600,7 +600,7 @@ func TestReconciler_ExecuteCreateWithRebuild(t *testing.T) {
 	require.NoError(t, err)
 
 	// Index should be created (state managed by rebuilder)
-	indexes := st.ListIndexes("db1")
+	indexes, _ := st.ListIndexes("db1")
 	assert.Greater(t, len(indexes), 0)
 }
 

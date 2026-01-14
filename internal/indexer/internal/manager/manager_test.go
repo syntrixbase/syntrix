@@ -43,7 +43,8 @@ func TestNew(t *testing.T) {
 	st := mem_store.New()
 	m := New(st)
 	assert.NotNil(t, m)
-	assert.Empty(t, m.Store().ListDatabases())
+	dbs, _ := m.Store().ListDatabases()
+	assert.Empty(t, dbs)
 	assert.Empty(t, m.Templates())
 }
 
@@ -71,14 +72,15 @@ func TestManager_DatabaseCreation(t *testing.T) {
 	m := New(st)
 
 	// Initially no databases
-	assert.Empty(t, m.Store().ListDatabases())
+	dbs, _ := m.Store().ListDatabases()
+	assert.Empty(t, dbs)
 
 	// Upsert creates database implicitly
 	err := m.Store().Upsert("myapp", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
 
 	// Database now exists
-	dbs := m.Store().ListDatabases()
+	dbs, _ = m.Store().ListDatabases()
 	assert.Len(t, dbs, 1)
 	assert.Contains(t, dbs, "myapp")
 
@@ -86,7 +88,7 @@ func TestManager_DatabaseCreation(t *testing.T) {
 	err = m.Store().Upsert("other", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
 
-	dbs = m.Store().ListDatabases()
+	dbs, _ = m.Store().ListDatabases()
 	assert.Len(t, dbs, 2)
 	assert.Contains(t, dbs, "myapp")
 	assert.Contains(t, dbs, "other")
@@ -101,14 +103,15 @@ func TestManager_DeleteIndex(t *testing.T) {
 	require.NoError(t, err)
 	err = m.Store().Upsert("other", "test/*", "tmpl1", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
-	assert.Len(t, m.Store().ListDatabases(), 2)
+	dbs, _ := m.Store().ListDatabases()
+	assert.Len(t, dbs, 2)
 
 	// Delete index from myapp
 	err = m.Store().DeleteIndex("myapp", "test/*", "tmpl1")
 	require.NoError(t, err)
 
 	// Index should be empty (database may still exist in list)
-	indexes := m.Store().ListIndexes("myapp")
+	indexes, _ := m.Store().ListIndexes("myapp")
 	assert.Empty(t, indexes)
 
 	// Deleting again is a no-op
@@ -379,7 +382,7 @@ func TestManager_IndexOperations(t *testing.T) {
 	m := New(st)
 
 	// Index doesn't exist - ListIndexes returns empty
-	indexes := m.Store().ListIndexes("mydb")
+	indexes, _ := m.Store().ListIndexes("mydb")
 	assert.Empty(t, indexes)
 
 	// Create index via Upsert
@@ -387,7 +390,7 @@ func TestManager_IndexOperations(t *testing.T) {
 	require.NoError(t, err)
 
 	// Now it exists
-	indexes = m.Store().ListIndexes("mydb")
+	indexes, _ = m.Store().ListIndexes("mydb")
 	assert.Len(t, indexes, 1)
 	assert.Equal(t, "users/*/chats", indexes[0].Pattern)
 	assert.Equal(t, "ts:desc", indexes[0].TemplateID)
@@ -494,7 +497,7 @@ func TestManager_ListDatabases(t *testing.T) {
 	m := New(st)
 
 	// Initially empty
-	names := m.Store().ListDatabases()
+	names, _ := m.Store().ListDatabases()
 	assert.Empty(t, names)
 
 	// Add databases via Upsert
@@ -505,7 +508,7 @@ func TestManager_ListDatabases(t *testing.T) {
 	err = st.Upsert("db3", "test/*", "tmpl", "doc1", []byte{0x01}, "")
 	require.NoError(t, err)
 
-	names = m.Store().ListDatabases()
+	names, _ = m.Store().ListDatabases()
 	assert.Len(t, names, 3)
 	assert.Contains(t, names, "db1")
 	assert.Contains(t, names, "db2")
@@ -600,7 +603,8 @@ func TestManager_Upsert_Concurrent(t *testing.T) {
 	}
 
 	// Should only have one database
-	assert.Len(t, m.Store().ListDatabases(), 1)
+	dbs, _ := m.Store().ListDatabases()
+	assert.Len(t, dbs, 1)
 }
 
 func TestManager_SelectBestTemplate_PatternPriority(t *testing.T) {

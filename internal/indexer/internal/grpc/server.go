@@ -132,7 +132,12 @@ func (s *Server) InvalidateIndex(ctx context.Context, req *indexerv1.InvalidateI
 	st := mgr.Store()
 	count := 0
 
-	for _, idx := range st.ListIndexes(req.Database) {
+	indexes, err := st.ListIndexes(req.Database)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to list indexes: %v", err)
+	}
+
+	for _, idx := range indexes {
 		// Match by pattern
 		if req.Pattern != "" && idx.Pattern != req.Pattern {
 			continue
@@ -269,13 +274,23 @@ func (s *Server) buildActualState(mgr *manager.Manager, filterDB, filterPattern 
 	var infos []*indexerv1.IndexInfo
 	st := mgr.Store()
 
-	for _, dbName := range st.ListDatabases() {
+	databases, err := st.ListDatabases()
+	if err != nil {
+		return nil
+	}
+
+	for _, dbName := range databases {
 		// Apply database filter
 		if filterDB != "" && dbName != filterDB {
 			continue
 		}
 
-		for _, idx := range st.ListIndexes(dbName) {
+		indexes, err := st.ListIndexes(dbName)
+		if err != nil {
+			continue // Skip database on error
+		}
+
+		for _, idx := range indexes {
 			// Apply pattern filter
 			if filterPattern != "" && idx.Pattern != filterPattern {
 				continue
