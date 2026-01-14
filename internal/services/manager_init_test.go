@@ -1227,3 +1227,94 @@ func TestManager_initDistributed_WithIndexer(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.indexerService)
 }
+
+func TestManager_initStandalone_IndexerError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Backends = nil
+	// Use invalid storage mode to trigger indexer error
+	cfg.Indexer.StorageMode = "invalid_storage_mode"
+
+	mgr := NewManager(cfg, Options{
+		Mode:   ModeStandalone,
+		RunAPI: true,
+	})
+
+	err := mgr.Init(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create indexer service")
+}
+
+func TestManager_initStandalone_QueryServiceError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Server.HTTPPort = 0
+	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Puller.Backends = nil
+
+	mgr := NewManager(cfg, Options{
+		Mode:   ModeStandalone,
+		RunAPI: true,
+	})
+
+	// Manually set indexerService to nil to trigger "indexer service required" error
+	// in initQueryService for standalone mode
+	mgr.indexerService = nil
+
+	// Need to call initStandalone directly since Init would call initIndexerService first
+	// which would set indexerService. We need to test the error path where indexer exists
+	// but query service fails for some other reason.
+	// Since initQueryService checks for nil indexerService in standalone mode,
+	// we can test this by not calling initIndexerService.
+
+	// Actually, let's test the error path more directly by calling initStandalone
+	// after Init has set up auth service
+	err := mgr.initAuthService(context.Background())
+	assert.NoError(t, err)
+
+	server.InitDefault(cfg.Server, nil)
+
+	// Now call initStandalone - indexerService is nil so it will call initIndexerService
+	// which will succeed, but let's skip that and test query error directly
+	// by setting a bad indexer service
+
+	// First run initIndexerService to create the service
+	err = mgr.initIndexerService(context.Background())
+	assert.NoError(t, err)
+
+	// Then clear it to simulate the error condition in initQueryService
+	mgr.indexerService = nil
+
+	err = mgr.initStreamerService()
+	assert.NoError(t, err)
+
+	_, err = mgr.initQueryService(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
+}
