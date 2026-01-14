@@ -122,7 +122,7 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	_ = p.Subscribe(ctx, "c1", "")
+	eventsCh := p.Subscribe(ctx, "c1", "")
 	_ = p.Start(ctx)
 
 	// Wait for change stream to be established
@@ -132,8 +132,14 @@ func TestPuller_ResumeFromCheckpoint(t *testing.T) {
 	coll := env.DB.Collection("users")
 	_, _ = coll.InsertOne(ctx, bson.M{"a": 1})
 
-	// Wait for checkpoint
-	time.Sleep(200 * time.Millisecond)
+	// Wait for event to ensure it was processed
+	select {
+	case <-eventsCh:
+		// Event received
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for event")
+	}
+
 	p.Stop(ctx)
 
 	// Verify checkpoint exists

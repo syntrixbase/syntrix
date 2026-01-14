@@ -13,7 +13,7 @@ server:
 
 storage:
   backends:
-    default_mongo:
+    default:
       type: mongo
       mongo:
         uri: "mongodb://localhost:27017"
@@ -21,17 +21,17 @@ storage:
   topology:
     document:
       strategy: single
-      primary: default_mongo
+      primary: default
       data_collection: documents
       sys_collection: sys
       soft_delete_retention: 720h # 30 days
     user:
       strategy: single
-      primary: default_mongo
+      primary: default
       collection: users
     revocation:
       strategy: single
-      primary: default_mongo
+      primary: default
       collection: revocations
 
 identity:
@@ -41,7 +41,7 @@ identity:
     auth_code_ttl: 2m
     private_key_file: "keys/auth_private.pem"
   authz:
-    rules_file: "security.yaml"
+    rules_file: "security.example.yml"
 
 gateway:
   query_service_url: "localhost:9000"
@@ -103,7 +103,7 @@ streamer:
 
 indexer:
   puller_addr: "localhost:9000"
-  template_path: "index_templates.yaml"
+  template_path: "index_templates.example.yml"
   progress_path: "data/indexer/progress"
   consumer_id: "indexer"
   reconcile_interval: 5s
