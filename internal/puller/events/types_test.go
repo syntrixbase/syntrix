@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 

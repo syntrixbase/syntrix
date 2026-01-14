@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/indexer/config"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/mem_store"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/persist_store"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/store"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/template"
+	"github.com/syntrixbase/syntrix/internal/indexer/encoding"
+	"github.com/syntrixbase/syntrix/internal/indexer/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/persist_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/store"
+	"github.com/syntrixbase/syntrix/internal/indexer/template"
 	"github.com/syntrixbase/syntrix/internal/puller"
 )
 

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/syntrixbase/syntrix/internal/storage/types"
+	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 )
 
 func TestFlattenStorageDocument_Nil(t *testing.T) {

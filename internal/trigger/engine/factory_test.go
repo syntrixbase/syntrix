@@ -9,9 +9,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/pubsub"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/worker"
+	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger/worker"
 )
 
 // MockTaskConsumer

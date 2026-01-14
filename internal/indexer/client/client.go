@@ -9,8 +9,8 @@ import (
 	"log/slog"
 
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/encoding"
-	"github.com/syntrixbase/syntrix/internal/indexer/internal/manager"
+	"github.com/syntrixbase/syntrix/internal/indexer/encoding"
+	"github.com/syntrixbase/syntrix/internal/indexer/manager"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"

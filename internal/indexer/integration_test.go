@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
-	"github.com/syntrixbase/syntrix/internal/storage"
 )
 
 // mockPuller implements puller.Service for testing.

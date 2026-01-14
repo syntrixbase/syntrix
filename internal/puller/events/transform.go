@@ -3,7 +3,7 @@ package events
 import (
 	"errors"
 
-	"github.com/syntrixbase/syntrix/internal/storage"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 )
 
 // EventType represents the type of change operation.

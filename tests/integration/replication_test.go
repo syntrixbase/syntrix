@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/syntrixbase/syntrix/internal/api/realtime"
-	"github.com/syntrixbase/syntrix/internal/api/rest"
+	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
+	"github.com/syntrixbase/syntrix/internal/gateway/rest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

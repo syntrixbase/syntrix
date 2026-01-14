@@ -4,15 +4,15 @@ import (
 	"fmt"
 
 	"github.com/nats-io/nats.go"
-	"github.com/syntrixbase/syntrix/internal/identity"
+	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
-	"github.com/syntrixbase/syntrix/internal/storage"
 	"github.com/syntrixbase/syntrix/internal/trigger"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/evaluator"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/pubsub"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/watcher"
-	"github.com/syntrixbase/syntrix/internal/trigger/internal/worker"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
+	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
+	"github.com/syntrixbase/syntrix/internal/trigger/watcher"
+	"github.com/syntrixbase/syntrix/internal/trigger/worker"
 )
 
 var (
