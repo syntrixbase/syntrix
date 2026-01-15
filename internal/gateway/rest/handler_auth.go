@@ -22,7 +22,7 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
-		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Signup failed")
+		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Signup failed: "+err.Error())
 		return
 	}
 
