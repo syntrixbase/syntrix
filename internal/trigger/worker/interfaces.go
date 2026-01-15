@@ -1,18 +1,13 @@
 package worker
 
 import (
-	"context"
-
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
-// SecretProvider resolves secret references.
-type SecretProvider interface {
-	GetSecret(ctx context.Context, ref string) (string, error)
-}
+// SecretProvider is an alias for types.SecretProvider.
+// Deprecated: Use types.SecretProvider directly.
+type SecretProvider = types.SecretProvider
 
-// DeliveryWorker processes delivery tasks by making HTTP requests.
-type DeliveryWorker interface {
-	// ProcessTask executes the delivery task.
-	ProcessTask(ctx context.Context, task *types.DeliveryTask) error
-}
+// DeliveryWorker is an alias for types.DeliveryWorker.
+// Deprecated: Use types.DeliveryWorker directly.
+type DeliveryWorker = types.DeliveryWorker

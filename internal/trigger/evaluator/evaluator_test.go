@@ -7,7 +7,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,14 +19,14 @@ func TestCELEvaluator(t *testing.T) {
 
 	tests := []struct {
 		name      string
-		trigger   *trigger.Trigger
+		trigger   *types.Trigger
 		event     events.SyntrixChangeEvent
 		wantMatch bool
 		wantErr   bool
 	}{
 		{
 			name: "Simple match",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
 				Condition:  "event.document.age > 18",
@@ -43,7 +43,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Simple no match",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
 				Condition:  "event.document.age > 18",
@@ -60,7 +60,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Event type mismatch",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"delete"},
 				Collection: "users",
 				Condition:  "true",
@@ -76,7 +76,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Collection mismatch",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "orders",
 				Condition:  "true",
@@ -92,7 +92,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Collection wildcard match",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "chats/*/members",
 				Condition:  "true",
@@ -108,7 +108,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Collection wildcard no match",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "chats/*/members",
 				Condition:  "true",
@@ -124,7 +124,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Complex condition",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"update"},
 				Collection: "users",
 				Condition:  "event.document.role == 'admin' && event.document.active == true",
@@ -144,7 +144,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Invalid CEL",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
 				Condition:  "invalid syntax ???",
@@ -160,7 +160,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Check Before State",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"update"},
 				Collection: "users",
 				Condition:  "event.before.status == 'pending' && event.document.status == 'active'",
@@ -181,7 +181,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Check Timestamp",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "logs",
 				Condition:  "event.timestamp > 0",
@@ -198,7 +198,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Empty condition",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
 				Condition:  "",
@@ -214,7 +214,7 @@ func TestCELEvaluator(t *testing.T) {
 		},
 		{
 			name: "Invalid condition syntax",
-			trigger: &trigger.Trigger{
+			trigger: &types.Trigger{
 				Events:     []string{"create"},
 				Collection: "users",
 				Condition:  "invalid syntax !!!",
@@ -270,7 +270,7 @@ func TestCELEvaluator_CacheEviction(t *testing.T) {
 		},
 	}
 
-	trig := &trigger.Trigger{
+	trig := &types.Trigger{
 		Events:     []string{"create"},
 		Collection: "test",
 		Condition:  "event.document.newfield == 1",
@@ -283,7 +283,7 @@ func TestCELEvaluator_CacheEviction(t *testing.T) {
 	assert.Equal(t, MaxCacheSize, len(celEval.prgCache))
 
 	// Add another one to trigger eviction
-	trig2 := &trigger.Trigger{
+	trig2 := &types.Trigger{
 		Events:     []string{"create"},
 		Collection: "test",
 		Condition:  "event.document.newfield == 2",
@@ -303,7 +303,7 @@ func TestCELEvaluator_DeleteEventWithBeforeOnly(t *testing.T) {
 	evaluator, err := NewEvaluator()
 	require.NoError(t, err)
 
-	trig := &trigger.Trigger{
+	trig := &types.Trigger{
 		Events:     []string{"delete"},
 		Collection: "users",
 		Condition:  "true",
@@ -327,7 +327,7 @@ func TestCELEvaluator_CollectionMismatchWithBeforeOnly(t *testing.T) {
 	evaluator, err := NewEvaluator()
 	require.NoError(t, err)
 
-	trig := &trigger.Trigger{
+	trig := &types.Trigger{
 		Events:     []string{"delete"},
 		Collection: "orders",
 		Condition:  "true",
@@ -352,7 +352,7 @@ func TestCELEvaluator_CELNonBoolReturn(t *testing.T) {
 	require.NoError(t, err)
 
 	// CEL that returns non-boolean
-	trig := &trigger.Trigger{
+	trig := &types.Trigger{
 		Events:     []string{"create"},
 		Collection: "users",
 		Condition:  "event.document.name", // Returns string, not bool
@@ -375,7 +375,7 @@ func TestCELEvaluator_CacheHit(t *testing.T) {
 	evaluator, err := NewEvaluator()
 	require.NoError(t, err)
 
-	trig := &trigger.Trigger{
+	trig := &types.Trigger{
 		Events:     []string{"create"},
 		Collection: "users",
 		Condition:  "event.document.age > 18",

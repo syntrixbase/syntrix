@@ -36,9 +36,9 @@ func NewWatcher(p puller.Service, store storage.DocumentStore, database string, 
 
 func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeEvent, error) {
 	// 1. Load Checkpoint
-	// We use "default" database for system checkpoints as per design implication of database-scoped keys.
-	// Key format: sys/checkpoints/trigger_evaluator/<database>
-	checkpointKey := fmt.Sprintf("sys/checkpoints/trigger_evaluator/%s", w.database)
+	// Checkpoint is global (not per-database) because Puller returns a single aggregated
+	// progress token across all databases. The database field is only used for filtering events.
+	checkpointKey := "sys/checkpoints/trigger_evaluator"
 	checkpointDatabase := "default"
 
 	var resumeToken string
@@ -46,20 +46,20 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeE
 	if err == nil && checkpointDoc != nil {
 		if token, ok := checkpointDoc.Data["token"].(string); ok {
 			resumeToken = token
-			log.Printf("Resuming trigger watcher for database %s from checkpoint: %s", w.database, token)
+			log.Printf("Resuming trigger watcher from checkpoint: %s", token)
 		}
 	} else if err == model.ErrNotFound {
 		if !w.opts.StartFromNow {
-			return nil, fmt.Errorf("checkpoint not found for database %s and StartFromNow is false", w.database)
+			return nil, fmt.Errorf("checkpoint not found and StartFromNow is false")
 		}
-		log.Printf("AUDIT: Starting watch from NOW for database %s (checkpoint missing)", w.database)
+		log.Printf("AUDIT: Starting watch from NOW (checkpoint missing)")
 	} else {
-		log.Printf("Failed to load checkpoint for database %s: %v", w.database, err)
+		log.Printf("Failed to load checkpoint: %v", err)
 		return nil, err
 	}
 
 	// 2. Start Watch
-	consumerID := fmt.Sprintf("trigger-evaluator-%s", w.database)
+	consumerID := "trigger-evaluator"
 	pullerCh := w.puller.Subscribe(ctx, consumerID, resumeToken)
 
 	outCh := make(chan events.SyntrixChangeEvent)
@@ -90,8 +90,7 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeE
 }
 
 func (w *pullerWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {
-	coll := "sys/checkpoints/trigger_evaluator"
-	checkpointKey := fmt.Sprintf("%s/%s", coll, w.database)
+	checkpointKey := "sys/checkpoints/trigger_evaluator"
 	checkpointDatabase := "default"
 
 	data := map[string]interface{}{
@@ -103,7 +102,7 @@ func (w *pullerWatcher) SaveCheckpoint(ctx context.Context, token interface{}) e
 	if err != nil {
 		if err == model.ErrNotFound {
 			// Create if not exists
-			doc := storage.NewStoredDoc(checkpointDatabase, coll, w.database, data)
+			doc := storage.NewStoredDoc(checkpointDatabase, "sys/checkpoints", "trigger_evaluator", data)
 			return w.store.Create(ctx, checkpointDatabase, doc)
 		}
 		return err

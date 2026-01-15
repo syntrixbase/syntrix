@@ -20,7 +20,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	triggerengine "github.com/syntrixbase/syntrix/internal/trigger/engine"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 
 	"github.com/nats-io/nats.go"
 )
@@ -472,4 +474,71 @@ func (m *Manager) initIndexerGRPCServer() {
 	grpcServer := indexer.NewGRPCServer(m.indexerService)
 	server.Default().RegisterGRPCService(&indexerv1.IndexerService_ServiceDesc, grpcServer)
 	slog.Info("Registered Indexer Service (gRPC)")
+}
+
+// initTriggerServicesV2 initializes trigger services using the new separated service packages.
+// This is an alternative to initTriggerServices that uses evaluator.Service and delivery.Service
+// instead of the combined TriggerFactory approach.
+// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
+func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS bool) error {
+	// Create NATS provider based on parameter
+	if useEmbeddedNATS {
+		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
+	} else {
+		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
+	}
+
+	nc, err := m.natsProvider.Connect(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Initialize Evaluator Service
+	if m.opts.RunTriggerEvaluator {
+		if m.pullerService == nil {
+			return fmt.Errorf("puller service is required for trigger evaluator")
+		}
+
+		evalSvc, err := evaluator.NewService(evaluator.Dependencies{
+			Store:   sf.Document(),
+			Puller:  m.pullerService,
+			Nats:    nc,
+			Metrics: nil, // TODO: Add metrics when available
+		}, evaluator.ServiceOptions{
+			Database:     "default",
+			StartFromNow: true,
+			RulesFile:    m.cfg.Trigger.RulesFile,
+			StreamName:   m.cfg.Trigger.StreamName,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
+		}
+		m.triggerService = evalSvc
+		slog.Info("Initialized Trigger Evaluator Service (v2)")
+	}
+
+	// Initialize Delivery Service
+	if m.opts.RunTriggerWorker {
+		deliverySvc, err := delivery.NewService(delivery.Dependencies{
+			Nats:    nc,
+			Auth:    m.authService,
+			Secrets: nil, // TODO: Add secret provider when available
+			Metrics: nil, // TODO: Add metrics when available
+		}, delivery.ServiceOptions{
+			StreamName: m.cfg.Trigger.StreamName,
+			NumWorkers: m.cfg.Trigger.WorkerCount,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create trigger delivery service: %w", err)
+		}
+		m.triggerConsumer = deliverySvc
+		slog.Info("Initialized Trigger Delivery Service (v2)")
+	}
+
+	return nil
 }
