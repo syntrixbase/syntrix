@@ -134,7 +134,7 @@ if check_port 8080; then
         stop_syntrix
         sleep 1
         echo "Starting Syntrix server in standalone mode (binding to 0.0.0.0 for LAN access)..."
-        "$PROJECT_ROOT/bin/syntrix" --standalone --host 0.0.0.0 &
+        SYNTRIX_HOST=0.0.0.0 "$PROJECT_ROOT/bin/syntrix" --standalone &
         SYNTRIX_PID=$!
         echo "Syntrix server started with PID: $SYNTRIX_PID"
         wait_for_service localhost 8080 "Syntrix API"
@@ -144,7 +144,7 @@ if check_port 8080; then
     fi
 else
     echo "Starting Syntrix server in standalone mode (binding to 0.0.0.0 for LAN access)..."
-    "$PROJECT_ROOT/bin/syntrix" --standalone --host 0.0.0.0 &
+    SYNTRIX_HOST=0.0.0.0 "$PROJECT_ROOT/bin/syntrix" --standalone &
     SYNTRIX_PID=$!
     echo "Syntrix server started with PID: $SYNTRIX_PID"
     wait_for_service localhost 8080 "Syntrix API"

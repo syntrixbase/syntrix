@@ -251,3 +251,12 @@ func TestIsStandaloneMode(t *testing.T) {
 	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: ""}}
 	assert.False(t, cfg.IsStandaloneMode())
 }
+
+func TestLoadConfig_ServerHostEnvVar(t *testing.T) {
+	os.Setenv("SYNTRIX_HOST", "0.0.0.0")
+	defer os.Unsetenv("SYNTRIX_HOST")
+
+	cfg := LoadConfig()
+
+	assert.Equal(t, "0.0.0.0", cfg.Server.Host)
+}

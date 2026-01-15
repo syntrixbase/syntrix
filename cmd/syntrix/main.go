@@ -35,8 +35,11 @@ func main() {
 		log.Println("Starting Syntrix in Standalone Mode...")
 		log.Println("- All services running in-process")
 		opts := services.Options{
-			Mode:   services.ModeStandalone,
-			RunAPI: true,
+			Mode:       services.ModeStandalone,
+			RunAPI:     true,
+			RunPuller:  true,
+			RunIndexer: true,
+			RunQuery:   true,
 		}
 		runServer(cfg, opts)
 		return

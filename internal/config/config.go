@@ -126,6 +126,11 @@ func LoadConfig() *Config {
 		cfg.Trigger.RulesFile = val
 	}
 
+	// Server configuration
+	if val := os.Getenv("SYNTRIX_HOST"); val != "" {
+		cfg.Server.Host = val
+	}
+
 	// Deployment configuration
 	if val := os.Getenv("SYNTRIX_DEPLOYMENT_MODE"); val != "" {
 		cfg.Deployment.Mode = val
