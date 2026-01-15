@@ -35,8 +35,8 @@ func TestFactoryOptions(t *testing.T) {
 	t.Parallel()
 	f := &defaultTriggerFactory{}
 
-	WithDatabase("database1")(f)
-	assert.Equal(t, "database1", f.database)
+	WithCheckpointDatabase("database1")(f)
+	assert.Equal(t, "database1", f.checkpointDatabase)
 
 	WithStartFromNow(true)(f)
 	assert.True(t, f.startFromNow)

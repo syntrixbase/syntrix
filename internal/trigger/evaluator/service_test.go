@@ -1,0 +1,788 @@
+package evaluator
+
+import (
+	"context"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/nats-io/nats.go"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/puller/events"
+	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
+)
+
+// MockDocumentWatcher mocks watcher.DocumentWatcher
+type MockDocumentWatcher struct {
+	mock.Mock
+}
+
+func (m *MockDocumentWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeEvent, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(<-chan events.SyntrixChangeEvent), args.Error(1)
+}
+
+func (m *MockDocumentWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {
+	args := m.Called(ctx, token)
+	return args.Error(0)
+}
+
+func (m *MockDocumentWatcher) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+// MockTaskPublisher mocks TaskPublisher
+type MockTaskPublisher struct {
+	mock.Mock
+}
+
+func (m *MockTaskPublisher) Publish(ctx context.Context, task *types.DeliveryTask) error {
+	args := m.Called(ctx, task)
+	return args.Error(0)
+}
+
+func (m *MockTaskPublisher) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+// MockPuller mocks puller.Service
+type MockPuller struct {
+	mock.Mock
+}
+
+func (m *MockPuller) Subscribe(ctx context.Context, consumerID string, after string) <-chan *events.PullerEvent {
+	args := m.Called(ctx, consumerID, after)
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Get(0).(<-chan *events.PullerEvent)
+}
+
+func TestService_LoadTriggers(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	triggers := []*types.Trigger{
+		{
+			ID:         "trigger1",
+			Database:   "db1",
+			Collection: "users",
+			Events:     []string{"create"},
+			URL:        "https://example.com/webhook",
+		},
+	}
+
+	err = svc.LoadTriggers(triggers)
+	assert.NoError(t, err)
+	assert.Len(t, svc.triggers, 1)
+}
+
+func TestService_LoadTriggers_ValidationError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	// Invalid trigger - missing ID
+	triggers := []*types.Trigger{
+		{
+			Database:   "db1",
+			Collection: "users",
+			Events:     []string{"create"},
+			URL:        "https://example.com/webhook",
+		},
+	}
+
+	err = svc.LoadTriggers(triggers)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "trigger id is required")
+}
+
+func TestService_Start(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+	mockWatcher.On("SaveCheckpoint", mock.Anything, "token1").Return(nil)
+	mockPublisher.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventCreate,
+			Document: &storage.StoredDoc{
+				Id:         "doc1",
+				DatabaseID: "db1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "test"},
+			},
+			Progress: "token1",
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+	mockWatcher.AssertExpectations(t)
+	mockPublisher.AssertExpectations(t)
+}
+
+func TestService_Start_WatchError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	mockWatcher.On("Watch", mock.Anything).Return(nil, errors.New("watch error"))
+
+	err = svc.Start(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "watch error")
+}
+
+func TestService_Start_EvaluateError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				Condition:  "invalid.cel.expression[",
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventCreate,
+			Document: &storage.StoredDoc{
+				Id:         "doc1",
+				DatabaseID: "db1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "test"},
+			},
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+}
+
+func TestService_Start_NilDocumentAndBefore(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		// Send event with nil Document and nil Before
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventCreate,
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+}
+
+func TestService_Start_PublishError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+	mockPublisher.On("Publish", mock.Anything, mock.Anything).Return(errors.New("publish error"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventCreate,
+			Document: &storage.StoredDoc{
+				Id:         "doc1",
+				DatabaseID: "db1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "test"},
+			},
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+	mockPublisher.AssertExpectations(t)
+}
+
+func TestService_Start_SaveCheckpointError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+	mockWatcher.On("SaveCheckpoint", mock.Anything, "token1").Return(errors.New("checkpoint error"))
+	mockPublisher.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventCreate,
+			Document: &storage.StoredDoc{
+				Id:         "doc1",
+				DatabaseID: "db1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "test"},
+			},
+			Progress: "token1",
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+}
+
+func TestService_Start_BeforeOnlyEvent(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+		triggers: []*types.Trigger{
+			{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"delete"},
+				URL:        "https://example.com/webhook",
+			},
+		},
+	}
+
+	eventCh := make(chan events.SyntrixChangeEvent)
+	mockWatcher.On("Watch", mock.Anything).Return((<-chan events.SyntrixChangeEvent)(eventCh), nil)
+	mockPublisher.On("Publish", mock.Anything, mock.Anything).Return(nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		eventCh <- events.SyntrixChangeEvent{
+			Type: events.EventDelete,
+			Before: &storage.StoredDoc{
+				Id:         "doc1",
+				DatabaseID: "db1",
+				Collection: "users",
+				Data:       map[string]interface{}{"name": "test"},
+			},
+		}
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+
+	err = svc.Start(ctx)
+	assert.NoError(t, err)
+	mockPublisher.AssertExpectations(t)
+}
+
+func TestService_Close(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	mockWatcher.On("Close").Return(nil)
+	mockPublisher.On("Close").Return(nil)
+
+	err = svc.Close()
+	assert.NoError(t, err)
+	mockWatcher.AssertExpectations(t)
+	mockPublisher.AssertExpectations(t)
+}
+
+func TestService_Close_WithWatcherError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	mockWatcher.On("Close").Return(errors.New("watcher close error"))
+	mockPublisher.On("Close").Return(nil)
+
+	err = svc.Close()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "watcher close error")
+}
+
+func TestService_Close_WithPublisherError(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	mockWatcher.On("Close").Return(nil)
+	mockPublisher.On("Close").Return(errors.New("publisher close error"))
+
+	err = svc.Close()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "publisher close error")
+}
+
+func TestService_Close_WithBothErrors(t *testing.T) {
+	mockWatcher := new(MockDocumentWatcher)
+	mockPublisher := new(MockTaskPublisher)
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   mockWatcher,
+		publisher: mockPublisher,
+	}
+
+	mockWatcher.On("Close").Return(errors.New("watcher close error"))
+	mockPublisher.On("Close").Return(errors.New("publisher close error"))
+
+	err = svc.Close()
+	assert.Error(t, err)
+	// First error wins
+	assert.Contains(t, err.Error(), "watcher close error")
+}
+
+func TestService_Close_Success(t *testing.T) {
+	eval, err := NewEvaluator()
+	require.NoError(t, err)
+
+	svc := &service{
+		evaluator: eval,
+		watcher:   nil,
+		publisher: nil,
+	}
+
+	err = svc.Close()
+	assert.NoError(t, err)
+}
+
+func TestNewService_NoPuller(t *testing.T) {
+	deps := Dependencies{
+		Puller: nil,
+	}
+	opts := ServiceOptions{}
+
+	_, err := NewService(deps, opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "puller service is required")
+}
+
+func TestNewService_PublisherError(t *testing.T) {
+	// Save original and restore after test
+	originalFactory := newTaskPublisher
+	defer func() { newTaskPublisher = originalFactory }()
+
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+		return nil, errors.New("publisher creation failed")
+	}
+
+	mockPuller := new(MockPuller)
+	deps := Dependencies{
+		Puller: mockPuller,
+		Nats:   &nats.Conn{}, // Non-nil to trigger publisher creation
+	}
+	opts := ServiceOptions{}
+
+	_, err := NewService(deps, opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create publisher")
+}
+
+func TestNewService_Success(t *testing.T) {
+	mockPuller := new(MockPuller)
+
+	deps := Dependencies{
+		Puller: mockPuller,
+	}
+	opts := ServiceOptions{}
+
+	svc, err := NewService(deps, opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+}
+
+func TestNewService_WithRulesFile(t *testing.T) {
+	mockPuller := new(MockPuller)
+
+	content := `[
+		{
+			"triggerId": "trigger1",
+			"database": "db1",
+			"collection": "users",
+			"events": ["create"],
+			"url": "https://example.com/webhook"
+		}
+	]`
+
+	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
+	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	require.NoError(t, err)
+
+	deps := Dependencies{
+		Puller: mockPuller,
+	}
+	opts := ServiceOptions{
+		RulesFile: tmpFile,
+	}
+
+	svc, err := NewService(deps, opts)
+	assert.NoError(t, err)
+	assert.NotNil(t, svc)
+}
+
+func TestNewService_WithInvalidRulesFile(t *testing.T) {
+	mockPuller := new(MockPuller)
+
+	deps := Dependencies{
+		Puller: mockPuller,
+	}
+	opts := ServiceOptions{
+		RulesFile: "/nonexistent/file.json",
+	}
+
+	_, err := NewService(deps, opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load trigger rules")
+}
+
+func TestNewService_WithInvalidTrigger(t *testing.T) {
+	mockPuller := new(MockPuller)
+
+	// Invalid trigger - missing ID
+	content := `[
+		{
+			"database": "db1",
+			"collection": "users",
+			"events": ["create"],
+			"url": "https://example.com/webhook"
+		}
+	]`
+
+	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
+	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	require.NoError(t, err)
+
+	deps := Dependencies{
+		Puller: mockPuller,
+	}
+	opts := ServiceOptions{
+		RulesFile: tmpFile,
+	}
+
+	_, err = NewService(deps, opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load triggers")
+}
+
+func TestValidateTrigger(t *testing.T) {
+	tests := []struct {
+		name      string
+		trigger   *types.Trigger
+		wantError string
+	}{
+		{
+			name: "valid trigger",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "",
+		},
+		{
+			name: "missing id",
+			trigger: &types.Trigger{
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "trigger id is required",
+		},
+		{
+			name: "invalid id",
+			trigger: &types.Trigger{
+				ID:         "trigger.1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "invalid trigger id",
+		},
+		{
+			name: "missing database",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "database is required",
+		},
+		{
+			name: "invalid database",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db.1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "invalid database",
+		},
+		{
+			name: "database too long",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "database name too long",
+		},
+		{
+			name: "missing collection",
+			trigger: &types.Trigger{
+				ID:       "trigger1",
+				Database: "db1",
+				Events:   []string{"create"},
+				URL:      "https://example.com/webhook",
+			},
+			wantError: "collection is required",
+		},
+		{
+			name: "collection too long",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz",
+				Events:     []string{"create"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "collection name too long",
+		},
+		{
+			name: "missing events",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "at least one event is required",
+		},
+		{
+			name: "invalid event",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"invalid"},
+				URL:        "https://example.com/webhook",
+			},
+			wantError: "invalid event type",
+		},
+		{
+			name: "missing url",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+			},
+			wantError: "url is required",
+		},
+		{
+			name: "invalid url scheme",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "ftp://example.com/webhook",
+			},
+			wantError: "url must use http or https scheme",
+		},
+		{
+			name: "url missing host",
+			trigger: &types.Trigger{
+				ID:         "trigger1",
+				Database:   "db1",
+				Collection: "users",
+				Events:     []string{"create"},
+				URL:        "https:///webhook",
+			},
+			wantError: "url must have a host",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTrigger(tt.trigger)
+			if tt.wantError == "" {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantError)
+			}
+		})
+	}
+}

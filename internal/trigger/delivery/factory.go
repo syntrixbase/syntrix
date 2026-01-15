@@ -24,6 +24,13 @@ type service struct {
 	consumer pubsub.TaskConsumer
 }
 
+// consumerFactory is a function type for creating TaskConsumer.
+// This allows injection for testing.
+type consumerFactory func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error)
+
+// newTaskConsumer is the default consumer factory.
+var newTaskConsumer consumerFactory = pubsub.NewTaskConsumer
+
 // NewService creates a new delivery Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	if deps.Nats == nil {
@@ -57,7 +64,7 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	}
 
 	// Create consumer
-	consumer, err := pubsub.NewTaskConsumer(deps.Nats, w, opts.StreamName, opts.NumWorkers, deps.Metrics, consumerOpts...)
+	consumer, err := newTaskConsumer(deps.Nats, w, opts.StreamName, opts.NumWorkers, deps.Metrics, consumerOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create consumer: %w", err)
 	}

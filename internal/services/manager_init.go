@@ -36,6 +36,16 @@ var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (stora
 	return storage.NewFactory(ctx, cfg.Storage)
 }
 
+// evaluatorServiceFactory creates evaluator services - injectable for testing
+var evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
+	return evaluator.NewService(deps, opts)
+}
+
+// deliveryServiceFactory creates delivery services - injectable for testing
+var deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
+	return delivery.NewService(deps, opts)
+}
+
 func (m *Manager) Init(ctx context.Context) error {
 	// Common infrastructure initialization
 	if err := m.initAuthService(ctx); err != nil {
@@ -87,7 +97,7 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 	// Initialize trigger services with embedded NATS if configured
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
 		useEmbeddedNATS := m.cfg.Deployment.Standalone.EmbeddedNATS
-		if err := m.initTriggerServices(ctx, useEmbeddedNATS); err != nil {
+		if err := m.initTriggerServicesV2(ctx, useEmbeddedNATS); err != nil {
 			return err
 		}
 	}
@@ -142,7 +152,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 
 	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServices(ctx, false); err != nil {
+		if err := m.initTriggerServicesV2(ctx, false); err != nil {
 			return err
 		}
 	}
@@ -504,16 +514,16 @@ func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS boo
 			return fmt.Errorf("puller service is required for trigger evaluator")
 		}
 
-		evalSvc, err := evaluator.NewService(evaluator.Dependencies{
+		evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
 			Store:   sf.Document(),
 			Puller:  m.pullerService,
 			Nats:    nc,
 			Metrics: nil, // TODO: Add metrics when available
 		}, evaluator.ServiceOptions{
-			Database:     "default",
-			StartFromNow: true,
-			RulesFile:    m.cfg.Trigger.RulesFile,
-			StreamName:   m.cfg.Trigger.StreamName,
+			StartFromNow:       true,
+			RulesFile:          m.cfg.Trigger.RulesFile,
+			StreamName:         m.cfg.Trigger.StreamName,
+			CheckpointDatabase: m.cfg.Trigger.CheckpointDatabase,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
@@ -524,7 +534,7 @@ func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS boo
 
 	// Initialize Delivery Service
 	if m.opts.RunTriggerWorker {
-		deliverySvc, err := delivery.NewService(delivery.Dependencies{
+		deliverySvc, err := deliveryServiceFactory(delivery.Dependencies{
 			Nats:    nc,
 			Auth:    m.authService,
 			Secrets: nil, // TODO: Add secret provider when available

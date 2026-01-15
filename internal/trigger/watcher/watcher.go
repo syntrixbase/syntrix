@@ -14,32 +14,37 @@ import (
 
 // WatcherOptions configures the watcher.
 type WatcherOptions struct {
-	StartFromNow bool
+	StartFromNow       bool
+	CheckpointDatabase string
 }
 
 type pullerWatcher struct {
-	puller   puller.Service
-	store    storage.DocumentStore
-	database string
-	opts     WatcherOptions
+	puller puller.Service
+	store  storage.DocumentStore
+	opts   WatcherOptions
 }
 
 // NewWatcher creates a new DocumentWatcher.
-func NewWatcher(p puller.Service, store storage.DocumentStore, database string, opts WatcherOptions) DocumentWatcher {
+// The watcher receives all events from Puller; database filtering is done by the Evaluator
+// based on each trigger's Database field.
+func NewWatcher(p puller.Service, store storage.DocumentStore, opts WatcherOptions) DocumentWatcher {
+	// Apply default if not set
+	if opts.CheckpointDatabase == "" {
+		opts.CheckpointDatabase = "default"
+	}
 	return &pullerWatcher{
-		puller:   p,
-		store:    store,
-		database: database,
-		opts:     opts,
+		puller: p,
+		store:  store,
+		opts:   opts,
 	}
 }
 
 func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeEvent, error) {
 	// 1. Load Checkpoint
 	// Checkpoint is global (not per-database) because Puller returns a single aggregated
-	// progress token across all databases. The database field is only used for filtering events.
+	// progress token across all databases.
 	checkpointKey := "sys/checkpoints/trigger_evaluator"
-	checkpointDatabase := "default"
+	checkpointDatabase := w.opts.CheckpointDatabase
 
 	var resumeToken string
 	checkpointDoc, err := w.store.Get(ctx, checkpointDatabase, checkpointKey)
@@ -67,12 +72,8 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeE
 	go func() {
 		defer close(outCh)
 		for pEvent := range pullerCh {
-			// Filter by database
-			if pEvent.Change.DatabaseID != w.database {
-				continue
-			}
-
-			// Convert
+			// Convert puller event to SyntrixChangeEvent
+			// No database filtering here - Evaluator handles database matching per trigger
 			event, err := events.Transform(pEvent)
 			if err != nil {
 				continue
@@ -91,7 +92,7 @@ func (w *pullerWatcher) Watch(ctx context.Context) (<-chan events.SyntrixChangeE
 
 func (w *pullerWatcher) SaveCheckpoint(ctx context.Context, token interface{}) error {
 	checkpointKey := "sys/checkpoints/trigger_evaluator"
-	checkpointDatabase := "default"
+	checkpointDatabase := w.opts.CheckpointDatabase
 
 	data := map[string]interface{}{
 		"token":     token,

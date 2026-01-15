@@ -26,10 +26,10 @@ var (
 // FactoryOption configures the factory.
 type FactoryOption func(*defaultTriggerFactory)
 
-// WithDatabase sets the database for the factory.
-func WithDatabase(database string) FactoryOption {
+// WithCheckpointDatabase sets the database for storing checkpoints.
+func WithCheckpointDatabase(database string) FactoryOption {
 	return func(f *defaultTriggerFactory) {
-		f.database = database
+		f.checkpointDatabase = database
 	}
 }
 
@@ -79,27 +79,27 @@ func WithRulesFile(path string) FactoryOption {
 
 // defaultTriggerFactory implements TriggerFactory.
 type defaultTriggerFactory struct {
-	store        storage.DocumentStore
-	nats         *nats.Conn
-	auth         identity.AuthN
-	puller       puller.Service
-	database     string
-	startFromNow bool
-	metrics      types.Metrics
-	secrets      worker.SecretProvider
-	streamName   string
-	rulesFile    string
+	store              storage.DocumentStore
+	nats               *nats.Conn
+	auth               identity.AuthN
+	puller             puller.Service
+	checkpointDatabase string
+	startFromNow       bool
+	metrics            types.Metrics
+	secrets            worker.SecretProvider
+	streamName         string
+	rulesFile          string
 }
 
 // NewFactory creates a new TriggerFactory.
 func NewFactory(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN, opts ...FactoryOption) (TriggerFactory, error) {
 	f := &defaultTriggerFactory{
-		store:      store,
-		nats:       nats,
-		auth:       auth,
-		database:   "default",
-		metrics:    &types.NoopMetrics{},
-		streamName: "TRIGGERS",
+		store:              store,
+		nats:               nats,
+		auth:               auth,
+		checkpointDatabase: "default",
+		metrics:            &types.NoopMetrics{},
+		streamName:         "TRIGGERS",
 	}
 	for _, opt := range opts {
 		opt(f)
@@ -118,8 +118,9 @@ func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
 		return nil, fmt.Errorf("failed to create evaluator: %w", err)
 	}
 
-	w := watcher.NewWatcher(f.puller, f.store, f.database, watcher.WatcherOptions{
-		StartFromNow: f.startFromNow,
+	w := watcher.NewWatcher(f.puller, f.store, watcher.WatcherOptions{
+		StartFromNow:       f.startFromNow,
+		CheckpointDatabase: f.checkpointDatabase,
 	})
 
 	var pub pubsub.TaskPublisher

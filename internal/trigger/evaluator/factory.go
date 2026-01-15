@@ -13,10 +13,10 @@ import (
 
 // ServiceOptions configures the evaluator service.
 type ServiceOptions struct {
-	Database     string
-	StartFromNow bool
-	RulesFile    string
-	StreamName   string
+	StartFromNow       bool
+	RulesFile          string
+	StreamName         string
+	CheckpointDatabase string
 }
 
 // Dependencies contains external dependencies for the evaluator service.
@@ -27,6 +27,13 @@ type Dependencies struct {
 	Metrics types.Metrics
 }
 
+// publisherFactory is a function type for creating TaskPublisher.
+// This allows injection for testing.
+type publisherFactory func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error)
+
+// newTaskPublisher is the default publisher factory.
+var newTaskPublisher publisherFactory = pubsub.NewTaskPublisher
+
 // NewService creates a new evaluator Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	if deps.Puller == nil {
@@ -34,11 +41,11 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	}
 
 	// Apply defaults
-	if opts.Database == "" {
-		opts.Database = "default"
-	}
 	if opts.StreamName == "" {
 		opts.StreamName = "TRIGGERS"
+	}
+	if opts.CheckpointDatabase == "" {
+		opts.CheckpointDatabase = "default"
 	}
 	if deps.Metrics == nil {
 		deps.Metrics = &types.NoopMetrics{}
@@ -50,15 +57,16 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 		return nil, fmt.Errorf("failed to create evaluator: %w", err)
 	}
 
-	// Create watcher
-	w := watcher.NewWatcher(deps.Puller, deps.Store, opts.Database, watcher.WatcherOptions{
-		StartFromNow: opts.StartFromNow,
+	// Create watcher (receives all events; database filtering is done by Evaluator per trigger)
+	w := watcher.NewWatcher(deps.Puller, deps.Store, watcher.WatcherOptions{
+		StartFromNow:       opts.StartFromNow,
+		CheckpointDatabase: opts.CheckpointDatabase,
 	})
 
 	// Create publisher
 	var pub TaskPublisher
 	if deps.Nats != nil {
-		p, err := pubsub.NewTaskPublisher(deps.Nats, opts.StreamName, deps.Metrics)
+		p, err := newTaskPublisher(deps.Nats, opts.StreamName, deps.Metrics)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create publisher: %w", err)
 		}

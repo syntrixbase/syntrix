@@ -47,7 +47,21 @@ func NewEvaluator() (Evaluator, error) {
 }
 
 func (e *celeEvaluator) Evaluate(ctx context.Context, t *types.Trigger, event events.SyntrixChangeEvent) (bool, error) {
-	// 1. Check event type (create, update, delete)
+	// 1. Check database
+	// Each trigger specifies which logical database it applies to
+	if t.Database != "" && t.Database != "*" {
+		eventDB := ""
+		if event.Document != nil {
+			eventDB = event.Document.DatabaseID
+		} else if event.Before != nil {
+			eventDB = event.Before.DatabaseID
+		}
+		if eventDB != t.Database {
+			return false, nil
+		}
+	}
+
+	// 2. Check event type (create, update, delete)
 	eventTypeMatch := false
 	for _, evt := range t.Events {
 		if string(event.Type) == evt {
@@ -59,7 +73,7 @@ func (e *celeEvaluator) Evaluate(ctx context.Context, t *types.Trigger, event ev
 		return false, nil
 	}
 
-	// 2. Check collection
+	// 3. Check collection
 	// Handle case where event.Document might be nil (e.g. delete event might only have Before)
 	var collectionToMatch string
 	if event.Document != nil {
@@ -78,7 +92,7 @@ func (e *celeEvaluator) Evaluate(ctx context.Context, t *types.Trigger, event ev
 		}
 	}
 
-	// 3. Evaluate CEL condition
+	// 4. Evaluate CEL condition
 	if t.Condition == "" {
 		return true, nil
 	}

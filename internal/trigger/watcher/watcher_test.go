@@ -89,14 +89,14 @@ func (m *MockPullerService) Subscribe(ctx context.Context, consumerID string, af
 func TestNewWatcher(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 	assert.NotNil(t, w)
 }
 
 func TestWatch_WithCheckpoint(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	checkpointDoc := &storage.StoredDoc{
 		Data: map[string]interface{}{"token": "resume-token"},
@@ -137,7 +137,7 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{StartFromNow: true})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator").Return(nil, model.ErrNotFound)
 
@@ -153,10 +153,12 @@ func TestWatch_NoCheckpoint_StartFromNow(t *testing.T) {
 	mockPuller.AssertExpectations(t)
 }
 
-func TestWatch_FilterDatabase(t *testing.T) {
+func TestWatch_AllDatabaseEvents(t *testing.T) {
+	// Watcher now receives all events regardless of database
+	// Database filtering is done by Evaluator per trigger
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{StartFromNow: true})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator").Return(nil, model.ErrNotFound)
 
@@ -167,30 +169,33 @@ func TestWatch_FilterDatabase(t *testing.T) {
 	assert.NoError(t, err)
 
 	go func() {
-		// Wrong database
+		// Event from database1
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID:      "evt-wrong",
-				DatabaseID:   "database2",
-				OpType:       events.StoreOperationInsert,
-				FullDocument: &storage.StoredDoc{Id: "wrong"},
-			},
-		}
-		// Correct database
-		ch <- &events.PullerEvent{
-			Change: &events.StoreChangeEvent{
-				EventID:      "evt-doc1",
+				EventID:      "evt-db1",
 				DatabaseID:   "database1",
 				OpType:       events.StoreOperationInsert,
-				MgoDocID:     "doc1",
 				FullDocument: &storage.StoredDoc{Id: "doc1"},
+			},
+		}
+		// Event from database2
+		ch <- &events.PullerEvent{
+			Change: &events.StoreChangeEvent{
+				EventID:      "evt-db2",
+				DatabaseID:   "database2",
+				OpType:       events.StoreOperationInsert,
+				FullDocument: &storage.StoredDoc{Id: "doc2"},
 			},
 		}
 		close(ch)
 	}()
 
-	evt := <-eventCh
-	assert.Equal(t, "evt-doc1", evt.Id) // Id comes from EventID
+	// Both events should be received (no filtering)
+	evt1 := <-eventCh
+	assert.Equal(t, "evt-db1", evt1.Id)
+
+	evt2 := <-eventCh
+	assert.Equal(t, "evt-db2", evt2.Id)
 
 	_, ok := <-eventCh
 	assert.False(t, ok)
@@ -199,7 +204,7 @@ func TestWatch_FilterDatabase(t *testing.T) {
 func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: false})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{StartFromNow: false})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator").Return(nil, model.ErrNotFound)
 
@@ -212,7 +217,7 @@ func TestWatch_NoCheckpoint_Fail(t *testing.T) {
 func TestSaveCheckpoint_Update(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator", mock.Anything, mock.Anything).Return(nil)
 
@@ -224,7 +229,7 @@ func TestSaveCheckpoint_Update(t *testing.T) {
 func TestSaveCheckpoint_Create(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator", mock.Anything, mock.Anything).Return(model.ErrNotFound)
 	mockStore.On("Create", mock.Anything, "default", mock.Anything).Return(nil)
@@ -237,7 +242,7 @@ func TestSaveCheckpoint_Create(t *testing.T) {
 func TestClose(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	// Close should be a no-op and return nil
 	err := w.Close()
@@ -247,7 +252,7 @@ func TestClose(t *testing.T) {
 func TestWatch_GetError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	// Get returns unexpected error
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator").Return(nil, assert.AnError)
@@ -260,7 +265,7 @@ func TestWatch_GetError(t *testing.T) {
 func TestSaveCheckpoint_UpdateError(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{})
 
 	mockStore.On("Update", mock.Anything, "default", "sys/checkpoints/trigger_evaluator", mock.Anything, mock.Anything).Return(assert.AnError)
 
@@ -272,7 +277,7 @@ func TestSaveCheckpoint_UpdateError(t *testing.T) {
 func TestWatch_EventTypes(t *testing.T) {
 	mockStore := new(MockDocumentStore)
 	mockPuller := new(MockPullerService)
-	w := NewWatcher(mockPuller, mockStore, "database1", WatcherOptions{StartFromNow: true})
+	w := NewWatcher(mockPuller, mockStore, WatcherOptions{StartFromNow: true})
 
 	mockStore.On("Get", mock.Anything, "default", "sys/checkpoints/trigger_evaluator").Return(nil, model.ErrNotFound)
 
