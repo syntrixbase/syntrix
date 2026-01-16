@@ -8,7 +8,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -16,7 +15,7 @@ import (
 type defaultTriggerEngine struct {
 	evaluator evaluator.Evaluator
 	watcher   watcher.DocumentWatcher
-	publisher pubsub.TaskPublisher
+	publisher evaluator.TaskPublisher
 	triggers  []*trigger.Trigger
 	mu        sync.RWMutex
 }

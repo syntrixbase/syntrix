@@ -9,11 +9,10 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
-// MockTaskConsumer mocks pubsub.TaskConsumer
+// MockTaskConsumer mocks TaskConsumer
 type MockTaskConsumer struct {
 	mock.Mock
 }
@@ -40,7 +39,7 @@ func TestNewService_Success(t *testing.T) {
 	defer func() { newTaskConsumer = originalFactory }()
 
 	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 		return mockConsumer, nil
 	}
 
@@ -65,7 +64,7 @@ func TestNewService_WithDefaults(t *testing.T) {
 	defer func() { newTaskConsumer = originalFactory }()
 
 	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 		// Verify defaults were applied
 		assert.Equal(t, "TRIGGERS", streamName)
 		assert.Equal(t, 16, numWorkers)
@@ -89,7 +88,7 @@ func TestNewService_WithAllOptions(t *testing.T) {
 
 	mockConsumer := new(MockTaskConsumer)
 	optsCaptured := false
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 		// 3 options should be passed (ChannelBufSize, DrainTimeout, ShutdownTimeout)
 		assert.Len(t, opts, 3)
 		optsCaptured = true
@@ -119,7 +118,7 @@ func TestNewService_ConsumerError(t *testing.T) {
 	originalFactory := newTaskConsumer
 	defer func() { newTaskConsumer = originalFactory }()
 
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
 		return nil, errors.New("consumer creation failed")
 	}
 

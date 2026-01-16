@@ -7,7 +7,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -21,15 +20,15 @@ type Dependencies struct {
 
 // service implements the Service interface.
 type service struct {
-	consumer pubsub.TaskConsumer
+	consumer TaskConsumer
 }
 
 // consumerFactory is a function type for creating TaskConsumer.
 // This allows injection for testing.
-type consumerFactory func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error)
+type consumerFactory func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error)
 
 // newTaskConsumer is the default consumer factory.
-var newTaskConsumer consumerFactory = pubsub.NewTaskConsumer
+var newTaskConsumer consumerFactory = NewTaskConsumer
 
 // NewService creates a new delivery Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
@@ -52,15 +51,15 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	w := worker.NewDeliveryWorker(deps.Auth, deps.Secrets, worker.HTTPClientOptions{}, deps.Metrics)
 
 	// Build consumer options
-	var consumerOpts []pubsub.ConsumerOption
+	var consumerOpts []ConsumerOption
 	if opts.ChannelBufSize > 0 {
-		consumerOpts = append(consumerOpts, pubsub.WithChannelBufferSize(opts.ChannelBufSize))
+		consumerOpts = append(consumerOpts, WithChannelBufferSize(opts.ChannelBufSize))
 	}
 	if opts.DrainTimeout > 0 {
-		consumerOpts = append(consumerOpts, pubsub.WithDrainTimeout(opts.DrainTimeout))
+		consumerOpts = append(consumerOpts, WithDrainTimeout(opts.DrainTimeout))
 	}
 	if opts.ShutdownTimeout > 0 {
-		consumerOpts = append(consumerOpts, pubsub.WithShutdownTimeout(opts.ShutdownTimeout))
+		consumerOpts = append(consumerOpts, WithShutdownTimeout(opts.ShutdownTimeout))
 	}
 
 	// Create consumer

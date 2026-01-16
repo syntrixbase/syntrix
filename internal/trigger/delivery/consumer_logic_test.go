@@ -1,4 +1,4 @@
-package pubsub
+package delivery
 
 import (
 	"context"

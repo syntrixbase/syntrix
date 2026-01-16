@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -526,7 +525,7 @@ func TestNewService_PublisherError(t *testing.T) {
 	originalFactory := newTaskPublisher
 	defer func() { newTaskPublisher = originalFactory }()
 
-	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error) {
 		return nil, errors.New("publisher creation failed")
 	}
 

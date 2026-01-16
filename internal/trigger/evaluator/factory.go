@@ -7,7 +7,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -29,10 +28,10 @@ type Dependencies struct {
 
 // publisherFactory is a function type for creating TaskPublisher.
 // This allows injection for testing.
-type publisherFactory func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error)
+type publisherFactory func(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error)
 
 // newTaskPublisher is the default publisher factory.
-var newTaskPublisher publisherFactory = pubsub.NewTaskPublisher
+var newTaskPublisher publisherFactory = NewTaskPublisher
 
 // NewService creates a new evaluator Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {

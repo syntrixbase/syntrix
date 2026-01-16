@@ -1,4 +1,4 @@
-package pubsub
+package evaluator
 
 import (
 	"context"
@@ -22,6 +22,11 @@ func (m *MockJetStreamCoverage) CreateOrUpdateStream(ctx context.Context, cfg je
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(jetstream.Stream), args.Error(1)
+}
+
+type MockStream struct {
+	mock.Mock
+	jetstream.Stream
 }
 
 func TestNewTaskPublisher_Coverage(t *testing.T) {

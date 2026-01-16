@@ -9,8 +9,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -86,7 +87,7 @@ func TestFactory_Engine_WithNATS(t *testing.T) {
 	defer func() { newTaskPublisher = originalNewTaskPublisher }()
 
 	mockPub := new(MockPublisher)
-	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (evaluator.TaskPublisher, error) {
 		return mockPub, nil
 	}
 
@@ -108,7 +109,7 @@ func TestFactory_Engine_PublisherFail(t *testing.T) {
 	originalNewTaskPublisher := newTaskPublisher
 	defer func() { newTaskPublisher = originalNewTaskPublisher }()
 
-	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (pubsub.TaskPublisher, error) {
+	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (evaluator.TaskPublisher, error) {
 		return nil, fmt.Errorf("publisher error")
 	}
 
@@ -177,7 +178,7 @@ func TestFactory_Consumer_Success(t *testing.T) {
 	defer func() { newTaskConsumer = originalNewTaskConsumer }()
 
 	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
+	newTaskConsumer = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...delivery.ConsumerOption) (delivery.TaskConsumer, error) {
 		return mockConsumer, nil
 	}
 

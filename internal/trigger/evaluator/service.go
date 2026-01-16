@@ -22,12 +22,6 @@ type Service interface {
 	Close() error
 }
 
-// TaskPublisher publishes delivery tasks.
-type TaskPublisher interface {
-	Publish(ctx context.Context, task *types.DeliveryTask) error
-	Close() error
-}
-
 // service implements the Service interface.
 type service struct {
 	evaluator Evaluator

@@ -1,4 +1,4 @@
-package pubsub
+package evaluator
 
 import (
 	"context"
@@ -13,6 +13,17 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
+
+// jetStreamNew is a variable to allow mocking jetstream.New in tests.
+var jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
+	return jetstream.New(nc)
+}
+
+// TaskPublisher publishes delivery tasks.
+type TaskPublisher interface {
+	Publish(ctx context.Context, task *types.DeliveryTask) error
+	Close() error
+}
 
 // natsPublisher implements TaskPublisher using NATS JetStream.
 type natsPublisher struct {

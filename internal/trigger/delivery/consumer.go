@@ -1,4 +1,4 @@
-package pubsub
+package delivery
 
 import (
 	"context"
@@ -15,6 +15,16 @@ import (
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
+
+// jetStreamNew is a variable to allow mocking jetstream.New in tests.
+var jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
+	return jetstream.New(nc)
+}
+
+// TaskConsumer consumes delivery tasks.
+type TaskConsumer interface {
+	Start(ctx context.Context) error
+}
 
 // DefaultChannelBufferSize is the default buffer size for worker channels.
 const DefaultChannelBufferSize = 100

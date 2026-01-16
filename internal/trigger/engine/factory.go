@@ -8,17 +8,17 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
-	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 var (
-	newTaskPublisher = pubsub.NewTaskPublisher
-	newTaskConsumer  = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...pubsub.ConsumerOption) (pubsub.TaskConsumer, error) {
-		return pubsub.NewTaskConsumer(nc, w, streamName, numWorkers, metrics, opts...)
+	newTaskPublisher = evaluator.NewTaskPublisher
+	newTaskConsumer  = func(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...delivery.ConsumerOption) (delivery.TaskConsumer, error) {
+		return delivery.NewTaskConsumer(nc, w, streamName, numWorkers, metrics, opts...)
 	}
 	loadTriggersFromFile = trigger.LoadTriggersFromFile
 )
@@ -123,7 +123,7 @@ func (f *defaultTriggerFactory) Engine() (TriggerEngine, error) {
 		CheckpointDatabase: f.checkpointDatabase,
 	})
 
-	var pub pubsub.TaskPublisher
+	var pub evaluator.TaskPublisher
 	if f.nats != nil {
 		p, err := newTaskPublisher(f.nats, f.streamName, f.metrics)
 		if err != nil {

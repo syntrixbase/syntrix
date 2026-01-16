@@ -1,4 +1,4 @@
-package pubsub
+package delivery
 
 import (
 	"context"
@@ -28,6 +28,35 @@ func (m *MockWorker) ProcessTask(ctx context.Context, task *trigger.DeliveryTask
 type MockStream struct {
 	mock.Mock
 	jetstream.Stream
+}
+
+type MockJetStream struct {
+	mock.Mock
+	jetstream.JetStream
+}
+
+func (m *MockJetStream) Publish(ctx context.Context, subject string, data []byte, opts ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
+	args := m.Called(ctx, subject, data, opts)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*jetstream.PubAck), args.Error(1)
+}
+
+func (m *MockJetStream) CreateOrUpdateStream(ctx context.Context, cfg jetstream.StreamConfig) (jetstream.Stream, error) {
+	args := m.Called(ctx, cfg)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(jetstream.Stream), args.Error(1)
+}
+
+func (m *MockJetStream) CreateOrUpdateConsumer(ctx context.Context, stream string, cfg jetstream.ConsumerConfig) (jetstream.Consumer, error) {
+	args := m.Called(ctx, stream, cfg)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(jetstream.Consumer), args.Error(1)
 }
 
 type MockConsumer struct {
