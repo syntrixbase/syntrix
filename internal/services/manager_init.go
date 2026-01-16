@@ -21,17 +21,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
-	triggerengine "github.com/syntrixbase/syntrix/internal/trigger/engine"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
-
-	"github.com/nats-io/nats.go"
 )
 
-var triggerFactoryFactory = func(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN, opts ...triggerengine.FactoryOption) (triggerengine.TriggerFactory, error) {
-	// Default options
-	defaultOpts := []triggerengine.FactoryOption{triggerengine.WithStartFromNow(true)}
-	return triggerengine.NewFactory(store, nats, auth, append(defaultOpts, opts...)...)
-}
 var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 	return storage.NewFactory(ctx, cfg.Storage)
 }
@@ -97,7 +89,7 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 	// Initialize trigger services with embedded NATS if configured
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
 		useEmbeddedNATS := m.cfg.Deployment.Standalone.EmbeddedNATS
-		if err := m.initTriggerServicesV2(ctx, useEmbeddedNATS); err != nil {
+		if err := m.initTriggerServices(ctx, useEmbeddedNATS); err != nil {
 			return err
 		}
 	}
@@ -152,7 +144,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 
 	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServicesV2(ctx, false); err != nil {
+		if err := m.initTriggerServices(ctx, false); err != nil {
 			return err
 		}
 	}
@@ -344,64 +336,6 @@ func (m *Manager) initGateway() error {
 	return nil
 }
 
-// initTriggerServices initializes trigger evaluator and worker services.
-// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
-func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
-	// Create NATS provider based on parameter
-	if useEmbeddedNATS {
-		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
-	} else {
-		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
-	}
-
-	nc, err := m.natsProvider.Connect(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-
-	opts := []triggerengine.FactoryOption{
-		triggerengine.WithStreamName(m.cfg.Trigger.StreamName),
-	}
-	if m.pullerService != nil {
-		opts = append(opts, triggerengine.WithPuller(m.pullerService))
-	}
-	if m.cfg.Trigger.RulesFile != "" {
-		opts = append(opts, triggerengine.WithRulesFile(m.cfg.Trigger.RulesFile))
-	}
-
-	sf, err := m.getStorageFactory(ctx)
-	if err != nil {
-		return err
-	}
-
-	factory, err := triggerFactoryFactory(sf.Document(), nc, m.authService, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to create trigger factory: %w", err)
-	}
-
-	if m.opts.RunTriggerEvaluator {
-		engine, err := factory.Engine()
-		if err != nil {
-			return fmt.Errorf("failed to create trigger engine: %w", err)
-		}
-		m.triggerService = engine
-
-		slog.Info("Initialized Trigger Evaluator Service")
-	}
-
-	if m.opts.RunTriggerWorker {
-		cons, err := factory.Consumer(m.cfg.Trigger.WorkerCount)
-		if err != nil {
-			return fmt.Errorf("failed to create trigger consumer: %w", err)
-		}
-		m.triggerConsumer = cons
-
-		slog.Info("Initialized Trigger Worker Service")
-	}
-
-	return nil
-}
-
 // initPullerService creates the Puller service and adds backends.
 // Does NOT register gRPC server - that's done separately in distributed mode.
 func (m *Manager) initPullerService(ctx context.Context) error {
@@ -486,11 +420,9 @@ func (m *Manager) initIndexerGRPCServer() {
 	slog.Info("Registered Indexer Service (gRPC)")
 }
 
-// initTriggerServicesV2 initializes trigger services using the new separated service packages.
-// This is an alternative to initTriggerServices that uses evaluator.Service and delivery.Service
-// instead of the combined TriggerFactory approach.
+// initTriggerServices initializes trigger evaluator and worker services.
 // useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
-func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS bool) error {
+func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
 	// Create NATS provider based on parameter
 	if useEmbeddedNATS {
 		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
@@ -529,7 +461,7 @@ func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS boo
 			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
 		}
 		m.triggerService = evalSvc
-		slog.Info("Initialized Trigger Evaluator Service (v2)")
+		slog.Info("Initialized Trigger Evaluator Service")
 	}
 
 	// Initialize Delivery Service
@@ -547,7 +479,7 @@ func (m *Manager) initTriggerServicesV2(ctx context.Context, useEmbeddedNATS boo
 			return fmt.Errorf("failed to create trigger delivery service: %w", err)
 		}
 		m.triggerConsumer = deliverySvc
-		slog.Info("Initialized Trigger Delivery Service (v2)")
+		slog.Info("Initialized Trigger Delivery Service")
 	}
 
 	return nil
