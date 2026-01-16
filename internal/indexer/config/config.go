@@ -1,7 +1,10 @@
 // Package config provides configuration for the Indexer service.
 package config
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 type StorageMode string
 
@@ -86,4 +89,60 @@ func DefaultStoreConfig() StoreConfig {
 		QueueSize:      10000,
 		BlockCacheSize: 128 * 1024 * 1024, // 128MB
 	}
+}
+
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.PullerAddr == "" {
+		c.PullerAddr = defaults.PullerAddr
+	}
+	if c.TemplatePath == "" {
+		c.TemplatePath = defaults.TemplatePath
+	}
+	if c.ProgressPath == "" {
+		c.ProgressPath = defaults.ProgressPath
+	}
+	if c.ConsumerID == "" {
+		c.ConsumerID = defaults.ConsumerID
+	}
+	if c.ReconcileInterval == 0 {
+		c.ReconcileInterval = defaults.ReconcileInterval
+	}
+	if c.StorageMode == "" {
+		c.StorageMode = defaults.StorageMode
+	}
+	// Apply store defaults
+	storeDefaults := DefaultStoreConfig()
+	if c.Store.Path == "" {
+		c.Store.Path = storeDefaults.Path
+	}
+	if c.Store.BatchSize == 0 {
+		c.Store.BatchSize = storeDefaults.BatchSize
+	}
+	if c.Store.BatchInterval == 0 {
+		c.Store.BatchInterval = storeDefaults.BatchInterval
+	}
+	if c.Store.QueueSize == 0 {
+		c.Store.QueueSize = storeDefaults.QueueSize
+	}
+	if c.Store.BlockCacheSize == 0 {
+		c.Store.BlockCacheSize = storeDefaults.BlockCacheSize
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No env vars for indexer config currently.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+func (c *Config) ResolvePaths(baseDir string) {
+	if c.TemplatePath != "" && !filepath.IsAbs(c.TemplatePath) {
+		c.TemplatePath = filepath.Join(baseDir, c.TemplatePath)
+	}
+}
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	return nil
 }

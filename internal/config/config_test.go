@@ -8,7 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	storage "github.com/syntrixbase/syntrix/internal/core/storage/config"
+	identity "github.com/syntrixbase/syntrix/internal/core/identity/config"
 	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
@@ -89,108 +89,33 @@ gateway:
 	assert.Equal(t, "filedb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
 }
 
-func TestResolvePath(t *testing.T) {
+func TestServiceConfig_ResolvePaths(t *testing.T) {
+	// Test that relative paths are resolved correctly
+	// The ResolvePaths function is now part of each service config
+
+	// Test with identity config
+	identityCfg := identity.Config{
+		AuthZ: identity.AuthZConfig{RulesFile: "security.yaml"},
+		AuthN: identity.AuthNConfig{PrivateKeyFile: "keys/auth.pem"},
+	}
+	identityCfg.ResolvePaths("config")
+	assert.Equal(t, filepath.Join("config", "security.yaml"), identityCfg.AuthZ.RulesFile)
+	assert.Equal(t, filepath.Join("config", "keys/auth.pem"), identityCfg.AuthN.PrivateKeyFile)
+
+	// Test with absolute path - should not be modified
 	absPath := filepath.Join(t.TempDir(), "absolute", "path", "to", "file")
-	assert.Equal(t, absPath, resolvePath("base", absPath))
-
-	relPath := "relative/path/to/file"
-	expected := filepath.Join("base", relPath)
-	assert.Equal(t, expected, resolvePath("base", relPath))
-
-	assert.Equal(t, "", resolvePath("base", ""))
-}
-
-func TestValidate(t *testing.T) {
-	// Case 1: Missing default database
-	cfg := &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{},
-		},
+	identityCfg2 := identity.Config{
+		AuthZ: identity.AuthZConfig{RulesFile: absPath},
 	}
-	err := cfg.Validate()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "storage.databases.default is required")
+	identityCfg2.ResolvePaths("config")
+	assert.Equal(t, absPath, identityCfg2.AuthZ.RulesFile)
 
-	// Case 2: Database references unknown backend
-	cfg = &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {Backend: "unknown_backend"},
-			},
-			Backends: map[string]storage.BackendConfig{
-				"existing_backend": {},
-			},
-		},
+	// Test with empty path - should remain empty
+	identityCfg3 := identity.Config{
+		AuthZ: identity.AuthZConfig{RulesFile: ""},
 	}
-	err = cfg.Validate()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "references unknown backend")
-
-	// Case 3: Valid config
-	cfg = &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {Backend: "existing_backend"},
-			},
-			Backends: map[string]storage.BackendConfig{
-				"existing_backend": {},
-			},
-		},
-	}
-	err = cfg.Validate()
-	assert.NoError(t, err)
-
-	// Case 4: Invalid deployment mode
-	cfg = &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {Backend: "existing_backend"},
-			},
-			Backends: map[string]storage.BackendConfig{
-				"existing_backend": {},
-			},
-		},
-		Deployment: services_config.DeploymentConfig{
-			Mode: "invalid_mode",
-		},
-	}
-	err = cfg.Validate()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "deployment.mode must be")
-
-	// Case 5: Valid standalone mode
-	cfg = &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {Backend: "existing_backend"},
-			},
-			Backends: map[string]storage.BackendConfig{
-				"existing_backend": {},
-			},
-		},
-		Deployment: services_config.DeploymentConfig{
-			Mode: "standalone",
-		},
-	}
-	err = cfg.Validate()
-	assert.NoError(t, err)
-
-	// Case 6: Valid distributed mode
-	cfg = &Config{
-		Storage: storage.Config{
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {Backend: "existing_backend"},
-			},
-			Backends: map[string]storage.BackendConfig{
-				"existing_backend": {},
-			},
-		},
-		Deployment: services_config.DeploymentConfig{
-			Mode: "distributed",
-		},
-	}
-	err = cfg.Validate()
-	assert.NoError(t, err)
+	identityCfg3.ResolvePaths("config")
+	assert.Equal(t, "", identityCfg3.AuthZ.RulesFile)
 }
 
 func TestLoadConfig_DeploymentDefaults(t *testing.T) {

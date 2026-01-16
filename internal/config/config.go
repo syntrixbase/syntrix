@@ -1,10 +1,8 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 
 	identity "github.com/syntrixbase/syntrix/internal/core/identity/config"
 	storage "github.com/syntrixbase/syntrix/internal/core/storage/config"
@@ -38,9 +36,9 @@ type Config struct {
 }
 
 // LoadConfig loads configuration from files and environment variables
-// Order: defaults -> config.yml -> config.local.yml -> env vars
+// Order: defaults -> config.yml -> config.local.yml -> ApplyEnvOverrides -> ResolvePaths -> Validate
 func LoadConfig() *Config {
-	// 1. Defaults
+	// 1. Start with default values (so YAML can override them, including bool fields)
 	cfg := &Config{
 		Storage:    storage.DefaultConfig(),
 		Identity:   identity.DefaultConfig(),
@@ -54,100 +52,35 @@ func LoadConfig() *Config {
 		Indexer:    indexer.DefaultConfig(),
 	}
 
-	// 2. Load config.yml
+	// 2. Load config.yml (overrides defaults)
 	loadFile("config/config.yml", cfg)
 
-	// 3. Load config.local.yml
+	// 3. Load config.local.yml (overrides config.yml)
 	loadFile("config/config.local.yml", cfg)
 
-	// 4. Override with Env Vars
-	if val := os.Getenv("GATEWAY_QUERY_SERVICE_URL"); val != "" {
-		cfg.Gateway.QueryServiceURL = val
-	}
-
-	if val := os.Getenv("MONGO_URI"); val != "" {
-		if backend, ok := cfg.Storage.Backends["default_mongo"]; ok {
-			backend.Mongo.URI = val
-			cfg.Storage.Backends["default_mongo"] = backend
-		}
-	}
-	if val := os.Getenv("DB_NAME"); val != "" {
-		if backend, ok := cfg.Storage.Backends["default_mongo"]; ok {
-			backend.Mongo.DatabaseName = val
-			cfg.Storage.Backends["default_mongo"] = backend
-		}
-	}
-
-	if val := os.Getenv("TRIGGER_NATS_URL"); val != "" {
-		cfg.Trigger.NatsURL = val
-	}
-	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
-		cfg.Trigger.Evaluator.RulesFile = val
-	}
-
-	// Deployment configuration
-	if val := os.Getenv("SYNTRIX_DEPLOYMENT_MODE"); val != "" {
-		cfg.Deployment.Mode = val
-	}
-	if val := os.Getenv("SYNTRIX_EMBEDDED_NATS"); val != "" {
-		cfg.Deployment.Standalone.EmbeddedNATS = val == "true" || val == "1"
-	}
-	if val := os.Getenv("SYNTRIX_NATS_DATA_DIR"); val != "" {
-		cfg.Deployment.Standalone.NATSDataDir = val
-	}
-
-	// 5. Resolve paths relative to config directory
-	cfg.resolvePaths()
-
-	// 6. Validate configuration
-	if err := cfg.Validate(); err != nil {
+	// 4. Apply configuration lifecycle: ApplyDefaults fills gaps, ApplyEnvOverrides, ResolvePaths, Validate
+	configDir := "config"
+	if err := ApplyServiceConfigs(configDir,
+		&cfg.Deployment,
+		&cfg.Server,
+		&cfg.Query,
+		&cfg.Indexer,
+		&cfg.Gateway,
+		&cfg.Trigger,
+		&cfg.Puller,
+		&cfg.Streamer,
+		&cfg.Storage,
+		&cfg.Identity,
+	); err != nil {
 		log.Fatalf("Configuration error: %v", err)
 	}
 
 	return cfg
 }
 
-func (c *Config) Validate() error {
-	// Validate Storage Databases
-	if _, ok := c.Storage.Databases["default"]; !ok {
-		return fmt.Errorf("storage.databases.default is required")
-	}
-	for tID, tCfg := range c.Storage.Databases {
-		if _, ok := c.Storage.Backends[tCfg.Backend]; !ok {
-			return fmt.Errorf("database '%s' references unknown backend '%s'", tID, tCfg.Backend)
-		}
-	}
-
-	// Validate Deployment Mode
-	mode := c.Deployment.Mode
-	if mode != "" && mode != "standalone" && mode != "distributed" {
-		return fmt.Errorf("deployment.mode must be 'standalone' or 'distributed', got '%s'", mode)
-	}
-
-	return nil
-}
-
 // IsStandaloneMode returns true if the deployment is configured for standalone mode
 func (c *Config) IsStandaloneMode() bool {
 	return c.Deployment.Mode == "standalone"
-}
-
-func (c *Config) resolvePaths() {
-	configDir := "config"
-	c.Identity.AuthZ.RulesFile = resolvePath(configDir, c.Identity.AuthZ.RulesFile)
-	c.Identity.AuthN.PrivateKeyFile = resolvePath(configDir, c.Identity.AuthN.PrivateKeyFile)
-	c.Trigger.Evaluator.RulesFile = resolvePath(configDir, c.Trigger.Evaluator.RulesFile)
-	c.Indexer.TemplatePath = resolvePath(configDir, c.Indexer.TemplatePath)
-}
-
-func resolvePath(base, path string) string {
-	if path == "" {
-		return ""
-	}
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(base, path)
 }
 
 func loadFile(filename string, cfg *Config) {

@@ -1,6 +1,10 @@
 package evaluator
 
-import "github.com/syntrixbase/syntrix/internal/core/pubsub"
+import (
+	"errors"
+
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+)
 
 // Config contains all configuration for the evaluator service.
 type Config struct {
@@ -50,4 +54,26 @@ func (c *Config) ApplyDefaults() {
 	if c.StorageType == "" {
 		c.StorageType = defaults.StorageType
 	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No evaluator-specific env vars; parent config handles TRIGGER_RULES_FILE.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+// RulesFile is resolved at the parent trigger.Config level.
+func (c *Config) ResolvePaths(_ string) { _ = c }
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	if c.StreamName == "" {
+		return errors.New("stream_name is required")
+	}
+	if c.RetryAttempts < 0 {
+		return errors.New("retry_attempts must be non-negative")
+	}
+	if c.StorageType != "" && c.StorageType != "file" && c.StorageType != "memory" {
+		return errors.New("storage_type must be 'file' or 'memory'")
+	}
+	return nil
 }

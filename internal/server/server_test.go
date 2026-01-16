@@ -140,16 +140,6 @@ func TestGlobal(t *testing.T) {
 	SetDefault(nil)
 }
 
-func TestDefaultConfig(t *testing.T) {
-	cfg := DefaultConfig()
-	assert.Equal(t, 8080, cfg.HTTPPort)
-	assert.Equal(t, 9000, cfg.GRPCPort)
-	assert.NotZero(t, cfg.HTTPReadTimeout)
-	assert.NotZero(t, cfg.HTTPWriteTimeout)
-	assert.NotZero(t, cfg.HTTPIdleTimeout)
-	assert.NotZero(t, cfg.ShutdownTimeout)
-}
-
 func TestGlobalHelpers(t *testing.T) {
 	InitDefault(Config{Host: "localhost"}, nil)
 	defer func() { SetDefault(nil) }()

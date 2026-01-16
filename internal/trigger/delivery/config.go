@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"errors"
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
@@ -56,4 +57,29 @@ func (c *Config) ApplyDefaults() {
 	if c.StorageType == "" {
 		c.StorageType = defaults.StorageType
 	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No delivery-specific env vars.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+// No paths to resolve in delivery config.
+func (c *Config) ResolvePaths(_ string) { _ = c }
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	if c.NumWorkers < 0 {
+		return errors.New("num_workers must be non-negative")
+	}
+	if c.StreamName == "" {
+		return errors.New("stream_name is required")
+	}
+	if c.ConsumerName == "" {
+		return errors.New("consumer_name is required")
+	}
+	if c.StorageType != "" && c.StorageType != "file" && c.StorageType != "memory" {
+		return errors.New("storage_type must be 'file' or 'memory'")
+	}
+	return nil
 }

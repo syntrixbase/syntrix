@@ -78,6 +78,24 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	assert.Equal(t, "memory", cfg2.StorageType)
 }
 
+func TestConfig_ApplyEnvOverrides(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ApplyEnvOverrides()
+	// No env vars, just verify no panic
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ResolvePaths("config")
+	// No paths to resolve, just verify no panic
+}
+
+func TestConfig_Validate(t *testing.T) {
+	cfg := DefaultConfig()
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
 func TestNewConsumer_NilConnection(t *testing.T) {
 	cfg := Config{}
 
@@ -86,4 +104,114 @@ func TestNewConsumer_NilConnection(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, consumer)
 	assert.Contains(t, err.Error(), "failed to create JetStream")
+}
+
+func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
+	cfg := Config{
+		NumWorkers:   32,
+		ConsumerName: "my-consumer",
+		// StreamName empty, should get default
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, 32, cfg.NumWorkers)
+	assert.Equal(t, "my-consumer", cfg.ConsumerName)
+	assert.Equal(t, "TRIGGERS", cfg.StreamName)
+	assert.Equal(t, "file", cfg.StorageType)
+}
+
+func TestConfig_Validate_EmptyConfig(t *testing.T) {
+	cfg := Config{}
+	err := cfg.Validate()
+	// Empty StreamName should fail validation
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "stream_name is required")
+}
+
+func TestConfig_Validate_Errors(t *testing.T) {
+	tests := []struct {
+		name   string
+		cfg    Config
+		errMsg string
+	}{
+		{
+			name:   "negative num workers",
+			cfg:    Config{NumWorkers: -1, StreamName: "TEST", ConsumerName: "test"},
+			errMsg: "num_workers must be non-negative",
+		},
+		{
+			name:   "empty stream name",
+			cfg:    Config{StreamName: "", ConsumerName: "test"},
+			errMsg: "stream_name is required",
+		},
+		{
+			name:   "empty consumer name",
+			cfg:    Config{StreamName: "TEST", ConsumerName: ""},
+			errMsg: "consumer_name is required",
+		},
+		{
+			name:   "invalid storage type",
+			cfg:    Config{StreamName: "TEST", ConsumerName: "test", StorageType: "invalid"},
+			errMsg: "storage_type must be 'file' or 'memory'",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+func TestConfig_Validate_ValidConfigs(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{
+			name: "default config",
+			cfg:  DefaultConfig(),
+		},
+		{
+			name: "memory storage",
+			cfg:  Config{StreamName: "TEST", ConsumerName: "test", StorageType: "memory"},
+		},
+		{
+			name: "file storage",
+			cfg:  Config{StreamName: "TEST", ConsumerName: "test", StorageType: "file"},
+		},
+		{
+			name: "empty storage type (defaults allowed)",
+			cfg:  Config{StreamName: "TEST", ConsumerName: "test", StorageType: ""},
+		},
+		{
+			name: "zero num workers",
+			cfg:  Config{StreamName: "TEST", ConsumerName: "test", NumWorkers: 0},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate()
+			assert.NoError(t, err)
+		})
+	}
+}
+
+func TestConfig_StructFields(t *testing.T) {
+	cfg := Config{
+		NumWorkers:     64,
+		ChannelBufSize: 100,
+		StreamName:     "CUSTOM_STREAM",
+		ConsumerName:   "custom-consumer",
+		StorageType:    "memory",
+	}
+
+	assert.Equal(t, 64, cfg.NumWorkers)
+	assert.Equal(t, 100, cfg.ChannelBufSize)
+	assert.Equal(t, "CUSTOM_STREAM", cfg.StreamName)
+	assert.Equal(t, "custom-consumer", cfg.ConsumerName)
+	assert.Equal(t, "memory", cfg.StorageType)
 }

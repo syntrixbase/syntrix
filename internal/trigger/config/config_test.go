@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -49,4 +51,158 @@ func TestConfig_StructFields(t *testing.T) {
 	assert.Equal(t, "custom_stream", cfg.Delivery.StreamName)
 	assert.Equal(t, "custom-consumer", cfg.Delivery.ConsumerName)
 	assert.Equal(t, 8, cfg.Delivery.NumWorkers)
+}
+
+func TestConfig_ApplyDefaults(t *testing.T) {
+	cfg := &Config{}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "nats://localhost:4222", cfg.NatsURL)
+	assert.Equal(t, "TRIGGERS", cfg.Evaluator.StreamName)
+	assert.Equal(t, 3, cfg.Evaluator.RetryAttempts)
+	assert.Equal(t, 16, cfg.Delivery.NumWorkers)
+}
+
+func TestConfig_ApplyEnvOverrides(t *testing.T) {
+	os.Setenv("TRIGGER_NATS_URL", "nats://env:4222")
+	os.Setenv("TRIGGER_RULES_FILE", "env_rules.json")
+	defer func() {
+		os.Unsetenv("TRIGGER_NATS_URL")
+		os.Unsetenv("TRIGGER_RULES_FILE")
+	}()
+
+	cfg := DefaultConfig()
+	cfg.ApplyEnvOverrides()
+
+	assert.Equal(t, "nats://env:4222", cfg.NatsURL)
+	assert.Equal(t, "env_rules.json", cfg.Evaluator.RulesFile)
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Evaluator.RulesFile = "triggers.json"
+	cfg.ResolvePaths("config")
+
+	assert.Equal(t, filepath.Join("config", "triggers.json"), cfg.Evaluator.RulesFile)
+}
+
+func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
+	cfg := DefaultConfig()
+	absPath := "/absolute/path/triggers.json"
+	cfg.Evaluator.RulesFile = absPath
+	cfg.ResolvePaths("config")
+
+	assert.Equal(t, absPath, cfg.Evaluator.RulesFile)
+}
+
+func TestConfig_Validate(t *testing.T) {
+	cfg := DefaultConfig()
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
+	cfg := &Config{
+		NatsURL: "nats://custom:4223",
+		Evaluator: evaluator.Config{
+			StreamName:         "CUSTOM_STREAM",
+			RulesFile:          "custom_rules.json",
+			CheckpointDatabase: "custom_db",
+			RetryAttempts:      5,
+			StorageType:        "memory",
+		},
+		Delivery: delivery.Config{
+			StreamName:   "CUSTOM_STREAM",
+			ConsumerName: "custom-consumer",
+			NumWorkers:   32,
+			StorageType:  "memory",
+		},
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "nats://custom:4223", cfg.NatsURL)
+	assert.Equal(t, "CUSTOM_STREAM", cfg.Evaluator.StreamName)
+	assert.Equal(t, "custom_rules.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "custom_db", cfg.Evaluator.CheckpointDatabase)
+	assert.Equal(t, 5, cfg.Evaluator.RetryAttempts)
+	assert.Equal(t, "memory", cfg.Evaluator.StorageType)
+	assert.Equal(t, "CUSTOM_STREAM", cfg.Delivery.StreamName)
+	assert.Equal(t, "custom-consumer", cfg.Delivery.ConsumerName)
+	assert.Equal(t, 32, cfg.Delivery.NumWorkers)
+	assert.Equal(t, "memory", cfg.Delivery.StorageType)
+}
+
+func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
+	cfg := &Config{
+		NatsURL: "nats://partial:4222",
+		// Other fields empty, should get defaults
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "nats://partial:4222", cfg.NatsURL)
+	assert.Equal(t, "TRIGGERS", cfg.Evaluator.StreamName)
+	assert.Equal(t, 3, cfg.Evaluator.RetryAttempts)
+	assert.Equal(t, "default", cfg.Evaluator.CheckpointDatabase)
+	assert.Equal(t, 16, cfg.Delivery.NumWorkers)
+}
+
+func TestConfig_ApplyEnvOverrides_WithTSetenv(t *testing.T) {
+	t.Setenv("TRIGGER_NATS_URL", "nats://testenv:4222")
+	t.Setenv("TRIGGER_RULES_FILE", "testenv_rules.json")
+
+	cfg := DefaultConfig()
+	cfg.ApplyEnvOverrides()
+
+	assert.Equal(t, "nats://testenv:4222", cfg.NatsURL)
+	assert.Equal(t, "testenv_rules.json", cfg.Evaluator.RulesFile)
+}
+
+func TestConfig_ApplyEnvOverrides_NoEnvVars(t *testing.T) {
+	cfg := DefaultConfig()
+	originalURL := cfg.NatsURL
+
+	cfg.ApplyEnvOverrides()
+
+	assert.Equal(t, originalURL, cfg.NatsURL)
+}
+
+func TestConfig_ResolvePaths_EmptyRulesFile(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Evaluator.RulesFile = ""
+	cfg.ResolvePaths("/config")
+
+	// Empty path should stay empty (not get resolved to just baseDir)
+	assert.Equal(t, "", cfg.Evaluator.RulesFile)
+}
+
+func TestConfig_Validate_EmptyConfig(t *testing.T) {
+	// Empty config is now invalid because StreamName is required
+	cfg := Config{}
+	err := cfg.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "stream_name is required")
+}
+
+func TestConfig_Validate_CallsSubConfigs(t *testing.T) {
+	// Verify that Validate calls sub-config Validate methods
+	cfg := DefaultConfig()
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestConfig_Validate_EvaluatorError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Evaluator.StreamName = "" // This triggers evaluator validation error
+	err := cfg.Validate()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "evaluator")
+}
+
+func TestConfig_Validate_DeliveryError(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.Delivery.StreamName = "" // This triggers delivery validation error
+	err := cfg.Validate()
+	assert.Error(t, err)
+	// Note: The error goes through evaluator first (which passes), then delivery
+	assert.Contains(t, err.Error(), "stream_name is required")
 }

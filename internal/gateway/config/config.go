@@ -1,5 +1,7 @@
 package config
 
+import "os"
+
 type GatewayConfig struct {
 	QueryServiceURL    string         `yaml:"query_service_url"`
 	StreamerServiceURL string         `yaml:"streamer_service_url"`
@@ -22,6 +24,32 @@ func DefaultGatewayConfig() GatewayConfig {
 	}
 }
 
+// ApplyDefaults fills in zero values with defaults.
+func (g *GatewayConfig) ApplyDefaults() {
+	defaults := DefaultGatewayConfig()
+	if g.QueryServiceURL == "" {
+		g.QueryServiceURL = defaults.QueryServiceURL
+	}
+	if g.StreamerServiceURL == "" {
+		g.StreamerServiceURL = defaults.StreamerServiceURL
+	}
+	if len(g.Realtime.AllowedOrigins) == 0 {
+		g.Realtime.AllowedOrigins = defaults.Realtime.AllowedOrigins
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+func (g *GatewayConfig) ApplyEnvOverrides() {
+	if val := os.Getenv("GATEWAY_QUERY_SERVICE_URL"); val != "" {
+		g.QueryServiceURL = val
+	}
+}
+
+// ResolvePaths resolves relative paths using the given base directory.
+// No paths to resolve in gateway config.
+func (g *GatewayConfig) ResolvePaths(_ string) { _ = g }
+
+// Validate returns an error if the configuration is invalid.
 func (g *GatewayConfig) Validate() error {
 	// Add validation logic if needed
 	return nil

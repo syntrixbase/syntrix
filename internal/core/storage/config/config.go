@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"os"
+	"time"
+)
 
 type Config struct {
 	Backends  map[string]BackendConfig  `yaml:"backends"`
@@ -91,5 +95,80 @@ func DefaultConfig() Config {
 }
 
 func (c *Config) Validate() error {
+	// Validate Storage Databases
+	if _, ok := c.Databases["default"]; !ok {
+		return fmt.Errorf("storage.databases.default is required")
+	}
+	for tID, tCfg := range c.Databases {
+		if _, ok := c.Backends[tCfg.Backend]; !ok {
+			return fmt.Errorf("database '%s' references unknown backend '%s'", tID, tCfg.Backend)
+		}
+	}
+
 	return nil
 }
+
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.Backends == nil {
+		c.Backends = defaults.Backends
+	}
+	if c.Databases == nil {
+		c.Databases = defaults.Databases
+	}
+	// Apply topology defaults
+	if c.Topology.Document.Strategy == "" {
+		c.Topology.Document.Strategy = defaults.Topology.Document.Strategy
+	}
+	if c.Topology.Document.Primary == "" {
+		c.Topology.Document.Primary = defaults.Topology.Document.Primary
+	}
+	if c.Topology.Document.DataCollection == "" {
+		c.Topology.Document.DataCollection = defaults.Topology.Document.DataCollection
+	}
+	if c.Topology.Document.SysCollection == "" {
+		c.Topology.Document.SysCollection = defaults.Topology.Document.SysCollection
+	}
+	if c.Topology.Document.SoftDeleteRetention == 0 {
+		c.Topology.Document.SoftDeleteRetention = defaults.Topology.Document.SoftDeleteRetention
+	}
+	if c.Topology.User.Strategy == "" {
+		c.Topology.User.Strategy = defaults.Topology.User.Strategy
+	}
+	if c.Topology.User.Primary == "" {
+		c.Topology.User.Primary = defaults.Topology.User.Primary
+	}
+	if c.Topology.User.Collection == "" {
+		c.Topology.User.Collection = defaults.Topology.User.Collection
+	}
+	if c.Topology.Revocation.Strategy == "" {
+		c.Topology.Revocation.Strategy = defaults.Topology.Revocation.Strategy
+	}
+	if c.Topology.Revocation.Primary == "" {
+		c.Topology.Revocation.Primary = defaults.Topology.Revocation.Primary
+	}
+	if c.Topology.Revocation.Collection == "" {
+		c.Topology.Revocation.Collection = defaults.Topology.Revocation.Collection
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+func (c *Config) ApplyEnvOverrides() {
+	if val := os.Getenv("MONGO_URI"); val != "" {
+		if backend, ok := c.Backends["default_mongo"]; ok {
+			backend.Mongo.URI = val
+			c.Backends["default_mongo"] = backend
+		}
+	}
+	if val := os.Getenv("DB_NAME"); val != "" {
+		if backend, ok := c.Backends["default_mongo"]; ok {
+			backend.Mongo.DatabaseName = val
+			c.Backends["default_mongo"] = backend
+		}
+	}
+}
+
+// ResolvePaths resolves relative paths using the given base directory.
+// No paths to resolve in storage config.
+func (c *Config) ResolvePaths(_ string) { _ = c }
