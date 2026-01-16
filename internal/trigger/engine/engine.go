@@ -7,9 +7,9 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
 	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
-	"github.com/syntrixbase/syntrix/internal/trigger/watcher"
 )
 
 // defaultTriggerEngine implements TriggerEngine.

@@ -6,9 +6,9 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
 	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
-	"github.com/syntrixbase/syntrix/internal/trigger/watcher"
 )
 
 // ServiceOptions configures the evaluator service.

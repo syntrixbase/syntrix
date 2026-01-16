@@ -6,9 +6,9 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
-	"github.com/syntrixbase/syntrix/internal/trigger/worker"
 )
 
 // Dependencies contains external dependencies for the delivery service.

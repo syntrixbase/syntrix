@@ -12,8 +12,8 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
-	"github.com/syntrixbase/syntrix/internal/trigger/worker"
 )
 
 // DefaultChannelBufferSize is the default buffer size for worker channels.

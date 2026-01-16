@@ -45,3 +45,51 @@ type MongoConfig struct {
 	URI          string `yaml:"uri"`
 	DatabaseName string `yaml:"database_name"`
 }
+
+func DefaultConfig() Config {
+	return Config{
+		Backends: map[string]BackendConfig{
+			"default_mongo": {
+				Type: "mongo",
+				Mongo: MongoConfig{
+					URI:          "mongodb://localhost:27017",
+					DatabaseName: "syntrix",
+				},
+			},
+		},
+		Topology: TopologyConfig{
+			Document: DocumentTopology{
+				BaseTopology: BaseTopology{
+					Strategy: "single",
+					Primary:  "default_mongo",
+				},
+				DataCollection:      "documents",
+				SysCollection:       "sys",
+				SoftDeleteRetention: 5 * time.Minute,
+			},
+			User: CollectionTopology{
+				BaseTopology: BaseTopology{
+					Strategy: "single",
+					Primary:  "default_mongo",
+				},
+				Collection: "users",
+			},
+			Revocation: CollectionTopology{
+				BaseTopology: BaseTopology{
+					Strategy: "single",
+					Primary:  "default_mongo",
+				},
+				Collection: "revocations",
+			},
+		},
+		Databases: map[string]DatabaseConfig{
+			"default": {
+				Backend: "default_mongo",
+			},
+		},
+	}
+}
+
+func (c *Config) Validate() error {
+	return nil
+}

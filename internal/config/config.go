@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"time"
 
 	identity "github.com/syntrixbase/syntrix/internal/core/identity/config"
 	storage "github.com/syntrixbase/syntrix/internal/core/storage/config"
@@ -13,9 +12,9 @@ import (
 	indexer "github.com/syntrixbase/syntrix/internal/indexer/config"
 	puller "github.com/syntrixbase/syntrix/internal/puller/config"
 	query "github.com/syntrixbase/syntrix/internal/query/config"
-	"github.com/syntrixbase/syntrix/internal/server"
+	server "github.com/syntrixbase/syntrix/internal/server"
 	services "github.com/syntrixbase/syntrix/internal/services/config"
-	"github.com/syntrixbase/syntrix/internal/streamer"
+	streamer "github.com/syntrixbase/syntrix/internal/streamer"
 	trigger "github.com/syntrixbase/syntrix/internal/trigger/config"
 	"gopkg.in/yaml.v3"
 )
@@ -43,47 +42,7 @@ type Config struct {
 func LoadConfig() *Config {
 	// 1. Defaults
 	cfg := &Config{
-		Storage: storage.Config{
-			Backends: map[string]storage.BackendConfig{
-				"default_mongo": {
-					Type: "mongo",
-					Mongo: storage.MongoConfig{
-						URI:          "mongodb://localhost:27017",
-						DatabaseName: "syntrix",
-					},
-				},
-			},
-			Topology: storage.TopologyConfig{
-				Document: storage.DocumentTopology{
-					BaseTopology: storage.BaseTopology{
-						Strategy: "single",
-						Primary:  "default_mongo",
-					},
-					DataCollection:      "documents",
-					SysCollection:       "sys",
-					SoftDeleteRetention: 5 * time.Minute,
-				},
-				User: storage.CollectionTopology{
-					BaseTopology: storage.BaseTopology{
-						Strategy: "single",
-						Primary:  "default_mongo",
-					},
-					Collection: "users",
-				},
-				Revocation: storage.CollectionTopology{
-					BaseTopology: storage.BaseTopology{
-						Strategy: "single",
-						Primary:  "default_mongo",
-					},
-					Collection: "revocations",
-				},
-			},
-			Databases: map[string]storage.DatabaseConfig{
-				"default": {
-					Backend: "default_mongo",
-				},
-			},
-		},
+		Storage:    storage.DefaultConfig(),
 		Identity:   identity.DefaultConfig(),
 		Server:     server.DefaultConfig(),
 		Query:      query.DefaultConfig(),

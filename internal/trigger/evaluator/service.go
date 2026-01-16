@@ -5,8 +5,8 @@ import (
 	"log"
 	"sync"
 
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
-	"github.com/syntrixbase/syntrix/internal/trigger/watcher"
 )
 
 // Service evaluates document changes against trigger rules and publishes matched tasks.
