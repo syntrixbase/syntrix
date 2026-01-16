@@ -91,6 +91,29 @@ func DefaultClientConfig() ClientConfig {
 	}
 }
 
+// ApplyDefaults fills in zero values with defaults.
+func (c *ClientConfig) ApplyDefaults() {
+	defaults := DefaultClientConfig()
+	if c.StreamerAddr == "" {
+		c.StreamerAddr = defaults.StreamerAddr
+	}
+	if c.InitialBackoff == 0 {
+		c.InitialBackoff = defaults.InitialBackoff
+	}
+	if c.MaxBackoff == 0 {
+		c.MaxBackoff = defaults.MaxBackoff
+	}
+	if c.BackoffMultiplier == 0 {
+		c.BackoffMultiplier = defaults.BackoffMultiplier
+	}
+	if c.HeartbeatInterval == 0 {
+		c.HeartbeatInterval = defaults.HeartbeatInterval
+	}
+	if c.ActivityTimeout == 0 {
+		c.ActivityTimeout = defaults.ActivityTimeout
+	}
+}
+
 // streamerClient implements the Service interface for remote Streamer.
 type streamerClient struct {
 	config ClientConfig

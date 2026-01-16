@@ -50,3 +50,145 @@ func TestDefaultStoreConfig(t *testing.T) {
 		t.Errorf("BlockCacheSize = %d, want %d", cfg.BlockCacheSize, 128*1024*1024)
 	}
 }
+
+func TestConfig_ApplyDefaults(t *testing.T) {
+	tests := []struct {
+		name    string
+		initial Config
+		check   func(t *testing.T, cfg *Config)
+	}{
+		{
+			name:    "empty config gets all defaults",
+			initial: Config{},
+			check: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "localhost:9000", cfg.PullerAddr)
+				assert.Equal(t, "config/index_templates.yaml", cfg.TemplatePath)
+				assert.Equal(t, "data/indexer/progress", cfg.ProgressPath)
+				assert.Equal(t, "indexer", cfg.ConsumerID)
+				assert.Equal(t, 5*time.Second, cfg.ReconcileInterval)
+				assert.Equal(t, StorageModeMemory, cfg.StorageMode)
+				assert.Equal(t, "data/indexer/indexes.db", cfg.Store.Path)
+				assert.Equal(t, 100, cfg.Store.BatchSize)
+				assert.Equal(t, 100*time.Millisecond, cfg.Store.BatchInterval)
+				assert.Equal(t, 10000, cfg.Store.QueueSize)
+				assert.Equal(t, int64(128*1024*1024), cfg.Store.BlockCacheSize)
+			},
+		},
+		{
+			name: "custom values preserved",
+			initial: Config{
+				PullerAddr:        "custom:9001",
+				TemplatePath:      "/custom/templates.yaml",
+				ProgressPath:      "/custom/progress",
+				ConsumerID:        "custom-indexer",
+				ReconcileInterval: 10 * time.Second,
+				StorageMode:       StorageModePebble,
+				Store: StoreConfig{
+					Path:           "/custom/store.db",
+					BatchSize:      200,
+					BatchInterval:  200 * time.Millisecond,
+					QueueSize:      20000,
+					BlockCacheSize: 256 * 1024 * 1024,
+				},
+			},
+			check: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "custom:9001", cfg.PullerAddr)
+				assert.Equal(t, "/custom/templates.yaml", cfg.TemplatePath)
+				assert.Equal(t, "/custom/progress", cfg.ProgressPath)
+				assert.Equal(t, "custom-indexer", cfg.ConsumerID)
+				assert.Equal(t, 10*time.Second, cfg.ReconcileInterval)
+				assert.Equal(t, StorageModePebble, cfg.StorageMode)
+				assert.Equal(t, "/custom/store.db", cfg.Store.Path)
+				assert.Equal(t, 200, cfg.Store.BatchSize)
+				assert.Equal(t, 200*time.Millisecond, cfg.Store.BatchInterval)
+				assert.Equal(t, 20000, cfg.Store.QueueSize)
+				assert.Equal(t, int64(256*1024*1024), cfg.Store.BlockCacheSize)
+			},
+		},
+		{
+			name: "partial config gets remaining defaults",
+			initial: Config{
+				PullerAddr: "partial:9002",
+				// Other fields empty, should get defaults
+			},
+			check: func(t *testing.T, cfg *Config) {
+				assert.Equal(t, "partial:9002", cfg.PullerAddr)
+				assert.Equal(t, "config/index_templates.yaml", cfg.TemplatePath)
+				assert.Equal(t, "data/indexer/progress", cfg.ProgressPath)
+				assert.Equal(t, "indexer", cfg.ConsumerID)
+				assert.Equal(t, 5*time.Second, cfg.ReconcileInterval)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := tt.initial
+			cfg.ApplyDefaults()
+			tt.check(t, &cfg)
+		})
+	}
+}
+
+func TestConfig_ApplyEnvOverrides(t *testing.T) {
+	// ApplyEnvOverrides is a no-op for indexer config
+	cfg := DefaultConfig()
+	originalPullerAddr := cfg.PullerAddr
+
+	cfg.ApplyEnvOverrides()
+
+	assert.Equal(t, originalPullerAddr, cfg.PullerAddr)
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseDir      string
+		templatePath string
+		expected     string
+	}{
+		{
+			name:         "relative path gets resolved",
+			baseDir:      "/config",
+			templatePath: "templates.yaml",
+			expected:     "/config/templates.yaml",
+		},
+		{
+			name:         "absolute path preserved",
+			baseDir:      "/config",
+			templatePath: "/absolute/templates.yaml",
+			expected:     "/absolute/templates.yaml",
+		},
+		{
+			name:         "nested relative path",
+			baseDir:      "/app/config",
+			templatePath: "sub/templates.yaml",
+			expected:     "/app/config/sub/templates.yaml",
+		},
+		{
+			name:         "empty path stays empty",
+			baseDir:      "/config",
+			templatePath: "",
+			expected:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{TemplatePath: tt.templatePath}
+			cfg.ResolvePaths(tt.baseDir)
+			assert.Equal(t, tt.expected, cfg.TemplatePath)
+		})
+	}
+}
+
+func TestConfig_Validate(t *testing.T) {
+	// Validate is currently a no-op that returns nil
+	cfg := Config{}
+	err := cfg.Validate()
+	assert.NoError(t, err)
+
+	cfg2 := DefaultConfig()
+	err = cfg2.Validate()
+	assert.NoError(t, err)
+}

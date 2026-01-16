@@ -2,7 +2,7 @@ package trigger
 
 import (
 	"github.com/syntrixbase/syntrix/internal/core/identity"
-	"github.com/syntrixbase/syntrix/internal/trigger/worker"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 )
 
 // DeliveryWorker is an alias for worker.DeliveryWorker interface

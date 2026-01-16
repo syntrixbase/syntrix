@@ -13,7 +13,7 @@ server:
 
 storage:
   backends:
-    default:
+    default_mongo:
       type: mongo
       mongo:
         uri: "mongodb://localhost:27017"
@@ -21,17 +21,17 @@ storage:
   topology:
     document:
       strategy: single
-      primary: default
+      primary: default_mongo
       data_collection: documents
       sys_collection: sys
       soft_delete_retention: 720h # 30 days
     user:
       strategy: single
-      primary: default
+      primary: default_mongo
       collection: users
     revocation:
       strategy: single
-      primary: default
+      primary: default_mongo
       collection: revocations
 
 identity:

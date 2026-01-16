@@ -217,3 +217,257 @@ func containsStr(s, substr string) bool {
 	}
 	return false
 }
+
+func TestConfig_ApplyDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		initial  Config
+		expected Config
+	}{
+		{
+			name:    "empty config gets all defaults",
+			initial: Config{},
+			expected: Config{
+				GRPC: GRPCConfig{
+					MaxConnections:    100,
+					HeartbeatInterval: 30 * time.Second,
+				},
+				Backends: []PullerBackendConfig{
+					{Name: "default_mongo", Collections: []string{"documents"}},
+				},
+				Buffer: BufferConfig{
+					Path:          "data/puller/events",
+					MaxSize:       "10GiB",
+					BatchSize:     100,
+					BatchInterval: 100 * time.Millisecond,
+					QueueSize:     10000,
+				},
+				Consumer: ConsumerConfig{
+					CatchUpThreshold:  100000,
+					CoalesceOnCatchUp: false,
+				},
+				Cleaner: CleanerConfig{
+					Interval:  1 * time.Minute,
+					Retention: 1 * time.Hour,
+				},
+				Bootstrap: BootstrapConfig{
+					Mode: "from_now",
+				},
+				Metrics: MetricsConfig{
+					Port: 9090,
+					Path: "/metrics",
+				},
+				Health: HealthConfig{
+					Port: 8081,
+					Path: "/health",
+				},
+			},
+		},
+		{
+			name: "custom values preserved",
+			initial: Config{
+				GRPC: GRPCConfig{
+					MaxConnections:    200,
+					HeartbeatInterval: 60 * time.Second,
+				},
+				Backends: []PullerBackendConfig{
+					{Name: "custom_backend", Collections: []string{"users"}},
+				},
+				Buffer: BufferConfig{
+					Path:          "/custom/path",
+					MaxSize:       "5GiB",
+					BatchSize:     50,
+					BatchInterval: 50 * time.Millisecond,
+					QueueSize:     5000,
+				},
+				Consumer: ConsumerConfig{
+					CatchUpThreshold:  50000,
+					CoalesceOnCatchUp: true,
+				},
+				Cleaner: CleanerConfig{
+					Interval:  2 * time.Minute,
+					Retention: 2 * time.Hour,
+				},
+				Bootstrap: BootstrapConfig{
+					Mode: "from_beginning",
+				},
+				Metrics: MetricsConfig{
+					Port: 9091,
+					Path: "/custom/metrics",
+				},
+				Health: HealthConfig{
+					Port: 8082,
+					Path: "/custom/health",
+				},
+			},
+			expected: Config{
+				GRPC: GRPCConfig{
+					MaxConnections:    200,
+					HeartbeatInterval: 60 * time.Second,
+				},
+				Backends: []PullerBackendConfig{
+					{Name: "custom_backend", Collections: []string{"users"}},
+				},
+				Buffer: BufferConfig{
+					Path:          "/custom/path",
+					MaxSize:       "5GiB",
+					BatchSize:     50,
+					BatchInterval: 50 * time.Millisecond,
+					QueueSize:     5000,
+				},
+				Consumer: ConsumerConfig{
+					CatchUpThreshold:  50000,
+					CoalesceOnCatchUp: true,
+				},
+				Cleaner: CleanerConfig{
+					Interval:  2 * time.Minute,
+					Retention: 2 * time.Hour,
+				},
+				Bootstrap: BootstrapConfig{
+					Mode: "from_beginning",
+				},
+				Metrics: MetricsConfig{
+					Port: 9091,
+					Path: "/custom/metrics",
+				},
+				Health: HealthConfig{
+					Port: 8082,
+					Path: "/custom/health",
+				},
+			},
+		},
+		{
+			name: "partial config gets remaining defaults",
+			initial: Config{
+				GRPC: GRPCConfig{
+					MaxConnections: 150,
+					// HeartbeatInterval is zero, should get default
+				},
+				Buffer: BufferConfig{
+					Path: "/my/path",
+					// Other fields zero, should get defaults
+				},
+				Metrics: MetricsConfig{
+					Port: 9095,
+					// Path empty, should get default
+				},
+			},
+			expected: Config{
+				GRPC: GRPCConfig{
+					MaxConnections:    150,
+					HeartbeatInterval: 30 * time.Second,
+				},
+				Backends: []PullerBackendConfig{
+					{Name: "default_mongo", Collections: []string{"documents"}},
+				},
+				Buffer: BufferConfig{
+					Path:          "/my/path",
+					MaxSize:       "10GiB",
+					BatchSize:     100,
+					BatchInterval: 100 * time.Millisecond,
+					QueueSize:     10000,
+				},
+				Consumer: ConsumerConfig{
+					CatchUpThreshold: 100000,
+				},
+				Cleaner: CleanerConfig{
+					Interval:  1 * time.Minute,
+					Retention: 1 * time.Hour,
+				},
+				Bootstrap: BootstrapConfig{
+					Mode: "from_now",
+				},
+				Metrics: MetricsConfig{
+					Port: 9095,
+					Path: "/metrics",
+				},
+				Health: HealthConfig{
+					Port: 8081,
+					Path: "/health",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := tt.initial
+			cfg.ApplyDefaults()
+
+			if cfg.GRPC.MaxConnections != tt.expected.GRPC.MaxConnections {
+				t.Errorf("GRPC.MaxConnections = %d, want %d", cfg.GRPC.MaxConnections, tt.expected.GRPC.MaxConnections)
+			}
+			if cfg.GRPC.HeartbeatInterval != tt.expected.GRPC.HeartbeatInterval {
+				t.Errorf("GRPC.HeartbeatInterval = %v, want %v", cfg.GRPC.HeartbeatInterval, tt.expected.GRPC.HeartbeatInterval)
+			}
+			if len(cfg.Backends) != len(tt.expected.Backends) {
+				t.Errorf("len(Backends) = %d, want %d", len(cfg.Backends), len(tt.expected.Backends))
+			}
+			if cfg.Buffer.Path != tt.expected.Buffer.Path {
+				t.Errorf("Buffer.Path = %q, want %q", cfg.Buffer.Path, tt.expected.Buffer.Path)
+			}
+			if cfg.Buffer.MaxSize != tt.expected.Buffer.MaxSize {
+				t.Errorf("Buffer.MaxSize = %q, want %q", cfg.Buffer.MaxSize, tt.expected.Buffer.MaxSize)
+			}
+			if cfg.Buffer.BatchSize != tt.expected.Buffer.BatchSize {
+				t.Errorf("Buffer.BatchSize = %d, want %d", cfg.Buffer.BatchSize, tt.expected.Buffer.BatchSize)
+			}
+			if cfg.Buffer.BatchInterval != tt.expected.Buffer.BatchInterval {
+				t.Errorf("Buffer.BatchInterval = %v, want %v", cfg.Buffer.BatchInterval, tt.expected.Buffer.BatchInterval)
+			}
+			if cfg.Buffer.QueueSize != tt.expected.Buffer.QueueSize {
+				t.Errorf("Buffer.QueueSize = %d, want %d", cfg.Buffer.QueueSize, tt.expected.Buffer.QueueSize)
+			}
+			if cfg.Consumer.CatchUpThreshold != tt.expected.Consumer.CatchUpThreshold {
+				t.Errorf("Consumer.CatchUpThreshold = %d, want %d", cfg.Consumer.CatchUpThreshold, tt.expected.Consumer.CatchUpThreshold)
+			}
+			if cfg.Cleaner.Interval != tt.expected.Cleaner.Interval {
+				t.Errorf("Cleaner.Interval = %v, want %v", cfg.Cleaner.Interval, tt.expected.Cleaner.Interval)
+			}
+			if cfg.Cleaner.Retention != tt.expected.Cleaner.Retention {
+				t.Errorf("Cleaner.Retention = %v, want %v", cfg.Cleaner.Retention, tt.expected.Cleaner.Retention)
+			}
+			if cfg.Bootstrap.Mode != tt.expected.Bootstrap.Mode {
+				t.Errorf("Bootstrap.Mode = %q, want %q", cfg.Bootstrap.Mode, tt.expected.Bootstrap.Mode)
+			}
+			if cfg.Metrics.Port != tt.expected.Metrics.Port {
+				t.Errorf("Metrics.Port = %d, want %d", cfg.Metrics.Port, tt.expected.Metrics.Port)
+			}
+			if cfg.Metrics.Path != tt.expected.Metrics.Path {
+				t.Errorf("Metrics.Path = %q, want %q", cfg.Metrics.Path, tt.expected.Metrics.Path)
+			}
+			if cfg.Health.Port != tt.expected.Health.Port {
+				t.Errorf("Health.Port = %d, want %d", cfg.Health.Port, tt.expected.Health.Port)
+			}
+			if cfg.Health.Path != tt.expected.Health.Path {
+				t.Errorf("Health.Path = %q, want %q", cfg.Health.Path, tt.expected.Health.Path)
+			}
+		})
+	}
+}
+
+func TestConfig_ApplyEnvOverrides(t *testing.T) {
+	// ApplyEnvOverrides is currently a no-op for puller config
+	// Verify it doesn't panic and doesn't modify config
+	cfg := DefaultConfig()
+	originalPath := cfg.Buffer.Path
+
+	cfg.ApplyEnvOverrides()
+
+	if cfg.Buffer.Path != originalPath {
+		t.Errorf("ApplyEnvOverrides modified Buffer.Path unexpectedly")
+	}
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	// ResolvePaths is currently a no-op for puller config
+	// Verify it doesn't panic and doesn't modify config
+	cfg := DefaultConfig()
+	originalPath := cfg.Buffer.Path
+
+	cfg.ResolvePaths("/some/base/dir")
+
+	if cfg.Buffer.Path != originalPath {
+		t.Errorf("ResolvePaths modified Buffer.Path unexpectedly")
+	}
+}

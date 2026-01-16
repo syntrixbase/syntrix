@@ -32,3 +32,110 @@ func TestConfig_StructFields(t *testing.T) {
 	assert.Equal(t, 10*time.Second, cfg.Server.SendTimeout)
 	assert.Equal(t, "custom:50052", cfg.Client.StreamerAddr)
 }
+
+func TestConfig_ApplyDefaults(t *testing.T) {
+	cfg := &Config{}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "http://localhost:9000", cfg.Server.PullerAddr)
+	assert.Equal(t, 5*time.Second, cfg.Server.SendTimeout)
+	assert.Equal(t, "localhost:50052", cfg.Client.StreamerAddr)
+	assert.Equal(t, 1*time.Second, cfg.Client.InitialBackoff)
+	assert.Equal(t, 30*time.Second, cfg.Client.MaxBackoff)
+	assert.Equal(t, 2.0, cfg.Client.BackoffMultiplier)
+}
+
+func TestConfig_ApplyEnvOverrides(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ApplyEnvOverrides()
+	// No env vars, just verify no panic
+}
+
+func TestConfig_ResolvePaths(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.ResolvePaths("config")
+	// No paths to resolve, just verify no panic
+}
+
+func TestConfig_Validate(t *testing.T) {
+	cfg := DefaultConfig()
+	err := cfg.Validate()
+	assert.NoError(t, err)
+}
+
+func TestServerConfig_ApplyDefaults(t *testing.T) {
+	cfg := &ServerConfig{}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "http://localhost:9000", cfg.PullerAddr)
+	assert.Equal(t, 5*time.Second, cfg.SendTimeout)
+}
+
+func TestClientConfig_ApplyDefaults(t *testing.T) {
+	cfg := &ClientConfig{}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "localhost:50052", cfg.StreamerAddr)
+	assert.Equal(t, 1*time.Second, cfg.InitialBackoff)
+	assert.Equal(t, 30*time.Second, cfg.MaxBackoff)
+	assert.Equal(t, 2.0, cfg.BackoffMultiplier)
+	assert.Equal(t, 30*time.Second, cfg.HeartbeatInterval)
+	assert.Equal(t, 90*time.Second, cfg.ActivityTimeout)
+}
+
+func TestClientConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
+	cfg := &ClientConfig{
+		StreamerAddr:      "custom:50053",
+		InitialBackoff:    5 * time.Second,
+		MaxBackoff:        120 * time.Second,
+		BackoffMultiplier: 3.0,
+		HeartbeatInterval: 45 * time.Second,
+		ActivityTimeout:   120 * time.Second,
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "custom:50053", cfg.StreamerAddr)
+	assert.Equal(t, 5*time.Second, cfg.InitialBackoff)
+	assert.Equal(t, 120*time.Second, cfg.MaxBackoff)
+	assert.Equal(t, 3.0, cfg.BackoffMultiplier)
+	assert.Equal(t, 45*time.Second, cfg.HeartbeatInterval)
+	assert.Equal(t, 120*time.Second, cfg.ActivityTimeout)
+}
+
+func TestServerConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
+	cfg := &ServerConfig{
+		PullerAddr:  "custom:9001",
+		SendTimeout: 15 * time.Second,
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "custom:9001", cfg.PullerAddr)
+	assert.Equal(t, 15*time.Second, cfg.SendTimeout)
+}
+
+func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
+	cfg := &Config{
+		Server: ServerConfig{
+			PullerAddr:  "custom:9001",
+			SendTimeout: 10 * time.Second,
+		},
+		Client: ClientConfig{
+			StreamerAddr:      "custom:50053",
+			InitialBackoff:    2 * time.Second,
+			MaxBackoff:        60 * time.Second,
+			BackoffMultiplier: 1.5,
+			HeartbeatInterval: 60 * time.Second,
+			ActivityTimeout:   180 * time.Second,
+		},
+	}
+	cfg.ApplyDefaults()
+
+	assert.Equal(t, "custom:9001", cfg.Server.PullerAddr)
+	assert.Equal(t, 10*time.Second, cfg.Server.SendTimeout)
+	assert.Equal(t, "custom:50053", cfg.Client.StreamerAddr)
+	assert.Equal(t, 2*time.Second, cfg.Client.InitialBackoff)
+	assert.Equal(t, 60*time.Second, cfg.Client.MaxBackoff)
+	assert.Equal(t, 1.5, cfg.Client.BackoffMultiplier)
+	assert.Equal(t, 60*time.Second, cfg.Client.HeartbeatInterval)
+	assert.Equal(t, 180*time.Second, cfg.Client.ActivityTimeout)
+}

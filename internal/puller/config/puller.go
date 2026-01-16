@@ -204,6 +204,67 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.GRPC.MaxConnections <= 0 {
+		c.GRPC.MaxConnections = defaults.GRPC.MaxConnections
+	}
+	if c.GRPC.HeartbeatInterval == 0 {
+		c.GRPC.HeartbeatInterval = defaults.GRPC.HeartbeatInterval
+	}
+	if len(c.Backends) == 0 {
+		c.Backends = defaults.Backends
+	}
+	if c.Buffer.Path == "" {
+		c.Buffer.Path = defaults.Buffer.Path
+	}
+	if c.Buffer.MaxSize == "" {
+		c.Buffer.MaxSize = defaults.Buffer.MaxSize
+	}
+	if c.Buffer.BatchSize <= 0 {
+		c.Buffer.BatchSize = defaults.Buffer.BatchSize
+	}
+	if c.Buffer.BatchInterval == 0 {
+		c.Buffer.BatchInterval = defaults.Buffer.BatchInterval
+	}
+	if c.Buffer.QueueSize <= 0 {
+		c.Buffer.QueueSize = defaults.Buffer.QueueSize
+	}
+	if c.Consumer.CatchUpThreshold <= 0 {
+		c.Consumer.CatchUpThreshold = defaults.Consumer.CatchUpThreshold
+	}
+	if c.Cleaner.Interval == 0 {
+		c.Cleaner.Interval = defaults.Cleaner.Interval
+	}
+	if c.Cleaner.Retention == 0 {
+		c.Cleaner.Retention = defaults.Cleaner.Retention
+	}
+	if c.Bootstrap.Mode == "" {
+		c.Bootstrap.Mode = defaults.Bootstrap.Mode
+	}
+	if c.Metrics.Port == 0 {
+		c.Metrics.Port = defaults.Metrics.Port
+	}
+	if c.Metrics.Path == "" {
+		c.Metrics.Path = defaults.Metrics.Path
+	}
+	if c.Health.Port == 0 {
+		c.Health.Port = defaults.Health.Port
+	}
+	if c.Health.Path == "" {
+		c.Health.Path = defaults.Health.Path
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No env vars for puller config currently.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+// No paths to resolve from config dir; buffer path is data path.
+func (c *Config) ResolvePaths(_ string) { _ = c }
+
 // ParseByteSize parses a human-readable byte size string (e.g., "10GiB", "1TiB").
 // Returns the size in bytes.
 func ParseByteSize(s string) (int64, error) {

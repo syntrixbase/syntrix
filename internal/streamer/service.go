@@ -44,6 +44,17 @@ func DefaultServiceConfig() ServerConfig {
 	}
 }
 
+// ApplyDefaults fills in zero values with defaults.
+func (c *ServerConfig) ApplyDefaults() {
+	defaults := DefaultServiceConfig()
+	if c.PullerAddr == "" {
+		c.PullerAddr = defaults.PullerAddr
+	}
+	if c.SendTimeout == 0 {
+		c.SendTimeout = defaults.SendTimeout
+	}
+}
+
 // ServiceConfigOption is a functional option for ServiceConfig.
 type ServiceConfigOption func(*ServerConfig)
 

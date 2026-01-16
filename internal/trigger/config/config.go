@@ -1,16 +1,70 @@
 package config
 
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
+)
+
+// Config is the top-level trigger configuration.
 type Config struct {
-	NatsURL     string `yaml:"nats_url"`
-	RulesFile   string `yaml:"rules_file"`
-	WorkerCount int    `yaml:"worker_count"`
-	StreamName  string `yaml:"stream_name"`
+	NatsURL string `yaml:"nats_url"`
+
+	// Evaluator service configuration
+	Evaluator evaluator.Config `yaml:"evaluator"`
+
+	// Delivery service configuration
+	Delivery delivery.Config `yaml:"delivery"`
 }
 
+// DefaultConfig returns the default trigger configuration.
 func DefaultConfig() Config {
 	return Config{
-		NatsURL:     "nats://localhost:4222",
-		RulesFile:   "triggers.json",
-		WorkerCount: 16,
+		NatsURL:   "nats://localhost:4222",
+		Evaluator: evaluator.DefaultConfig(),
+		Delivery:  delivery.DefaultConfig(),
 	}
+}
+
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.NatsURL == "" {
+		c.NatsURL = defaults.NatsURL
+	}
+	c.Evaluator.ApplyDefaults()
+	c.Delivery.ApplyDefaults()
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+func (c *Config) ApplyEnvOverrides() {
+	if val := os.Getenv("TRIGGER_NATS_URL"); val != "" {
+		c.NatsURL = val
+	}
+	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
+		c.Evaluator.RulesFile = val
+	}
+	c.Evaluator.ApplyEnvOverrides()
+	c.Delivery.ApplyEnvOverrides()
+}
+
+// ResolvePaths resolves relative paths using the given base directory.
+func (c *Config) ResolvePaths(baseDir string) {
+	if c.Evaluator.RulesFile != "" && !filepath.IsAbs(c.Evaluator.RulesFile) {
+		c.Evaluator.RulesFile = filepath.Join(baseDir, c.Evaluator.RulesFile)
+	}
+	c.Evaluator.ResolvePaths(baseDir)
+	c.Delivery.ResolvePaths(baseDir)
+}
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	// Delegate to sub-configs; returns nil if all valid
+	if err := c.Evaluator.Validate(); err != nil {
+		return fmt.Errorf("evaluator: %w", err)
+	}
+	return c.Delivery.Validate()
 }

@@ -15,3 +15,6 @@ Index of task planning documents for Syntrix.
 - [x] [032.2026-01-08-query-grpc-migration.md](032.2026-01-08-query-grpc-migration.md) — Query Service gRPC Migration. Status: Completed.
 - [x] [033.2026-01-08-unified-grpc-server.md](033.2026-01-08-unified-grpc-server.md) — Unified gRPC Server Migration (Puller & Streamer). Status: Completed.
 - [ ] [034.2026-01-11-query-indexer-integration.md](034.2026-01-11-query-indexer-integration.md) — Query-Indexer Integration. Status: Completed. Depends on: 017.
+- [ ] [035.2026-01-13-index-persistence.md](035.2026-01-13-index-persistence.md) — Index Persistence. Status: Planned.
+- [ ] [036.2026-01-14-core-pubsub.md](036.2026-01-14-core-pubsub.md) — Core Pubsub Layer. Status: Planned.
+- [x] [037.2026-01-15-trigger-service-separation.md](037.2026-01-15-trigger-service-separation.md) — Trigger Service Separation. Status: Completed.

@@ -1,6 +1,9 @@
 package config
 
-import "time"
+import (
+	"path/filepath"
+	"time"
+)
 
 type Config struct {
 	AuthN AuthNConfig `yaml:"authn"`
@@ -30,4 +33,43 @@ func DefaultConfig() Config {
 			RulesFile: "security.yaml",
 		},
 	}
+}
+
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.AuthN.AccessTokenTTL == 0 {
+		c.AuthN.AccessTokenTTL = defaults.AuthN.AccessTokenTTL
+	}
+	if c.AuthN.RefreshTokenTTL == 0 {
+		c.AuthN.RefreshTokenTTL = defaults.AuthN.RefreshTokenTTL
+	}
+	if c.AuthN.AuthCodeTTL == 0 {
+		c.AuthN.AuthCodeTTL = defaults.AuthN.AuthCodeTTL
+	}
+	if c.AuthN.PrivateKeyFile == "" {
+		c.AuthN.PrivateKeyFile = defaults.AuthN.PrivateKeyFile
+	}
+	if c.AuthZ.RulesFile == "" {
+		c.AuthZ.RulesFile = defaults.AuthZ.RulesFile
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No env vars for identity config currently.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+func (c *Config) ResolvePaths(baseDir string) {
+	if c.AuthZ.RulesFile != "" && !filepath.IsAbs(c.AuthZ.RulesFile) {
+		c.AuthZ.RulesFile = filepath.Join(baseDir, c.AuthZ.RulesFile)
+	}
+	if c.AuthN.PrivateKeyFile != "" && !filepath.IsAbs(c.AuthN.PrivateKeyFile) {
+		c.AuthN.PrivateKeyFile = filepath.Join(baseDir, c.AuthN.PrivateKeyFile)
+	}
+}
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	return nil
 }

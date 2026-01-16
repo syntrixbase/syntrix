@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nats-io/nats.go"
+
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -20,18 +23,32 @@ import (
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
-	triggerengine "github.com/syntrixbase/syntrix/internal/trigger/engine"
-
-	"github.com/nats-io/nats.go"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 )
 
-var triggerFactoryFactory = func(store storage.DocumentStore, nats *nats.Conn, auth identity.AuthN, opts ...triggerengine.FactoryOption) (triggerengine.TriggerFactory, error) {
-	// Default options
-	defaultOpts := []triggerengine.FactoryOption{triggerengine.WithStartFromNow(true)}
-	return triggerengine.NewFactory(store, nats, auth, append(defaultOpts, opts...)...)
-}
 var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 	return storage.NewFactory(ctx, cfg.Storage)
+}
+
+// evaluatorServiceFactory creates evaluator services - injectable for testing
+var evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+	return evaluator.NewService(deps, cfg)
+}
+
+// deliveryServiceFactory creates delivery services - injectable for testing
+var deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+	return delivery.NewService(deps, cfg)
+}
+
+// pubsubPublisherFactory creates a pubsub.Publisher - injectable for testing
+var pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+	return evaluator.NewPublisher(nc, cfg)
+}
+
+// pubsubConsumerFactory creates a pubsub.Consumer - injectable for testing
+var pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
+	return delivery.NewConsumer(nc, cfg)
 }
 
 func (m *Manager) Init(ctx context.Context) error {
@@ -332,64 +349,6 @@ func (m *Manager) initGateway() error {
 	return nil
 }
 
-// initTriggerServices initializes trigger evaluator and worker services.
-// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
-func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
-	// Create NATS provider based on parameter
-	if useEmbeddedNATS {
-		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
-	} else {
-		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
-	}
-
-	nc, err := m.natsProvider.Connect(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-
-	opts := []triggerengine.FactoryOption{
-		triggerengine.WithStreamName(m.cfg.Trigger.StreamName),
-	}
-	if m.pullerService != nil {
-		opts = append(opts, triggerengine.WithPuller(m.pullerService))
-	}
-	if m.cfg.Trigger.RulesFile != "" {
-		opts = append(opts, triggerengine.WithRulesFile(m.cfg.Trigger.RulesFile))
-	}
-
-	sf, err := m.getStorageFactory(ctx)
-	if err != nil {
-		return err
-	}
-
-	factory, err := triggerFactoryFactory(sf.Document(), nc, m.authService, opts...)
-	if err != nil {
-		return fmt.Errorf("failed to create trigger factory: %w", err)
-	}
-
-	if m.opts.RunTriggerEvaluator {
-		engine, err := factory.Engine()
-		if err != nil {
-			return fmt.Errorf("failed to create trigger engine: %w", err)
-		}
-		m.triggerService = engine
-
-		slog.Info("Initialized Trigger Evaluator Service")
-	}
-
-	if m.opts.RunTriggerWorker {
-		cons, err := factory.Consumer(m.cfg.Trigger.WorkerCount)
-		if err != nil {
-			return fmt.Errorf("failed to create trigger consumer: %w", err)
-		}
-		m.triggerConsumer = cons
-
-		slog.Info("Initialized Trigger Worker Service")
-	}
-
-	return nil
-}
-
 // initPullerService creates the Puller service and adds backends.
 // Does NOT register gRPC server - that's done separately in distributed mode.
 func (m *Manager) initPullerService(ctx context.Context) error {
@@ -472,4 +431,73 @@ func (m *Manager) initIndexerGRPCServer() {
 	grpcServer := indexer.NewGRPCServer(m.indexerService)
 	server.Default().RegisterGRPCService(&indexerv1.IndexerService_ServiceDesc, grpcServer)
 	slog.Info("Registered Indexer Service (gRPC)")
+}
+
+// initTriggerServices initializes trigger evaluator and worker services.
+// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
+func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
+	// Create NATS provider based on parameter
+	if useEmbeddedNATS {
+		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
+	} else {
+		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
+	}
+
+	nc, err := m.natsProvider.Connect(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Initialize Evaluator Service
+	if m.opts.RunTriggerEvaluator {
+		if m.pullerService == nil {
+			return fmt.Errorf("puller service is required for trigger evaluator")
+		}
+
+		// Create pubsub.Publisher for evaluator using injectable factory
+		publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
+		if err != nil {
+			return fmt.Errorf("failed to create trigger publisher: %w", err)
+		}
+
+		evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
+			Store:     sf.Document(),
+			Puller:    m.pullerService,
+			Publisher: publisher,
+			Metrics:   nil, // TODO: Add metrics when available
+		}, m.cfg.Trigger.Evaluator)
+		if err != nil {
+			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
+		}
+		m.triggerService = evalSvc
+		slog.Info("Initialized Trigger Evaluator Service")
+	}
+
+	// Initialize Delivery Service
+	if m.opts.RunTriggerWorker {
+		// Create pubsub.Consumer for delivery using injectable factory
+		consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
+		if err != nil {
+			return fmt.Errorf("failed to create trigger consumer: %w", err)
+		}
+
+		deliverySvc, err := deliveryServiceFactory(delivery.Dependencies{
+			Consumer: consumer,
+			Auth:     m.authService,
+			Secrets:  nil, // TODO: Add secret provider when available
+			Metrics:  nil, // TODO: Add metrics when available
+		}, m.cfg.Trigger.Delivery)
+		if err != nil {
+			return fmt.Errorf("failed to create trigger delivery service: %w", err)
+		}
+		m.triggerConsumer = deliverySvc
+		slog.Info("Initialized Trigger Delivery Service")
+	}
+
+	return nil
 }

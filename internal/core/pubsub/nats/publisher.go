@@ -28,10 +28,15 @@ func NewPublisher(js JetStream, opts pubsub.PublisherOptions) (pubsub.Publisher,
 			subjects = []string{opts.SubjectPrefix + ".>"}
 		}
 
+		storage := jetstream.MemoryStorage
+		if opts.Storage == pubsub.FileStorage {
+			storage = jetstream.FileStorage
+		}
+
 		_, err := js.CreateOrUpdateStream(context.Background(), jetstream.StreamConfig{
 			Name:     opts.StreamName,
 			Subjects: subjects,
-			Storage:  jetstream.MemoryStorage,
+			Storage:  storage,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("failed to ensure stream: %w", err)
@@ -50,7 +55,12 @@ func (p *jetStreamPublisher) Publish(ctx context.Context, subject string, data [
 		fullSubject = p.opts.SubjectPrefix + "." + subject
 	}
 
-	_, err := p.js.Publish(ctx, fullSubject, data)
+	var publishOpts []jetstream.PublishOpt
+	if p.opts.RetryAttempts > 0 {
+		publishOpts = append(publishOpts, jetstream.WithRetryAttempts(p.opts.RetryAttempts))
+	}
+
+	_, err := p.js.Publish(ctx, fullSubject, data, publishOpts...)
 
 	if p.opts.OnPublish != nil {
 		p.opts.OnPublish(fullSubject, err, time.Since(start))

@@ -15,3 +15,24 @@ func DefaultConfig() Config {
 		IndexerAddr: "localhost:9000",
 	}
 }
+
+// ApplyDefaults fills in zero values with defaults.
+func (c *Config) ApplyDefaults() {
+	defaults := DefaultConfig()
+	if c.IndexerAddr == "" {
+		c.IndexerAddr = defaults.IndexerAddr
+	}
+}
+
+// ApplyEnvOverrides applies environment variable overrides.
+// No env vars for query config currently.
+func (c *Config) ApplyEnvOverrides() { _ = c }
+
+// ResolvePaths resolves relative paths using the given base directory.
+// No paths to resolve in query config.
+func (c *Config) ResolvePaths(_ string) { _ = c }
+
+// Validate returns an error if the configuration is invalid.
+func (c *Config) Validate() error {
+	return nil
+}

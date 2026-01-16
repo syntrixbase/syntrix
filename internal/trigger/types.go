@@ -11,5 +11,7 @@ type Evaluator = types.Evaluator
 type EventPublisher = types.EventPublisher
 type Duration = types.Duration
 type FatalError = types.FatalError
+type SecretProvider = types.SecretProvider
+type Metrics = types.Metrics
 
 var IsFatal = types.IsFatal
