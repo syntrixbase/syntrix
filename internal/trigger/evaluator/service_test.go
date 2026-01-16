@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -518,27 +517,6 @@ func TestNewService_NoPuller(t *testing.T) {
 	_, err := NewService(deps, opts)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "puller service is required")
-}
-
-func TestNewService_PublisherError(t *testing.T) {
-	// Save original and restore after test
-	originalFactory := newTaskPublisher
-	defer func() { newTaskPublisher = originalFactory }()
-
-	newTaskPublisher = func(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error) {
-		return nil, errors.New("publisher creation failed")
-	}
-
-	mockPuller := new(MockPuller)
-	deps := Dependencies{
-		Puller: mockPuller,
-		Nats:   &nats.Conn{}, // Non-nil to trigger publisher creation
-	}
-	opts := ServiceOptions{}
-
-	_, err := NewService(deps, opts)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create publisher")
 }
 
 func TestNewService_Success(t *testing.T) {

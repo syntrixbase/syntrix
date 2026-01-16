@@ -10,16 +10,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
-
-// jetStreamNew is a variable to allow mocking jetstream.New in tests.
-var jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
-	return jetstream.New(nc)
-}
 
 // TaskConsumer consumes delivery tasks.
 type TaskConsumer interface {
@@ -31,12 +25,11 @@ const DefaultChannelBufferSize = 100
 
 // natsConsumer consumes delivery tasks from NATS and dispatches them to the worker.
 type natsConsumer struct {
-	js             jetstream.JetStream
+	consumer       pubsub.Consumer
 	worker         worker.DeliveryWorker
-	stream         string
 	numWorkers     int
 	channelBufSize int
-	workerChans    []chan jetstream.Msg
+	workerChans    []chan pubsub.Message
 	wg             sync.WaitGroup
 	metrics        types.Metrics
 
@@ -79,36 +72,18 @@ func WithShutdownTimeout(d time.Duration) ConsumerOption {
 	}
 }
 
-// NewTaskConsumer creates a new TaskConsumer.
-func NewTaskConsumer(nc *nats.Conn, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
-	if nc == nil {
-		return nil, fmt.Errorf("nats connection cannot be nil")
-	}
-
-	js, err := jetStreamNew(nc)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewTaskConsumerFromJS(js, w, streamName, numWorkers, metrics, opts...)
-}
-
-// NewTaskConsumerFromJS creates a new TaskConsumer using an existing JetStream context.
-func NewTaskConsumerFromJS(js jetstream.JetStream, w worker.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
+// NewTaskConsumer creates a new TaskConsumer wrapping a pubsub.Consumer.
+func NewTaskConsumer(consumer pubsub.Consumer, w worker.DeliveryWorker, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) TaskConsumer {
 	if numWorkers <= 0 {
 		numWorkers = 16
 	}
 	if metrics == nil {
 		metrics = &types.NoopMetrics{}
 	}
-	if streamName == "" {
-		streamName = "TRIGGERS"
-	}
 
 	c := &natsConsumer{
-		js:              js,
+		consumer:        consumer,
 		worker:          w,
-		stream:          streamName,
 		numWorkers:      numWorkers,
 		channelBufSize:  DefaultChannelBufferSize,
 		metrics:         metrics,
@@ -120,56 +95,36 @@ func NewTaskConsumerFromJS(js jetstream.JetStream, w worker.DeliveryWorker, stre
 		opt(c)
 	}
 
-	return c, nil
+	return c
 }
 
 // Start begins consuming messages. It blocks until the context is cancelled.
 func (c *natsConsumer) Start(ctx context.Context) error {
-	// Ensure Stream exists
-	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:     c.stream,
-		Subjects: []string{fmt.Sprintf("%s.>", c.stream)},
-		Storage:  jetstream.MemoryStorage,
-	})
+	// Subscribe to messages (stream/consumer creation handled by pubsub.Consumer)
+	msgCh, err := c.consumer.Subscribe(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to ensure stream: %w", err)
-	}
-
-	// Create Consumer
-	consumer, err := c.js.CreateOrUpdateConsumer(ctx, c.stream, jetstream.ConsumerConfig{
-		Durable:       "TriggerDeliveryWorker",
-		AckPolicy:     jetstream.AckExplicitPolicy,
-		FilterSubject: fmt.Sprintf("%s.>", c.stream),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create consumer: %w", err)
+		return fmt.Errorf("failed to subscribe: %w", err)
 	}
 
 	// Initialize Worker Pool
-	c.workerChans = make([]chan jetstream.Msg, c.numWorkers)
+	c.workerChans = make([]chan pubsub.Message, c.numWorkers)
 	for i := 0; i < c.numWorkers; i++ {
-		c.workerChans[i] = make(chan jetstream.Msg, c.channelBufSize)
+		c.workerChans[i] = make(chan pubsub.Message, c.channelBufSize)
 		c.wg.Add(1)
 		go c.workerLoop(ctx, i)
 	}
 
-	// Consume messages
-	cc, err := consumer.Consume(func(msg jetstream.Msg) {
-		c.dispatch(msg)
-	})
-	if err != nil {
-		return fmt.Errorf("failed to start consumer: %w", err)
-	}
-	defer cc.Stop()
-
 	log.Printf("Trigger Consumer started with %d workers, waiting for messages...", c.numWorkers)
 
-	<-ctx.Done()
+	// Message loop (replaces callback pattern)
+	for msg := range msgCh {
+		c.dispatch(msg)
+	}
+	// Channel closed means context is cancelled, proceed to shutdown
 
-	// Phase 1: Stop accepting new messages
+	// Phase 1: Stop accepting new messages (already done - channel closed)
 	log.Println("[Info] Stopping Trigger Consumer...")
 	c.closing.Store(true)
-	cc.Stop()
 
 	// Phase 2: Wait for in-flight dispatches to complete
 	drainCtx, drainCancel := context.WithTimeout(context.Background(), c.drainTimeout)
@@ -223,7 +178,7 @@ func (c *natsConsumer) waitForDrain(ctx context.Context) {
 	}
 }
 
-func (c *natsConsumer) dispatch(msg jetstream.Msg) {
+func (c *natsConsumer) dispatch(msg pubsub.Message) {
 	// Track in-flight count for graceful shutdown
 	c.inFlightCount.Add(1)
 	defer c.inFlightCount.Add(-1)
@@ -310,7 +265,7 @@ func (c *natsConsumer) workerLoop(ctx context.Context, id int) {
 	}
 }
 
-func (c *natsConsumer) processMsg(ctx context.Context, msg jetstream.Msg) error {
+func (c *natsConsumer) processMsg(ctx context.Context, msg pubsub.Message) error {
 	start := time.Now()
 	var task types.DeliveryTask
 	if err := json.Unmarshal(msg.Data(), &task); err != nil {

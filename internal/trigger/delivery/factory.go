@@ -4,18 +4,18 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery/worker"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
 // Dependencies contains external dependencies for the delivery service.
 type Dependencies struct {
-	Nats    *nats.Conn
-	Auth    identity.AuthN
-	Secrets types.SecretProvider
-	Metrics types.Metrics
+	Consumer pubsub.Consumer
+	Auth     identity.AuthN
+	Secrets  types.SecretProvider
+	Metrics  types.Metrics
 }
 
 // service implements the Service interface.
@@ -23,23 +23,13 @@ type service struct {
 	consumer TaskConsumer
 }
 
-// consumerFactory is a function type for creating TaskConsumer.
-// This allows injection for testing.
-type consumerFactory func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error)
-
-// newTaskConsumer is the default consumer factory.
-var newTaskConsumer consumerFactory = NewTaskConsumer
-
 // NewService creates a new delivery Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
-	if deps.Nats == nil {
-		return nil, fmt.Errorf("nats connection is required for delivery service")
+	if deps.Consumer == nil {
+		return nil, fmt.Errorf("consumer is required for delivery service")
 	}
 
 	// Apply defaults
-	if opts.StreamName == "" {
-		opts.StreamName = "TRIGGERS"
-	}
 	if opts.NumWorkers <= 0 {
 		opts.NumWorkers = 16
 	}
@@ -62,14 +52,11 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 		consumerOpts = append(consumerOpts, WithShutdownTimeout(opts.ShutdownTimeout))
 	}
 
-	// Create consumer
-	consumer, err := newTaskConsumer(deps.Nats, w, opts.StreamName, opts.NumWorkers, deps.Metrics, consumerOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create consumer: %w", err)
-	}
+	// Create consumer wrapping pubsub.Consumer
+	taskConsumer := NewTaskConsumer(deps.Consumer, w, opts.NumWorkers, deps.Metrics, consumerOpts...)
 
 	return &service{
-		consumer: consumer,
+		consumer: taskConsumer,
 	}, nil
 }
 

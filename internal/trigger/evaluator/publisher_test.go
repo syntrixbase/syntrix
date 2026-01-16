@@ -10,55 +10,49 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/stretchr/testify/require"
+	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
-type MockJetStream struct {
-	mock.Mock
-	jetstream.JetStream
-}
-
-func (m *MockJetStream) Publish(ctx context.Context, subject string, data []byte, opts ...jetstream.PublishOpt) (*jetstream.PubAck, error) {
-	args := m.Called(ctx, subject, data, opts)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*jetstream.PubAck), args.Error(1)
-}
-
 func TestNatsPublisher_Publish(t *testing.T) {
-	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
+	mockPub := pubsubtesting.NewMockPublisher()
+	publisher := NewTaskPublisher(mockPub, "TRIGGERS", nil)
 
-	task := &trigger.DeliveryTask{
+	task := &types.DeliveryTask{
 		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",
 	}
 
-	expectedSubject := "TRIGGERS.acme.users.dXNlci0x" // base64url("user-1")
-	expectedData, _ := json.Marshal(task)
-
-	mockJS.On("Publish", mock.Anything, expectedSubject, expectedData, mock.Anything).Return(&jetstream.PubAck{}, nil)
+	// Subject format: <database>.<collection>.<base64_encoded_doc_id>
+	// (prefix is handled by pubsub.Publisher)
+	expectedSubject := "acme.users.dXNlci0x" // base64url("user-1")
 
 	err := publisher.Publish(context.Background(), task)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
-	mockJS.AssertExpectations(t)
+	msgs := mockPub.Messages()
+	require.Len(t, msgs, 1)
+	assert.Equal(t, expectedSubject, msgs[0].Subject)
+
+	var decoded types.DeliveryTask
+	err = json.Unmarshal(msgs[0].Data, &decoded)
+	require.NoError(t, err)
+	assert.Equal(t, task.TriggerID, decoded.TriggerID)
 }
+
 func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
-	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
+	mockPub := pubsubtesting.NewMockPublisher()
+	publisher := NewTaskPublisher(mockPub, "TRIGGERS", nil)
 
 	// Create a long DocumentID to force hashing
 	longDocumentID := strings.Repeat("a", 1000)
 	encodedDocumentID := base64.URLEncoding.EncodeToString([]byte(longDocumentID))
 
-	task := &trigger.DeliveryTask{
+	task := &types.DeliveryTask{
 		Database:   "acme",
 		Collection: "users",
 		DocumentID: longDocumentID,
@@ -66,91 +60,67 @@ func TestNatsPublisher_Publish_HashedSubject(t *testing.T) {
 	}
 
 	// Calculate expected subject
-	originalSubject := fmt.Sprintf("TRIGGERS.%s.%s.%s", task.Database, task.Collection, encodedDocumentID)
+	// Full subject with prefix for length check
+	fullSubject := fmt.Sprintf("TRIGGERS.%s.%s.%s", task.Database, task.Collection, encodedDocumentID)
 	// Verify it is indeed long enough
-	assert.True(t, len(originalSubject) > 1024)
+	assert.True(t, len(fullSubject) > 1024)
 
-	hash := sha256.Sum256([]byte(originalSubject))
+	hash := sha256.Sum256([]byte(fullSubject))
 	hashStr := hex.EncodeToString(hash[:16])
-	expectedSubject := fmt.Sprintf("TRIGGERS.hashed.%s", hashStr)
-
-	// The task passed to Publish will be modified (SubjectHashed = true)
-	// So we need to match the data argument with SubjectHashed = true
-	expectedTask := *task
-	expectedTask.SubjectHashed = true
-	expectedData, _ := json.Marshal(&expectedTask)
-
-	mockJS.On("Publish", mock.Anything, expectedSubject, expectedData, mock.Anything).Return(&jetstream.PubAck{}, nil)
+	expectedSubject := fmt.Sprintf("hashed.%s", hashStr)
 
 	err := publisher.Publish(context.Background(), task)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, task.SubjectHashed) // Verify the task was modified in place
 
-	mockJS.AssertExpectations(t)
+	msgs := mockPub.Messages()
+	require.Len(t, msgs, 1)
+	assert.Equal(t, expectedSubject, msgs[0].Subject)
 }
-func TestNatsPublisher_Publish_Error(t *testing.T) {
-	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
 
-	task := &trigger.DeliveryTask{
+func TestNatsPublisher_Publish_Error(t *testing.T) {
+	mockPub := pubsubtesting.NewMockPublisher()
+	mockPub.SetError(assert.AnError)
+	publisher := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+
+	task := &types.DeliveryTask{
 		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",
 	}
-
-	mockJS.On("Publish", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil, assert.AnError)
 
 	err := publisher.Publish(context.Background(), task)
 	assert.Error(t, err)
-
-	mockJS.AssertExpectations(t)
 }
 
-func TestNatsPublisher_Close(t *testing.T) {
-	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, "TRIGGERS", nil)
+func TestNatsPublisher_Close_Delegates(t *testing.T) {
+	mockPub := pubsubtesting.NewMockPublisher()
+	publisher := NewTaskPublisher(mockPub, "TRIGGERS", nil)
 
-	// Close should be a no-op and return nil
 	err := publisher.Close()
 	assert.NoError(t, err)
+	assert.True(t, mockPub.IsClosed())
 }
 
-func (m *MockJetStream) CreateOrUpdateStream(ctx context.Context, cfg jetstream.StreamConfig) (jetstream.Stream, error) {
-	args := m.Called(ctx, cfg)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(jetstream.Stream), args.Error(1)
-}
-
-func (m *MockJetStream) CreateOrUpdateConsumer(ctx context.Context, stream string, cfg jetstream.ConsumerConfig) (jetstream.Consumer, error) {
-	args := m.Called(ctx, stream, cfg)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(jetstream.Consumer), args.Error(1)
-}
-
-func TestNewTaskPublisherFromJS_EmptyStream(t *testing.T) {
-	mockJS := new(MockJetStream)
-	publisher := NewTaskPublisherFromJS(mockJS, "", nil)
+func TestNewTaskPublisher_EmptyStreamName(t *testing.T) {
+	mockPub := pubsubtesting.NewMockPublisher()
+	publisher := NewTaskPublisher(mockPub, "", nil)
 	assert.NotNil(t, publisher)
-	// We can't easily check the internal prefix without reflection or exposing it,
-	// but we can verify it works by calling Publish and checking the subject.
 
-	task := &trigger.DeliveryTask{
+	// Verify default prefix is used for hashing calculation
+	task := &types.DeliveryTask{
 		Database:   "acme",
 		Collection: "users",
 		DocumentID: "user-1",
 		TriggerID:  "t1",
 	}
 
-	expectedSubject := "TRIGGERS.acme.users.dXNlci0x"
-	expectedData, _ := json.Marshal(task)
-
-	mockJS.On("Publish", mock.Anything, expectedSubject, expectedData, mock.Anything).Return(&jetstream.PubAck{}, nil)
-
 	err := publisher.Publish(context.Background(), task)
-	assert.NoError(t, err)
+	require.NoError(t, err)
+
+	msgs := mockPub.Messages()
+	require.Len(t, msgs, 1)
+	// Subject should be: <database>.<collection>.<base64_encoded_doc_id>
+	assert.Equal(t, "acme.users.dXNlci0x", msgs[0].Subject)
 }

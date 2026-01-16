@@ -14,7 +14,6 @@ type Service interface {
 
 // ServiceOptions configures the delivery service.
 type ServiceOptions struct {
-	StreamName      string
 	NumWorkers      int
 	ChannelBufSize  int
 	DrainTimeout    time.Duration

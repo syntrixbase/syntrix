@@ -3,7 +3,7 @@ package evaluator
 import (
 	"fmt"
 
-	"github.com/nats-io/nats.go"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
@@ -20,18 +20,11 @@ type ServiceOptions struct {
 
 // Dependencies contains external dependencies for the evaluator service.
 type Dependencies struct {
-	Store   storage.DocumentStore
-	Puller  puller.Service
-	Nats    *nats.Conn
-	Metrics types.Metrics
+	Store     storage.DocumentStore
+	Puller    puller.Service
+	Publisher pubsub.Publisher
+	Metrics   types.Metrics
 }
-
-// publisherFactory is a function type for creating TaskPublisher.
-// This allows injection for testing.
-type publisherFactory func(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error)
-
-// newTaskPublisher is the default publisher factory.
-var newTaskPublisher publisherFactory = NewTaskPublisher
 
 // NewService creates a new evaluator Service.
 func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
@@ -62,14 +55,10 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 		CheckpointDatabase: opts.CheckpointDatabase,
 	})
 
-	// Create publisher
+	// Create publisher wrapping pubsub.Publisher
 	var pub TaskPublisher
-	if deps.Nats != nil {
-		p, err := newTaskPublisher(deps.Nats, opts.StreamName, deps.Metrics)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create publisher: %w", err)
-		}
-		pub = p
+	if deps.Publisher != nil {
+		pub = NewTaskPublisher(deps.Publisher, opts.StreamName, deps.Metrics)
 	}
 
 	svc := &service{

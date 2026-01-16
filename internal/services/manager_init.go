@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/nats-io/nats.go"
+
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	natspubsub "github.com/syntrixbase/syntrix/internal/core/pubsub/nats"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -36,6 +40,24 @@ var evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.S
 // deliveryServiceFactory creates delivery services - injectable for testing
 var deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
 	return delivery.NewService(deps, opts)
+}
+
+// pubsubPublisherFactory creates a pubsub.Publisher - injectable for testing
+var pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	js, err := natspubsub.NewJetStream(nc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JetStream: %w", err)
+	}
+	return natspubsub.NewPublisher(js, opts)
+}
+
+// pubsubConsumerFactory creates a pubsub.Consumer - injectable for testing
+var pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	js, err := natspubsub.NewJetStream(nc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JetStream: %w", err)
+	}
+	return natspubsub.NewConsumer(js, opts)
 }
 
 func (m *Manager) Init(ctx context.Context) error {
@@ -440,21 +462,38 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 		return err
 	}
 
+	// Stream name for trigger tasks
+	streamName := m.cfg.Trigger.StreamName
+	if streamName == "" {
+		streamName = "TRIGGERS"
+	}
+
 	// Initialize Evaluator Service
 	if m.opts.RunTriggerEvaluator {
 		if m.pullerService == nil {
 			return fmt.Errorf("puller service is required for trigger evaluator")
 		}
 
+		// Create pubsub.Publisher for evaluator using injectable factory
+		publisher, err := pubsubPublisherFactory(nc, pubsub.PublisherOptions{
+			StreamName:    streamName,
+			SubjectPrefix: streamName,
+			RetryAttempts: 3,
+			Storage:       pubsub.FileStorage,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create trigger publisher: %w", err)
+		}
+
 		evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
-			Store:   sf.Document(),
-			Puller:  m.pullerService,
-			Nats:    nc,
-			Metrics: nil, // TODO: Add metrics when available
+			Store:     sf.Document(),
+			Puller:    m.pullerService,
+			Publisher: publisher,
+			Metrics:   nil, // TODO: Add metrics when available
 		}, evaluator.ServiceOptions{
 			StartFromNow:       true,
 			RulesFile:          m.cfg.Trigger.RulesFile,
-			StreamName:         m.cfg.Trigger.StreamName,
+			StreamName:         streamName,
 			CheckpointDatabase: m.cfg.Trigger.CheckpointDatabase,
 		})
 		if err != nil {
@@ -466,13 +505,22 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 
 	// Initialize Delivery Service
 	if m.opts.RunTriggerWorker {
+		// Create pubsub.Consumer for delivery using injectable factory
+		consumer, err := pubsubConsumerFactory(nc, pubsub.ConsumerOptions{
+			StreamName:   streamName,
+			ConsumerName: "trigger-delivery",
+			Storage:      pubsub.FileStorage,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create trigger consumer: %w", err)
+		}
+
 		deliverySvc, err := deliveryServiceFactory(delivery.Dependencies{
-			Nats:    nc,
-			Auth:    m.authService,
-			Secrets: nil, // TODO: Add secret provider when available
-			Metrics: nil, // TODO: Add metrics when available
+			Consumer: consumer,
+			Auth:     m.authService,
+			Secrets:  nil, // TODO: Add secret provider when available
+			Metrics:  nil, // TODO: Add metrics when available
 		}, delivery.ServiceOptions{
-			StreamName: m.cfg.Trigger.StreamName,
 			NumWorkers: m.cfg.Trigger.WorkerCount,
 		})
 		if err != nil {

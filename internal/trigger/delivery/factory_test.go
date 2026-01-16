@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
@@ -22,34 +22,25 @@ func (m *MockTaskConsumer) Start(ctx context.Context) error {
 	return args.Error(0)
 }
 
-func TestNewService_NilNats(t *testing.T) {
+func TestNewService_NilConsumer(t *testing.T) {
 	deps := Dependencies{
-		Nats: nil,
+		Consumer: nil,
 	}
 	opts := ServiceOptions{}
 
 	_, err := NewService(deps, opts)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "nats connection is required")
+	assert.Contains(t, err.Error(), "consumer is required")
 }
 
 func TestNewService_Success(t *testing.T) {
-	// Save original and restore after test
-	originalFactory := newTaskConsumer
-	defer func() { newTaskConsumer = originalFactory }()
+	mockConsumer := pubsubtesting.NewMockConsumer()
 
-	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
-		return mockConsumer, nil
-	}
-
-	// Create a fake NATS connection (just need non-nil for the check)
 	deps := Dependencies{
-		Nats:    &nats.Conn{},
-		Metrics: &types.NoopMetrics{},
+		Consumer: mockConsumer,
+		Metrics:  &types.NoopMetrics{},
 	}
 	opts := ServiceOptions{
-		StreamName: "TEST_STREAM",
 		NumWorkers: 4,
 	}
 
@@ -59,48 +50,31 @@ func TestNewService_Success(t *testing.T) {
 }
 
 func TestNewService_WithDefaults(t *testing.T) {
-	// Save original and restore after test
-	originalFactory := newTaskConsumer
-	defer func() { newTaskConsumer = originalFactory }()
-
-	mockConsumer := new(MockTaskConsumer)
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
-		// Verify defaults were applied
-		assert.Equal(t, "TRIGGERS", streamName)
-		assert.Equal(t, 16, numWorkers)
-		return mockConsumer, nil
-	}
+	mockConsumer := pubsubtesting.NewMockConsumer()
 
 	deps := Dependencies{
-		Nats: &nats.Conn{},
+		Consumer: mockConsumer,
 	}
 	opts := ServiceOptions{} // No options - should use defaults
 
 	svc, err := NewService(deps, opts)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
+
+	// The service should be created with default NumWorkers (16)
+	s := svc.(*service)
+	nc := s.consumer.(*natsConsumer)
+	assert.Equal(t, 16, nc.numWorkers)
 }
 
 func TestNewService_WithAllOptions(t *testing.T) {
-	// Save original and restore after test
-	originalFactory := newTaskConsumer
-	defer func() { newTaskConsumer = originalFactory }()
-
-	mockConsumer := new(MockTaskConsumer)
-	optsCaptured := false
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
-		// 3 options should be passed (ChannelBufSize, DrainTimeout, ShutdownTimeout)
-		assert.Len(t, opts, 3)
-		optsCaptured = true
-		return mockConsumer, nil
-	}
+	mockConsumer := pubsubtesting.NewMockConsumer()
 
 	deps := Dependencies{
-		Nats:    &nats.Conn{},
-		Metrics: &types.NoopMetrics{},
+		Consumer: mockConsumer,
+		Metrics:  &types.NoopMetrics{},
 	}
 	opts := ServiceOptions{
-		StreamName:      "MY_STREAM",
 		NumWorkers:      8,
 		ChannelBufSize:  100,
 		DrainTimeout:    5 * time.Second,
@@ -110,26 +84,14 @@ func TestNewService_WithAllOptions(t *testing.T) {
 	svc, err := NewService(deps, opts)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
-	assert.True(t, optsCaptured)
-}
 
-func TestNewService_ConsumerError(t *testing.T) {
-	// Save original and restore after test
-	originalFactory := newTaskConsumer
-	defer func() { newTaskConsumer = originalFactory }()
-
-	newTaskConsumer = func(nc *nats.Conn, worker types.DeliveryWorker, streamName string, numWorkers int, metrics types.Metrics, opts ...ConsumerOption) (TaskConsumer, error) {
-		return nil, errors.New("consumer creation failed")
-	}
-
-	deps := Dependencies{
-		Nats: &nats.Conn{},
-	}
-	opts := ServiceOptions{}
-
-	_, err := NewService(deps, opts)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create consumer")
+	// Verify options were applied
+	s := svc.(*service)
+	nc := s.consumer.(*natsConsumer)
+	assert.Equal(t, 8, nc.numWorkers)
+	assert.Equal(t, 100, nc.channelBufSize)
+	assert.Equal(t, 5*time.Second, nc.drainTimeout)
+	assert.Equal(t, 10*time.Second, nc.shutdownTimeout)
 }
 
 func TestService_Start(t *testing.T) {

@@ -41,10 +41,15 @@ func (c *jetStreamConsumer) Subscribe(ctx context.Context) (<-chan pubsub.Messag
 		filterSubject = c.opts.StreamName + ".>"
 	}
 
+	storage := jetstream.MemoryStorage
+	if c.opts.Storage == pubsub.FileStorage {
+		storage = jetstream.FileStorage
+	}
+
 	_, err := c.js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:     c.opts.StreamName,
 		Subjects: []string{filterSubject},
-		Storage:  jetstream.MemoryStorage,
+		Storage:  storage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to ensure stream: %w", err)

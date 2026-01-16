@@ -2,76 +2,132 @@ package evaluator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
+	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
 
-type MockJetStreamCoverage struct {
-	mock.Mock
-	jetstream.JetStream
+func TestNewTaskPublisher(t *testing.T) {
+	t.Run("with mock publisher", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+		assert.NotNil(t, pub)
+	})
+
+	t.Run("with nil metrics uses noop", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+		assert.NotNil(t, pub)
+	})
+
+	t.Run("with empty stream name uses default", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "", nil)
+		assert.NotNil(t, pub)
+	})
 }
 
-func (m *MockJetStreamCoverage) CreateOrUpdateStream(ctx context.Context, cfg jetstream.StreamConfig) (jetstream.Stream, error) {
-	args := m.Called(ctx, cfg)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(jetstream.Stream), args.Error(1)
+func TestTaskPublisher_Publish(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+
+		task := &types.DeliveryTask{
+			TriggerID:  "trigger-1",
+			Database:   "testdb",
+			Collection: "testcol",
+			DocumentID: "doc-1",
+		}
+
+		err := pub.Publish(context.Background(), task)
+		require.NoError(t, err)
+
+		msgs := mockPub.Messages()
+		require.Len(t, msgs, 1)
+		// Subject should be: <database>.<collection>.<base64_encoded_doc_id>
+		assert.Contains(t, msgs[0].Subject, "testdb.testcol.")
+	})
+
+	t.Run("publish error", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		mockPub.SetError(errors.New("publish failed"))
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+
+		task := &types.DeliveryTask{
+			TriggerID:  "trigger-1",
+			Database:   "testdb",
+			Collection: "testcol",
+			DocumentID: "doc-1",
+		}
+
+		err := pub.Publish(context.Background(), task)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "publish failed")
+	})
+
+	t.Run("long subject gets hashed", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+
+		// Create a very long document ID that will cause subject > 1024
+		longDocID := make([]byte, 2000)
+		for i := range longDocID {
+			longDocID[i] = 'a'
+		}
+
+		task := &types.DeliveryTask{
+			TriggerID:  "trigger-1",
+			Database:   "testdb",
+			Collection: "testcol",
+			DocumentID: string(longDocID),
+		}
+
+		err := pub.Publish(context.Background(), task)
+		require.NoError(t, err)
+
+		msgs := mockPub.Messages()
+		require.Len(t, msgs, 1)
+		assert.Contains(t, msgs[0].Subject, "hashed.")
+		assert.True(t, task.SubjectHashed)
+	})
+
+	t.Run("message data is valid json", func(t *testing.T) {
+		mockPub := pubsubtesting.NewMockPublisher()
+		pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
+
+		task := &types.DeliveryTask{
+			TriggerID:  "trigger-1",
+			Database:   "testdb",
+			Collection: "testcol",
+			DocumentID: "doc-1",
+		}
+
+		err := pub.Publish(context.Background(), task)
+		require.NoError(t, err)
+
+		msgs := mockPub.Messages()
+		require.Len(t, msgs, 1)
+
+		var decoded types.DeliveryTask
+		err = json.Unmarshal(msgs[0].Data, &decoded)
+		require.NoError(t, err)
+		assert.Equal(t, task.TriggerID, decoded.TriggerID)
+		assert.Equal(t, task.Database, decoded.Database)
+		assert.Equal(t, task.Collection, decoded.Collection)
+		assert.Equal(t, task.DocumentID, decoded.DocumentID)
+	})
 }
 
-type MockStream struct {
-	mock.Mock
-	jetstream.Stream
-}
+func TestTaskPublisher_Close(t *testing.T) {
+	mockPub := pubsubtesting.NewMockPublisher()
+	pub := NewTaskPublisher(mockPub, "TRIGGERS", nil)
 
-func TestNewTaskPublisher_Coverage(t *testing.T) {
-	// Save original jetStreamNew and restore after test
-	originalJetStreamNew := jetStreamNew
-	defer func() { jetStreamNew = originalJetStreamNew }()
-
-	// Case 1: Nil connection
-	pub, err := NewTaskPublisher(nil, "TRIGGERS", nil)
-	assert.Error(t, err)
-	assert.Nil(t, pub)
-	assert.Contains(t, err.Error(), "nats connection cannot be nil")
-
-	// Case 2: jetStreamNew error
-	jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return nil, errors.New("mock js error")
-	}
-	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
-	assert.Error(t, err)
-	assert.Nil(t, pub)
-	assert.Contains(t, err.Error(), "mock js error")
-
-	// Case 3: EnsureStream error
-	mockJS := new(MockJetStreamCoverage)
-	mockJS.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(nil, errors.New("stream error"))
-
-	jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS, nil
-	}
-
-	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
-	assert.Error(t, err)
-	assert.Nil(t, pub)
-	assert.Contains(t, err.Error(), "failed to ensure stream")
-	assert.Contains(t, err.Error(), "stream error")
-
-	// Case 4: Success
-	mockJS2 := new(MockJetStreamCoverage)
-	mockJS2.On("CreateOrUpdateStream", mock.Anything, mock.Anything).Return(&MockStream{}, nil)
-
-	jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
-		return mockJS2, nil
-	}
-
-	pub, err = NewTaskPublisher(&nats.Conn{}, "TRIGGERS", nil)
+	err := pub.Close()
 	assert.NoError(t, err)
-	assert.NotNil(t, pub)
+	assert.True(t, mockPub.IsClosed())
 }

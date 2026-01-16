@@ -9,15 +9,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
-
-// jetStreamNew is a variable to allow mocking jetstream.New in tests.
-var jetStreamNew = func(nc *nats.Conn) (jetstream.JetStream, error) {
-	return jetstream.New(nc)
-}
 
 // TaskPublisher publishes delivery tasks.
 type TaskPublisher interface {
@@ -25,72 +19,43 @@ type TaskPublisher interface {
 	Close() error
 }
 
-// natsPublisher implements TaskPublisher using NATS JetStream.
+// natsPublisher implements TaskPublisher wrapping pubsub.Publisher.
 type natsPublisher struct {
-	js      jetstream.JetStream
+	pub     pubsub.Publisher
 	metrics types.Metrics
 	prefix  string
 }
 
-func NewTaskPublisher(nc *nats.Conn, streamName string, metrics types.Metrics) (TaskPublisher, error) {
-	if nc == nil {
-		return nil, fmt.Errorf("nats connection cannot be nil")
-	}
-	js, err := jetStreamNew(nc)
-	if err != nil {
-		return nil, err
-	}
-
-	// Ensure stream exists
-	if err := EnsureStream(js, streamName); err != nil {
-		return nil, fmt.Errorf("failed to ensure stream: %w", err)
-	}
-
-	return NewTaskPublisherFromJS(js, streamName, metrics), nil
-}
-
-func EnsureStream(js jetstream.JetStream, streamName string) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	if streamName == "" {
-		streamName = "TRIGGERS"
-	}
-	subjects := []string{fmt.Sprintf("%s.>", streamName)}
-
-	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
-		Name:     streamName,
-		Subjects: subjects,
-		Storage:  jetstream.MemoryStorage,
-	})
-	return err
-}
-
-func NewTaskPublisherFromJS(js jetstream.JetStream, streamName string, metrics types.Metrics) TaskPublisher {
+// NewTaskPublisher creates a TaskPublisher wrapping a pubsub.Publisher.
+func NewTaskPublisher(pub pubsub.Publisher, streamName string, metrics types.Metrics) TaskPublisher {
 	if metrics == nil {
 		metrics = &types.NoopMetrics{}
 	}
 	if streamName == "" {
 		streamName = "TRIGGERS"
 	}
-	return &natsPublisher{js: js, metrics: metrics, prefix: streamName}
+	return &natsPublisher{pub: pub, metrics: metrics, prefix: streamName}
 }
 
 func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) error {
 	start := time.Now()
-	// Subject format: <streamName>.<database>.<collection>.<documentId>
+	// Subject format: <database>.<collection>.<documentId>
 	// DocumentID is base64url encoded to ensure safety.
+	// Note: prefix is handled by pubsub.Publisher, so we don't include it here.
 	encodedDocumentID := base64.URLEncoding.EncodeToString([]byte(task.DocumentID))
 
-	subject := fmt.Sprintf("%s.%s.%s.%s", p.prefix, task.Database, task.Collection, encodedDocumentID)
+	subject := fmt.Sprintf("%s.%s.%s", task.Database, task.Collection, encodedDocumentID)
+
+	// Full subject for length check (including prefix)
+	fullSubject := fmt.Sprintf("%s.%s", p.prefix, subject)
 
 	// NATS subject length limit is usually 64KB, but for performance and practical reasons,
 	// we might want to limit it. The requirement says "if length > 1024".
-	if len(subject) > 1024 {
-		hash := sha256.Sum256([]byte(subject))
+	if len(fullSubject) > 1024 {
+		hash := sha256.Sum256([]byte(fullSubject))
 		// Truncate to 32 chars (16 bytes hex)
 		hashStr := hex.EncodeToString(hash[:16])
-		subject = fmt.Sprintf("%s.hashed.%s", p.prefix, hashStr)
+		subject = fmt.Sprintf("hashed.%s", hashStr)
 		task.SubjectHashed = true
 	}
 
@@ -100,7 +65,7 @@ func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) e
 		return err
 	}
 
-	_, err = p.js.Publish(ctx, subject, data, jetstream.WithExpectStream(p.prefix), jetstream.WithRetryAttempts(3))
+	err = p.pub.Publish(ctx, subject, data)
 	if err != nil {
 		p.metrics.IncPublishFailure(task.Database, task.Collection, err.Error())
 		return err
@@ -112,7 +77,6 @@ func (p *natsPublisher) Publish(ctx context.Context, task *types.DeliveryTask) e
 }
 
 // Close releases resources held by the publisher.
-// The publisher does not own the NATS connection, so this is a no-op.
 func (p *natsPublisher) Close() error {
-	return nil
+	return p.pub.Close()
 }
