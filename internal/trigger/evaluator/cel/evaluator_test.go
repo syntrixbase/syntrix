@@ -399,3 +399,128 @@ func TestCELEvaluator_CacheHit(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, match2)
 }
+
+func TestCELEvaluator_DatabaseFilter(t *testing.T) {
+	evaluator, err := NewEvaluator()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name      string
+		trigger   *types.Trigger
+		event     events.SyntrixChangeEvent
+		wantMatch bool
+	}{
+		{
+			name: "database matches from Document",
+			trigger: &types.Trigger{
+				Database:   "mydb",
+				Events:     []string{"create"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type: events.EventCreate,
+				Document: &storage.StoredDoc{
+					DatabaseID: "mydb",
+					Collection: "users",
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name: "database mismatch from Document",
+			trigger: &types.Trigger{
+				Database:   "mydb",
+				Events:     []string{"create"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type: events.EventCreate,
+				Document: &storage.StoredDoc{
+					DatabaseID: "otherdb",
+					Collection: "users",
+				},
+			},
+			wantMatch: false,
+		},
+		{
+			name: "database matches from Before when Document is nil",
+			trigger: &types.Trigger{
+				Database:   "mydb",
+				Events:     []string{"delete"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type:     events.EventDelete,
+				Document: nil,
+				Before: &storage.StoredDoc{
+					DatabaseID: "mydb",
+					Collection: "users",
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name: "database mismatch from Before when Document is nil",
+			trigger: &types.Trigger{
+				Database:   "mydb",
+				Events:     []string{"delete"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type:     events.EventDelete,
+				Document: nil,
+				Before: &storage.StoredDoc{
+					DatabaseID: "otherdb",
+					Collection: "users",
+				},
+			},
+			wantMatch: false,
+		},
+		{
+			name: "wildcard database matches any",
+			trigger: &types.Trigger{
+				Database:   "*",
+				Events:     []string{"create"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type: events.EventCreate,
+				Document: &storage.StoredDoc{
+					DatabaseID: "anydb",
+					Collection: "users",
+				},
+			},
+			wantMatch: true,
+		},
+		{
+			name: "empty database matches any",
+			trigger: &types.Trigger{
+				Database:   "",
+				Events:     []string{"create"},
+				Collection: "users",
+				Condition:  "",
+			},
+			event: events.SyntrixChangeEvent{
+				Type: events.EventCreate,
+				Document: &storage.StoredDoc{
+					DatabaseID: "anydb",
+					Collection: "users",
+				},
+			},
+			wantMatch: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			match, err := evaluator.Evaluate(context.Background(), tt.trigger, tt.event)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantMatch, match)
+		})
+	}
+}

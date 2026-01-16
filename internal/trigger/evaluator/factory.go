@@ -72,7 +72,12 @@ func NewService(deps Dependencies, cfg Config) (Service, error) {
 
 // NewPublisher creates a pubsub.Publisher from evaluator config.
 func NewPublisher(nc *nats.Conn, cfg Config) (pubsub.Publisher, error) {
-	js, err := natspubsub.NewJetStream(nc)
+	return newPublisherWithFactory(nc, cfg, natspubsub.NewJetStream)
+}
+
+// newPublisherWithFactory is the internal implementation that accepts a JetStream factory for testing.
+func newPublisherWithFactory(nc *nats.Conn, cfg Config, jsFactory func(*nats.Conn) (natspubsub.JetStream, error)) (pubsub.Publisher, error) {
+	js, err := jsFactory(nc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JetStream: %w", err)
 	}

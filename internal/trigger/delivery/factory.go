@@ -67,7 +67,12 @@ func (s *service) Start(ctx context.Context) error {
 
 // NewConsumer creates a pubsub.Consumer from delivery config.
 func NewConsumer(nc *nats.Conn, cfg Config) (pubsub.Consumer, error) {
-	js, err := natspubsub.NewJetStream(nc)
+	return newConsumerWithFactory(nc, cfg, natspubsub.NewJetStream)
+}
+
+// newConsumerWithFactory is the internal implementation that accepts a JetStream factory for testing.
+func newConsumerWithFactory(nc *nats.Conn, cfg Config, jsFactory func(*nats.Conn) (natspubsub.JetStream, error)) (pubsub.Consumer, error) {
+	js, err := jsFactory(nc)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create JetStream: %w", err)
 	}
