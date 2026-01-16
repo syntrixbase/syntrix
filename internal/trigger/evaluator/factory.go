@@ -3,20 +3,14 @@ package evaluator
 import (
 	"fmt"
 
+	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	natspubsub "github.com/syntrixbase/syntrix/internal/core/pubsub/nats"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
 	"github.com/syntrixbase/syntrix/internal/trigger/types"
 )
-
-// ServiceOptions configures the evaluator service.
-type ServiceOptions struct {
-	StartFromNow       bool
-	RulesFile          string
-	StreamName         string
-	CheckpointDatabase string
-}
 
 // Dependencies contains external dependencies for the evaluator service.
 type Dependencies struct {
@@ -27,18 +21,13 @@ type Dependencies struct {
 }
 
 // NewService creates a new evaluator Service.
-func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
+func NewService(deps Dependencies, cfg Config) (Service, error) {
 	if deps.Puller == nil {
 		return nil, fmt.Errorf("puller service is required for evaluator service")
 	}
 
 	// Apply defaults
-	if opts.StreamName == "" {
-		opts.StreamName = "TRIGGERS"
-	}
-	if opts.CheckpointDatabase == "" {
-		opts.CheckpointDatabase = "default"
-	}
+	cfg.ApplyDefaults()
 	if deps.Metrics == nil {
 		deps.Metrics = &types.NoopMetrics{}
 	}
@@ -51,14 +40,14 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 
 	// Create watcher (receives all events; database filtering is done by Evaluator per trigger)
 	w := watcher.NewWatcher(deps.Puller, deps.Store, watcher.WatcherOptions{
-		StartFromNow:       opts.StartFromNow,
-		CheckpointDatabase: opts.CheckpointDatabase,
+		StartFromNow:       cfg.StartFromNow,
+		CheckpointDatabase: cfg.CheckpointDatabase,
 	})
 
 	// Create publisher wrapping pubsub.Publisher
 	var pub TaskPublisher
 	if deps.Publisher != nil {
-		pub = NewTaskPublisher(deps.Publisher, opts.StreamName, deps.Metrics)
+		pub = NewTaskPublisher(deps.Publisher, cfg.StreamName, deps.Metrics)
 	}
 
 	svc := &service{
@@ -68,10 +57,10 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	}
 
 	// Load trigger rules from file if configured
-	if opts.RulesFile != "" {
-		triggers, err := types.LoadTriggersFromFile(opts.RulesFile)
+	if cfg.RulesFile != "" {
+		triggers, err := types.LoadTriggersFromFile(cfg.RulesFile)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load trigger rules from %s: %w", opts.RulesFile, err)
+			return nil, fmt.Errorf("failed to load trigger rules from %s: %w", cfg.RulesFile, err)
 		}
 		if err := svc.LoadTriggers(triggers); err != nil {
 			return nil, fmt.Errorf("failed to load triggers: %w", err)
@@ -79,4 +68,21 @@ func NewService(deps Dependencies, opts ServiceOptions) (Service, error) {
 	}
 
 	return svc, nil
+}
+
+// NewPublisher creates a pubsub.Publisher from evaluator config.
+func NewPublisher(nc *nats.Conn, cfg Config) (pubsub.Publisher, error) {
+	js, err := natspubsub.NewJetStream(nc)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create JetStream: %w", err)
+	}
+
+	cfg.ApplyDefaults()
+
+	return natspubsub.NewPublisher(js, pubsub.PublisherOptions{
+		StreamName:    cfg.StreamName,
+		SubjectPrefix: cfg.StreamName,
+		RetryAttempts: cfg.RetryAttempts,
+		Storage:       cfg.StorageTypeValue(),
+	})
 }

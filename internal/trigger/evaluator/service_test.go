@@ -512,9 +512,9 @@ func TestNewService_NoPuller(t *testing.T) {
 	deps := Dependencies{
 		Puller: nil,
 	}
-	opts := ServiceOptions{}
+	cfg := Config{}
 
-	_, err := NewService(deps, opts)
+	_, err := NewService(deps, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "puller service is required")
 }
@@ -525,9 +525,9 @@ func TestNewService_Success(t *testing.T) {
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
-	opts := ServiceOptions{}
+	cfg := Config{}
 
-	svc, err := NewService(deps, opts)
+	svc, err := NewService(deps, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }
@@ -552,11 +552,11 @@ func TestNewService_WithRulesFile(t *testing.T) {
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
-	opts := ServiceOptions{
+	cfg := Config{
 		RulesFile: tmpFile,
 	}
 
-	svc, err := NewService(deps, opts)
+	svc, err := NewService(deps, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }
@@ -567,11 +567,11 @@ func TestNewService_WithInvalidRulesFile(t *testing.T) {
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
-	opts := ServiceOptions{
+	cfg := Config{
 		RulesFile: "/nonexistent/file.json",
 	}
 
-	_, err := NewService(deps, opts)
+	_, err := NewService(deps, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load trigger rules")
 }
@@ -596,11 +596,11 @@ func TestNewService_WithInvalidTrigger(t *testing.T) {
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
-	opts := ServiceOptions{
+	cfg := Config{
 		RulesFile: tmpFile,
 	}
 
-	_, err = NewService(deps, opts)
+	_, err = NewService(deps, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to load triggers")
 }

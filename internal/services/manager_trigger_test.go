@@ -61,7 +61,7 @@ func setupTriggerTestFactories(t *testing.T) func() {
 
 func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesFile = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
 
 	restore := setupTriggerTestFactories(t)
@@ -76,7 +76,7 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
 
@@ -84,7 +84,7 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	mgr.pullerService = &mockTriggerPuller{}
 
 	// Mock evaluator factory
-	evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
 		return &fakeEvaluator{}, nil
 	}
 
@@ -109,12 +109,12 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub consumer factory
-	pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
 		return pubsubtesting.NewMockConsumer(), nil
 	}
 
 	// Mock delivery factory
-	deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
 		return &fakeConsumer{}, nil
 	}
 
@@ -125,7 +125,7 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 
 func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesFile = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunTriggerWorker: true, RunPuller: true})
 
 	restore := setupTriggerTestFactories(t)
@@ -140,10 +140,10 @@ func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub factories
-	pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
-	pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
 		return pubsubtesting.NewMockConsumer(), nil
 	}
 
@@ -151,10 +151,10 @@ func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	mgr.pullerService = &mockTriggerPuller{}
 
 	// Mock factories
-	evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
 		return &fakeEvaluator{}, nil
 	}
-	deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
 		return &fakeConsumer{}, nil
 	}
 
@@ -200,7 +200,7 @@ func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
 
@@ -208,7 +208,7 @@ func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 	mgr.pullerService = &mockTriggerPuller{}
 
 	// Mock evaluator factory to return error
-	evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
 		return nil, fmt.Errorf("evaluator error")
 	}
 
@@ -232,12 +232,12 @@ func TestManager_InitTriggerServices_DeliveryError(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub consumer factory
-	pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
 		return pubsubtesting.NewMockConsumer(), nil
 	}
 
 	// Mock delivery factory to return error
-	deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
 		return nil, fmt.Errorf("delivery error")
 	}
 
@@ -279,7 +279,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	jsonRules := `[{"triggerId":"t1","database":"default","collection":"users","events":["create"],"url":"http://localhost:8080/webhook"}]`
 	rulesFile := filepath.Join(tmpDir, "rules.json")
 	assert.NoError(t, os.WriteFile(rulesFile, []byte(jsonRules), 0644))
-	cfg.Trigger.RulesFile = rulesFile
+	cfg.Trigger.Evaluator.RulesFile = rulesFile
 
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
 
@@ -295,7 +295,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
 
@@ -303,8 +303,8 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	mgr.pullerService = &mockTriggerPuller{}
 
 	// Mock evaluator factory - verify rules file is passed
-	evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
-		assert.Equal(t, rulesFile, opts.RulesFile)
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		assert.Equal(t, rulesFile, cfg.RulesFile)
 		return &fakeEvaluator{}, nil
 	}
 
@@ -314,7 +314,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 
 func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesFile = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
 
 	restore := setupTriggerTestFactories(t)
@@ -329,7 +329,7 @@ func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub publisher factory to return error
-	pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
 		return nil, fmt.Errorf("publisher factory error")
 	}
 
@@ -356,7 +356,7 @@ func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
 	// Mock pubsub consumer factory to return error
-	pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
 		return nil, fmt.Errorf("consumer factory error")
 	}
 

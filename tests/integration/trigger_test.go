@@ -104,10 +104,11 @@ func TestTriggerIntegration(t *testing.T) {
 
 	// 4. Configure and Start Service Manager
 	env := setupServiceEnv(t, "", func(cfg *config.Config) {
-		cfg.Trigger.RulesFile = rulesFile
-		cfg.Trigger.WorkerCount = 4
+		cfg.Trigger.Evaluator.RulesFile = rulesFile
+		cfg.Trigger.Delivery.NumWorkers = 4
 		cfg.Trigger.NatsURL = natsURL
-		cfg.Trigger.StreamName = streamName
+		cfg.Trigger.Evaluator.StreamName = streamName
+		cfg.Trigger.Delivery.StreamName = streamName
 	})
 	defer env.Cancel()
 

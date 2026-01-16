@@ -26,9 +26,9 @@ func TestNewService_NilConsumer(t *testing.T) {
 	deps := Dependencies{
 		Consumer: nil,
 	}
-	opts := ServiceOptions{}
+	cfg := Config{}
 
-	_, err := NewService(deps, opts)
+	_, err := NewService(deps, cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "consumer is required")
 }
@@ -40,11 +40,11 @@ func TestNewService_Success(t *testing.T) {
 		Consumer: mockConsumer,
 		Metrics:  &types.NoopMetrics{},
 	}
-	opts := ServiceOptions{
+	cfg := Config{
 		NumWorkers: 4,
 	}
 
-	svc, err := NewService(deps, opts)
+	svc, err := NewService(deps, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 }
@@ -55,9 +55,9 @@ func TestNewService_WithDefaults(t *testing.T) {
 	deps := Dependencies{
 		Consumer: mockConsumer,
 	}
-	opts := ServiceOptions{} // No options - should use defaults
+	cfg := Config{} // No options - should use defaults
 
-	svc, err := NewService(deps, opts)
+	svc, err := NewService(deps, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 
@@ -74,14 +74,14 @@ func TestNewService_WithAllOptions(t *testing.T) {
 		Consumer: mockConsumer,
 		Metrics:  &types.NoopMetrics{},
 	}
-	opts := ServiceOptions{
+	cfg := Config{
 		NumWorkers:      8,
 		ChannelBufSize:  100,
 		DrainTimeout:    5 * time.Second,
 		ShutdownTimeout: 10 * time.Second,
 	}
 
-	svc, err := NewService(deps, opts)
+	svc, err := NewService(deps, cfg)
 	assert.NoError(t, err)
 	assert.NotNil(t, svc)
 

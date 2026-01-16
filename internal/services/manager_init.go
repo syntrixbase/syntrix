@@ -14,7 +14,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
-	natspubsub "github.com/syntrixbase/syntrix/internal/core/pubsub/nats"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -33,31 +32,23 @@ var storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (stora
 }
 
 // evaluatorServiceFactory creates evaluator services - injectable for testing
-var evaluatorServiceFactory = func(deps evaluator.Dependencies, opts evaluator.ServiceOptions) (evaluator.Service, error) {
-	return evaluator.NewService(deps, opts)
+var evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+	return evaluator.NewService(deps, cfg)
 }
 
 // deliveryServiceFactory creates delivery services - injectable for testing
-var deliveryServiceFactory = func(deps delivery.Dependencies, opts delivery.ServiceOptions) (delivery.Service, error) {
-	return delivery.NewService(deps, opts)
+var deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+	return delivery.NewService(deps, cfg)
 }
 
 // pubsubPublisherFactory creates a pubsub.Publisher - injectable for testing
-var pubsubPublisherFactory = func(nc *nats.Conn, opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
-	js, err := natspubsub.NewJetStream(nc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create JetStream: %w", err)
-	}
-	return natspubsub.NewPublisher(js, opts)
+var pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+	return evaluator.NewPublisher(nc, cfg)
 }
 
 // pubsubConsumerFactory creates a pubsub.Consumer - injectable for testing
-var pubsubConsumerFactory = func(nc *nats.Conn, opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
-	js, err := natspubsub.NewJetStream(nc)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create JetStream: %w", err)
-	}
-	return natspubsub.NewConsumer(js, opts)
+var pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
+	return delivery.NewConsumer(nc, cfg)
 }
 
 func (m *Manager) Init(ctx context.Context) error {
@@ -462,12 +453,6 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 		return err
 	}
 
-	// Stream name for trigger tasks
-	streamName := m.cfg.Trigger.StreamName
-	if streamName == "" {
-		streamName = "TRIGGERS"
-	}
-
 	// Initialize Evaluator Service
 	if m.opts.RunTriggerEvaluator {
 		if m.pullerService == nil {
@@ -475,12 +460,7 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 		}
 
 		// Create pubsub.Publisher for evaluator using injectable factory
-		publisher, err := pubsubPublisherFactory(nc, pubsub.PublisherOptions{
-			StreamName:    streamName,
-			SubjectPrefix: streamName,
-			RetryAttempts: 3,
-			Storage:       pubsub.FileStorage,
-		})
+		publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger publisher: %w", err)
 		}
@@ -490,12 +470,7 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 			Puller:    m.pullerService,
 			Publisher: publisher,
 			Metrics:   nil, // TODO: Add metrics when available
-		}, evaluator.ServiceOptions{
-			StartFromNow:       true,
-			RulesFile:          m.cfg.Trigger.RulesFile,
-			StreamName:         streamName,
-			CheckpointDatabase: m.cfg.Trigger.CheckpointDatabase,
-		})
+		}, m.cfg.Trigger.Evaluator)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
 		}
@@ -506,11 +481,7 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 	// Initialize Delivery Service
 	if m.opts.RunTriggerWorker {
 		// Create pubsub.Consumer for delivery using injectable factory
-		consumer, err := pubsubConsumerFactory(nc, pubsub.ConsumerOptions{
-			StreamName:   streamName,
-			ConsumerName: "trigger-delivery",
-			Storage:      pubsub.FileStorage,
-		})
+		consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger consumer: %w", err)
 		}
@@ -520,9 +491,7 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 			Auth:     m.authService,
 			Secrets:  nil, // TODO: Add secret provider when available
 			Metrics:  nil, // TODO: Add metrics when available
-		}, delivery.ServiceOptions{
-			NumWorkers: m.cfg.Trigger.WorkerCount,
-		})
+		}, m.cfg.Trigger.Delivery)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger delivery service: %w", err)
 		}

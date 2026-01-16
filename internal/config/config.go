@@ -82,7 +82,7 @@ func LoadConfig() *Config {
 		cfg.Trigger.NatsURL = val
 	}
 	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
-		cfg.Trigger.RulesFile = val
+		cfg.Trigger.Evaluator.RulesFile = val
 	}
 
 	// Deployment configuration
@@ -136,7 +136,7 @@ func (c *Config) resolvePaths() {
 	configDir := "config"
 	c.Identity.AuthZ.RulesFile = resolvePath(configDir, c.Identity.AuthZ.RulesFile)
 	c.Identity.AuthN.PrivateKeyFile = resolvePath(configDir, c.Identity.AuthN.PrivateKeyFile)
-	c.Trigger.RulesFile = resolvePath(configDir, c.Trigger.RulesFile)
+	c.Trigger.Evaluator.RulesFile = resolvePath(configDir, c.Trigger.Evaluator.RulesFile)
 	c.Indexer.TemplatePath = resolvePath(configDir, c.Indexer.TemplatePath)
 }
 
