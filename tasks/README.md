@@ -18,3 +18,4 @@ Index of task planning documents for Syntrix.
 - [ ] [035.2026-01-13-index-persistence.md](035.2026-01-13-index-persistence.md) — Index Persistence. Status: Planned.
 - [ ] [036.2026-01-14-core-pubsub.md](036.2026-01-14-core-pubsub.md) — Core Pubsub Layer. Status: Planned.
 - [x] [037.2026-01-15-trigger-service-separation.md](037.2026-01-15-trigger-service-separation.md) — Trigger Service Separation. Status: Completed.
+- [x] [039.2026-01-17-index-templates-per-database.md](039.2026-01-17-index-templates-per-database.md) — Index Templates Per-Database Configuration. Status: Completed.

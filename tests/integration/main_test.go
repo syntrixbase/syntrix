@@ -144,8 +144,13 @@ match:
 		return nil, fmt.Errorf("failed to write rules file: %w", err)
 	}
 
-	// Create templates.yaml for Indexer
+	// Create templates directory for Indexer
+	templatesDir := tempDir + "/templates"
+	if err := os.MkdirAll(templatesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create templates dir: %w", err)
+	}
 	templatesContent := `
+database: default
 templates:
   - name: default-id
     collectionPattern: "{collection}"
@@ -204,7 +209,7 @@ templates:
       - field: id
         order: asc
 `
-	templatesFile := tempDir + "/templates.yaml"
+	templatesFile := templatesDir + "/default.yml"
 	if err := os.WriteFile(templatesFile, []byte(templatesContent), 0644); err != nil {
 		return nil, fmt.Errorf("failed to write templates file: %w", err)
 	}
@@ -293,7 +298,7 @@ templates:
 		},
 		Indexer: indexer_config.Config{
 			PullerAddr:   fmt.Sprintf("localhost:%d", grpcPort),
-			TemplatePath: templatesFile,
+			TemplatePath: templatesDir,
 			StorageMode:  indexer_config.StorageModePebble,
 			Store: indexer_config.StoreConfig{
 				Path:          tempDir + "/indexer.db",

@@ -88,9 +88,9 @@ func (s *service) Start(ctx context.Context) error {
 		return errors.New("service already running")
 	}
 
-	// Load templates
+	// Load templates from directory
 	if s.cfg.TemplatePath != "" {
-		if err := s.manager.LoadTemplates(s.cfg.TemplatePath); err != nil {
+		if err := s.manager.LoadTemplatesFromDir(s.cfg.TemplatePath); err != nil {
 			return fmt.Errorf("failed to load templates: %w", err)
 		}
 		s.logger.Info("loaded index templates",

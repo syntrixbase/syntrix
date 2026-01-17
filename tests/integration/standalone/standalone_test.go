@@ -90,8 +90,13 @@ match:
 	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
-	// Create templates.yaml
+	// Create templates directory
+	templatesDir := t.TempDir() + "/templates"
+	err = os.MkdirAll(templatesDir, 0755)
+	require.NoError(t, err)
+
 	templatesContent := `
+database: default
 templates:
   - name: default-ids
     collectionPattern: "{collection}"
@@ -99,7 +104,7 @@ templates:
       - field: id
         order: asc
 `
-	templatesFile := t.TempDir() + "/templates.yaml"
+	templatesFile := templatesDir + "/default.yml"
 	err = os.WriteFile(templatesFile, []byte(templatesContent), 0644)
 	require.NoError(t, err)
 
@@ -169,7 +174,7 @@ templates:
 			},
 		},
 		Indexer: indexer_config.Config{
-			TemplatePath: templatesFile,
+			TemplatePath: templatesDir,
 			StorageMode:  indexer_config.StorageModePebble,
 			Store: indexer_config.StoreConfig{
 				Path:          t.TempDir() + "/indexer.db",

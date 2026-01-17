@@ -618,25 +618,25 @@ func TestExtractFieldValue(t *testing.T) {
 }
 
 func TestService_StartWithTemplatePath(t *testing.T) {
-	t.Run("valid template file", func(t *testing.T) {
-		// Create temp template file
-		tmpFile, err := os.CreateTemp("", "templates-*.yaml")
+	t.Run("valid template directory", func(t *testing.T) {
+		// Create temp template directory
+		tmpDir, err := os.MkdirTemp("", "templates-*")
 		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
+		defer os.RemoveAll(tmpDir)
 
 		templateYAML := `
+database: default
 templates:
   - name: test_template
     collectionPattern: users/{uid}/docs
     fields:
       - { field: timestamp, order: desc }
 `
-		_, err = tmpFile.WriteString(templateYAML)
+		err = os.WriteFile(tmpDir+"/default.yml", []byte(templateYAML), 0644)
 		require.NoError(t, err)
-		tmpFile.Close()
 
 		cfg := config.Config{
-			TemplatePath: tmpFile.Name(),
+			TemplatePath: tmpDir,
 		}
 		svc := newTestService(cfg, nil, testLogger())
 
@@ -650,9 +650,9 @@ templates:
 		assert.Equal(t, 1, stats.TemplateCount)
 	})
 
-	t.Run("invalid template file", func(t *testing.T) {
+	t.Run("invalid template directory", func(t *testing.T) {
 		cfg := config.Config{
-			TemplatePath: "/nonexistent/path/templates.yaml",
+			TemplatePath: "/nonexistent/path/templates",
 		}
 		svc := newTestService(cfg, nil, testLogger())
 

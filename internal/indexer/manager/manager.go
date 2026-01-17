@@ -71,9 +71,10 @@ type DocRef struct {
 
 // Manager manages index operations through the Store interface.
 type Manager struct {
-	mu        sync.RWMutex
-	store     store.Store
-	templates []template.Template
+	mu          sync.RWMutex
+	store       store.Store
+	templates   []template.Template        // flat list for backward compatibility
+	dbTemplates template.DatabaseTemplates // templates grouped by database
 }
 
 // New creates a new index manager with the given store.
@@ -88,15 +89,17 @@ func (m *Manager) Store() store.Store {
 	return m.store
 }
 
-// LoadTemplates loads templates from a YAML file.
-func (m *Manager) LoadTemplates(path string) error {
-	templates, err := template.LoadFromFile(path)
+// LoadTemplatesFromDir loads templates from a directory.
+// Templates are grouped by the database field in each file.
+func (m *Manager) LoadTemplatesFromDir(dirPath string) error {
+	dbTemplates, err := template.LoadFromDir(dirPath)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrTemplateLoadFailed, err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.templates = templates
+	m.dbTemplates = dbTemplates
+	m.templates = dbTemplates.AllTemplates() // maintain flat list for backward compatibility
 	return nil
 }
 
@@ -117,6 +120,20 @@ func (m *Manager) Templates() []template.Template {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return m.templates
+}
+
+// DatabaseTemplates returns templates grouped by database.
+func (m *Manager) DatabaseTemplates() template.DatabaseTemplates {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.dbTemplates
+}
+
+// TemplatesForDatabase returns templates for a specific database.
+func (m *Manager) TemplatesForDatabase(database string) []template.Template {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.dbTemplates[database]
 }
 
 // MatchTemplatesForCollection returns templates that match a collection path.
