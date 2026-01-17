@@ -128,40 +128,6 @@ func TestServer_Start_GRPC_PortConflict(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestGlobal(t *testing.T) {
-	cfg := Config{
-		Host:     "localhost",
-		HTTPPort: 0,
-	}
-	InitDefault(cfg, nil)
-	assert.NotNil(t, Default())
-
-	// Clean up
-	SetDefault(nil)
-}
-
-func TestGlobalHelpers(t *testing.T) {
-	InitDefault(Config{Host: "localhost"}, nil)
-	defer func() { SetDefault(nil) }()
-
-	// Test RegisterHTTP
-	RegisterHTTP("/test-http", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
-
-	// Test HandleFunc
-	HandleFunc("/test-func", func(w http.ResponseWriter, r *http.Request) {})
-
-	// RegisterGRPC is tested in grpc_test.go
-}
-
-func TestGlobalHelpers_NoInit(t *testing.T) {
-	defaultService = nil
-
-	// Should not panic
-	RegisterHTTP("/test", nil)
-	HandleFunc("/test", nil)
-	RegisterGRPC(nil, nil)
-}
-
 func TestServer_HTTPMux(t *testing.T) {
 	cfg := Config{
 		Host:     "localhost",

@@ -32,48 +32,7 @@ func TestBuffer_New_Error(t *testing.T) {
 	}
 }
 
-func TestBuffer_Closed_Errors(t *testing.T) {
-	t.Parallel()
-	dir, _ := os.MkdirTemp("", "buffer-test-*")
-	defer os.RemoveAll(dir)
-
-	buf, _ := New(Options{Path: dir})
-	buf.Close()
-
-	evt := &events.StoreChangeEvent{EventID: "1"}
-
-	if err := buf.Write(evt, testToken); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from Write, got %v", err)
-	}
-
-	if _, err := buf.Read("key"); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from Read, got %v", err)
-	}
-
-	if _, err := buf.ScanFrom(""); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from ScanFrom, got %v", err)
-	}
-
-	if _, err := buf.Head(); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from Head, got %v", err)
-	}
-
-	if err := buf.Delete("key"); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from Delete, got %v", err)
-	}
-
-	if _, err := buf.DeleteBefore("key"); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from DeleteBefore, got %v", err)
-	}
-
-	if _, err := buf.Count(); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from Count, got %v", err)
-	}
-
-	if _, err := buf.CountAfter(""); err == nil || err.Error() != "buffer is closed" {
-		t.Errorf("Expected 'buffer is closed' error from CountAfter, got %v", err)
-	}
-}
+// TestBuffer_Closed_Errors REMOVED - consolidated into TestBuffer_ClosedScenarios in buffer_test.go
 
 func TestBuffer_Write_MarshalError(t *testing.T) {
 	t.Parallel()
