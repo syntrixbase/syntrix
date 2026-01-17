@@ -99,6 +99,7 @@ After processing all files, provide a summary:
 ### Commit Message Standards
 - Use conventional commit format: `refactor(<scope>): <description>`
 - Scope should be the package name
+- Filename should be a part of description
 - Description should summarize what was removed
 - Body should list specific changes and coverage status
 - Do NOT add any co-author credits
