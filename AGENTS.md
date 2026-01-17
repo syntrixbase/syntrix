@@ -1,7 +1,3 @@
----
-applyTo: "**"
----
-
 # AI AGENT INSTRUCTIONS
 
 - Always disucss in "中文" with user and write document and code in English.
@@ -23,14 +19,11 @@ IMMEDIATELY STOP and ask user when:
 
 ## 🚫 FORBIDDEN PATTERNS
 
-- Using unverified parameters from external interfaces (Strict validation required).
-- `Skip` any unit test or integration testing.
 - Using `cat` or `echo` to write or append to files in the terminal.
-- **Integration Tests**: Direct calls to internal service components in `tests/integration` directly.
 - Start coding without a **confirmed plan** from the user.
 - Adding "Generated with Claude Code", "via Happy", or any co-author credits in commit messages.
 - **Git commits without explicit single-use authorization**: Each git commit instruction only authorizes ONE commit. Never auto-commit or batch commit without explicit user consent for each commit.
-- **Git add without explicit authorization**: Never run `git add` without explicit user consent. Each git staging operation requires separate authorization.
+- **Git force push**: Never use `git push --force` or `git push -f`. Use `git push --force-with-lease` only when absolutely necessary and with explicit user consent.
 
 ## 🔄 DECISION TREE
 
