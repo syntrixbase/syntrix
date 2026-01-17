@@ -54,8 +54,8 @@ type MockAuthzEngine struct {
 	identity.AuthZ
 }
 
-func (m *MockAuthzEngine) Evaluate(ctx context.Context, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
-	args := m.Called(ctx, path, action, req, existingRes)
+func (m *MockAuthzEngine) Evaluate(ctx context.Context, database string, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
+	args := m.Called(ctx, database, path, action, req, existingRes)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -107,7 +107,7 @@ func TestServer_RegisterRoutes(t *testing.T) {
 		// Mock GetDocument to return ErrNotFound
 		// Use valid document path format: collection/docId (even number of segments)
 		mockQuery.On("GetDocument", mock.Anything, "default", "users/test").Return(nil, model.ErrNotFound)
-		mockAuthz.On("Evaluate", mock.Anything, "users/test", "read", mock.Anything, mock.Anything).Return(true, nil)
+		mockAuthz.On("Evaluate", mock.Anything, "default", "users/test", "read", mock.Anything, mock.Anything).Return(true, nil)
 
 		req := httptest.NewRequest("GET", "/api/v1/users/test", nil)
 		w := httptest.NewRecorder()

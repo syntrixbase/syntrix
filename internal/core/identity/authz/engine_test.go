@@ -12,6 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockQueryService
@@ -67,8 +68,16 @@ func (m *MockQueryService) Push(ctx context.Context, database string, req storag
 	return nil, nil
 }
 
+// createTestRulesDir creates a temp directory with test rules
+func createTestRulesDir(t *testing.T, database string, rulesYAML string) string {
+	tmpDir := t.TempDir()
+	fullYAML := "database: " + database + "\n" + rulesYAML
+	err := os.WriteFile(tmpDir+"/"+database+".yml", []byte(fullYAML), 0644)
+	require.NoError(t, err)
+	return tmpDir
+}
+
 func TestEngine_Evaluate(t *testing.T) {
-	// Create a temporary rules file
 	rules := `
 rules_version: '1'
 service: syntrix
@@ -88,14 +97,12 @@ match:
           write: "request.auth.userId in resource.data.members"
       /admin/{doc=**}:
         allow:
-          read, write: "exists('/databases/' + database + '/documents/admins/' + request.auth.userId)"
+          read, write: "exists('/databases/default/documents/admins/' + request.auth.userId)"
 `
-	tmpFile := t.TempDir() + "/security.yaml"
-	err := os.WriteFile(tmpFile, []byte(rules), 0644)
-	assert.NoError(t, err)
+	tmpDir := createTestRulesDir(t, "default", rules)
 
 	mockQuery := new(MockQueryService)
-	engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, mockQuery)
 	assert.NoError(t, err)
 
 	// Test Case 1: Allowed Read (User matches)
@@ -103,7 +110,7 @@ match:
 		Auth: Auth{UID: "user123"},
 		Time: time.Now(),
 	}
-	allowed, err := engine.Evaluate(context.Background(), "/users/user123", "read", req, nil)
+	allowed, err := engine.Evaluate(context.Background(), "default", "/users/user123", "read", req, nil)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
@@ -112,12 +119,12 @@ match:
 		Auth: Auth{UID: "otherUser"},
 		Time: time.Now(),
 	}
-	allowed, err = engine.Evaluate(context.Background(), "/users/user123", "read", req, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/users/user123", "read", req, nil)
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 
 	// Test Case 3: Public Read (Wildcard)
-	allowed, err = engine.Evaluate(context.Background(), "/public/some/doc", "read", req, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/public/some/doc", "read", req, nil)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
@@ -127,7 +134,7 @@ match:
 			"public": true,
 		},
 	}
-	allowed, err = engine.Evaluate(context.Background(), "/rooms/room1", "read", req, publicRoom)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/rooms/room1", "read", req, publicRoom)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
@@ -138,7 +145,7 @@ match:
 			"members": []interface{}{"otherUser"},
 		},
 	}
-	allowed, err = engine.Evaluate(context.Background(), "/rooms/room2", "read", req, privateRoom)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/rooms/room2", "read", req, privateRoom)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
@@ -147,7 +154,7 @@ match:
 		Auth: Auth{UID: "stranger"},
 		Time: time.Now(),
 	}
-	allowed, err = engine.Evaluate(context.Background(), "/rooms/room2", "read", reqNonMember, privateRoom)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/rooms/room2", "read", reqNonMember, privateRoom)
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 
@@ -158,17 +165,18 @@ match:
 	}
 	mockQuery.On("GetDocument", mock.Anything, "default", "admins/adminUser").Return(model.Document{"id": "adminUser"}, nil)
 
-	allowed, err = engine.Evaluate(context.Background(), "/admin/config", "write", reqAdmin, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/admin/config", "write", reqAdmin, nil)
 	assert.NoError(t, err)
 	assert.True(t, allowed)
 
 	// Test Case 8: Custom Function 'exists' (Admin Check - Fail)
 	mockQuery.On("GetDocument", mock.Anything, "default", "admins/stranger").Return(nil, model.ErrNotFound)
 
-	allowed, err = engine.Evaluate(context.Background(), "/admin/config", "write", reqNonMember, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/admin/config", "write", reqNonMember, nil)
 	assert.NoError(t, err)
 	assert.False(t, allowed)
 }
+
 func TestEvaluate_ActionAliases(t *testing.T) {
 	rules := `
 rules_version: '1'
@@ -181,56 +189,311 @@ match:
           read: "true"
           write: "true"
 `
-	tmpFile := t.TempDir() + "/security.yaml"
-	err := os.WriteFile(tmpFile, []byte(rules), 0644)
-	assert.NoError(t, err)
+	tmpDir := createTestRulesDir(t, "default", rules)
 
 	mockQuery := new(MockQueryService)
-	engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, mockQuery)
 	assert.NoError(t, err)
 
 	req := Request{Auth: Auth{UID: "user1"}}
 
 	// Test read aliases
 	for _, action := range []string{"get", "list"} {
-		allowed, err := engine.Evaluate(context.Background(), "/test/1", action, req, nil)
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/1", action, req, nil)
 		assert.NoError(t, err)
 		assert.True(t, allowed, "Action %s should be allowed by read", action)
 	}
 
 	// Test write aliases
 	for _, action := range []string{"create", "update", "delete"} {
-		allowed, err := engine.Evaluate(context.Background(), "/test/1", action, req, nil)
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/1", action, req, nil)
 		assert.NoError(t, err)
 		assert.True(t, allowed, "Action %s should be allowed by write", action)
 	}
 
 	// Test exact match
-	allowed, err := engine.Evaluate(context.Background(), "/test/1", "read", req, nil)
+	allowed, err := engine.Evaluate(context.Background(), "default", "/test/1", "read", req, nil)
 	assert.True(t, allowed)
-	allowed, err = engine.Evaluate(context.Background(), "/test/1", "write", req, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/test/1", "write", req, nil)
 	assert.True(t, allowed)
 
 	// Test mismatch
-	allowed, err = engine.Evaluate(context.Background(), "/test/1", "other", req, nil)
+	allowed, err = engine.Evaluate(context.Background(), "default", "/test/1", "other", req, nil)
 	assert.False(t, allowed)
 }
+
 func TestEngine_UpdateRules(t *testing.T) {
 	engine, err := NewEngine(config.AuthZConfig{}, new(MockQueryService))
 	assert.NoError(t, err)
 
 	rules := `
+database: testdb
 rules_version: '2'
 service: syntrix
 match:
-  /test:
-    allow:
-      read: "true"
+  /databases/{database}/documents:
+    match:
+      /test:
+        allow:
+          read: "true"
 `
-	err = engine.UpdateRules([]byte(rules))
+	err = engine.UpdateRules("testdb", []byte(rules))
 	assert.NoError(t, err)
 
-	loadedRules := engine.GetRules()
+	loadedRules := engine.GetRulesForDatabase("testdb")
 	assert.NotNil(t, loadedRules)
 	assert.Equal(t, "2", loadedRules.Version)
+}
+
+func TestEngine_LoadRulesFromDir(t *testing.T) {
+	t.Run("valid directory with single file", func(t *testing.T) {
+		rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		tmpDir := createTestRulesDir(t, "mydb", rules)
+
+		engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		require.NoError(t, err)
+
+		dbRules := engine.GetRulesForDatabase("mydb")
+		assert.NotNil(t, dbRules)
+		assert.Equal(t, "mydb", dbRules.Database)
+	})
+
+	t.Run("multiple databases", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		rules1 := `database: db1
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		rules2 := `database: db2
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "false"
+`
+		err := os.WriteFile(tmpDir+"/db1.yml", []byte(rules1), 0644)
+		require.NoError(t, err)
+		err = os.WriteFile(tmpDir+"/db2.yml", []byte(rules2), 0644)
+		require.NoError(t, err)
+
+		engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		require.NoError(t, err)
+
+		assert.NotNil(t, engine.GetRulesForDatabase("db1"))
+		assert.NotNil(t, engine.GetRulesForDatabase("db2"))
+	})
+
+	t.Run("duplicate database rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		rules := `database: mydb
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		err := os.WriteFile(tmpDir+"/file1.yml", []byte(rules), 0644)
+		require.NoError(t, err)
+		err = os.WriteFile(tmpDir+"/file2.yml", []byte(rules), 0644)
+		require.NoError(t, err)
+
+		_, err = NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateDatabase)
+	})
+
+	t.Run("empty database field rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		rules := `rules_version: '1'
+service: syntrix
+match:
+  /databases/default/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		err := os.WriteFile(tmpDir+"/test.yml", []byte(rules), 0644)
+		require.NoError(t, err)
+
+		_, err = NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrEmptyDatabase)
+	})
+
+	t.Run("database placeholder replaced", func(t *testing.T) {
+		rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		tmpDir := createTestRulesDir(t, "analytics", rules)
+
+		engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		require.NoError(t, err)
+
+		dbRules := engine.GetRulesForDatabase("analytics")
+		assert.NotNil(t, dbRules)
+
+		// Verify placeholder was replaced
+		_, hasAnalytics := dbRules.Match["/databases/analytics/documents"]
+		assert.True(t, hasAnalytics, "placeholder should be replaced with database name")
+	})
+
+	t.Run("database mismatch rejected", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		rules := `database: mydb
+rules_version: '1'
+service: syntrix
+match:
+  /databases/wrongdb/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+		err := os.WriteFile(tmpDir+"/mydb.yml", []byte(rules), 0644)
+		require.NoError(t, err)
+
+		_, err = NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrDatabaseMismatch)
+	})
+
+	t.Run("not a directory", func(t *testing.T) {
+		tmpFile := t.TempDir() + "/file.yml"
+		err := os.WriteFile(tmpFile, []byte("database: test\n"), 0644)
+		require.NoError(t, err)
+
+		_, err = NewEngine(config.AuthZConfig{RulesPath: tmpFile}, new(MockQueryService))
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrNotDirectory)
+	})
+
+	t.Run("empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+		require.NoError(t, err)
+
+		// No rules loaded, evaluate should deny
+		req := Request{Auth: Auth{UID: "user1"}}
+		allowed, err := engine.Evaluate(context.Background(), "anydb", "/test", "read", req, nil)
+		assert.NoError(t, err)
+		assert.False(t, allowed)
+	})
+}
+
+func TestEngine_EvaluateNoRulesForDatabase(t *testing.T) {
+	rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+	tmpDir := createTestRulesDir(t, "db1", rules)
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	req := Request{Auth: Auth{UID: "user1"}}
+
+	// Should allow for db1
+	allowed, err := engine.Evaluate(context.Background(), "db1", "/test", "read", req, nil)
+	assert.NoError(t, err)
+	assert.True(t, allowed)
+
+	// Should deny for unknown database
+	allowed, err = engine.Evaluate(context.Background(), "unknown", "/test", "read", req, nil)
+	assert.NoError(t, err)
+	assert.False(t, allowed)
+}
+
+func TestEngine_GetRules(t *testing.T) {
+	rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`
+	tmpDir := createTestRulesDir(t, "testdb", rules)
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	// GetRules should return the first ruleset for backward compatibility
+	ruleSet := engine.GetRules()
+	assert.NotNil(t, ruleSet)
+	assert.Equal(t, "testdb", ruleSet.Database)
+}
+
+func TestEngine_GetRules_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	// GetRules should return nil when no rules loaded
+	ruleSet := engine.GetRules()
+	assert.Nil(t, ruleSet)
+}
+
+func TestEngine_UpdateRules_DatabaseMismatch(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	// Try to update with content that has different database than target
+	content := []byte(`database: otherdb
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "true"
+`)
+	err = engine.UpdateRules("targetdb", content)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrDatabaseMismatch)
 }

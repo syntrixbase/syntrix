@@ -241,14 +241,14 @@ func (m *Manager) initQueryGRPCServer(service query.Service) {
 func (m *Manager) initAPIServer(queryService query.Service) error {
 	var authzEngine identity.AuthZ
 
-	if m.cfg.Identity.AuthZ.RulesFile != "" {
+	if m.cfg.Identity.AuthZ.RulesPath != "" {
 		var err error
 		authzEngine, err = identity.NewAuthZ(m.cfg.Identity.AuthZ, queryService)
 		if err != nil {
 			return fmt.Errorf("failed to create authz engine: %w", err)
 		}
 
-		slog.Info("Loaded authorization rules", "file", m.cfg.Identity.AuthZ.RulesFile)
+		slog.Info("Loaded authorization rules", "path", m.cfg.Identity.AuthZ.RulesPath)
 	}
 
 	// Determine which Streamer interface to use

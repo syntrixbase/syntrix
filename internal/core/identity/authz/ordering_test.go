@@ -2,6 +2,8 @@ package authz
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -12,10 +14,11 @@ import (
 func TestMatchOrdering(t *testing.T) {
 	// Rule set with overlapping paths, nested under the default database prefix
 	rulesYAML := `
+database: default
 rules_version: "1.0"
 service: "test"
 match:
-  /databases/default/documents:
+  /databases/{database}/documents:
     match:
       /users/{uid}:
         allow:
@@ -31,9 +34,11 @@ match:
           read: "true" # Longer path
 `
 
-	engine, err := NewEngine(config.AuthZConfig{}, nil)
+	tmpDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(tmpDir, "default.yml"), []byte(rulesYAML), 0644)
 	require.NoError(t, err)
-	err = engine.UpdateRules([]byte(rulesYAML))
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, nil)
 	require.NoError(t, err)
 
 	ctx := context.Background()
@@ -68,7 +73,7 @@ match:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			allowed, err := engine.Evaluate(ctx, tt.path, "read", req, nil)
+			allowed, err := engine.Evaluate(ctx, "default", tt.path, "read", req, nil)
 			assert.NoError(t, err)
 			assert.Equal(t, tt.expected, allowed)
 		})

@@ -151,7 +151,7 @@ func TestAuthorized_InvalidJSONBody(t *testing.T) {
 	// We need to verify that Evaluate is called with nil Resource (or Resource with nil Data)
 	// when body is invalid JSON.
 
-	mockAuthz.On("Evaluate", mock.Anything, "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
+	mockAuthz.On("Evaluate", mock.Anything, "default", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
 		// Resource should be nil because Unmarshal failed
 		return req.Resource == nil
 	}), mock.Anything).Return(true, nil)

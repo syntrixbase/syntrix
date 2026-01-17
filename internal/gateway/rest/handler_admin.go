@@ -67,19 +67,32 @@ func (h *Handler) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) 
 }
 
 func (h *Handler) handleAdminGetRules(w http.ResponseWriter, r *http.Request) {
-	rules := h.authz.GetRules()
+	database := r.URL.Query().Get("database")
+	if database == "" {
+		database = "default"
+	}
+	rules := h.authz.GetRulesForDatabase(database)
+	if rules == nil {
+		writeError(w, http.StatusNotFound, ErrCodeNotFound, "No rules found for database")
+		return
+	}
 	writeJSON(w, http.StatusOK, rules)
 }
 
 func (h *Handler) handleAdminPushRules(w http.ResponseWriter, r *http.Request) {
+	database := r.URL.Query().Get("database")
+	if database == "" {
+		database = "default"
+	}
+
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Failed to read request body")
 		return
 	}
 
-	if err := h.authz.UpdateRules(body); err != nil {
-		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid rules format")
+	if err := h.authz.UpdateRules(database, body); err != nil {
+		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid rules format: "+err.Error())
 		return
 	}
 

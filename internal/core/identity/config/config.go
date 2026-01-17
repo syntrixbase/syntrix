@@ -21,7 +21,7 @@ type AuthNConfig struct {
 }
 
 type AuthZConfig struct {
-	RulesFile string `yaml:"rules_file"`
+	RulesPath string `yaml:"rules_path"`
 }
 
 func DefaultConfig() Config {
@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 			PrivateKeyFile:  "keys/auth_private.pem",
 		},
 		AuthZ: AuthZConfig{
-			RulesFile: "security.yaml",
+			RulesPath: "config/security_rules",
 		},
 	}
 }
@@ -53,8 +53,8 @@ func (c *Config) ApplyDefaults() {
 	if c.AuthN.PrivateKeyFile == "" {
 		c.AuthN.PrivateKeyFile = defaults.AuthN.PrivateKeyFile
 	}
-	if c.AuthZ.RulesFile == "" {
-		c.AuthZ.RulesFile = defaults.AuthZ.RulesFile
+	if c.AuthZ.RulesPath == "" {
+		c.AuthZ.RulesPath = defaults.AuthZ.RulesPath
 	}
 }
 
@@ -64,8 +64,8 @@ func (c *Config) ApplyEnvOverrides() { _ = c }
 
 // ResolvePaths resolves relative paths using the given base directory.
 func (c *Config) ResolvePaths(baseDir string) {
-	if c.AuthZ.RulesFile != "" && !filepath.IsAbs(c.AuthZ.RulesFile) {
-		c.AuthZ.RulesFile = filepath.Join(baseDir, c.AuthZ.RulesFile)
+	if c.AuthZ.RulesPath != "" && !filepath.IsAbs(c.AuthZ.RulesPath) {
+		c.AuthZ.RulesPath = filepath.Join(baseDir, c.AuthZ.RulesPath)
 	}
 	if c.AuthN.PrivateKeyFile != "" && !filepath.IsAbs(c.AuthN.PrivateKeyFile) {
 		c.AuthN.PrivateKeyFile = filepath.Join(baseDir, c.AuthN.PrivateKeyFile)
@@ -74,8 +74,8 @@ func (c *Config) ResolvePaths(baseDir string) {
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(_ services.DeploymentMode) error {
-	if c.AuthZ.RulesFile == "" {
-		return errors.New("identity.authz.rules_file is required")
+	if c.AuthZ.RulesPath == "" {
+		return errors.New("identity.authz.rules_path is required")
 	}
 	return nil
 }

@@ -190,8 +190,8 @@ type MockAuthzService struct {
 	mock.Mock
 }
 
-func (m *MockAuthzService) Evaluate(ctx context.Context, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
-	args := m.Called(ctx, path, action, req, existingRes)
+func (m *MockAuthzService) Evaluate(ctx context.Context, database string, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
+	args := m.Called(ctx, database, path, action, req, existingRes)
 	return args.Bool(0), args.Error(1)
 }
 
@@ -203,13 +203,21 @@ func (m *MockAuthzService) GetRules() *identity.RuleSet {
 	return args.Get(0).(*identity.RuleSet)
 }
 
-func (m *MockAuthzService) UpdateRules(content []byte) error {
-	args := m.Called(content)
+func (m *MockAuthzService) GetRulesForDatabase(database string) *identity.RuleSet {
+	args := m.Called(database)
+	if args.Get(0) == nil {
+		return nil
+	}
+	return args.Get(0).(*identity.RuleSet)
+}
+
+func (m *MockAuthzService) UpdateRules(database string, content []byte) error {
+	args := m.Called(database, content)
 	return args.Error(0)
 }
 
-func (m *MockAuthzService) LoadRules(path string) error {
-	args := m.Called(path)
+func (m *MockAuthzService) LoadRulesFromDir(dirPath string) error {
+	args := m.Called(dirPath)
 	return args.Error(0)
 }
 

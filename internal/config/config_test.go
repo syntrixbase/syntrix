@@ -95,27 +95,27 @@ func TestServiceConfig_ResolvePaths(t *testing.T) {
 
 	// Test with identity config
 	identityCfg := identity.Config{
-		AuthZ: identity.AuthZConfig{RulesFile: "security.yaml"},
+		AuthZ: identity.AuthZConfig{RulesPath: "security.yaml"},
 		AuthN: identity.AuthNConfig{PrivateKeyFile: "keys/auth.pem"},
 	}
 	identityCfg.ResolvePaths("config")
-	assert.Equal(t, filepath.Join("config", "security.yaml"), identityCfg.AuthZ.RulesFile)
+	assert.Equal(t, filepath.Join("config", "security.yaml"), identityCfg.AuthZ.RulesPath)
 	assert.Equal(t, filepath.Join("config", "keys/auth.pem"), identityCfg.AuthN.PrivateKeyFile)
 
 	// Test with absolute path - should not be modified
 	absPath := filepath.Join(t.TempDir(), "absolute", "path", "to", "file")
 	identityCfg2 := identity.Config{
-		AuthZ: identity.AuthZConfig{RulesFile: absPath},
+		AuthZ: identity.AuthZConfig{RulesPath: absPath},
 	}
 	identityCfg2.ResolvePaths("config")
-	assert.Equal(t, absPath, identityCfg2.AuthZ.RulesFile)
+	assert.Equal(t, absPath, identityCfg2.AuthZ.RulesPath)
 
 	// Test with empty path - should remain empty
 	identityCfg3 := identity.Config{
-		AuthZ: identity.AuthZConfig{RulesFile: ""},
+		AuthZ: identity.AuthZConfig{RulesPath: ""},
 	}
 	identityCfg3.ResolvePaths("config")
-	assert.Equal(t, "", identityCfg3.AuthZ.RulesFile)
+	assert.Equal(t, "", identityCfg3.AuthZ.RulesPath)
 }
 
 func TestDeploymentMode_IsStandalone_ViaConfig(t *testing.T) {

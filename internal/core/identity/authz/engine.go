@@ -3,8 +3,10 @@ package authz
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -21,18 +23,28 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Errors for rule loading
+var (
+	ErrEmptyDatabase     = errors.New("database field cannot be empty")
+	ErrDuplicateDatabase = errors.New("duplicate database definition")
+	ErrNotDirectory      = errors.New("path is not a directory")
+	ErrDatabaseMismatch  = errors.New("explicit database name in path does not match database field")
+)
+
 type Engine interface {
-	Evaluate(ctx context.Context, path string, action string, req Request, existingRes *Resource) (bool, error)
+	Evaluate(ctx context.Context, database string, path string, action string, req Request, existingRes *Resource) (bool, error)
 	GetRules() *RuleSet
-	UpdateRules(content []byte) error
-	LoadRules(path string) error
+	GetRulesForDatabase(database string) *RuleSet
+	UpdateRules(database string, content []byte) error
+	LoadRulesFromDir(dirPath string) error
 }
 
 type ruleEngine struct {
-	rules      *RuleSet
+	dbRules    map[string]*RuleSet // rules grouped by database
 	celEnv     *cel.Env
 	programMap sync.Map // map[string]cel.Program
 	query      query.Service
+	mu         sync.RWMutex
 }
 
 func NewEngine(cfg config.AuthZConfig, q query.Service) (Engine, error) {
@@ -49,42 +61,161 @@ func NewEngine(cfg config.AuthZConfig, q query.Service) (Engine, error) {
 	}
 
 	e := &ruleEngine{
-		celEnv: env,
-		query:  q,
+		dbRules: make(map[string]*RuleSet),
+		celEnv:  env,
+		query:   q,
 	}
 
-	if cfg.RulesFile != "" {
-		if err := e.LoadRules(cfg.RulesFile); err != nil {
-			return nil, fmt.Errorf("failed to load rules from %s: %w", cfg.RulesFile, err)
+	if cfg.RulesPath != "" {
+		if err := e.LoadRulesFromDir(cfg.RulesPath); err != nil {
+			return nil, fmt.Errorf("failed to load rules from %s: %w", cfg.RulesPath, err)
 		}
 	}
 
 	return e, nil
 }
 
-func (e *ruleEngine) LoadRules(path string) error {
+// LoadRulesFromDir loads rules from all YAML files in a directory.
+// Each file must have a database field. Same database in multiple files is rejected.
+func (e *ruleEngine) LoadRulesFromDir(dirPath string) error {
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to stat directory: %w", err)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%w: %s", ErrNotDirectory, dirPath)
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	result := make(map[string]*RuleSet)
+	// Track database -> source file for conflict detection
+	seen := make(map[string]string)
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+
+		filePath := filepath.Join(dirPath, name)
+		rules, err := loadRulesFromFile(filePath)
+		if err != nil {
+			return fmt.Errorf("file %s: %w", name, err)
+		}
+
+		if rules.Database == "" {
+			return fmt.Errorf("file %s: %w", name, ErrEmptyDatabase)
+		}
+
+		// Check for duplicate database
+		if existingFile, ok := seen[rules.Database]; ok {
+			return fmt.Errorf("%w: database %q defined in both %s and %s",
+				ErrDuplicateDatabase, rules.Database, existingFile, name)
+		}
+		seen[rules.Database] = name
+
+		// Process match paths: replace {database} placeholder or validate explicit name
+		if err := processMatchPaths(rules.Match, rules.Database); err != nil {
+			return fmt.Errorf("file %s: %w", name, err)
+		}
+
+		// Validate rules
+		if err := e.validateRules(rules); err != nil {
+			return fmt.Errorf("file %s: %w", name, err)
+		}
+
+		result[rules.Database] = rules
+	}
+
+	e.mu.Lock()
+	e.dbRules = result
+	e.programMap = sync.Map{} // Clear cache
+	e.mu.Unlock()
+
+	return nil
+}
+
+// loadRulesFromFile loads a RuleSet from a YAML file.
+func loadRulesFromFile(path string) (*RuleSet, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	var rules RuleSet
 	if err := yaml.Unmarshal(data, &rules); err != nil {
-		return err
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
 	}
 
-	e.rules = &rules
-	e.programMap = sync.Map{}
+	return &rules, nil
+}
+
+// processMatchPaths replaces {database} placeholder with actual database name
+// or validates that explicit database names match the database field.
+func processMatchPaths(blocks map[string]MatchBlock, database string) error {
+	processed := make(map[string]MatchBlock)
+
+	for pattern, block := range blocks {
+		newPattern := pattern
+
+		// Replace {database} placeholder
+		if strings.Contains(pattern, "{database}") {
+			newPattern = strings.ReplaceAll(pattern, "{database}", database)
+		} else {
+			// Check for explicit database name that doesn't match
+			// Pattern like /databases/somedb/documents should match the database field
+			if strings.HasPrefix(pattern, "/databases/") {
+				parts := strings.SplitN(pattern, "/", 4) // ["", "databases", "dbname", "documents..."]
+				if len(parts) >= 3 {
+					explicitDB := parts[2]
+					if explicitDB != database && explicitDB != "{database}" {
+						return fmt.Errorf("%w: path has %q but database field is %q",
+							ErrDatabaseMismatch, explicitDB, database)
+					}
+				}
+			}
+		}
+
+		// Recursively process nested match blocks
+		if len(block.Match) > 0 {
+			if err := processMatchPaths(block.Match, database); err != nil {
+				return err
+			}
+		}
+
+		processed[newPattern] = block
+	}
+
+	// Replace original map with processed one
+	for k := range blocks {
+		delete(blocks, k)
+	}
+	for k, v := range processed {
+		blocks[k] = v
+	}
+
 	return nil
 }
 
-func (e *ruleEngine) Evaluate(ctx context.Context, path string, action string, req Request, existingRes *Resource) (bool, error) {
-	if e.rules == nil {
+func (e *ruleEngine) Evaluate(ctx context.Context, database string, path string, action string, req Request, existingRes *Resource) (bool, error) {
+	e.mu.RLock()
+	rules := e.dbRules[database]
+	e.mu.RUnlock()
+
+	if rules == nil {
+		// No rules for this database - deny by default
 		return false, nil
 	}
 
-	fullPath := "/databases/default/documents/" + strings.TrimPrefix(path, "/")
-	return e.matchPath(ctx, e.rules.Match, fullPath, action, make(map[string]string), req, existingRes)
+	fullPath := "/databases/" + database + "/documents/" + strings.TrimPrefix(path, "/")
+	return e.matchPath(ctx, rules.Match, fullPath, action, make(map[string]string), req, existingRes)
 }
 
 func (e *ruleEngine) matchPath(ctx context.Context, blocks map[string]MatchBlock, path string, action string, vars map[string]string, req Request, existingRes *Resource) (bool, error) {
@@ -352,12 +483,38 @@ func stripDatabasePrefix(path string) string {
 }
 
 func (e *ruleEngine) GetRules() *RuleSet {
-	return e.rules
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	// Return the first ruleset for backward compatibility (or nil if empty)
+	for _, rules := range e.dbRules {
+		return rules
+	}
+	return nil
 }
 
-func (e *ruleEngine) UpdateRules(content []byte) error {
+// GetRulesForDatabase returns rules for a specific database.
+func (e *ruleEngine) GetRulesForDatabase(database string) *RuleSet {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.dbRules[database]
+}
+
+func (e *ruleEngine) UpdateRules(database string, content []byte) error {
 	var rules RuleSet
 	if err := yaml.Unmarshal(content, &rules); err != nil {
+		return err
+	}
+
+	// Set database if not specified
+	if rules.Database == "" {
+		rules.Database = database
+	} else if rules.Database != database {
+		return fmt.Errorf("%w: content has database %q but updating %q",
+			ErrDatabaseMismatch, rules.Database, database)
+	}
+
+	// Process match paths
+	if err := processMatchPaths(rules.Match, database); err != nil {
 		return err
 	}
 
@@ -365,8 +522,10 @@ func (e *ruleEngine) UpdateRules(content []byte) error {
 		return err
 	}
 
-	e.rules = &rules
+	e.mu.Lock()
+	e.dbRules[database] = &rules
 	e.programMap = sync.Map{} // Clear cache
+	e.mu.Unlock()
 	return nil
 }
 

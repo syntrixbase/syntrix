@@ -223,6 +223,12 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 
 		path := r.PathValue("path")
 
+		// Extract database from context (defaults to "default")
+		database := "default"
+		if db, ok := r.Context().Value(ContextKeyDatabase).(string); ok && db != "" {
+			database = db
+		}
+
 		// Build Request Context
 		reqCtx := identity.AuthzRequest{
 			Time: time.Now(),
@@ -245,7 +251,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		// Fetch Existing Resource if needed
 		var existingRes *identity.Resource
 		if action != "create" {
-			doc, err := h.engine.GetDocument(r.Context(), "default", path)
+			doc, err := h.engine.GetDocument(r.Context(), database, path)
 			if err == nil {
 				data := model.Document{}
 				for k, v := range doc {
@@ -282,9 +288,10 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 			// report the error with more specific context
 		}
 
-		allowed, err := h.authz.Evaluate(r.Context(), path, action, reqCtx, existingRes)
+		allowed, err := h.authz.Evaluate(r.Context(), database, path, action, reqCtx, existingRes)
 		if err != nil {
 			slog.Warn("Authorization rule evaluation error",
+				"database", database,
 				"path", path,
 				"action", action,
 				"error", err,

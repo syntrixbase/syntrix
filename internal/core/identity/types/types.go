@@ -58,9 +58,10 @@ type RefreshRequest struct {
 
 // RuleSet defines authorization rules.
 type RuleSet struct {
-	Version string                `json:"rules_version" yaml:"rules_version"`
-	Service string                `json:"service" yaml:"service"`
-	Match   map[string]MatchBlock `json:"match" yaml:"match"`
+	Database string                `json:"database" yaml:"database"`
+	Version  string                `json:"rules_version" yaml:"rules_version"`
+	Service  string                `json:"service" yaml:"service"`
+	Match    map[string]MatchBlock `json:"match" yaml:"match"`
 }
 
 // MatchBlock defines nested authorization rules for a path segment.
