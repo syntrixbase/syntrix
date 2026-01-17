@@ -69,30 +69,37 @@ func (m *Manager) Init(ctx context.Context) error {
 
 // initStandalone initializes services for standalone deployment mode.
 // All services run in a single process without HTTP inter-service communication.
+// In standalone mode, services use direct in-process references instead of gRPC clients.
 func (m *Manager) initStandalone(ctx context.Context) error {
-	// Initialize Puller service (local only, no gRPC)
-	if m.opts.RunPuller {
-		if err := m.initPullerService(ctx); err != nil {
-			return err
-		}
-	}
-
-	// Initialize Indexer service (local only, no gRPC)
-	// Always initialize in standalone because Query Engine requires it
-	if err := m.initIndexerService(ctx); err != nil {
+	// Initialize Puller service first - required by other services
+	if err := m.initPullerService(ctx); err != nil {
 		return err
 	}
 
-	// Initialize Streamer service (local only, no gRPC)
-	if err := m.initStreamerService(); err != nil {
-		return err
+	// Initialize Indexer service - uses local Puller directly
+	indexerSvc, err := indexer.NewService(m.cfg.Indexer, m.pullerService, slog.Default())
+	if err != nil {
+		return fmt.Errorf("failed to create indexer service: %w", err)
 	}
+	m.indexerService = indexerSvc
+	slog.Info("Initialized Indexer Service (standalone)")
 
-	// Initialize Query service and API server
-	queryService, err := m.initQueryService(ctx)
+	// Initialize Streamer service - uses local Puller directly
+	opts := []streamer.ServiceConfigOption{streamer.WithPullerClient(m.pullerService)}
+	streamerSvc, err := streamer.NewService(m.cfg.Streamer.Server, slog.Default(), opts...)
+	if err != nil {
+		return fmt.Errorf("failed to create streamer service: %w", err)
+	}
+	m.streamerService = streamerSvc
+	slog.Info("Initialized Streamer Service (standalone)")
+
+	// Initialize Query service - uses local Indexer directly
+	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
 		return err
 	}
+	queryService := query.NewService(sf.Document(), m.indexerService)
+	slog.Info("Initialized Query Service (standalone)")
 
 	// API server is the only HTTP server in standalone mode
 	if err := m.initAPIServer(queryService); err != nil {
@@ -100,11 +107,8 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 	}
 
 	// Initialize trigger services with embedded NATS if configured
-	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		useEmbeddedNATS := m.cfg.Deployment.Standalone.EmbeddedNATS
-		if err := m.initTriggerServices(ctx, useEmbeddedNATS); err != nil {
-			return err
-		}
+	if err := m.initTriggerServicesStandalone(ctx); err != nil {
+		return err
 	}
 
 	return nil
@@ -157,7 +161,7 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 
 	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
-		if err := m.initTriggerServices(ctx, false); err != nil {
+		if err := m.initTriggerServices(ctx); err != nil {
 			return err
 		}
 	}
@@ -166,8 +170,12 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 }
 
 func (m *Manager) getStorageFactory(ctx context.Context) (storage.StorageFactory, error) {
-	if !(m.opts.RunQuery || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker || m.opts.RunPuller) {
-		return nil, nil
+	// In standalone mode, storage factory is always needed
+	// In distributed mode, check if any service that needs storage is enabled
+	if m.opts.Mode.IsDistributed() {
+		if !(m.opts.RunQuery || m.opts.RunTriggerEvaluator || m.opts.RunAPI || m.opts.RunTriggerWorker || m.opts.RunPuller) {
+			return nil, nil
+		}
 	}
 
 	m.storageFactoryOnce.Do(func() {
@@ -204,24 +212,15 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 	return nil
 }
 
-// initQueryService creates and returns a query engine service.
-// In standalone mode, uses local Indexer; in distributed mode, uses gRPC client.
+// initQueryService creates and returns a query engine service for distributed mode.
+// Uses gRPC client to connect to remote Indexer service.
 func (m *Manager) initQueryService(ctx context.Context) (query.Service, error) {
 	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	if m.opts.Mode.IsStandalone() {
-		// Standalone: direct call to local indexer
-		if m.indexerService == nil {
-			return nil, fmt.Errorf("indexer service required in standalone mode")
-		}
-		return query.NewService(sf.Document(), m.indexerService), nil
-	}
-
-	// Distributed (including --all): use gRPC client
-	// Note: IndexerAddr is validated at config load time via Config.Validate()
+	// Distributed mode: use gRPC client to connect to remote Indexer
 	client, err := indexer.NewClient(m.cfg.Query.IndexerAddr, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to indexer: %w", err)
@@ -272,40 +271,25 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 	return nil
 }
 
-// initStreamerService creates the Streamer service and sets m.streamerService.
-// In standalone mode, uses local Puller; in distributed mode, uses gRPC client.
+// initStreamerService creates the Streamer service for distributed mode.
+// Uses gRPC client to connect to remote Puller service.
 func (m *Manager) initStreamerService() error {
 	cfg := m.cfg.Streamer.Server
-	var opts []streamer.ServiceConfigOption
 
-	if m.opts.Mode.IsStandalone() {
-		// Standalone mode: use local Puller service
-		if m.pullerService != nil {
-			opts = append(opts, streamer.WithPullerClient(m.pullerService))
-			slog.Info("Streamer using local Puller service")
-		} else {
-			slog.Warn("Streamer running without Puller - realtime events will not be available")
-		}
-	} else {
-		// Distributed mode: connect to Puller via gRPC
-		if cfg.PullerAddr != "" {
-			pullerClient, err := puller.NewClient(cfg.PullerAddr, nil)
-			if err != nil {
-				return fmt.Errorf("failed to create Puller gRPC client: %w", err)
-			}
-			opts = append(opts, streamer.WithPullerClient(pullerClient))
-			slog.Info("Streamer using remote Puller service", "url", cfg.PullerAddr)
-		} else {
-			slog.Warn("Streamer running without Puller - realtime events will not be available")
-		}
+	// Distributed mode: connect to Puller via gRPC
+	pullerClient, err := puller.NewClient(cfg.PullerAddr, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create Puller gRPC client: %w", err)
 	}
+	slog.Info("Streamer using remote Puller service", "url", cfg.PullerAddr)
 
+	opts := []streamer.ServiceConfigOption{streamer.WithPullerClient(pullerClient)}
 	svc, err := streamer.NewService(cfg, slog.Default(), opts...)
 	if err != nil {
 		return fmt.Errorf("failed to create streamer service: %w", err)
 	}
 	m.streamerService = svc
-	slog.Info("Initialized Streamer Service")
+	slog.Info("Initialized Streamer Service (distributed)")
 
 	return nil
 }
@@ -384,42 +368,24 @@ func (m *Manager) initPullerGRPCServer() {
 	slog.Info("Registered Puller Service (gRPC)")
 }
 
-// initIndexerService creates the Indexer service.
-// In standalone mode, it uses local Puller service if available.
-// In distributed mode, it must connect to Puller via gRPC.
+// initIndexerService creates the Indexer service for distributed mode.
+// Uses gRPC client to connect to remote Puller service.
 func (m *Manager) initIndexerService(ctx context.Context) error {
 	slog.Info("Initializing Indexer Service...")
 
-	var pullerSvc puller.Service
-
-	if m.opts.Mode.IsStandalone() {
-		// Standalone mode: use local Puller service if available
-		if m.pullerService != nil {
-			pullerSvc = m.pullerService
-			slog.Info("Indexer using local Puller service")
-		} else {
-			slog.Warn("Indexer running without Puller - index updates will not be available")
-		}
-	} else {
-		// Distributed mode: must connect via gRPC
-		if m.cfg.Indexer.PullerAddr != "" {
-			client, err := puller.NewClient(m.cfg.Indexer.PullerAddr, nil)
-			if err != nil {
-				return fmt.Errorf("failed to create Puller gRPC client for Indexer: %w", err)
-			}
-			pullerSvc = client
-			slog.Info("Indexer using remote Puller service", "url", m.cfg.Indexer.PullerAddr)
-		} else {
-			slog.Warn("Indexer running without Puller - index updates will not be available")
-		}
+	// Distributed mode: connect to Puller via gRPC
+	pullerClient, err := puller.NewClient(m.cfg.Indexer.PullerAddr, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create Puller gRPC client for Indexer: %w", err)
 	}
+	slog.Info("Indexer using remote Puller service", "url", m.cfg.Indexer.PullerAddr)
 
-	svc, err := indexer.NewService(m.cfg.Indexer, pullerSvc, slog.Default())
+	svc, err := indexer.NewService(m.cfg.Indexer, pullerClient, slog.Default())
 	if err != nil {
 		return fmt.Errorf("failed to create indexer service: %w", err)
 	}
 	m.indexerService = svc
-	slog.Info("Initialized Indexer Service")
+	slog.Info("Initialized Indexer Service (distributed)")
 
 	return nil
 }
@@ -431,15 +397,17 @@ func (m *Manager) initIndexerGRPCServer() {
 	slog.Info("Registered Indexer Service (gRPC)")
 }
 
-// initTriggerServices initializes trigger evaluator and worker services.
-// useEmbeddedNATS determines whether to use embedded NATS (standalone) or remote NATS (distributed).
-func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool) error {
-	// Create NATS provider based on parameter
-	if useEmbeddedNATS {
-		m.natsProvider = trigger.NewEmbeddedNATSProvider(m.cfg.Deployment.Standalone.NATSDataDir)
-	} else {
-		m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
+// initTriggerServicesStandalone initializes trigger services for standalone mode.
+// Uses local Puller service and optionally embedded NATS.
+// In standalone mode, all trigger services are always initialized (no RunXXX checks).
+func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
+	// Standalone mode requires Puller service
+	if m.pullerService == nil {
+		return fmt.Errorf("puller service is required for trigger evaluator in standalone mode")
 	}
+
+	// Initialize NATS provider based on configuration
+	m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
 
 	nc, err := m.natsProvider.Connect(context.Background())
 	if err != nil {
@@ -452,28 +420,68 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 	}
 
 	// Initialize Evaluator Service
+	publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger publisher: %w", err)
+	}
+
+	evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
+		Store:     sf.Document(),
+		Puller:    m.pullerService,
+		Publisher: publisher,
+		Metrics:   nil,
+	}, m.cfg.Trigger.Evaluator)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger evaluator service: %w", err)
+	}
+	m.triggerService = evalSvc
+	slog.Info("Initialized Trigger Evaluator Service (standalone)")
+
+	// Initialize Delivery Service
+	consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger consumer: %w", err)
+	}
+
+	deliverySvc, err := deliveryServiceFactory(delivery.Dependencies{
+		Consumer: consumer,
+		Auth:     m.authService,
+		Secrets:  nil,
+		Metrics:  nil,
+	}, m.cfg.Trigger.Delivery)
+	if err != nil {
+		return fmt.Errorf("failed to create trigger delivery service: %w", err)
+	}
+	m.triggerConsumer = deliverySvc
+	slog.Info("Initialized Trigger Delivery Service (standalone)")
+
+	return nil
+}
+
+// initTriggerServices initializes trigger services for distributed mode.
+// Uses gRPC client to connect to remote Puller and remote NATS.
+func (m *Manager) initTriggerServices(ctx context.Context) error {
+	// Distributed mode always uses remote NATS
+	m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
+
+	nc, err := m.natsProvider.Connect(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed to connect to NATS: %w", err)
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Initialize Evaluator Service - uses gRPC client to remote Puller
 	if m.opts.RunTriggerEvaluator {
-		var pullerSvc puller.Service
-
-		if m.opts.Mode.IsStandalone() {
-			// Standalone mode: use local Puller service
-			if m.pullerService == nil {
-				return fmt.Errorf("puller service is required for trigger evaluator in standalone mode")
-			}
-			pullerSvc = m.pullerService
-			slog.Info("Trigger Evaluator using local Puller service")
-		} else {
-			// Distributed mode: use gRPC client
-			// Note: PullerAddr is validated at config load time via Config.Validate()
-			client, err := puller.NewClient(m.cfg.Trigger.Evaluator.PullerAddr, nil)
-			if err != nil {
-				return fmt.Errorf("failed to create Puller gRPC client for Trigger Evaluator: %w", err)
-			}
-			pullerSvc = client
-			slog.Info("Trigger Evaluator using remote Puller service", "url", m.cfg.Trigger.Evaluator.PullerAddr)
+		pullerClient, err := puller.NewClient(m.cfg.Trigger.Evaluator.PullerAddr, nil)
+		if err != nil {
+			return fmt.Errorf("failed to create Puller gRPC client for Trigger Evaluator: %w", err)
 		}
+		slog.Info("Trigger Evaluator using remote Puller service", "url", m.cfg.Trigger.Evaluator.PullerAddr)
 
-		// Create pubsub.Publisher for evaluator using injectable factory
 		publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger publisher: %w", err)
@@ -481,20 +489,19 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 
 		evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
 			Store:     sf.Document(),
-			Puller:    pullerSvc,
+			Puller:    pullerClient,
 			Publisher: publisher,
-			Metrics:   nil, // TODO: Add metrics when available
+			Metrics:   nil,
 		}, m.cfg.Trigger.Evaluator)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger evaluator service: %w", err)
 		}
 		m.triggerService = evalSvc
-		slog.Info("Initialized Trigger Evaluator Service")
+		slog.Info("Initialized Trigger Evaluator Service (distributed)")
 	}
 
 	// Initialize Delivery Service
 	if m.opts.RunTriggerWorker {
-		// Create pubsub.Consumer for delivery using injectable factory
 		consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger consumer: %w", err)
@@ -503,14 +510,14 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 		deliverySvc, err := deliveryServiceFactory(delivery.Dependencies{
 			Consumer: consumer,
 			Auth:     m.authService,
-			Secrets:  nil, // TODO: Add secret provider when available
-			Metrics:  nil, // TODO: Add metrics when available
+			Secrets:  nil,
+			Metrics:  nil,
 		}, m.cfg.Trigger.Delivery)
 		if err != nil {
 			return fmt.Errorf("failed to create trigger delivery service: %w", err)
 		}
 		m.triggerConsumer = deliverySvc
-		slog.Info("Initialized Trigger Delivery Service")
+		slog.Info("Initialized Trigger Delivery Service (distributed)")
 	}
 
 	return nil

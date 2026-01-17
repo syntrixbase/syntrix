@@ -28,23 +28,17 @@ func (m DeploymentMode) IsDistributed() bool {
 
 // DeploymentConfig holds deployment mode settings
 type DeploymentConfig struct {
-	Mode       DeploymentMode   `yaml:"mode"` // "standalone" or "distributed" (default)
-	Standalone StandaloneConfig `yaml:"standalone"`
+	Mode DeploymentMode `yaml:"mode"` // "standalone" or "distributed" (default)
 }
 
 // StandaloneConfig holds standalone-specific settings
 type StandaloneConfig struct {
-	EmbeddedNATS bool   `yaml:"embedded_nats"` // Use embedded NATS server
-	NATSDataDir  string `yaml:"nats_data_dir"` // Data directory for embedded NATS
+	EmbeddedNATS bool `yaml:"embedded_nats"` // Use embedded NATS server
 }
 
 func DefaultDeploymentConfig() DeploymentConfig {
 	return DeploymentConfig{
 		Mode: ModeDistributed, // Default to distributed mode
-		Standalone: StandaloneConfig{
-			EmbeddedNATS: true,        // Default to embedded NATS in standalone
-			NATSDataDir:  "data/nats", // Default data directory
-		},
 	}
 }
 
@@ -54,21 +48,12 @@ func (c *DeploymentConfig) ApplyDefaults() {
 	if c.Mode == "" {
 		c.Mode = defaults.Mode
 	}
-	if c.Standalone.NATSDataDir == "" {
-		c.Standalone.NATSDataDir = defaults.Standalone.NATSDataDir
-	}
 }
 
 // ApplyEnvOverrides applies environment variable overrides.
 func (c *DeploymentConfig) ApplyEnvOverrides() {
 	if val := os.Getenv("SYNTRIX_DEPLOYMENT_MODE"); val != "" {
 		c.Mode = DeploymentMode(val)
-	}
-	if val := os.Getenv("SYNTRIX_EMBEDDED_NATS"); val != "" {
-		c.Standalone.EmbeddedNATS = val == "true" || val == "1"
-	}
-	if val := os.Getenv("SYNTRIX_NATS_DATA_DIR"); val != "" {
-		c.Standalone.NATSDataDir = val
 	}
 }
 

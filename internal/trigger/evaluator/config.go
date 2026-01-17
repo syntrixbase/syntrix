@@ -85,6 +85,9 @@ func (c *Config) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(mode services.DeploymentMode) error {
+	if c.RulesFile == "" {
+		return errors.New("trigger.evaluator.rules_file is required")
+	}
 	if c.StreamName == "" {
 		return errors.New("stream_name is required")
 	}

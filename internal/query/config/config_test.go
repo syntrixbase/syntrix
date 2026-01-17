@@ -60,3 +60,16 @@ func TestConfig_StructFields(t *testing.T) {
 
 	assert.Equal(t, "custom-indexer:9002", cfg.IndexerAddr)
 }
+
+func TestConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, IndexerAddr is required
+	cfg := &Config{IndexerAddr: ""}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "query.indexer_addr is required in distributed mode")
+
+	// With IndexerAddr set, should pass
+	cfg.IndexerAddr = "indexer:9000"
+	err = cfg.Validate(services.ModeDistributed)
+	assert.NoError(t, err)
+}

@@ -193,3 +193,16 @@ func TestConfig_Validate(t *testing.T) {
 	err = cfg2.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
+
+func TestConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, PullerAddr is required
+	cfg := &Config{PullerAddr: ""}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "indexer.puller_addr is required in distributed mode")
+
+	// With PullerAddr set, should pass
+	cfg.PullerAddr = "puller:9000"
+	err = cfg.Validate(services.ModeDistributed)
+	assert.NoError(t, err)
+}

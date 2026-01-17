@@ -11,10 +11,12 @@ SCRIPT_DIR=$(dirname "$0")
 # Hook sources
 PRE_COMMIT_SOURCE="$SCRIPT_DIR/hooks/gofmt-pre-commit.sh"
 COMMIT_MSG_SOURCE="$SCRIPT_DIR/hooks/commit-msg.sh"
+PRE_PUSH_SOURCE="$SCRIPT_DIR/hooks/pre-push.sh"
 
 # Resolve absolute paths
 ABS_PRE_COMMIT_SOURCE=$(realpath "$PRE_COMMIT_SOURCE")
 ABS_COMMIT_MSG_SOURCE=$(realpath "$COMMIT_MSG_SOURCE")
+ABS_PRE_PUSH_SOURCE=$(realpath "$PRE_PUSH_SOURCE")
 
 # Install pre-commit hook
 echo "Installing pre-commit hook..."
@@ -33,3 +35,16 @@ cat > "$HOOKS_DIR/commit-msg" <<EOF
 EOF
 chmod +x "$HOOKS_DIR/commit-msg"
 echo "Commit-msg hook installed successfully at $HOOKS_DIR/commit-msg"
+
+# Install pre-push hook (preserving git-lfs if present)
+echo "Installing pre-push hook..."
+cat > "$HOOKS_DIR/pre-push" <<EOF
+#!/bin/bash
+# Run coverage check
+"$ABS_PRE_PUSH_SOURCE" "\$@" || exit \$?
+
+# Run git-lfs if available
+command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "\$@"
+EOF
+chmod +x "$HOOKS_DIR/pre-push"
+echo "Pre-push hook installed successfully at $HOOKS_DIR/pre-push"

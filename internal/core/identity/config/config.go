@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -73,5 +74,8 @@ func (c *Config) ResolvePaths(baseDir string) {
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(_ services.DeploymentMode) error {
+	if c.AuthZ.RulesFile == "" {
+		return errors.New("identity.authz.rules_file is required")
+	}
 	return nil
 }
