@@ -34,24 +34,37 @@ set -e
 
 sed -i 's/of statements//g; s/github.com\/syntrixbase\/syntrix\///g' "$TMP_OUTPUT"
 
+# Count test cases per package and save to temp file
+TMP_TEST_COUNTS=$(mktemp)
+trap 'rm -f "$TMP_OUTPUT" "$TMP_JSON" "$TMP_TEST_COUNTS"' EXIT
+jq -r 'select(.Action == "run") | select(.Test) | select(.Test | contains("/") | not) | .Package' "$TMP_JSON" 2>/dev/null | \
+    sed 's|github.com/syntrixbase/syntrix/||' | \
+    sort | uniq -c | awk '{print $2, $1}' > "$TMP_TEST_COUNTS"
+
 echo
 echo "Package coverage summary:"
-printf "%-3s %-40s %-10s %s\n" "OK" "PACKAGE" "STATEMENTS" "COVERAGE"
-echo "-------------------------------------------------------------------"
+printf "%-3s %-40s %-10s %-10s %s\n" "OK" "PACKAGE" "STATEMENTS" "TESTS" "COVERAGE"
+echo "--------------------------------------------------------------------------------"
 # Process and sort 'ok' lines (coverage data)
 grep "^ok" "$TMP_OUTPUT" | \
     grep -vE "^ok\s+tests/" | \
+    while read -r line; do
+        pkg=$(echo "$line" | awk '{print $2}')
+        test_count=$(grep "^$pkg " "$TMP_TEST_COUNTS" | awk '{print $2}')
+        test_count=${test_count:-0}
+        echo "$line $test_count"
+    done | \
     awk -v threshold_package="$threshold_package" '{
         cov = $5;
         sub("%", "", cov);
+        tests = $6;
         if (cov + 0 < threshold_package + 0) {
-            # Mark packages below package threshold with *
-            printf "%-3s %-40s %-10s \033[31m%s\033[0m (CRITICAL: < %s%%)\n", $1, $2, $3, $5, threshold_package
+            printf "%-3s %-40s %-10s %-10s \033[31m%s\033[0m (CRITICAL: < %s%%)\n", $1, $2, $3, tests, $5, threshold_package
         } else {
-            printf "%-3s %-40s %-10s %s\n", $1, $2, $3, $5
+            printf "%-3s %-40s %-10s %-10s %s\n", $1, $2, $3, tests, $5
         }
     }' | \
-    sort -k4 -nr || true
+    sort -k5 -nr || true
 
 # Process and print other lines (skipped, failures, etc.)
 grep -v "^ok" "$TMP_OUTPUT" | \
