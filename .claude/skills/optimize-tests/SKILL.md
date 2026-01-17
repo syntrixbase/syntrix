@@ -49,7 +49,7 @@ For each test file, perform the following steps:
    ```bash
    make coverage
    ```
-   - If coverage dropped: **immediately revert the changes** and try a more conservative approach
+   - If coverage dropped or CRITICAL issue reported: **immediately revert the changes** and try a more conservative approach
    - If coverage is maintained or improved: proceed to commit
 
 6. **Commit the changes**:
