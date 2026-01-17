@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// printHeader prints the header for the output
-func printHeader(locWidth int, printDescription bool) {
+// printUncoveredHeader prints the header for uncovered blocks output
+func printUncoveredHeader(locWidth int, printDescription bool) {
 	if printDescription {
 		fmt.Println(`# Uncovered Code Ranges (from Go coverage)
 #
@@ -41,8 +41,7 @@ Details:`)
 }
 
 // printBlocks prints the analyzed blocks with formatting
-func printBlocks(merged []MergedBlock, maxLocWidth int) {
-	limit := maxOutputBlocks
+func printBlocks(merged []MergedBlock, maxLocWidth int, limit int) {
 	count := 0
 	printedNonCritical := false
 

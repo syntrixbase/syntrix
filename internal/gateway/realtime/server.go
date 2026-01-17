@@ -47,25 +47,15 @@ func (s *Server) wrapWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.auth != nil {
-		s.auth.MiddlewareOptional(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ServeWs(s.hub, s.queryService, s.auth, s.cfg, w, r)
-		})).ServeHTTP(w, r)
-		return
-	}
-
-	ServeWs(s.hub, s.queryService, s.auth, s.cfg, w, r)
+	s.auth.MiddlewareOptional(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ServeWs(s.hub, s.queryService, s.auth, s.cfg, w, r)
+	})).ServeHTTP(w, r)
 }
 
 func (s *Server) wrapSSE(w http.ResponseWriter, r *http.Request) {
-	if s.auth != nil {
-		s.auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ServeSSE(s.hub, s.queryService, s.auth, s.cfg, w, r)
-		})).ServeHTTP(w, r)
-		return
-	}
-
-	ServeSSE(s.hub, s.queryService, s.auth, s.cfg, w, r)
+	s.auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ServeSSE(s.hub, s.queryService, s.auth, s.cfg, w, r)
+	})).ServeHTTP(w, r)
 }
 
 func tokenFromQueryParam(r *http.Request) string {
