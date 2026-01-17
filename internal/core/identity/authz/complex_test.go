@@ -3,11 +3,13 @@ package authz
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/identity/config"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
@@ -15,6 +17,7 @@ import (
 func TestEngine_ComplexScenarios(t *testing.T) {
 	// Define a complex ruleset covering various scenarios
 	complexRules := `
+database: default
 rules_version: '1'
 service: syntrix
 match:
@@ -40,7 +43,7 @@ match:
 
       /secrets/{secretId}:
         allow:
-          read: "get('/databases/' + database + '/documents/users/' + request.auth.userId).data.role == 'admin'"
+          read: "get('/databases/$(database)/documents/users/' + request.auth.userId).data.role == 'admin'"
 
       /time_limited/{docId}:
         allow:
@@ -51,9 +54,9 @@ match:
           write: "(request.auth.userId == resource.data.owner || (request.auth.roles != null && 'editor' in request.auth.roles)) && request.resource.data.status == 'draft'"
 `
 
-	tmpFile := t.TempDir() + "/complex_security.yaml"
-	err := os.WriteFile(tmpFile, []byte(complexRules), 0644)
-	assert.NoError(t, err)
+	tmpDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(tmpDir, "default.yml"), []byte(complexRules), 0644)
+	require.NoError(t, err)
 
 	type testCase struct {
 		name        string
@@ -281,10 +284,10 @@ match:
 				tc.mockSetup(mockQuery)
 			}
 
-			engine, err := NewEngine(config.AuthZConfig{RulesFile: tmpFile}, mockQuery)
+			engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, mockQuery)
 			assert.NoError(t, err)
 
-			allowed, err := engine.Evaluate(context.Background(), tc.path, tc.action, tc.req, tc.existingRes)
+			allowed, err := engine.Evaluate(context.Background(), "default", tc.path, tc.action, tc.req, tc.existingRes)
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {

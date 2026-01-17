@@ -76,6 +76,7 @@ func setupStandaloneEnv(t *testing.T, rulesContent string, configModifiers ...fu
 	// Default security rules
 	if rulesContent == "" {
 		rulesContent = `
+database: default
 rules_version: '1'
 service: syntrix
 match:
@@ -86,8 +87,10 @@ match:
           read, write: "true"
 `
 	}
-	rulesFile := t.TempDir() + "/security.yaml"
-	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
+	rulesDir := t.TempDir() + "/security_rules"
+	err = os.MkdirAll(rulesDir, 0755)
+	require.NoError(t, err)
+	err = os.WriteFile(rulesDir+"/default.yml", []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
 	// Create templates directory
@@ -170,7 +173,7 @@ templates:
 				PrivateKeyFile:  t.TempDir() + "/keys/auth_private.pem",
 			},
 			AuthZ: identity_config.AuthZConfig{
-				RulesFile: rulesFile,
+				RulesPath: rulesDir,
 			},
 		},
 		Indexer: indexer_config.Config{

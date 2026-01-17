@@ -163,9 +163,9 @@ func TestAdminHandlerErrors(t *testing.T) {
 
 	t.Run("PushRules_Error", func(t *testing.T) {
 		rules := []byte("invalid rules")
-		mockAuthz.On("UpdateRules", rules).Return(errors.New("parse error")).Once()
+		mockAuthz.On("UpdateRules", "default", rules).Return(errors.New("parse error")).Once()
 
-		req := httptest.NewRequest("POST", "/admin/rules/push", bytes.NewReader(rules))
+		req := httptest.NewRequest("POST", "/admin/rules/push?database=default", bytes.NewReader(rules))
 		req.Header.Set("X-Role", "admin")
 		w := httptest.NewRecorder()
 

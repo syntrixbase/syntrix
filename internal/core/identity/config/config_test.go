@@ -19,7 +19,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
 
 	// Verify AuthZ defaults
-	assert.Equal(t, "security.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_StructFields(t *testing.T) {
@@ -31,7 +31,7 @@ func TestConfig_StructFields(t *testing.T) {
 			PrivateKeyFile:  "custom/key.pem",
 		},
 		AuthZ: AuthZConfig{
-			RulesFile: "custom_rules.yaml",
+			RulesPath: "custom_rules.yaml",
 		},
 	}
 
@@ -39,7 +39,7 @@ func TestConfig_StructFields(t *testing.T) {
 	assert.Equal(t, 24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 5*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "custom/key.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "custom_rules.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "custom_rules.yaml", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ApplyDefaults(t *testing.T) {
@@ -50,7 +50,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 2*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "security.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ApplyEnvOverrides(t *testing.T) {
@@ -61,18 +61,18 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 
 func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("base")
 
-	assert.Equal(t, filepath.Join("config", "security.yaml"), cfg.AuthZ.RulesFile)
-	assert.Equal(t, filepath.Join("config", "keys/auth_private.pem"), cfg.AuthN.PrivateKeyFile)
+	assert.Equal(t, filepath.Join("base", "config/security_rules"), cfg.AuthZ.RulesPath)
+	assert.Equal(t, filepath.Join("base", "keys/auth_private.pem"), cfg.AuthN.PrivateKeyFile)
 }
 
 func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.AuthZ.RulesFile = "/absolute/path/security.yaml"
+	cfg.AuthZ.RulesPath = "/absolute/path/security_rules"
 	cfg.ResolvePaths("config")
 
-	assert.Equal(t, "/absolute/path/security.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "/absolute/path/security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -90,7 +90,7 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 			PrivateKeyFile:  "custom/key.pem",
 		},
 		AuthZ: AuthZConfig{
-			RulesFile: "custom_rules.yaml",
+			RulesPath: "custom_rules.yaml",
 		},
 	}
 	cfg.ApplyDefaults()
@@ -99,7 +99,7 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 	assert.Equal(t, 14*24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 5*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "custom/key.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "custom_rules.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "custom_rules.yaml", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
@@ -115,7 +115,7 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 2*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "security.yaml", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ResolvePaths_EmptyPaths(t *testing.T) {
@@ -124,13 +124,13 @@ func TestConfig_ResolvePaths_EmptyPaths(t *testing.T) {
 			PrivateKeyFile: "",
 		},
 		AuthZ: AuthZConfig{
-			RulesFile: "",
+			RulesPath: "",
 		},
 	}
 	cfg.ResolvePaths("/config")
 
 	// Empty paths should stay empty
-	assert.Equal(t, "", cfg.AuthZ.RulesFile)
+	assert.Equal(t, "", cfg.AuthZ.RulesPath)
 	assert.Equal(t, "", cfg.AuthN.PrivateKeyFile)
 }
 
@@ -146,5 +146,5 @@ func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
 	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "identity.authz.rules_file is required")
+	assert.Contains(t, err.Error(), "identity.authz.rules_path is required")
 }

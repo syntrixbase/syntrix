@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -114,9 +115,10 @@ func setupGlobalEnv() (*GlobalTestEnv, error) {
 		return nil, fmt.Errorf("failed to create buffer dir: %w", err)
 	}
 
-	// Create comprehensive security rules file that supports all test scenarios
+	// Create comprehensive security rules directory that supports all test scenarios
 	// Different tests use different path prefixes to test different authorization rules
 	rulesContent := `
+database: default
 rules_version: '1'
 service: syntrix
 match:
@@ -139,9 +141,17 @@ match:
         allow:
           read, write: "true"
 `
-	rulesFile := tempDir + "/security.yaml"
-	if err := os.WriteFile(rulesFile, []byte(rulesContent), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write rules file: %w", err)
+	rulesDir := tempDir + "/security_rules"
+	if err := os.MkdirAll(rulesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create rules dir: %w", err)
+	}
+	// Create rules for all databases used in tests
+	databases := []string{"default", "database-a", "database-b", "db1", "db2"}
+	for _, db := range databases {
+		dbRulesContent := strings.Replace(rulesContent, "database: default", "database: "+db, 1)
+		if err := os.WriteFile(rulesDir+"/"+db+".yml", []byte(dbRulesContent), 0644); err != nil {
+			return nil, fmt.Errorf("failed to write rules file for %s: %w", db, err)
+		}
 	}
 
 	// Create templates directory for Indexer
@@ -280,7 +290,7 @@ templates:
 				PrivateKeyFile:  keysDir + "/auth_private.pem",
 			},
 			AuthZ: identity_config.AuthZConfig{
-				RulesFile: rulesFile,
+				RulesPath: rulesDir,
 			},
 		},
 		Puller: puller_config.Config{

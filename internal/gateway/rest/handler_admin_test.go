@@ -159,10 +159,10 @@ func TestAdmin_PushRules(t *testing.T) {
 
 	// Mock UpdateRules
 	rulesContent := []byte("rules_version: '1'")
-	mockAuthz.On("UpdateRules", rulesContent).Return(nil)
+	mockAuthz.On("UpdateRules", "default", rulesContent).Return(nil)
 
 	// Create Request
-	req := httptest.NewRequest("POST", "/admin/rules/push", bytes.NewReader(rulesContent))
+	req := httptest.NewRequest("POST", "/admin/rules/push?database=default", bytes.NewReader(rulesContent))
 	req.Header.Set("X-Role", "admin")
 	w := httptest.NewRecorder()
 
@@ -180,9 +180,9 @@ func TestAdmin_PushRules_Invalid(t *testing.T) {
 	server := createTestServer(nil, mockAuth, mockAuthz)
 
 	rulesContent := []byte("bad")
-	mockAuthz.On("UpdateRules", rulesContent).Return(errors.New("bad rules"))
+	mockAuthz.On("UpdateRules", "default", rulesContent).Return(errors.New("bad rules"))
 
-	req := httptest.NewRequest("POST", "/admin/rules/push", bytes.NewReader(rulesContent))
+	req := httptest.NewRequest("POST", "/admin/rules/push?database=default", bytes.NewReader(rulesContent))
 	req.Header.Set("X-Role", "admin")
 	w := httptest.NewRecorder()
 
@@ -231,7 +231,7 @@ func TestAdmin_GetRules(t *testing.T) {
 	server := createTestServer(nil, mockAuth, mockAuthz)
 
 	ruleSet := &identity.RuleSet{Version: "1"}
-	mockAuthz.On("GetRules").Return(ruleSet)
+	mockAuthz.On("GetRulesForDatabase", "default").Return(ruleSet)
 
 	req := httptest.NewRequest("GET", "/admin/rules", nil)
 	req.Header.Set("X-Role", "admin")
@@ -243,6 +243,24 @@ func TestAdmin_GetRules(t *testing.T) {
 	var resp identity.RuleSet
 	assert.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
 	assert.Equal(t, "1", resp.Version)
+	mockAuthz.AssertExpectations(t)
+}
+
+func TestAdmin_GetRules_NotFound(t *testing.T) {
+	mockAuth := &AdminTestAuthService{MockAuthService: new(MockAuthService)}
+	mockAuthz := new(MockAuthzService)
+	server := createTestServer(nil, mockAuth, mockAuthz)
+
+	mockAuthz.On("GetRulesForDatabase", "nonexistent").Return(nil)
+
+	req := httptest.NewRequest("GET", "/admin/rules?database=nonexistent", nil)
+	req.Header.Set("X-Role", "admin")
+	w := httptest.NewRecorder()
+
+	server.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+	assert.Contains(t, w.Body.String(), "No rules found")
 	mockAuthz.AssertExpectations(t)
 }
 
