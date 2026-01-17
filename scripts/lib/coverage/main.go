@@ -78,13 +78,13 @@ func main() {
 	fmt.Println()
 
 	// Run tests and collect results
-	results, testCounts, exitCode := runTests()
+	results, topLevelCounts, subTestCounts, exitCode := runTests()
 	if exitCode != 0 && len(results) == 0 {
 		os.Exit(exitCode)
 	}
 
 	// Print package coverage summary
-	hasCriticalPackage := printPackageSummary(results, testCounts)
+	hasCriticalPackage := printPackageSummary(results, topLevelCounts, subTestCounts)
 
 	if exitCode != 0 {
 		os.Exit(exitCode)
@@ -94,13 +94,13 @@ func main() {
 	funcData := getFunctionCoverage()
 
 	// Print function coverage details
-	hasCriticalFunc := printFunctionCoverage(funcData)
+	hasCriticalFunc, funcWidth := printFunctionCoverage(funcData)
 
 	// Print total and check threshold
-	hasCriticalTotal := printTotal()
+	hasCriticalTotal := printTotal(funcWidth)
 
 	// Print statistics
-	printStatistics(funcData, testCounts)
+	printStatistics(funcData, topLevelCounts, subTestCounts)
 
 	// Generate HTML report (only in local mode)
 	if !cfg.CIMode {
@@ -139,7 +139,7 @@ func parseConfig() Config {
 		c.RaceDetection = true
 		c.CoverProfile = "coverage.out"
 		c.UncoveredLimit = 20
-		c.ShowTestCounts = false
+		// ShowTestCounts remains true in CI mode
 	}
 
 	// Override from environment
@@ -176,13 +176,13 @@ func parseConfig() Config {
 }
 
 // runTests executes go test and parses JSON output
-func runTests() ([]PackageResult, map[string]int, int) {
+func runTests() ([]PackageResult, map[string]int, map[string]int, int) {
 	// Build package list
 	pkgCmd := exec.Command("go", "list", "./...")
 	pkgOutput, err := pkgCmd.Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error listing packages: %v\n", err)
-		return nil, nil, 1
+		return nil, nil, nil, 1
 	}
 
 	var pkgs []string
@@ -211,16 +211,16 @@ func runTests() ([]PackageResult, map[string]int, int) {
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating stdout pipe: %v\n", err)
-		return nil, nil, 1
+		return nil, nil, nil, 1
 	}
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error starting tests: %v\n", err)
-		return nil, nil, 1
+		return nil, nil, nil, 1
 	}
 
-	results, testCounts := parseTestOutput(stdout)
+	results, topLevelCounts, subTestCounts := parseTestOutput(stdout)
 
 	exitCode := 0
 	if err := cmd.Wait(); err != nil {
@@ -231,13 +231,14 @@ func runTests() ([]PackageResult, map[string]int, int) {
 		}
 	}
 
-	return results, testCounts, exitCode
+	return results, topLevelCounts, subTestCounts, exitCode
 }
 
 // parseTestOutput parses JSON output from go test
-func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int) {
+func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]int) {
 	results := make(map[string]*PackageResult)
-	testCounts := make(map[string]int)
+	topLevelCounts := make(map[string]int)
+	subTestCounts := make(map[string]int)
 	decoder := json.NewDecoder(r)
 
 	for {
@@ -251,9 +252,13 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int) {
 
 		pkg := strings.TrimPrefix(event.Package, ModulePrefix)
 
-		// Count top-level tests (tests without "/" in name)
-		if event.Action == "run" && event.Test != "" && !strings.Contains(event.Test, "/") {
-			testCounts[pkg]++
+		// Count tests separately: top-level vs subtests
+		if event.Action == "run" && event.Test != "" {
+			if strings.Contains(event.Test, "/") {
+				subTestCounts[pkg]++
+			} else {
+				topLevelCounts[pkg]++
+			}
 		}
 
 		// Parse coverage from output lines
@@ -272,7 +277,7 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int) {
 		resultSlice = append(resultSlice, *r)
 	}
 
-	return resultSlice, testCounts
+	return resultSlice, topLevelCounts, subTestCounts
 }
 
 // parsePackageResult parses a single package result line
@@ -317,14 +322,14 @@ func parsePackageResult(line string, results map[string]*PackageResult) {
 
 // printPackageSummary prints the package coverage summary table
 // Returns true if any package is below threshold (CRITICAL)
-func printPackageSummary(results []PackageResult, testCounts map[string]int) bool {
+func printPackageSummary(results []PackageResult, topLevelCounts, subTestCounts map[string]int) bool {
 	hasCritical := false
 
 	fmt.Println("Package coverage summary:")
 	if cfg.ShowTestCounts {
-		fmt.Printf("%-3s %-40s %-10s %-10s %s\n", "OK", "PACKAGE", "STATEMENTS", "TESTS", "COVERAGE")
+		fmt.Printf("%-3s %-40s %-10s %-7s %s\n", "OK", "PACKAGE", "DURATION", "TESTS", "COVERAGE")
 	} else {
-		fmt.Printf("%-3s %-40s %-10s %-10s %s\n", "OK", "PACKAGE", "STATEMENTS", "", "COVERAGE")
+		fmt.Printf("%-3s %-40s %-10s %s\n", "OK", "PACKAGE", "DURATION", "COVERAGE")
 	}
 	fmt.Println(strings.Repeat("-", 80))
 
@@ -340,24 +345,24 @@ func printPackageSummary(results []PackageResult, testCounts map[string]int) boo
 				duration = "(cached)"
 			}
 
-			tests := testCounts[r.Name]
+			total := topLevelCounts[r.Name] + subTestCounts[r.Name]
 			coverageStr := r.CoverageStr
 			isCritical := r.Coverage < cfg.ThresholdPackage
 
 			if isCritical {
 				hasCritical = true
 				if cfg.CIMode {
-					fmt.Printf("::error::%-3s %-40s %-10s %-10s %s (CRITICAL: < %.0f%%)\n",
-						r.Status, r.Name, duration, "", coverageStr, cfg.ThresholdPackage)
+					fmt.Printf("::error::%-3s %-40s %-10s %s (CRITICAL: < %.0f%%)\n",
+						r.Status, r.Name, duration, coverageStr, cfg.ThresholdPackage)
 				} else {
 					coverageStr = fmt.Sprintf("%s%s%s (CRITICAL: < %.0f%%)", ColorRed, r.CoverageStr, ColorReset, cfg.ThresholdPackage)
-					fmt.Printf("%-3s %-40s %-10s %-10d %s\n", r.Status, r.Name, duration, tests, coverageStr)
+					fmt.Printf("%-3s %-40s %-10s %-7d %s\n", r.Status, r.Name, duration, total, coverageStr)
 				}
 			} else {
 				if cfg.ShowTestCounts {
-					fmt.Printf("%-3s %-40s %-10s %-10d %s\n", r.Status, r.Name, duration, tests, coverageStr)
+					fmt.Printf("%-3s %-40s %-10s %-7d %s\n", r.Status, r.Name, duration, total, coverageStr)
 				} else {
-					fmt.Printf("%-3s %-40s %-10s %-10s %s\n", r.Status, r.Name, duration, "", coverageStr)
+					fmt.Printf("%-3s %-40s %-10s %s\n", r.Status, r.Name, duration, coverageStr)
 				}
 			}
 		}
@@ -411,15 +416,11 @@ func getFunctionCoverage() []FuncCoverage {
 }
 
 // printFunctionCoverage prints function coverage details
-// Returns true if any function is below threshold (CRITICAL)
-func printFunctionCoverage(funcs []FuncCoverage) bool {
+// Returns (hasCritical, totalWidth) where totalWidth is for alignment
+func printFunctionCoverage(funcs []FuncCoverage) (bool, int) {
 	hasCritical := false
 
-	fmt.Printf("\nFunction coverage details (excluding >= %.0f%%):\n", cfg.ThresholdPrint)
-	fmt.Printf("%-70s %-35s %s\n", "LOCATION", "FUNCTION", "COVERAGE")
-	fmt.Println(strings.Repeat("-", 105))
-
-	// Count functions above threshold
+	// Count functions above threshold and collect below threshold
 	aboveThreshold := 0
 	var belowThreshold []FuncCoverage
 
@@ -430,6 +431,24 @@ func printFunctionCoverage(funcs []FuncCoverage) bool {
 			belowThreshold = append(belowThreshold, f)
 		}
 	}
+
+	// Calculate max widths for alignment
+	maxLocWidth := 20
+	maxFuncWidth := 10
+	for _, f := range belowThreshold {
+		if len(f.Location) > maxLocWidth {
+			maxLocWidth = len(f.Location)
+		}
+		if len(f.Function) > maxFuncWidth {
+			maxFuncWidth = len(f.Function)
+		}
+	}
+
+	totalWidth := maxLocWidth + maxFuncWidth + 15
+
+	fmt.Printf("\nFunction coverage details (excluding >= %.0f%%):\n", cfg.ThresholdPrint)
+	fmt.Printf("%-*s %-*s %s\n", maxLocWidth, "LOCATION", maxFuncWidth, "FUNCTION", "COVERAGE")
+	fmt.Println(strings.Repeat("-", totalWidth))
 
 	fmt.Printf("... %d more...\n", aboveThreshold)
 
@@ -454,39 +473,44 @@ func printFunctionCoverage(funcs []FuncCoverage) bool {
 				if len(parts) > 1 {
 					line = parts[1]
 				}
-				fmt.Printf("::error file=%s,line=%s::%-70s %-35s %s (CRITICAL < %.0f%%)\n",
-					file, line, f.Location, f.Function, covStr, cfg.ThresholdFunc)
+				fmt.Printf("::error file=%s,line=%s::%-*s %-*s %s (CRITICAL < %.0f%%)\n",
+					file, line, maxLocWidth, f.Location, maxFuncWidth, f.Function, covStr, cfg.ThresholdFunc)
 			} else {
 				covStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, f.Coverage, ColorReset, cfg.ThresholdFunc)
-				fmt.Printf("%-70s %-35s %s\n", f.Location, f.Function, covStr)
+				fmt.Printf("%-*s %-*s %s\n", maxLocWidth, f.Location, maxFuncWidth, f.Function, covStr)
 			}
 		} else {
-			fmt.Printf("%-70s %-35s %s\n", f.Location, f.Function, covStr)
+			fmt.Printf("%-*s %-*s %s\n", maxLocWidth, f.Location, maxFuncWidth, f.Function, covStr)
 		}
 	}
 
-	fmt.Println(strings.Repeat("-", 105))
-	return hasCritical
+	fmt.Println(strings.Repeat("-", totalWidth))
+	return hasCritical, totalWidth
 }
 
 // printTotal prints total coverage and checks threshold
 // Returns true if total is below threshold (CRITICAL)
-func printTotal() bool {
+func printTotal(width int) bool {
 	totalCov := getTotalCoverage()
 	isCritical := totalCov < cfg.ThresholdTotal
 
 	totalStr := fmt.Sprintf("%.1f%%", totalCov)
+	labelWidth := width - 10 // Leave space for coverage value
+	if labelWidth < 10 {
+		labelWidth = 10
+	}
+
 	if isCritical {
 		if cfg.CIMode {
-			fmt.Printf("::error::%-96s %s (CRITICAL: < %.0f%%)\n", "TOTAL", totalStr, cfg.ThresholdTotal)
+			fmt.Printf("::error::%-*s %s (CRITICAL: < %.0f%%)\n", labelWidth, "TOTAL", totalStr, cfg.ThresholdTotal)
 		} else {
 			totalStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, totalCov, ColorReset, cfg.ThresholdTotal)
-			fmt.Printf("%-96s %s\n", "TOTAL", totalStr)
+			fmt.Printf("%-*s %s\n", labelWidth, "TOTAL", totalStr)
 		}
 	} else {
-		fmt.Printf("%-96s %s\n", "TOTAL", totalStr)
+		fmt.Printf("%-*s %s\n", labelWidth, "TOTAL", totalStr)
 	}
-	fmt.Println(strings.Repeat("-", 105))
+	fmt.Println(strings.Repeat("-", width))
 
 	return isCritical
 }
@@ -514,7 +538,7 @@ func getTotalCoverage() float64 {
 }
 
 // printStatistics prints coverage statistics
-func printStatistics(funcs []FuncCoverage, testCounts map[string]int) {
+func printStatistics(funcs []FuncCoverage, topLevelCounts, subTestCounts map[string]int) {
 	count100 := 0
 	count95_100 := 0
 	count85_95 := 0
@@ -542,10 +566,14 @@ func printStatistics(funcs []FuncCoverage, testCounts map[string]int) {
 	// Count total tests
 	if cfg.ShowTestCounts {
 		totalTopLevel := 0
-		for _, count := range testCounts {
+		totalSubTests := 0
+		for _, count := range topLevelCounts {
 			totalTopLevel += count
 		}
-		fmt.Printf("Total tests: %d top-level\n", totalTopLevel)
+		for _, count := range subTestCounts {
+			totalSubTests += count
+		}
+		fmt.Printf("Total tests: %d (including subtests, %d top-level)\n", totalTopLevel+totalSubTests, totalTopLevel)
 	}
 }
 
@@ -557,13 +585,82 @@ func generateHTMLReport() {
 	}
 }
 
-// analyzeUncoveredBlocks calls the existing uncovered_blocks tool
+// analyzeUncoveredBlocks parses coverage file and analyzes uncovered blocks
 // Returns true if any CRITICAL blocks found
 func analyzeUncoveredBlocks() bool {
-	cmd := exec.Command("go", "run", "./scripts/lib/uncovered_blocks/",
-		cfg.CoverProfile, "false", strconv.Itoa(cfg.UncoveredLimit))
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	return err != nil
+	file, err := os.Open(cfg.CoverProfile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error opening coverage file: %v\n", err)
+		return false
+	}
+	defer file.Close()
+
+	var blocks []Block
+	scanner := bufio.NewScanner(file)
+
+	// Skip mode line
+	if scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "mode:") {
+			if b, ok := parseLine(line); ok {
+				blocks = append(blocks, b)
+			}
+		}
+	}
+
+	for scanner.Scan() {
+		if b, ok := parseLine(scanner.Text()); ok {
+			blocks = append(blocks, b)
+		}
+	}
+
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error reading coverage file: %v\n", err)
+		return false
+	}
+
+	merged := mergeBlocks(blocks)
+
+	// Analyze blocks using AST
+	fileCache := NewFileCache()
+	astCache := NewASTCache()
+	for i := range merged {
+		AnalyzeBlockWithAST(&merged[i], astCache, fileCache)
+	}
+
+	// Sort by Level (CRITICAL > HIGH > MEDIUM > LOW) then by NumLines descending
+	levelWeight := map[string]int{
+		"CRITICAL": 4,
+		"HIGH":     3,
+		"MEDIUM":   2,
+		"LOW":      1,
+	}
+
+	sort.Slice(merged, func(i, j int) bool {
+		w1 := levelWeight[merged[i].Level]
+		w2 := levelWeight[merged[j].Level]
+		if w1 != w2 {
+			return w1 > w2
+		}
+		if merged[i].EffectiveLines != merged[j].EffectiveLines {
+			return merged[i].EffectiveLines > merged[j].EffectiveLines
+		}
+		return merged[i].NumLines > merged[j].NumLines
+	})
+
+	// Check if any CRITICAL blocks exist
+	hasCritical := false
+	for _, b := range merged {
+		if b.Level == "CRITICAL" {
+			hasCritical = true
+			break
+		}
+	}
+
+	// Print output
+	maxLocWidth := calculateMaxLocWidth(merged)
+	printUncoveredHeader(maxLocWidth, false)
+	printBlocks(merged, maxLocWidth, cfg.UncoveredLimit)
+
+	return hasCritical
 }
