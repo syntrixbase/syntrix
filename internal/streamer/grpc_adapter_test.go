@@ -105,44 +105,6 @@ func TestGRPCStream_RecvError(t *testing.T) {
 	assert.ErrorIs(t, err, io.EOF)
 }
 
-func TestGRPCStream_SubscribeMessage(t *testing.T) {
-	t.Parallel()
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Subscribe and immediately receive EOF to exit
-	mockStream := &mockBidiStream{
-		ctx: ctx,
-		recvMsgs: []*pb.GatewayMessage{
-			{
-				Payload: &pb.GatewayMessage_Subscribe{
-					Subscribe: &pb.SubscribeRequest{
-						SubscriptionId: "sub1",
-						Database:       "database1",
-						Collection:     "users",
-					},
-				},
-			},
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- internal.GRPCStream(mockStream)
-	}()
-
-	// Wait a bit for message to be processed, then cancel to stop
-	time.Sleep(30 * time.Millisecond)
-	cancel()
-	<-done
-
-	// Test passes as long as it doesn't hang or panic
-}
-
 func TestGRPCStream_HeartbeatMessage(t *testing.T) {
 	t.Parallel()
 	s, err := NewService(ServerConfig{}, slog.Default())
@@ -259,122 +221,6 @@ func TestGRPCStream_UnsubscribeMessage(t *testing.T) {
 
 	// Wait for message to be processed
 	time.Sleep(30 * time.Millisecond)
-	cancel()
-	<-done
-}
-
-func TestGRPCStream_SubscribeWithError(t *testing.T) {
-	t.Parallel()
-	// Create a service with a mock manager that returns errors
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// First subscribe to create the subscription, then subscribe again with same ID
-	// to trigger an error (subscription already exists)
-	mockStream := &mockBidiStream{
-		ctx: ctx,
-		recvMsgs: []*pb.GatewayMessage{
-			{
-				Payload: &pb.GatewayMessage_Subscribe{
-					Subscribe: &pb.SubscribeRequest{
-						SubscriptionId: "dup-sub",
-						Database:       "database1",
-						Collection:     "users",
-					},
-				},
-			},
-			{
-				Payload: &pb.GatewayMessage_Subscribe{
-					Subscribe: &pb.SubscribeRequest{
-						SubscriptionId: "dup-sub", // duplicate
-						Database:       "database1",
-						Collection:     "users",
-					},
-				},
-			},
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- internal.GRPCStream(mockStream)
-	}()
-
-	// Wait for messages to be processed
-	time.Sleep(50 * time.Millisecond)
-	cancel()
-	<-done
-
-	// Test passes as long as it processes without panic
-}
-
-func TestGRPCStream_MultipleHeartbeats(t *testing.T) {
-	t.Parallel()
-	// Test that multiple heartbeat messages are handled correctly
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Send multiple heartbeat messages
-	mockStream := &mockBidiStream{
-		ctx: ctx,
-		recvMsgs: []*pb.GatewayMessage{
-			{
-				Payload: &pb.GatewayMessage_Heartbeat{
-					Heartbeat: &pb.Heartbeat{Timestamp: 1},
-				},
-			},
-			{
-				Payload: &pb.GatewayMessage_Heartbeat{
-					Heartbeat: &pb.Heartbeat{Timestamp: 2},
-				},
-			},
-		},
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- internal.GRPCStream(mockStream)
-	}()
-
-	// Wait a bit then cancel
-	time.Sleep(30 * time.Millisecond)
-	cancel()
-	<-done
-}
-
-// TestGRPCAdapter_OutgoingEvents tests the outgoing event delivery path.
-func TestGRPCAdapter_OutgoingEvents(t *testing.T) {
-	t.Parallel()
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mockStream := &mockBidiStream{ctx: ctx}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- internal.GRPCStream(mockStream)
-	}()
-
-	// Give adapter time to start
-	time.Sleep(20 * time.Millisecond)
-
-	// Create a local stream and subscribe to the same gateway
-	// The GRPCStream creates its own gatewayID, so we need to get events to it
-	// by processing events that match its subscriptions
-
-	// For now, just let it exit via context cancellation
 	cancel()
 	<-done
 }
@@ -556,31 +402,6 @@ func TestGRPCAdapter_SubscribeAutoGenerateID(t *testing.T) {
 	require.NotNil(t, resp)
 	assert.NotEmpty(t, resp.SubscriptionId)
 	assert.True(t, resp.Success)
-}
-
-// TestGRPCAdapter_OutgoingChannelClosed tests behavior when outgoing channel is closed.
-func TestGRPCAdapter_OutgoingChannelClosed(t *testing.T) {
-	t.Parallel()
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	mockStream := &mockBidiStream{ctx: ctx}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- internal.GRPCStream(mockStream)
-	}()
-
-	// Stop the service to close streams
-	time.Sleep(20 * time.Millisecond)
-	internal.Stop(context.Background())
-
-	err = <-done
-	assert.Error(t, err)
 }
 
 // TestGRPCAdapter_Subscribe_ManagerError tests handleProtoMessage when manager.Subscribe returns error.

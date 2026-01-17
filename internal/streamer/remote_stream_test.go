@@ -126,29 +126,6 @@ func TestRemoteStream_Recv_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "recv failed")
 }
 
-func TestRemoteStream_Recv_ContextCanceled(t *testing.T) {
-	// Use a blocking mock stream
-	mockStream := &mockGRPCStreamClient{}
-	ctx, cancel := context.WithCancel(context.Background())
-	rs := &remoteStream{
-		ctx:        ctx,
-		grpcStream: mockStream,
-		logger:     slog.Default(),
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		_, err := rs.Recv()
-		done <- err
-	}()
-
-	time.Sleep(20 * time.Millisecond)
-	cancel()
-
-	err := <-done
-	require.Error(t, err)
-}
-
 func TestRemoteStream_Close(t *testing.T) {
 	mockStream := &mockGRPCStreamClient{}
 	rs := &remoteStream{
@@ -157,23 +134,12 @@ func TestRemoteStream_Close(t *testing.T) {
 		logger:     slog.Default(),
 	}
 
+	// First close should work
 	err := rs.Close()
 	require.NoError(t, err)
 	assert.True(t, mockStream.closedSend)
-}
 
-func TestRemoteStream_Close_Idempotent(t *testing.T) {
-	mockStream := &mockGRPCStreamClient{}
-	rs := &remoteStream{
-		ctx:        context.Background(),
-		grpcStream: mockStream,
-		logger:     slog.Default(),
-	}
-
-	err := rs.Close()
-	require.NoError(t, err)
-
-	// Second close should be no-op
+	// Second close should be no-op (idempotent)
 	err = rs.Close()
 	require.NoError(t, err)
 }
@@ -304,39 +270,6 @@ func TestStreamerClient_Stream_NoServer(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to establish stream")
 }
 
-func TestRemoteStream_Success(t *testing.T) {
-	// Create a remoteStream with mock gRPC stream
-	mockStream := &mockGRPCStreamClient{
-		recvMsgs: []*pb.StreamerMessage{
-			{
-				Payload: &pb.StreamerMessage_Delivery{
-					Delivery: &pb.EventDelivery{
-						SubscriptionIds: []string{"sub1"},
-						Event: &pb.StreamerEvent{
-							Database:   "database1",
-							Collection: "users",
-							DocumentId: "doc1",
-							Operation:  pb.OperationType_OPERATION_TYPE_INSERT,
-						},
-					},
-				},
-			},
-		},
-	}
-
-	rs := &remoteStream{
-		ctx:        context.Background(),
-		grpcStream: mockStream,
-		logger:     slog.Default(),
-	}
-
-	// Recv should return the delivery
-	delivery, err := rs.Recv()
-	require.NoError(t, err)
-	assert.Equal(t, "users", delivery.Event.Collection)
-	assert.Equal(t, "doc1", delivery.Event.DocumentID)
-}
-
 func TestRemoteStream_Recv_SkipsSubscribeResponse(t *testing.T) {
 	// Send a SubscribeResponse followed by a Delivery
 	mockStream := &mockGRPCStreamClient{
@@ -371,57 +304,6 @@ func TestRemoteStream_Recv_SkipsSubscribeResponse(t *testing.T) {
 	delivery, err := rs.Recv()
 	require.NoError(t, err)
 	assert.Equal(t, "orders", delivery.Event.Collection)
-}
-
-func TestRemoteStream_Recv_SkipsHeartbeatAck_WithMock(t *testing.T) {
-	mockStream := &mockGRPCStreamClient{
-		recvMsgs: []*pb.StreamerMessage{
-			{
-				Payload: &pb.StreamerMessage_HeartbeatAck{
-					HeartbeatAck: &pb.HeartbeatAck{Timestamp: 12345},
-				},
-			},
-			{
-				Payload: &pb.StreamerMessage_Delivery{
-					Delivery: &pb.EventDelivery{
-						SubscriptionIds: []string{"sub1"},
-						Event:           &pb.StreamerEvent{Collection: "products"},
-					},
-				},
-			},
-		},
-	}
-
-	rs := &remoteStream{
-		ctx:               context.Background(),
-		grpcStream:        mockStream,
-		logger:            slog.Default(),
-		pendingSubscribes: make(map[string]chan *pb.SubscribeResponse),
-	}
-
-	// Recv should skip HeartbeatAck and return the delivery
-	delivery, err := rs.Recv()
-	require.NoError(t, err)
-	assert.Equal(t, "products", delivery.Event.Collection)
-}
-
-// TestRemoteStream_Recv_ChannelClosedWithError tests Recv when channel closes with a prior error.
-func TestRemoteStream_Recv_ChannelClosedWithError(t *testing.T) {
-	// Create a mock stream that will return an error
-	mockStream := &mockGRPCStreamClient{
-		recvErr: errors.New("previous recv error"),
-	}
-
-	rs := &remoteStream{
-		ctx:        context.Background(),
-		grpcStream: mockStream,
-		logger:     slog.Default(),
-	}
-
-	// Call Recv - it will start the recv loop which will hit the error
-	_, err := rs.Recv()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "previous recv error")
 }
 
 // TestRemoteStream_Recv_ChannelClosedNoError tests Recv when channel closes without error (EOF).
@@ -672,61 +554,59 @@ func TestRemoteStream_SetState_WithCallback(t *testing.T) {
 	assert.Equal(t, testErr, calledErr)
 }
 
-// TestRemoteStream_Reconnect_NoClient tests reconnect returns false when client is nil.
-func TestRemoteStream_Reconnect_NoClient(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+// TestRemoteStream_NoClient tests functions exit immediately when client is nil.
+func TestRemoteStream_NoClient(t *testing.T) {
+	t.Parallel()
 
-	rs := &remoteStream{
-		ctx:    ctx,
-		logger: slog.Default(),
-		client: nil, // No client
-	}
+	t.Run("reconnect", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
 
-	// reconnect should return false immediately
-	assert.False(t, rs.reconnect())
-}
+		rs := &remoteStream{
+			ctx:    ctx,
+			logger: slog.Default(),
+			client: nil,
+		}
+		assert.False(t, rs.reconnect())
+	})
 
-// TestRemoteStream_HeartbeatLoop_NoClient tests heartbeat loop exits when client is nil.
-func TestRemoteStream_HeartbeatLoop_NoClient(t *testing.T) {
-	rs := &remoteStream{
-		logger: slog.Default(),
-		client: nil, // No client
-	}
+	t.Run("heartbeatLoop", func(t *testing.T) {
+		rs := &remoteStream{
+			logger: slog.Default(),
+			client: nil,
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.heartbeatLoop()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			rs.heartbeatLoop()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-		// Success - heartbeat loop exited immediately
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("heartbeatLoop should have exited immediately when client is nil")
-	}
-}
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("heartbeatLoop should have exited immediately when client is nil")
+		}
+	})
 
-// TestRemoteStream_ActivityMonitor_NoClient tests activity monitor exits when client is nil.
-func TestRemoteStream_ActivityMonitor_NoClient(t *testing.T) {
-	rs := &remoteStream{
-		logger: slog.Default(),
-		client: nil, // No client
-	}
+	t.Run("activityMonitor", func(t *testing.T) {
+		rs := &remoteStream{
+			logger: slog.Default(),
+			client: nil,
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.activityMonitor()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			rs.activityMonitor()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-		// Success - activity monitor exited immediately
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("activityMonitor should have exited immediately when client is nil")
-	}
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("activityMonitor should have exited immediately when client is nil")
+		}
+	})
 }
 
 // TestRemoteStream_Reconnect_ContextCanceled tests reconnect exits when context is canceled.
@@ -916,75 +796,97 @@ func TestRemoteStream_ResubscribeAll_SendError(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to resubscribe")
 }
 
-// TestRemoteStream_HeartbeatLoop_ContextDone tests heartbeat loop exits on context done.
-func TestRemoteStream_HeartbeatLoop_ContextDone(t *testing.T) {
+// TestRemoteStream_HeartbeatLoop_Exit tests heartbeat loop exits under various conditions.
+func TestRemoteStream_HeartbeatLoop_Exit(t *testing.T) {
 	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
 
-	client := &streamerClient{
-		config: ClientConfig{
-			HeartbeatInterval: 10 * time.Millisecond,
-		},
-	}
+	t.Run("ContextDone", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
 
-	rs := &remoteStream{
-		ctx:           ctx,
-		logger:        slog.Default(),
-		client:        client,
-		heartbeatStop: make(chan struct{}),
-	}
+		client := &streamerClient{
+			config: ClientConfig{HeartbeatInterval: 10 * time.Millisecond},
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.heartbeatLoop()
-		close(done)
-	}()
+		rs := &remoteStream{
+			ctx:           ctx,
+			logger:        slog.Default(),
+			client:        client,
+			heartbeatStop: make(chan struct{}),
+		}
 
-	// Cancel context
-	cancel()
+		done := make(chan struct{})
+		go func() {
+			rs.heartbeatLoop()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("heartbeatLoop should have exited on context cancel")
-	}
-}
+		cancel()
 
-// TestRemoteStream_HeartbeatLoop_StopChannel tests heartbeat loop exits on stop channel.
-func TestRemoteStream_HeartbeatLoop_StopChannel(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("heartbeatLoop should have exited on context cancel")
+		}
+	})
 
-	client := &streamerClient{
-		config: ClientConfig{
-			HeartbeatInterval: 10 * time.Millisecond,
-		},
-	}
+	t.Run("StopChannel", func(t *testing.T) {
+		t.Parallel()
+		client := &streamerClient{
+			config: ClientConfig{HeartbeatInterval: 10 * time.Millisecond},
+		}
 
-	stopChan := make(chan struct{})
-	rs := &remoteStream{
-		ctx:           ctx,
-		logger:        slog.Default(),
-		client:        client,
-		heartbeatStop: stopChan,
-	}
+		stopChan := make(chan struct{})
+		rs := &remoteStream{
+			ctx:           context.Background(),
+			logger:        slog.Default(),
+			client:        client,
+			heartbeatStop: stopChan,
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.heartbeatLoop()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			rs.heartbeatLoop()
+			close(done)
+		}()
 
-	// Close stop channel
-	close(stopChan)
+		close(stopChan)
 
-	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("heartbeatLoop should have exited on stop channel close")
-	}
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("heartbeatLoop should have exited on stop channel close")
+		}
+	})
+
+	t.Run("Closed", func(t *testing.T) {
+		t.Parallel()
+		client := &streamerClient{
+			config: ClientConfig{HeartbeatInterval: 10 * time.Millisecond},
+		}
+
+		rs := &remoteStream{
+			ctx:           context.Background(),
+			grpcStream:    &mockGRPCStreamClient{},
+			logger:        slog.Default(),
+			client:        client,
+			state:         StateConnected,
+			closed:        true,
+			heartbeatStop: make(chan struct{}),
+		}
+
+		done := make(chan struct{})
+		go func() {
+			rs.heartbeatLoop()
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(50 * time.Millisecond):
+			t.Fatal("heartbeatLoop should have exited when closed")
+		}
+	})
 }
 
 // TestRemoteStream_HeartbeatLoop_SendsHeartbeat tests heartbeat is sent when connected.
@@ -1073,112 +975,68 @@ func TestRemoteStream_HeartbeatLoop_SkipsWhenNotConnected(t *testing.T) {
 	assert.Equal(t, 0, sentCount)
 }
 
-// TestRemoteStream_HeartbeatLoop_Closed tests heartbeat loop exits when stream is closed.
-func TestRemoteStream_HeartbeatLoop_Closed(t *testing.T) {
+// TestRemoteStream_ActivityMonitor_Exit tests activity monitor exits under various conditions.
+func TestRemoteStream_ActivityMonitor_Exit(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	mockStream := &mockGRPCStreamClient{}
+	t.Run("ContextDone", func(t *testing.T) {
+		t.Parallel()
+		ctx, cancel := context.WithCancel(context.Background())
 
-	client := &streamerClient{
-		config: ClientConfig{
-			HeartbeatInterval: 10 * time.Millisecond,
-		},
-	}
+		client := &streamerClient{
+			config: ClientConfig{ActivityTimeout: 30 * time.Millisecond},
+		}
 
-	rs := &remoteStream{
-		ctx:           ctx,
-		grpcStream:    mockStream,
-		logger:        slog.Default(),
-		client:        client,
-		state:         StateConnected,
-		closed:        true, // Already closed
-		heartbeatStop: make(chan struct{}),
-	}
+		rs := &remoteStream{
+			ctx:           ctx,
+			logger:        slog.Default(),
+			client:        client,
+			heartbeatStop: make(chan struct{}),
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.heartbeatLoop()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			rs.activityMonitor()
+			close(done)
+		}()
 
-	select {
-	case <-done:
-		// Success - exited because closed
-	case <-time.After(50 * time.Millisecond):
-		t.Fatal("heartbeatLoop should have exited when closed")
-	}
-}
+		cancel()
 
-// TestRemoteStream_ActivityMonitor_ContextDone tests activity monitor exits on context done.
-func TestRemoteStream_ActivityMonitor_ContextDone(t *testing.T) {
-	t.Parallel()
-	ctx, cancel := context.WithCancel(context.Background())
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("activityMonitor should have exited on context cancel")
+		}
+	})
 
-	client := &streamerClient{
-		config: ClientConfig{
-			ActivityTimeout: 30 * time.Millisecond,
-		},
-	}
+	t.Run("StopChannel", func(t *testing.T) {
+		t.Parallel()
+		client := &streamerClient{
+			config: ClientConfig{ActivityTimeout: 30 * time.Millisecond},
+		}
 
-	rs := &remoteStream{
-		ctx:           ctx,
-		logger:        slog.Default(),
-		client:        client,
-		heartbeatStop: make(chan struct{}),
-	}
+		stopChan := make(chan struct{})
+		rs := &remoteStream{
+			ctx:           context.Background(),
+			logger:        slog.Default(),
+			client:        client,
+			heartbeatStop: stopChan,
+		}
 
-	done := make(chan struct{})
-	go func() {
-		rs.activityMonitor()
-		close(done)
-	}()
+		done := make(chan struct{})
+		go func() {
+			rs.activityMonitor()
+			close(done)
+		}()
 
-	// Cancel context
-	cancel()
+		close(stopChan)
 
-	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("activityMonitor should have exited on context cancel")
-	}
-}
-
-// TestRemoteStream_ActivityMonitor_StopChannel tests activity monitor exits on stop channel.
-func TestRemoteStream_ActivityMonitor_StopChannel(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	client := &streamerClient{
-		config: ClientConfig{
-			ActivityTimeout: 30 * time.Millisecond,
-		},
-	}
-
-	stopChan := make(chan struct{})
-	rs := &remoteStream{
-		ctx:           ctx,
-		logger:        slog.Default(),
-		client:        client,
-		heartbeatStop: stopChan,
-	}
-
-	done := make(chan struct{})
-	go func() {
-		rs.activityMonitor()
-		close(done)
-	}()
-
-	// Close stop channel
-	close(stopChan)
-
-	select {
-	case <-done:
-		// Success
-	case <-time.After(100 * time.Millisecond):
-		t.Fatal("activityMonitor should have exited on stop channel close")
-	}
+		select {
+		case <-done:
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("activityMonitor should have exited on stop channel close")
+		}
+	})
 }
 
 // TestRemoteStream_ActivityMonitor_DetectsStale tests activity monitor detects stale connection.

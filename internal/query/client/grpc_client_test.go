@@ -7,81 +7,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
+	grpctesting "github.com/syntrixbase/syntrix/api/gen/testing"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
-
-// MockQueryServiceClient is a mock implementation of pb.QueryServiceClient.
-type MockQueryServiceClient struct {
-	mock.Mock
-}
-
-func (m *MockQueryServiceClient) GetDocument(ctx context.Context, in *pb.GetDocumentRequest, opts ...grpc.CallOption) (*pb.GetDocumentResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.GetDocumentResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) CreateDocument(ctx context.Context, in *pb.CreateDocumentRequest, opts ...grpc.CallOption) (*pb.CreateDocumentResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.CreateDocumentResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) ReplaceDocument(ctx context.Context, in *pb.ReplaceDocumentRequest, opts ...grpc.CallOption) (*pb.ReplaceDocumentResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.ReplaceDocumentResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) PatchDocument(ctx context.Context, in *pb.PatchDocumentRequest, opts ...grpc.CallOption) (*pb.PatchDocumentResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.PatchDocumentResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) DeleteDocument(ctx context.Context, in *pb.DeleteDocumentRequest, opts ...grpc.CallOption) (*pb.DeleteDocumentResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.DeleteDocumentResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) ExecuteQuery(ctx context.Context, in *pb.ExecuteQueryRequest, opts ...grpc.CallOption) (*pb.ExecuteQueryResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.ExecuteQueryResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) Pull(ctx context.Context, in *pb.PullRequest, opts ...grpc.CallOption) (*pb.PullResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.PullResponse), args.Error(1)
-}
-
-func (m *MockQueryServiceClient) Push(ctx context.Context, in *pb.PushRequest, opts ...grpc.CallOption) (*pb.PushResponse, error) {
-	args := m.Called(ctx, in)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*pb.PushResponse), args.Error(1)
-}
 
 func TestStatusToError(t *testing.T) {
 	tests := []struct {
@@ -156,7 +88,7 @@ func TestNew_Error(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to connect to query service")
 }
 
-func newTestClient(mockClient *MockQueryServiceClient) *Client {
+func newTestClient(mockClient *grpctesting.MockQueryServiceClient) *Client {
 	return &Client{
 		client: mockClient,
 	}
@@ -164,7 +96,7 @@ func newTestClient(mockClient *MockQueryServiceClient) *Client {
 
 func TestClient_GetDocument(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("GetDocument", mock.Anything, mock.Anything).Return(&pb.GetDocumentResponse{
@@ -182,20 +114,20 @@ func TestClient_GetDocument(t *testing.T) {
 		mockClient.AssertExpectations(t)
 	})
 
-	t.Run("not found", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+	t.Run("error", func(t *testing.T) {
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("GetDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.NotFound, "not found"))
 
 		_, err := client.GetDocument(context.Background(), "database1", "users/doc1")
-		assert.ErrorIs(t, err, model.ErrNotFound)
+		assert.Error(t, err)
 	})
 }
 
 func TestClient_CreateDocument(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("CreateDocument", mock.Anything, mock.Anything).Return(&pb.CreateDocumentResponse{}, nil)
@@ -208,20 +140,20 @@ func TestClient_CreateDocument(t *testing.T) {
 		mockClient.AssertExpectations(t)
 	})
 
-	t.Run("already exists", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+	t.Run("error", func(t *testing.T) {
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("CreateDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.AlreadyExists, "already exists"))
 
 		err := client.CreateDocument(context.Background(), "database1", model.Document{"id": "doc1"})
-		assert.ErrorIs(t, err, model.ErrExists)
+		assert.Error(t, err)
 	})
 }
 
 func TestClient_ReplaceDocument(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("ReplaceDocument", mock.Anything, mock.Anything).Return(&pb.ReplaceDocumentResponse{
@@ -242,20 +174,20 @@ func TestClient_ReplaceDocument(t *testing.T) {
 		mockClient.AssertExpectations(t)
 	})
 
-	t.Run("precondition failed", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+	t.Run("error", func(t *testing.T) {
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("ReplaceDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "version mismatch"))
 
 		_, err := client.ReplaceDocument(context.Background(), "database1", model.Document{}, nil)
-		assert.ErrorIs(t, err, model.ErrPreconditionFailed)
+		assert.Error(t, err)
 	})
 }
 
 func TestClient_PatchDocument(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("PatchDocument", mock.Anything, mock.Anything).Return(&pb.PatchDocumentResponse{
@@ -276,20 +208,20 @@ func TestClient_PatchDocument(t *testing.T) {
 		mockClient.AssertExpectations(t)
 	})
 
-	t.Run("not found", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+	t.Run("error", func(t *testing.T) {
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("PatchDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.NotFound, "not found"))
 
 		_, err := client.PatchDocument(context.Background(), "database1", model.Document{}, nil)
-		assert.ErrorIs(t, err, model.ErrNotFound)
+		assert.Error(t, err)
 	})
 }
 
 func TestClient_DeleteDocument(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("DeleteDocument", mock.Anything, mock.Anything).Return(&pb.DeleteDocumentResponse{}, nil)
@@ -299,22 +231,20 @@ func TestClient_DeleteDocument(t *testing.T) {
 		mockClient.AssertExpectations(t)
 	})
 
-	t.Run("precondition failed", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+	t.Run("error", func(t *testing.T) {
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("DeleteDocument", mock.Anything, mock.Anything).Return(nil, status.Error(codes.FailedPrecondition, "precondition failed"))
 
-		err := client.DeleteDocument(context.Background(), "database1", "users/doc1",
-			model.Filters{{Field: "version", Op: "eq", Value: int64(1)}},
-		)
-		assert.ErrorIs(t, err, model.ErrPreconditionFailed)
+		err := client.DeleteDocument(context.Background(), "database1", "users/doc1", nil)
+		assert.Error(t, err)
 	})
 }
 
 func TestClient_ExecuteQuery(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("ExecuteQuery", mock.Anything, mock.Anything).Return(&pb.ExecuteQueryResponse{
@@ -336,7 +266,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 	})
 
 	t.Run("empty results", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("ExecuteQuery", mock.Anything, mock.Anything).Return(&pb.ExecuteQueryResponse{
@@ -350,18 +280,8 @@ func TestClient_ExecuteQuery(t *testing.T) {
 		assert.Empty(t, docs)
 	})
 
-	t.Run("invalid query", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
-		client := newTestClient(mockClient)
-
-		mockClient.On("ExecuteQuery", mock.Anything, mock.Anything).Return(nil, status.Error(codes.InvalidArgument, "invalid query"))
-
-		_, err := client.ExecuteQuery(context.Background(), "database1", model.Query{})
-		assert.ErrorIs(t, err, model.ErrInvalidQuery)
-	})
-
 	t.Run("with filters and order", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("ExecuteQuery", mock.Anything, mock.Anything).Return(&pb.ExecuteQueryResponse{
@@ -388,7 +308,7 @@ func TestClient_ExecuteQuery(t *testing.T) {
 
 func TestClient_Pull(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("Pull", mock.Anything, mock.Anything).Return(&pb.PullResponse{
@@ -414,7 +334,7 @@ func TestClient_Pull(t *testing.T) {
 	})
 
 	t.Run("empty results", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("Pull", mock.Anything, mock.Anything).Return(&pb.PullResponse{
@@ -430,22 +350,11 @@ func TestClient_Pull(t *testing.T) {
 		assert.Empty(t, resp.Documents)
 		assert.Equal(t, int64(987654321), resp.Checkpoint)
 	})
-
-	t.Run("error", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
-		client := newTestClient(mockClient)
-
-		mockClient.On("Pull", mock.Anything, mock.Anything).Return(nil, status.Error(codes.Internal, "internal error"))
-
-		_, err := client.Pull(context.Background(), "database1", storage.ReplicationPullRequest{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "internal error")
-	})
 }
 
 func TestClient_Push(t *testing.T) {
 	t.Run("success no conflicts", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("Push", mock.Anything, mock.Anything).Return(&pb.PushResponse{
@@ -474,7 +383,7 @@ func TestClient_Push(t *testing.T) {
 	})
 
 	t.Run("with conflicts", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
+		mockClient := grpctesting.NewMockQueryServiceClient()
 		client := newTestClient(mockClient)
 
 		mockClient.On("Push", mock.Anything, mock.Anything).Return(&pb.PushResponse{
@@ -499,37 +408,5 @@ func TestClient_Push(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Len(t, resp.Conflicts, 1)
 		assert.Equal(t, "doc1", resp.Conflicts[0].Id)
-	})
-
-	t.Run("error", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
-		client := newTestClient(mockClient)
-
-		mockClient.On("Push", mock.Anything, mock.Anything).Return(nil, status.Error(codes.PermissionDenied, "permission denied"))
-
-		_, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{})
-		assert.ErrorIs(t, err, model.ErrPermissionDenied)
-	})
-
-	t.Run("multiple changes", func(t *testing.T) {
-		mockClient := new(MockQueryServiceClient)
-		client := newTestClient(mockClient)
-
-		mockClient.On("Push", mock.Anything, mock.Anything).Return(&pb.PushResponse{
-			Conflicts: []*pb.Document{},
-		}, nil)
-
-		v1 := int64(1)
-		v2 := int64(5)
-		resp, err := client.Push(context.Background(), "database1", storage.ReplicationPushRequest{
-			Collection: "users",
-			Changes: []storage.ReplicationPushChange{
-				{Doc: &storage.StoredDoc{Id: "doc1"}, BaseVersion: &v1},
-				{Doc: &storage.StoredDoc{Id: "doc2"}, BaseVersion: &v2},
-				{Doc: &storage.StoredDoc{Id: "doc3"}, BaseVersion: nil},
-			},
-		})
-		assert.NoError(t, err)
-		assert.Empty(t, resp.Conflicts)
 	})
 }

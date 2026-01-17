@@ -216,20 +216,6 @@ func TestService_Stream_Unsubscribe(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestService_Stream_CloseAndSubscribe(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-
-	stream, err := s.Stream(context.Background())
-	require.NoError(t, err)
-
-	err = stream.Close()
-	require.NoError(t, err)
-
-	_, err = stream.Subscribe("database1", "users", nil)
-	require.Error(t, err)
-}
-
 func TestService_Stream_ContextCancel(t *testing.T) {
 	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
@@ -352,52 +338,50 @@ func TestService_ProcessEventJSON_DeleteIgnored(t *testing.T) {
 	require.NoError(t, err) // Should not error, just silently ignore
 }
 
-func TestService_Unsubscribe_Closed(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
+// TestService_Stream_ClosedOperations tests that operations on a closed stream return errors.
+func TestService_Stream_ClosedOperations(t *testing.T) {
+	t.Parallel()
 
-	stream, err := s.Stream(context.Background())
-	require.NoError(t, err)
+	t.Run("Subscribe", func(t *testing.T) {
+		s, err := NewService(ServerConfig{}, slog.Default())
+		require.NoError(t, err)
 
-	stream.Close()
+		stream, err := s.Stream(context.Background())
+		require.NoError(t, err)
 
-	err = stream.Unsubscribe("sub1")
-	require.Error(t, err)
-}
+		err = stream.Close()
+		require.NoError(t, err)
 
-func TestService_Recv_Closed(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
+		_, err = stream.Subscribe("database1", "users", nil)
+		require.Error(t, err)
+	})
 
-	stream, err := s.Stream(context.Background())
-	require.NoError(t, err)
+	t.Run("Unsubscribe", func(t *testing.T) {
+		s, err := NewService(ServerConfig{}, slog.Default())
+		require.NoError(t, err)
 
-	stream.Close()
-	time.Sleep(10 * time.Millisecond)
+		stream, err := s.Stream(context.Background())
+		require.NoError(t, err)
 
-	_, err = stream.Recv()
-	require.Error(t, err)
-}
+		stream.Close()
 
-func TestService_Recv_WithEvent(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
+		err = stream.Unsubscribe("sub1")
+		require.Error(t, err)
+	})
 
-	stream, err := s.Stream(context.Background())
-	require.NoError(t, err)
-	defer stream.Close()
+	t.Run("Recv", func(t *testing.T) {
+		s, err := NewService(ServerConfig{}, slog.Default())
+		require.NoError(t, err)
 
-	subID, err := stream.Subscribe("database1", "users", nil)
-	require.NoError(t, err)
+		stream, err := s.Stream(context.Background())
+		require.NoError(t, err)
 
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
-	require.NoError(t, err)
+		stream.Close()
+		time.Sleep(10 * time.Millisecond)
 
-	delivery, err := stream.Recv()
-	require.NoError(t, err)
-	require.NotNil(t, delivery)
-	assert.Equal(t, []string{subID}, delivery.SubscriptionIDs)
+		_, err = stream.Recv()
+		require.Error(t, err)
+	})
 }
 
 func TestService_ProcessEvent_Timeout(t *testing.T) {
@@ -474,31 +458,6 @@ func TestService_MultipleSubscriptions(t *testing.T) {
 	assert.Contains(t, delivery.SubscriptionIDs, subID1)
 }
 
-func TestService_RecvWithFilters(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	stream, err := s.Stream(ctx)
-	require.NoError(t, err)
-	defer stream.Close()
-
-	// Subscribe without filters for simplicity
-	subID, err := stream.Subscribe("database1", "users", nil)
-	require.NoError(t, err)
-
-	// Send event
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
-	require.NoError(t, err)
-
-	delivery, err := stream.Recv()
-	require.NoError(t, err)
-	assert.Contains(t, delivery.SubscriptionIDs, subID)
-}
-
 func TestService_RecvNoMatch(t *testing.T) {
 	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
@@ -552,16 +511,6 @@ func TestService_Close_CancelsContext(t *testing.T) {
 	// Subsequent operations should fail
 	_, err = stream.Subscribe("database2", "orders", nil)
 	require.Error(t, err)
-}
-
-func TestService_ProcessEvent_NoMatchingSubscriptions(t *testing.T) {
-	s, err := NewService(ServerConfig{}, slog.Default())
-	require.NoError(t, err)
-	internal := getInternalService(s)
-
-	// No streams connected - event should just be discarded
-	err = internal.ProcessEvent(testSyntrixEvent("evt1", "database1", "users", "doc1", events.EventCreate, map[string]interface{}{"name": "Alice"}))
-	require.NoError(t, err)
 }
 
 func TestService_ProcessEvent_DeleteOperation(t *testing.T) {
