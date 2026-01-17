@@ -78,11 +78,6 @@ func LoadConfig() *Config {
 	return cfg
 }
 
-// IsStandaloneMode returns true if the deployment is configured for standalone mode
-func (c *Config) IsStandaloneMode() bool {
-	return c.Deployment.Mode == "standalone"
-}
-
 func loadFile(filename string, cfg *Config) {
 	data, err := os.ReadFile(filename)
 	if err != nil {

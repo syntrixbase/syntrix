@@ -126,10 +126,10 @@ func TestLoadConfig_DeploymentDefaults(t *testing.T) {
 
 	cfg := LoadConfig()
 
-	assert.Equal(t, "distributed", cfg.Deployment.Mode)
+	assert.Equal(t, services_config.ModeDistributed, cfg.Deployment.Mode)
 	assert.True(t, cfg.Deployment.Standalone.EmbeddedNATS)
 	assert.Equal(t, "data/nats", cfg.Deployment.Standalone.NATSDataDir)
-	assert.False(t, cfg.IsStandaloneMode())
+	assert.False(t, cfg.Deployment.Mode.IsStandalone())
 }
 
 func TestLoadConfig_DeploymentEnvVars(t *testing.T) {
@@ -144,10 +144,10 @@ func TestLoadConfig_DeploymentEnvVars(t *testing.T) {
 
 	cfg := LoadConfig()
 
-	assert.Equal(t, "standalone", cfg.Deployment.Mode)
+	assert.Equal(t, services_config.ModeStandalone, cfg.Deployment.Mode)
 	assert.False(t, cfg.Deployment.Standalone.EmbeddedNATS)
 	assert.Equal(t, "/custom/nats/data", cfg.Deployment.Standalone.NATSDataDir)
-	assert.True(t, cfg.IsStandaloneMode())
+	assert.True(t, cfg.Deployment.Mode.IsStandalone())
 }
 
 func TestLoadConfig_DeploymentEnvVars_EmbeddedNATSTrue(t *testing.T) {
@@ -166,13 +166,13 @@ func TestLoadConfig_DeploymentEnvVars_EmbeddedNATS1(t *testing.T) {
 	assert.True(t, cfg.Deployment.Standalone.EmbeddedNATS)
 }
 
-func TestIsStandaloneMode(t *testing.T) {
-	cfg := &Config{Deployment: services_config.DeploymentConfig{Mode: "standalone"}}
-	assert.True(t, cfg.IsStandaloneMode())
+func TestDeploymentMode_IsStandalone_ViaConfig(t *testing.T) {
+	cfg := &Config{Deployment: services_config.DeploymentConfig{Mode: services_config.ModeStandalone}}
+	assert.True(t, cfg.Deployment.Mode.IsStandalone())
 
-	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: "distributed"}}
-	assert.False(t, cfg.IsStandaloneMode())
+	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: services_config.ModeDistributed}}
+	assert.False(t, cfg.Deployment.Mode.IsStandalone())
 
 	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: ""}}
-	assert.False(t, cfg.IsStandaloneMode())
+	assert.False(t, cfg.Deployment.Mode.IsStandalone())
 }

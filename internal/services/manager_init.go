@@ -61,7 +61,7 @@ func (m *Manager) Init(ctx context.Context) error {
 	server.InitDefault(m.cfg.Server, nil)
 
 	// Mode-specific initialization
-	if m.opts.Mode == ModeStandalone {
+	if m.opts.Mode.IsStandalone() {
 		return m.initStandalone(ctx)
 	}
 	return m.initDistributed(ctx)
@@ -212,7 +212,7 @@ func (m *Manager) initQueryService(ctx context.Context) (query.Service, error) {
 		return nil, err
 	}
 
-	if m.opts.Mode == ModeStandalone {
+	if m.opts.Mode.IsStandalone() {
 		// Standalone: direct call to local indexer
 		if m.indexerService == nil {
 			return nil, fmt.Errorf("indexer service required in standalone mode")
@@ -280,7 +280,7 @@ func (m *Manager) initStreamerService() error {
 	cfg := m.cfg.Streamer.Server
 	var opts []streamer.ServiceConfigOption
 
-	if m.opts.Mode == ModeStandalone {
+	if m.opts.Mode.IsStandalone() {
 		// Standalone mode: use local Puller service
 		if m.pullerService != nil {
 			opts = append(opts, streamer.WithPullerClient(m.pullerService))
@@ -394,7 +394,7 @@ func (m *Manager) initIndexerService(ctx context.Context) error {
 
 	var pullerSvc puller.Service
 
-	if m.opts.Mode == ModeStandalone {
+	if m.opts.Mode.IsStandalone() {
 		// Standalone mode: use local Puller service if available
 		if m.pullerService != nil {
 			pullerSvc = m.pullerService

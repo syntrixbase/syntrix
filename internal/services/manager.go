@@ -10,18 +10,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
+	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
-)
-
-// DeploymentMode represents the deployment mode of the service.
-type DeploymentMode int
-
-const (
-	// ModeDistributed is the default mode where services communicate via HTTP/NATS.
-	ModeDistributed DeploymentMode = iota
-	// ModeStandalone runs all services in a single process with direct function calls.
-	ModeStandalone
 )
 
 type Options struct {
@@ -34,8 +25,14 @@ type Options struct {
 	RunIndexer          bool
 
 	// Mode specifies the deployment mode (distributed or standalone).
-	Mode DeploymentMode
+	Mode services_config.DeploymentMode
 }
+
+// Re-export DeploymentMode constants for backwards compatibility.
+const (
+	ModeDistributed = services_config.ModeDistributed
+	ModeStandalone  = services_config.ModeStandalone
+)
 
 type triggerService interface {
 	Start(ctx context.Context) error

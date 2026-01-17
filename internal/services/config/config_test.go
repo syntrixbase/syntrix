@@ -10,21 +10,57 @@ import (
 func TestDefaultDeploymentConfig(t *testing.T) {
 	cfg := DefaultDeploymentConfig()
 
-	assert.Equal(t, "distributed", cfg.Mode)
+	assert.Equal(t, ModeDistributed, cfg.Mode)
 	assert.True(t, cfg.Standalone.EmbeddedNATS)
 	assert.Equal(t, "data/nats", cfg.Standalone.NATSDataDir)
 }
 
+func TestDeploymentMode_IsStandalone(t *testing.T) {
+	tests := []struct {
+		mode     DeploymentMode
+		expected bool
+	}{
+		{ModeStandalone, true},
+		{ModeDistributed, false},
+		{"", false},
+		{"other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.mode.IsStandalone())
+		})
+	}
+}
+
+func TestDeploymentMode_IsDistributed(t *testing.T) {
+	tests := []struct {
+		mode     DeploymentMode
+		expected bool
+	}{
+		{ModeDistributed, true},
+		{"", true}, // empty defaults to distributed
+		{ModeStandalone, false},
+		{"other", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(string(tt.mode), func(t *testing.T) {
+			assert.Equal(t, tt.expected, tt.mode.IsDistributed())
+		})
+	}
+}
+
 func TestDeploymentConfig_StructFields(t *testing.T) {
 	cfg := DeploymentConfig{
-		Mode: "standalone",
+		Mode: ModeStandalone,
 		Standalone: StandaloneConfig{
 			EmbeddedNATS: false,
 			NATSDataDir:  "custom/nats",
 		},
 	}
 
-	assert.Equal(t, "standalone", cfg.Mode)
+	assert.Equal(t, ModeStandalone, cfg.Mode)
 	assert.False(t, cfg.Standalone.EmbeddedNATS)
 	assert.Equal(t, "custom/nats", cfg.Standalone.NATSDataDir)
 }
@@ -33,7 +69,7 @@ func TestDeploymentConfig_ApplyDefaults(t *testing.T) {
 	cfg := &DeploymentConfig{}
 	cfg.ApplyDefaults()
 
-	assert.Equal(t, "distributed", cfg.Mode)
+	assert.Equal(t, ModeDistributed, cfg.Mode)
 	assert.Equal(t, "data/nats", cfg.Standalone.NATSDataDir)
 }
 
@@ -50,7 +86,7 @@ func TestDeploymentConfig_ApplyEnvOverrides(t *testing.T) {
 	cfg := DefaultDeploymentConfig()
 	cfg.ApplyEnvOverrides()
 
-	assert.Equal(t, "standalone", cfg.Mode)
+	assert.Equal(t, ModeStandalone, cfg.Mode)
 	assert.True(t, cfg.Standalone.EmbeddedNATS)
 	assert.Equal(t, "/custom/path", cfg.Standalone.NATSDataDir)
 }
@@ -79,7 +115,7 @@ func TestDeploymentConfig_Validate(t *testing.T) {
 
 func TestDeploymentConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 	cfg := &DeploymentConfig{
-		Mode: "standalone",
+		Mode: ModeStandalone,
 		Standalone: StandaloneConfig{
 			EmbeddedNATS: false,
 			NATSDataDir:  "/custom/nats",
@@ -87,7 +123,7 @@ func TestDeploymentConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 	}
 	cfg.ApplyDefaults()
 
-	assert.Equal(t, "standalone", cfg.Mode)
+	assert.Equal(t, ModeStandalone, cfg.Mode)
 	assert.False(t, cfg.Standalone.EmbeddedNATS)
 	assert.Equal(t, "/custom/nats", cfg.Standalone.NATSDataDir)
 }
@@ -99,7 +135,7 @@ func TestDeploymentConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 	}
 	cfg.ApplyDefaults()
 
-	assert.Equal(t, "custom_mode", cfg.Mode)
+	assert.Equal(t, DeploymentMode("custom_mode"), cfg.Mode)
 	assert.Equal(t, "data/nats", cfg.Standalone.NATSDataDir)
 }
 
@@ -111,7 +147,7 @@ func TestDeploymentConfig_ApplyEnvOverrides_WithTSetenv(t *testing.T) {
 	cfg := DefaultDeploymentConfig()
 	cfg.ApplyEnvOverrides()
 
-	assert.Equal(t, "production", cfg.Mode)
+	assert.Equal(t, DeploymentMode("production"), cfg.Mode)
 	assert.True(t, cfg.Standalone.EmbeddedNATS)
 	assert.Equal(t, "/prod/nats", cfg.Standalone.NATSDataDir)
 }
@@ -141,11 +177,11 @@ func TestDeploymentConfig_Validate_InvalidMode(t *testing.T) {
 func TestDeploymentConfig_Validate_ValidModes(t *testing.T) {
 	tests := []struct {
 		name string
-		mode string
+		mode DeploymentMode
 	}{
 		{"empty mode", ""},
-		{"standalone mode", "standalone"},
-		{"distributed mode", "distributed"},
+		{"standalone mode", ModeStandalone},
+		{"distributed mode", ModeDistributed},
 	}
 
 	for _, tt := range tests {
