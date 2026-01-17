@@ -2,12 +2,20 @@ package evaluator
 
 import (
 	"errors"
+	"fmt"
+	"os"
 
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 // Config contains all configuration for the evaluator service.
 type Config struct {
+	// PullerAddr is the address of the Puller gRPC service.
+	// Used in distributed mode to connect to remote Puller.
+	// In standalone mode, this is ignored and local Puller is used.
+	PullerAddr string `yaml:"puller_addr"`
+
 	// Service behavior
 	StartFromNow       bool   `yaml:"start_from_now"`
 	RulesFile          string `yaml:"rules_file"`
@@ -22,6 +30,7 @@ type Config struct {
 // DefaultConfig returns default evaluator configuration.
 func DefaultConfig() Config {
 	return Config{
+		PullerAddr:         "localhost:9000",
 		StartFromNow:       true,
 		RulesFile:          "triggers.example.json",
 		CheckpointDatabase: "default",
@@ -42,6 +51,9 @@ func (c Config) StorageTypeValue() pubsub.StorageType {
 // ApplyDefaults fills in zero values with defaults.
 func (c *Config) ApplyDefaults() {
 	defaults := DefaultConfig()
+	if c.PullerAddr == "" {
+		c.PullerAddr = defaults.PullerAddr
+	}
 	if c.CheckpointDatabase == "" {
 		c.CheckpointDatabase = defaults.CheckpointDatabase
 	}
@@ -58,14 +70,24 @@ func (c *Config) ApplyDefaults() {
 
 // ApplyEnvOverrides applies environment variable overrides.
 // No evaluator-specific env vars; parent config handles TRIGGER_RULES_FILE.
-func (c *Config) ApplyEnvOverrides() { _ = c }
+func (c *Config) ApplyEnvOverrides() {
+	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
+		c.RulesFile = val
+	}
+	if val := os.Getenv("TRIGGER_PULLER_ADDR"); val != "" {
+		c.PullerAddr = val
+	}
+}
 
 // ResolvePaths resolves relative paths using the given base directory.
 // RulesFile is resolved at the parent trigger.Config level.
 func (c *Config) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(mode services.DeploymentMode) error {
+	if c.RulesFile == "" {
+		return errors.New("trigger.evaluator.rules_file is required")
+	}
 	if c.StreamName == "" {
 		return errors.New("stream_name is required")
 	}
@@ -74,6 +96,9 @@ func (c *Config) Validate() error {
 	}
 	if c.StorageType != "" && c.StorageType != "file" && c.StorageType != "memory" {
 		return errors.New("storage_type must be 'file' or 'memory'")
+	}
+	if mode.IsDistributed() && c.PullerAddr == "" {
+		return fmt.Errorf("trigger.evaluator.puller_addr is required in distributed mode")
 	}
 	return nil
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultGatewayConfig(t *testing.T) {
@@ -32,7 +33,7 @@ func TestGatewayConfig_StructFields(t *testing.T) {
 
 func TestGatewayConfig_Validate(t *testing.T) {
 	cfg := DefaultGatewayConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -111,6 +112,26 @@ func TestGatewayConfig_ApplyEnvOverrides_NoEnvVar(t *testing.T) {
 
 func TestGatewayConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := GatewayConfig{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
+	assert.NoError(t, err)
+}
+
+func TestGatewayConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, both QueryServiceURL and StreamerServiceURL are required
+	cfg := &GatewayConfig{QueryServiceURL: "", StreamerServiceURL: "streamer:9000"}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway.query_service_url is required in distributed mode")
+
+	// With QueryServiceURL but no StreamerServiceURL
+	cfg.QueryServiceURL = "query:9000"
+	cfg.StreamerServiceURL = ""
+	err = cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "gateway.streamer_service_url is required in distributed mode")
+
+	// With both set, should pass
+	cfg.StreamerServiceURL = "streamer:9000"
+	err = cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }

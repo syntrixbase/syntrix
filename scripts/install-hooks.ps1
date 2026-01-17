@@ -32,3 +32,17 @@ $commitMsgScript = @(
 ) -join "`n"
 [System.IO.File]::WriteAllText($commitMsgPath, $commitMsgScript, [System.Text.Encoding]::ASCII)
 Write-Output "Commit-msg hook installed successfully at $commitMsgPath"
+
+# Install pre-push hook (preserving git-lfs if present)
+$prePushPath = Join-Path $hooksDir 'pre-push'
+$prePushScript = @(
+    '#!/bin/sh',
+    'REPO_ROOT="$(git rev-parse --show-toplevel)"',
+    'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/pre-push.sh"',
+    '"$HOOK_SCRIPT" "$@" || exit $?',
+    '',
+    '# Run git-lfs if available',
+    'command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "$@"'
+) -join "`n"
+[System.IO.File]::WriteAllText($prePushPath, $prePushScript, [System.Text.Encoding]::ASCII)
+Write-Output "Pre-push hook installed successfully at $prePushPath"

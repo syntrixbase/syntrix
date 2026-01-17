@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -185,10 +186,23 @@ func TestConfig_ResolvePaths(t *testing.T) {
 func TestConfig_Validate(t *testing.T) {
 	// Validate is currently a no-op that returns nil
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
 	assert.NoError(t, err)
 
 	cfg2 := DefaultConfig()
-	err = cfg2.Validate()
+	err = cfg2.Validate(services.ModeDistributed)
+	assert.NoError(t, err)
+}
+
+func TestConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, PullerAddr is required
+	cfg := &Config{PullerAddr: ""}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "indexer.puller_addr is required in distributed mode")
+
+	// With PullerAddr set, should pass
+	cfg.PullerAddr = "puller:9000"
+	err = cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }

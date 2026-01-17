@@ -59,9 +59,17 @@ func LoadConfig() *Config {
 	loadFile("config/config.local.yml", cfg)
 
 	// 4. Apply configuration lifecycle: ApplyDefaults fills gaps, ApplyEnvOverrides, ResolvePaths, Validate
+	// Note: We need to process Deployment first to get the mode, then pass it to other configs
 	configDir := "config"
-	if err := ApplyServiceConfigs(configDir,
-		&cfg.Deployment,
+	cfg.Deployment.ApplyDefaults()
+	cfg.Deployment.ApplyEnvOverrides()
+	cfg.Deployment.ResolvePaths(configDir)
+	if err := cfg.Deployment.Validate(cfg.Deployment.Mode); err != nil {
+		log.Fatalf("Configuration error: %v", err)
+	}
+
+	// Apply other configs with the now-known deployment mode
+	if err := ApplyServiceConfigs(configDir, cfg.Deployment.Mode,
 		&cfg.Server,
 		&cfg.Query,
 		&cfg.Indexer,
@@ -76,11 +84,6 @@ func LoadConfig() *Config {
 	}
 
 	return cfg
-}
-
-// IsStandaloneMode returns true if the deployment is configured for standalone mode
-func (c *Config) IsStandaloneMode() bool {
-	return c.Deployment.Mode == "standalone"
 }
 
 func loadFile(filename string, cfg *Config) {

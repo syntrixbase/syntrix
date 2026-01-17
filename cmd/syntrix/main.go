@@ -11,6 +11,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/services"
+	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func main() {
@@ -29,13 +30,18 @@ func main() {
 	// 1. Load Configuration early to check deployment mode from config
 	cfg := config.LoadConfig()
 
-	// Standalone mode: from CLI flag or config file
-	// CLI flag takes precedence over config file
-	if *standalone || cfg.IsStandaloneMode() {
+	// Determine deployment mode: CLI flag takes precedence over config file
+	mode := cfg.Deployment.Mode
+	if *standalone {
+		mode = services_config.ModeStandalone
+	}
+
+	// Standalone mode: all services in-process
+	if mode.IsStandalone() {
 		log.Println("Starting Syntrix in Standalone Mode...")
 		log.Println("- All services running in-process")
 		opts := services.Options{
-			Mode:   services.ModeStandalone,
+			Mode:   mode,
 			RunAPI: true,
 		}
 		runServer(cfg, opts)

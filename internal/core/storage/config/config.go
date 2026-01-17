@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 type Config struct {
@@ -94,7 +96,7 @@ func DefaultConfig() Config {
 	}
 }
 
-func (c *Config) Validate() error {
+func (c *Config) Validate(_ services.DeploymentMode) error {
 	// Validate Storage Databases
 	if _, ok := c.Databases["default"]; !ok {
 		return fmt.Errorf("storage.databases.default is required")

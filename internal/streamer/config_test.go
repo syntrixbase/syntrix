@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -59,7 +60,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
 	assert.NoError(t, err)
 }
 
@@ -138,4 +139,17 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 	assert.Equal(t, 1.5, cfg.Client.BackoffMultiplier)
 	assert.Equal(t, 60*time.Second, cfg.Client.HeartbeatInterval)
 	assert.Equal(t, 180*time.Second, cfg.Client.ActivityTimeout)
+}
+
+func TestConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, PullerAddr is required
+	cfg := &Config{Server: ServerConfig{PullerAddr: ""}}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "streamer.server.puller_addr is required in distributed mode")
+
+	// With PullerAddr set, should pass
+	cfg.Server.PullerAddr = "puller:9000"
+	err = cfg.Validate(services.ModeDistributed)
+	assert.NoError(t, err)
 }

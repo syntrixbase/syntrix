@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 )
@@ -16,6 +17,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "nats://localhost:4222", cfg.NatsURL)
 
 	// Evaluator config
+	assert.Equal(t, "localhost:9000", cfg.Evaluator.PullerAddr)
 	assert.Equal(t, "TRIGGERS", cfg.Evaluator.StreamName)
 	assert.Equal(t, 3, cfg.Evaluator.RetryAttempts)
 	assert.Equal(t, "file", cfg.Evaluator.StorageType)
@@ -66,9 +68,11 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 func TestConfig_ApplyEnvOverrides(t *testing.T) {
 	os.Setenv("TRIGGER_NATS_URL", "nats://env:4222")
 	os.Setenv("TRIGGER_RULES_FILE", "env_rules.json")
+	os.Setenv("TRIGGER_PULLER_ADDR", "puller.env:9000")
 	defer func() {
 		os.Unsetenv("TRIGGER_NATS_URL")
 		os.Unsetenv("TRIGGER_RULES_FILE")
+		os.Unsetenv("TRIGGER_PULLER_ADDR")
 	}()
 
 	cfg := DefaultConfig()
@@ -76,6 +80,7 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 
 	assert.Equal(t, "nats://env:4222", cfg.NatsURL)
 	assert.Equal(t, "env_rules.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "puller.env:9000", cfg.Evaluator.PullerAddr)
 }
 
 func TestConfig_ResolvePaths(t *testing.T) {
@@ -97,7 +102,7 @@ func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -176,24 +181,24 @@ func TestConfig_ResolvePaths_EmptyRulesFile(t *testing.T) {
 }
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
-	// Empty config is now invalid because StreamName is required
+	// Empty config is now invalid because RulesFile is required
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "stream_name is required")
+	assert.Contains(t, err.Error(), "rules_file is required")
 }
 
 func TestConfig_Validate_CallsSubConfigs(t *testing.T) {
 	// Verify that Validate calls sub-config Validate methods
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
 func TestConfig_Validate_EvaluatorError(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Evaluator.StreamName = "" // This triggers evaluator validation error
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "evaluator")
 }
@@ -201,7 +206,7 @@ func TestConfig_Validate_EvaluatorError(t *testing.T) {
 func TestConfig_Validate_DeliveryError(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Delivery.StreamName = "" // This triggers delivery validation error
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
 	// Note: The error goes through evaluator first (which passes), then delivery
 	assert.Contains(t, err.Error(), "stream_name is required")

@@ -10,14 +10,20 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/trigger"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
@@ -160,9 +166,9 @@ func TestManager_InitAPIServer_WithRealtime(t *testing.T) {
 func TestManager_InitTriggerServices_NATSFailure(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
-	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
+	mgr := NewManager(cfg, Options{RunTriggerWorker: true, Mode: ModeDistributed})
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServices(context.Background())
 	assert.Error(t, err)
 }
 
@@ -529,11 +535,16 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
-	cfg.Puller.Backends = nil // Clear puller backends for unit tests
+	cfg.Trigger.Evaluator.RulesFile = "" // Clear trigger rules for unit tests
+	cfg.Puller.Backends = nil            // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
-		Mode:   ModeStandalone,
-		RunAPI: true,
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
 	})
+
+	// Set up mock puller service (required for standalone mode)
+	mgr.pullerService = &mockPullerService{}
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
@@ -560,11 +571,16 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesFile = ""
 	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
-		Mode:   ModeStandalone,
-		RunAPI: true,
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
 	})
+
+	// Set up mock puller service (required for standalone mode)
+	mgr.pullerService = &mockPullerService{}
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
@@ -584,73 +600,22 @@ func TestManager_initQueryService(t *testing.T) {
 	}
 
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunQuery: true})
+	cfg.Query.IndexerAddr = "localhost:9000"
+	mgr := NewManager(cfg, Options{RunQuery: true, Mode: ModeDistributed})
 
 	service, err := mgr.initQueryService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, service)
 }
 
-func TestManager_initQueryService_StandaloneMode(t *testing.T) {
-	fakeDocStore := &fakeDocumentStore{}
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
+// Note: TestManager_initQueryService_StandaloneMode and TestManager_initQueryService_StandaloneMissingIndexer
+// were removed because standalone mode Query initialization is now inlined in initStandalone().
+// See TestManager_Init_StandaloneMode and TestManager_initStandalone_QueryServiceError for standalone tests.
 
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-		}, nil
-	}
-
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunQuery: true})
-	// Set indexerService to a non-nil value
-	mgr.indexerService = &stubIndexerService{}
-
-	service, err := mgr.initQueryService(context.Background())
-	assert.NoError(t, err)
-	assert.NotNil(t, service)
-}
-
-func TestManager_initQueryService_StandaloneMissingIndexer(t *testing.T) {
-	fakeDocStore := &fakeDocumentStore{}
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
-
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-		}, nil
-	}
-
-	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunQuery: true})
-	// indexerService is nil
-
-	_, err := mgr.initQueryService(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
-}
-
-func TestManager_initQueryService_DistributedMissingURL(t *testing.T) {
-	fakeDocStore := &fakeDocumentStore{}
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
-
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-		}, nil
-	}
-
-	cfg := config.LoadConfig()
-	cfg.Query.IndexerAddr = "" // Clear the URL
-	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunQuery: true})
-
-	_, err := mgr.initQueryService(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "query.indexer_addr required in distributed mode")
-}
+// Note: TestManager_initQueryService_DistributedMissingURL was removed because
+// validation of IndexerAddr in distributed mode now happens at config load time
+// via Config.Validate(). See TestConfig_Validate_DistributedMode_MissingAddresses
+// in internal/config/config_test.go.
 
 func TestManager_initQueryService_StorageError(t *testing.T) {
 	origFactory := storageFactoryFactory
@@ -701,9 +666,13 @@ func TestManager_initStandalone_APIServerError(t *testing.T) {
 	cfg.Identity.AuthZ.RulesFile = "/nonexistent/rules/file.yaml"
 	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
-		Mode:   ModeStandalone,
-		RunAPI: true,
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
 	})
+
+	// Set up mock puller service (required for standalone mode)
+	mgr.pullerService = &mockPullerService{}
 
 	err := mgr.Init(context.Background())
 	assert.Error(t, err)
@@ -818,35 +787,9 @@ func (m *mockPullerService) Replay(ctx context.Context, after map[string]string,
 	return nil, nil
 }
 
-func TestManager_initStreamerService_Standalone(t *testing.T) {
-	done := make(chan bool)
-	go func() {
-		cfg := config.LoadConfig()
-		// Disable Mongo/Backends for this unit test requiring no IO
-		// Use ModeStandalone to avoid gRPC registration
-		mgr := NewManager(cfg, Options{Mode: ModeStandalone})
-
-		// Case 1: No Puller Service (already nil)
-		err1 := mgr.initStreamerService()
-		assert.NoError(t, err1)
-		assert.NotNil(t, mgr.streamerService)
-
-		// Reset for Case 2
-		mgr.streamerService = nil
-
-		// Case 2: With Puller Service
-		mgr.pullerService = &mockPullerService{}
-		err2 := mgr.initStreamerService()
-		assert.NoError(t, err2)
-		assert.NotNil(t, mgr.streamerService)
-		done <- true
-	}()
-	select {
-	case <-done:
-	case <-time.After(500 * time.Millisecond):
-		t.Fatal("TestManager_initStreamerService_Standalone timed out")
-	}
-}
+// Note: TestManager_initStreamerService_Standalone was removed because
+// standalone mode Streamer initialization is now inlined in initStandalone().
+// See TestManager_Init_StandaloneMode for standalone tests.
 
 func TestManager_initStreamerService_Distributed(t *testing.T) {
 	cfg := config.LoadConfig()
@@ -863,20 +806,10 @@ func TestManager_initStreamerService_Distributed(t *testing.T) {
 	assert.NotNil(t, mgr.streamerService)
 }
 
-func TestManager_initStreamerService_NoPuller(t *testing.T) {
-	cfg := config.LoadConfig()
-	cfg.Server.GRPCPort = 0
-	cfg.Streamer.Server.PullerAddr = "" // No Puller URL configured
-
-	// Initialize the unified server first
-	server.InitDefault(cfg.Server, nil)
-
-	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunStreamer: true})
-
-	err := mgr.initStreamerService()
-	assert.NoError(t, err)
-	assert.NotNil(t, mgr.streamerService)
-}
+// Note: TestManager_initStreamerService_NoPuller was removed because
+// validation of PullerAddr in distributed mode now happens at config load time
+// via Config.Validate(). See TestConfig_Validate_DistributedMode_MissingAddresses
+// in internal/config/config_test.go.
 
 func TestManager_initGateway(t *testing.T) {
 	origFactory := storageFactoryFactory
@@ -1017,8 +950,12 @@ func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 	mgr := NewManager(cfg, Options{
 		Mode:                ModeStandalone,
 		RunAPI:              true,
+		RunPuller:           true,
 		RunTriggerEvaluator: true,
 	})
+
+	// Set up mock puller service (required for standalone mode)
+	mgr.pullerService = &mockPullerService{}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -1043,6 +980,7 @@ func TestManager_initStandalone_WithPuller(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesFile = ""
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
 
@@ -1105,32 +1043,21 @@ func TestManager_initPullerGRPCServer(t *testing.T) {
 	assert.NotNil(t, mgr.pullerGRPC)
 }
 
-func TestManager_initIndexerService(t *testing.T) {
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
+// Note: TestManager_initIndexerService_Standalone was removed because
+// standalone mode Indexer initialization is now inlined in initStandalone().
+// See TestManager_Init_StandaloneMode for standalone tests.
 
-	fakeSF := &stubStorageFactory{
-		dbByName: map[string]string{"default": "test_db"},
-		client:   &mongo.Client{},
-	}
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return fakeSF, nil
-	}
-
+func TestManager_initIndexerService_Distributed(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Server.HTTPPort = 0
-	cfg.Server.GRPCPort = 0
 	cfg.Indexer.TemplatePath = ""
+	cfg.Indexer.PullerAddr = "localhost:50051"
 
 	mgr := NewManager(cfg, Options{
 		Mode:       ModeDistributed,
 		RunIndexer: true,
-		RunPuller:  true, // Indexer uses puller if available
 	})
 
-	// Create a minimal puller service (so the indexer can use it)
-	mgr.pullerService = &mockPullerService{}
-
+	// Distributed mode uses gRPC client (doesn't need local pullerService)
 	err := mgr.initIndexerService(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.indexerService)
@@ -1164,7 +1091,19 @@ func TestManager_initIndexerGRPCServer(t *testing.T) {
 
 func TestManager_initStandalone_WithIndexer(t *testing.T) {
 	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
+	origEvalFactory := evaluatorServiceFactory
+	origDeliveryFactory := deliveryServiceFactory
+	origPubsubPublisher := pubsubPublisherFactory
+	origPubsubConsumer := pubsubConsumerFactory
+	origConnector := trigger.GetNatsConnectFunc()
+	defer func() {
+		storageFactoryFactory = origFactory
+		evaluatorServiceFactory = origEvalFactory
+		deliveryServiceFactory = origDeliveryFactory
+		pubsubPublisherFactory = origPubsubPublisher
+		pubsubConsumerFactory = origPubsubConsumer
+		trigger.SetNatsConnectFunc(origConnector)
+	}()
 
 	fakeSF := &stubStorageFactory{
 		dbByName: map[string]string{"default": "test_db"},
@@ -1174,12 +1113,29 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 		return fakeSF, nil
 	}
 
+	// Mock trigger services (standalone initializes all services)
+	fakeConn := &nats.Conn{}
+	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+		return pubsubtesting.NewMockPublisher(), nil
+	}
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
+		return pubsubtesting.NewMockConsumer(), nil
+	}
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		return &fakeEvaluatorService{}, nil
+	}
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+		return &fakeDeliveryService{}, nil
+	}
+
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesFile = ""
 	cfg.Indexer.TemplatePath = ""
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
+	cfg.Trigger.Evaluator.RulesFile = "" // Mock factory handles this
 
 	mgr := NewManager(cfg, Options{
 		Mode:       ModeStandalone,
@@ -1187,7 +1143,11 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 		RunPuller:  true,
 		RunIndexer: true,
 	})
-	defer mgr.Shutdown(context.Background())
+	defer func() {
+		// Clear NATS provider before shutdown to avoid panic on fake conn close
+		mgr.natsProvider = nil
+		mgr.Shutdown(context.Background())
+	}()
 
 	err := mgr.Init(context.Background())
 	assert.NoError(t, err)
@@ -1250,71 +1210,37 @@ func TestManager_initStandalone_IndexerError(t *testing.T) {
 	cfg.Indexer.StorageMode = "invalid_storage_mode"
 
 	mgr := NewManager(cfg, Options{
-		Mode:   ModeStandalone,
-		RunAPI: true,
+		Mode:      ModeStandalone,
+		RunAPI:    true,
+		RunPuller: true,
 	})
+
+	// Set up mock puller service (required for standalone mode)
+	mgr.pullerService = &mockPullerService{}
 
 	err := mgr.Init(context.Background())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to create indexer service")
 }
 
-func TestManager_initStandalone_QueryServiceError(t *testing.T) {
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
+// Note: TestManager_initStandalone_QueryServiceError was removed because
+// standalone mode Query initialization is now inlined in initStandalone().
+// The error path is tested via the initStandalone flow where missing Puller
+// causes the entire initialization to fail early.
 
-	fakeDocStore := &fakeDocumentStore{}
-	fakeAuth := &fakeAuthStore{}
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-			usrStore: fakeAuth,
-			revStore: fakeAuth,
-		}, nil
-	}
+// Fake trigger services for standalone tests
+type fakeEvaluatorService struct{}
 
-	cfg := config.LoadConfig()
-	cfg.Server.HTTPPort = 0
-	cfg.Identity.AuthZ.RulesFile = ""
-	cfg.Puller.Backends = nil
+func (f *fakeEvaluatorService) LoadTriggers(triggers []*trigger.Trigger) error { return nil }
+func (f *fakeEvaluatorService) Start(ctx context.Context) error                { return nil }
+func (f *fakeEvaluatorService) Close() error                                   { return nil }
 
-	mgr := NewManager(cfg, Options{
-		Mode:   ModeStandalone,
-		RunAPI: true,
-	})
+type fakeDeliveryService struct{}
 
-	// Manually set indexerService to nil to trigger "indexer service required" error
-	// in initQueryService for standalone mode
-	mgr.indexerService = nil
+func (f *fakeDeliveryService) Start(ctx context.Context) error { return nil }
 
-	// Need to call initStandalone directly since Init would call initIndexerService first
-	// which would set indexerService. We need to test the error path where indexer exists
-	// but query service fails for some other reason.
-	// Since initQueryService checks for nil indexerService in standalone mode,
-	// we can test this by not calling initIndexerService.
-
-	// Actually, let's test the error path more directly by calling initStandalone
-	// after Init has set up auth service
-	err := mgr.initAuthService(context.Background())
-	assert.NoError(t, err)
-
-	server.InitDefault(cfg.Server, nil)
-
-	// Now call initStandalone - indexerService is nil so it will call initIndexerService
-	// which will succeed, but let's skip that and test query error directly
-	// by setting a bad indexer service
-
-	// First run initIndexerService to create the service
-	err = mgr.initIndexerService(context.Background())
-	assert.NoError(t, err)
-
-	// Then clear it to simulate the error condition in initQueryService
-	mgr.indexerService = nil
-
-	err = mgr.initStreamerService()
-	assert.NoError(t, err)
-
-	_, err = mgr.initQueryService(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
-}
+// Interface compliance checks
+var _ evaluator.Service = (*fakeEvaluatorService)(nil)
+var _ delivery.Service = (*fakeDeliveryService)(nil)
+var _ pubsub.Publisher = pubsubtesting.NewMockPublisher()
+var _ pubsub.Consumer = pubsubtesting.NewMockConsumer()

@@ -62,7 +62,7 @@ func setupTriggerTestFactories(t *testing.T) func() {
 func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -80,6 +80,11 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
 
+	// Mock pubsub consumer factory (standalone initializes both services)
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
+		return pubsubtesting.NewMockConsumer(), nil
+	}
+
 	// Set up fake puller service
 	mgr.pullerService = &mockTriggerPuller{}
 
@@ -88,14 +93,20 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 		return &fakeEvaluator{}, nil
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	// Mock delivery factory (standalone initializes both services)
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+		return &fakeConsumer{}, nil
+	}
+
+	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerService)
+	assert.NotNil(t, mgr.triggerConsumer)
 }
 
 func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
+	mgr := NewManager(cfg, Options{RunTriggerWorker: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -118,7 +129,7 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 		return &fakeConsumer{}, nil
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServices(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerConsumer)
 }
@@ -126,7 +137,7 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunTriggerWorker: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -158,35 +169,27 @@ func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 		return &fakeConsumer{}, nil
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerService)
 	assert.NotNil(t, mgr.triggerConsumer)
 }
 
-func TestManager_InitTriggerServices_EvaluatorNoPuller(t *testing.T) {
+func TestManager_InitTriggerServices_EvaluatorNoPuller_Standalone(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
 
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{}, nil
-	}
-
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// No puller service set - should fail
-	err := mgr.initTriggerServices(context.Background(), false)
-	assert.ErrorContains(t, err, "puller service is required")
+	// No puller service set - should fail in standalone mode (checked before NATS connect)
+	err := mgr.initTriggerServicesStandalone(context.Background())
+	assert.ErrorContains(t, err, "puller service is required for trigger evaluator in standalone mode")
 }
 
 func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -212,13 +215,14 @@ func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 		return nil, fmt.Errorf("evaluator error")
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.ErrorContains(t, err, "evaluator error")
 }
 
 func TestManager_InitTriggerServices_DeliveryError(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
+	cfg.Trigger.Evaluator.PullerAddr = "localhost:50051" // For distributed mode
+	mgr := NewManager(cfg, Options{RunTriggerWorker: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -241,13 +245,13 @@ func TestManager_InitTriggerServices_DeliveryError(t *testing.T) {
 		return nil, fmt.Errorf("delivery error")
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServices(context.Background())
 	assert.ErrorContains(t, err, "delivery error")
 }
 
 func TestManager_InitTriggerServices_NatsError(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -256,21 +260,8 @@ func TestManager_InitTriggerServices_NatsError(t *testing.T) {
 		return nil, fmt.Errorf("nats error")
 	})
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServices(context.Background())
 	assert.ErrorContains(t, err, "nats error")
-}
-
-func TestManager_InitTriggerServices_StandaloneEmbeddedNATS(t *testing.T) {
-	cfg := config.LoadConfig()
-	cfg.Deployment.Mode = "standalone"
-	cfg.Deployment.Standalone.EmbeddedNATS = true
-	cfg.Deployment.Standalone.NATSDataDir = "/tmp/nats"
-	mgr := NewManager(cfg, Options{Mode: ModeStandalone, RunTriggerEvaluator: true})
-
-	// EmbeddedNATSProvider should return error since it's not implemented
-	err := mgr.initTriggerServices(context.Background(), true)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, trigger.ErrEmbeddedNATSNotImplemented)
 }
 
 func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
@@ -281,7 +272,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	assert.NoError(t, os.WriteFile(rulesFile, []byte(jsonRules), 0644))
 	cfg.Trigger.Evaluator.RulesFile = rulesFile
 
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -299,6 +290,11 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 		return pubsubtesting.NewMockPublisher(), nil
 	}
 
+	// Mock pubsub consumer factory (standalone initializes both services)
+	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
+		return pubsubtesting.NewMockConsumer(), nil
+	}
+
 	// Set up fake puller service
 	mgr.pullerService = &mockTriggerPuller{}
 
@@ -308,14 +304,19 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 		return &fakeEvaluator{}, nil
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	// Mock delivery factory (standalone initializes both services)
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+		return &fakeConsumer{}, nil
+	}
+
+	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.NoError(t, err)
 }
 
 func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -336,13 +337,13 @@ func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	// Set up fake puller service
 	mgr.pullerService = &mockTriggerPuller{}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.ErrorContains(t, err, "publisher factory error")
 }
 
 func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerWorker: true})
+	mgr := NewManager(cfg, Options{RunTriggerWorker: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -360,8 +361,97 @@ func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
 		return nil, fmt.Errorf("consumer factory error")
 	}
 
-	err := mgr.initTriggerServices(context.Background(), false)
+	err := mgr.initTriggerServices(context.Background())
 	assert.ErrorContains(t, err, "consumer factory error")
+}
+
+func TestManager_InitTriggerServices_Distributed_EvaluatorSuccess(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
+	cfg.Trigger.Evaluator.RulesFile = ""
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
+
+	restore := setupTriggerTestFactories(t)
+	defer restore()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{}, nil
+	}
+
+	// Set up fake NATS connection
+	fakeConn := &nats.Conn{}
+	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
+
+	// Mock pubsub publisher factory
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+		return pubsubtesting.NewMockPublisher(), nil
+	}
+
+	// Mock evaluator factory
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		return &fakeEvaluator{}, nil
+	}
+
+	err := mgr.initTriggerServices(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.triggerService)
+}
+
+func TestManager_InitTriggerServices_Distributed_EvaluatorPublisherError(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
+	cfg.Trigger.Evaluator.RulesFile = ""
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
+
+	restore := setupTriggerTestFactories(t)
+	defer restore()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{}, nil
+	}
+
+	// Set up fake NATS connection
+	fakeConn := &nats.Conn{}
+	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
+
+	// Mock pubsub publisher factory to return error
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+		return nil, fmt.Errorf("publisher error in distributed mode")
+	}
+
+	err := mgr.initTriggerServices(context.Background())
+	assert.ErrorContains(t, err, "publisher error in distributed mode")
+}
+
+func TestManager_InitTriggerServices_Distributed_EvaluatorServiceError(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
+	cfg.Trigger.Evaluator.RulesFile = ""
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
+
+	restore := setupTriggerTestFactories(t)
+	defer restore()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{}, nil
+	}
+
+	// Set up fake NATS connection
+	fakeConn := &nats.Conn{}
+	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
+
+	// Mock pubsub publisher factory
+	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
+		return pubsubtesting.NewMockPublisher(), nil
+	}
+
+	// Mock evaluator factory to return error
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		return nil, fmt.Errorf("evaluator service error in distributed mode")
+	}
+
+	err := mgr.initTriggerServices(context.Background())
+	assert.ErrorContains(t, err, "evaluator service error in distributed mode")
 }
 
 // Fakes

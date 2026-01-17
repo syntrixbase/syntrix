@@ -118,6 +118,19 @@ func TestNewClient(t *testing.T) {
 	}
 }
 
+func TestNewClient_EmptyAddress(t *testing.T) {
+	c, err := NewClient("", nil)
+	if err == nil {
+		t.Error("NewClient should fail with empty address")
+	}
+	if c != nil {
+		t.Error("NewClient should return nil on error")
+	}
+	if err.Error() != "puller address cannot be empty" {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
 func TestStartHealthServer(t *testing.T) {
 	hc := NewHealthChecker(nil)
 	ctx, cancel := context.WithCancel(context.Background())

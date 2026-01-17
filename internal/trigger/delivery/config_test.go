@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestConfig_StorageTypeValue(t *testing.T) {
@@ -92,7 +93,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -122,7 +123,7 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	// Empty StreamName should fail validation
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "stream_name is required")
@@ -158,7 +159,7 @@ func TestConfig_Validate_Errors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.Validate()
+			err := tt.cfg.Validate(services.ModeDistributed)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errMsg)
 		})
@@ -194,7 +195,7 @@ func TestConfig_Validate_ValidConfigs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.cfg.Validate()
+			err := tt.cfg.Validate(services.ModeDistributed)
 			assert.NoError(t, err)
 		})
 	}

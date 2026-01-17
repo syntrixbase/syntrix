@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 )
@@ -44,9 +45,7 @@ func (c *Config) ApplyEnvOverrides() {
 	if val := os.Getenv("TRIGGER_NATS_URL"); val != "" {
 		c.NatsURL = val
 	}
-	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
-		c.Evaluator.RulesFile = val
-	}
+
 	c.Evaluator.ApplyEnvOverrides()
 	c.Delivery.ApplyEnvOverrides()
 }
@@ -61,10 +60,10 @@ func (c *Config) ResolvePaths(baseDir string) {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(mode services.DeploymentMode) error {
 	// Delegate to sub-configs; returns nil if all valid
-	if err := c.Evaluator.Validate(); err != nil {
+	if err := c.Evaluator.Validate(mode); err != nil {
 		return fmt.Errorf("evaluator: %w", err)
 	}
-	return c.Delivery.Validate()
+	return c.Delivery.Validate(mode)
 }

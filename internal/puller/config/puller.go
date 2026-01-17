@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 // Config holds configuration for the Puller service.
@@ -151,7 +153,7 @@ func DefaultConfig() Config {
 }
 
 // Validate validates the PullerConfig.
-func (c *Config) Validate() error {
+func (c *Config) Validate(_ services.DeploymentMode) error {
 	if c.GRPC.MaxConnections <= 0 {
 		return errors.New("puller.grpc.max_connections must be positive")
 	}

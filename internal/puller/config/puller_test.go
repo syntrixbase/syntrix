@@ -3,6 +3,8 @@ package config
 import (
 	"testing"
 	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultPullerConfig(t *testing.T) {
@@ -41,7 +43,7 @@ func TestDefaultPullerConfig(t *testing.T) {
 	}
 
 	// Default config should be valid
-	if err := cfg.Validate(); err != nil {
+	if err := cfg.Validate(services.ModeDistributed); err != nil {
 		t.Errorf("DefaultPullerConfig().Validate() error = %v", err)
 	}
 }
@@ -159,7 +161,7 @@ func TestPullerConfig_Validate(t *testing.T) {
 			cfg := validCfg()
 			tt.modify(&cfg)
 
-			err := cfg.Validate()
+			err := cfg.Validate(services.ModeDistributed)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}

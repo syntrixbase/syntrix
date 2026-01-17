@@ -2,8 +2,11 @@
 package config
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 type StorageMode string
@@ -143,6 +146,9 @@ func (c *Config) ResolvePaths(baseDir string) {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(mode services.DeploymentMode) error {
+	if mode.IsDistributed() && c.PullerAddr == "" {
+		return fmt.Errorf("indexer.puller_addr is required in distributed mode")
+	}
 	return nil
 }

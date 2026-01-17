@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -33,7 +34,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -48,7 +49,7 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
 	assert.NoError(t, err)
 }
 
@@ -58,4 +59,17 @@ func TestConfig_StructFields(t *testing.T) {
 	}
 
 	assert.Equal(t, "custom-indexer:9002", cfg.IndexerAddr)
+}
+
+func TestConfig_Validate_DistributedMode(t *testing.T) {
+	// In distributed mode, IndexerAddr is required
+	cfg := &Config{IndexerAddr: ""}
+	err := cfg.Validate(services.ModeDistributed)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "query.indexer_addr is required in distributed mode")
+
+	// With IndexerAddr set, should pass
+	cfg.IndexerAddr = "indexer:9000"
+	err = cfg.Validate(services.ModeDistributed)
+	assert.NoError(t, err)
 }
