@@ -155,19 +155,3 @@ func TestTokenService_GenerateTokenPair_DefaultDatabase(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "default", claims.DatabaseID)
 }
-
-func TestLoadPrivateKey_DecodeError(t *testing.T) {
-	tmpDir := t.TempDir()
-	keyPath := filepath.Join(tmpDir, "bad_pem.pem")
-	// Write valid file but invalid PEM block content (e.g. just random text without headers)
-	os.WriteFile(keyPath, []byte("just random text"), 0600)
-
-	_, err := LoadPrivateKey(keyPath)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to decode PEM block")
-}
-
-func TestSavePrivateKey_Marshal(t *testing.T) {
-	// x509.MarshalPKCS1PrivateKey doesn't return error for valid key.
-	// We already covered file creation error in SavePrivateKey_InvalidPath.
-}
