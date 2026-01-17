@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -59,7 +60,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
 	assert.NoError(t, err)
 }
 

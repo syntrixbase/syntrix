@@ -1,6 +1,10 @@
 package server
 
-import "time"
+import (
+	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
+)
 
 // Config holds the configuration for the unified server module.
 type Config struct {
@@ -70,6 +74,6 @@ func (c *Config) ApplyEnvOverrides() { _ = c }
 func (c *Config) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(_ services.DeploymentMode) error {
 	return nil
 }

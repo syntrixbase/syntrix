@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -41,14 +42,14 @@ func TestDefaultConfig(t *testing.T) {
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
 
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
 
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	// Empty config fails because databases.default is required
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "storage.databases.default is required")

@@ -109,7 +109,7 @@ func TestDeploymentConfig_ResolvePaths(t *testing.T) {
 
 func TestDeploymentConfig_Validate(t *testing.T) {
 	cfg := DefaultDeploymentConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -163,13 +163,13 @@ func TestDeploymentConfig_ApplyEnvOverrides_NoEnvVars(t *testing.T) {
 
 func TestDeploymentConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := DeploymentConfig{}
-	err := cfg.Validate()
+	err := cfg.Validate(ModeDistributed)
 	assert.NoError(t, err)
 }
 
 func TestDeploymentConfig_Validate_InvalidMode(t *testing.T) {
 	cfg := DeploymentConfig{Mode: "invalid_mode"}
-	err := cfg.Validate()
+	err := cfg.Validate(ModeDistributed)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "deployment.mode must be 'standalone' or 'distributed'")
 }
@@ -187,7 +187,7 @@ func TestDeploymentConfig_Validate_ValidModes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := DeploymentConfig{Mode: tt.mode}
-			err := cfg.Validate()
+			err := cfg.Validate(ModeDistributed)
 			assert.NoError(t, err)
 		})
 	}

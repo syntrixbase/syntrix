@@ -176,3 +176,9 @@ func TestDeploymentMode_IsStandalone_ViaConfig(t *testing.T) {
 	cfg = &Config{Deployment: services_config.DeploymentConfig{Mode: ""}}
 	assert.False(t, cfg.Deployment.Mode.IsStandalone())
 }
+
+// Note: Config.Validate() has been removed. Mode-dependent validation is now
+// performed by individual service configs via their Validate(mode) method.
+// Tests for distributed mode address requirements are in the respective
+// service config test files (e.g., query/config/config_test.go,
+// gateway/config/config_test.go, etc.)

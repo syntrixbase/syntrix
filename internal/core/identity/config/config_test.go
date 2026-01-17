@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -76,7 +77,7 @@ func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 
 func TestConfig_Validate(t *testing.T) {
 	cfg := DefaultConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -143,6 +144,6 @@ func TestConfig_ResolvePaths_PrivateKeyAbsolute(t *testing.T) {
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }

@@ -1,6 +1,11 @@
 package config
 
-import "os"
+import (
+	"fmt"
+	"os"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
+)
 
 type GatewayConfig struct {
 	QueryServiceURL    string         `yaml:"query_service_url"`
@@ -50,7 +55,14 @@ func (g *GatewayConfig) ApplyEnvOverrides() {
 func (g *GatewayConfig) ResolvePaths(_ string) { _ = g }
 
 // Validate returns an error if the configuration is invalid.
-func (g *GatewayConfig) Validate() error {
-	// Add validation logic if needed
+func (g *GatewayConfig) Validate(mode services.DeploymentMode) error {
+	if mode.IsDistributed() {
+		if g.QueryServiceURL == "" {
+			return fmt.Errorf("gateway.query_service_url is required in distributed mode")
+		}
+		if g.StreamerServiceURL == "" {
+			return fmt.Errorf("gateway.streamer_service_url is required in distributed mode")
+		}
+	}
 	return nil
 }

@@ -62,7 +62,7 @@ func setupTriggerTestFactories(t *testing.T) func() {
 func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -126,7 +126,7 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunTriggerWorker: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunTriggerWorker: true, RunPuller: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -164,9 +164,9 @@ func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	assert.NotNil(t, mgr.triggerConsumer)
 }
 
-func TestManager_InitTriggerServices_EvaluatorNoPuller(t *testing.T) {
+func TestManager_InitTriggerServices_EvaluatorNoPuller_Standalone(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -179,14 +179,14 @@ func TestManager_InitTriggerServices_EvaluatorNoPuller(t *testing.T) {
 	fakeConn := &nats.Conn{}
 	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
 
-	// No puller service set - should fail
+	// No puller service set - should fail in standalone mode
 	err := mgr.initTriggerServices(context.Background(), false)
-	assert.ErrorContains(t, err, "puller service is required")
+	assert.ErrorContains(t, err, "puller service is required for trigger evaluator in standalone mode")
 }
 
 func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 	cfg := config.LoadConfig()
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -281,7 +281,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	assert.NoError(t, os.WriteFile(rulesFile, []byte(jsonRules), 0644))
 	cfg.Trigger.Evaluator.RulesFile = rulesFile
 
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -315,7 +315,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesFile = ""
-	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true})
+	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, RunPuller: true, Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()

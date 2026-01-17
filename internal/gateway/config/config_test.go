@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultGatewayConfig(t *testing.T) {
@@ -32,7 +33,7 @@ func TestGatewayConfig_StructFields(t *testing.T) {
 
 func TestGatewayConfig_Validate(t *testing.T) {
 	cfg := DefaultGatewayConfig()
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }
 
@@ -111,6 +112,6 @@ func TestGatewayConfig_ApplyEnvOverrides_NoEnvVar(t *testing.T) {
 
 func TestGatewayConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := GatewayConfig{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeStandalone)
 	assert.NoError(t, err)
 }

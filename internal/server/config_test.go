@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 func TestDefaultConfig(t *testing.T) {
@@ -116,10 +117,10 @@ func TestConfig_ResolvePaths(t *testing.T) {
 func TestConfig_Validate(t *testing.T) {
 	// Validate is currently a no-op that returns nil
 	cfg := Config{}
-	err := cfg.Validate()
+	err := cfg.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 
 	cfg2 := DefaultConfig()
-	err = cfg2.Validate()
+	err = cfg2.Validate(services.ModeDistributed)
 	assert.NoError(t, err)
 }

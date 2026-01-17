@@ -632,25 +632,10 @@ func TestManager_initQueryService_StandaloneMissingIndexer(t *testing.T) {
 	assert.Contains(t, err.Error(), "indexer service required in standalone mode")
 }
 
-func TestManager_initQueryService_DistributedMissingURL(t *testing.T) {
-	fakeDocStore := &fakeDocumentStore{}
-	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
-
-	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
-		return &fakeStorageFactory{
-			docStore: fakeDocStore,
-		}, nil
-	}
-
-	cfg := config.LoadConfig()
-	cfg.Query.IndexerAddr = "" // Clear the URL
-	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunQuery: true})
-
-	_, err := mgr.initQueryService(context.Background())
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "query.indexer_addr required in distributed mode")
-}
+// Note: TestManager_initQueryService_DistributedMissingURL was removed because
+// validation of IndexerAddr in distributed mode now happens at config load time
+// via Config.Validate(). See TestConfig_Validate_DistributedMode_MissingAddresses
+// in internal/config/config_test.go.
 
 func TestManager_initQueryService_StorageError(t *testing.T) {
 	origFactory := storageFactoryFactory

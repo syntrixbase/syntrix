@@ -3,6 +3,8 @@ package config
 import (
 	"path/filepath"
 	"time"
+
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 type Config struct {
@@ -70,6 +72,6 @@ func (c *Config) ResolvePaths(baseDir string) {
 }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(_ services.DeploymentMode) error {
 	return nil
 }

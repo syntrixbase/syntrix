@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	services "github.com/syntrixbase/syntrix/internal/services/config"
 )
 
 // Config contains all configuration for the delivery service.
@@ -68,7 +69,7 @@ func (c *Config) ApplyEnvOverrides() { _ = c }
 func (c *Config) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
-func (c *Config) Validate() error {
+func (c *Config) Validate(_ services.DeploymentMode) error {
 	if c.NumWorkers < 0 {
 		return errors.New("num_workers must be non-negative")
 	}

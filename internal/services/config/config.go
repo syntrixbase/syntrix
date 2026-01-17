@@ -77,7 +77,7 @@ func (c *DeploymentConfig) ApplyEnvOverrides() {
 func (c *DeploymentConfig) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
-func (c *DeploymentConfig) Validate() error {
+func (c *DeploymentConfig) Validate(_ DeploymentMode) error {
 	// Validate Deployment Mode
 	if c.Mode != "" && c.Mode != ModeStandalone && c.Mode != ModeDistributed {
 		return fmt.Errorf("deployment.mode must be 'standalone' or 'distributed', got '%s'", c.Mode)

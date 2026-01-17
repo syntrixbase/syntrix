@@ -220,10 +220,8 @@ func (m *Manager) initQueryService(ctx context.Context) (query.Service, error) {
 		return query.NewService(sf.Document(), m.indexerService), nil
 	}
 
-	// Distributed (including --all): must use gRPC client
-	if m.cfg.Query.IndexerAddr == "" {
-		return nil, fmt.Errorf("query.indexer_addr required in distributed mode")
-	}
+	// Distributed (including --all): use gRPC client
+	// Note: IndexerAddr is validated at config load time via Config.Validate()
 	client, err := indexer.NewClient(m.cfg.Query.IndexerAddr, slog.Default())
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to indexer: %w", err)
@@ -455,8 +453,24 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 
 	// Initialize Evaluator Service
 	if m.opts.RunTriggerEvaluator {
-		if m.pullerService == nil {
-			return fmt.Errorf("puller service is required for trigger evaluator")
+		var pullerSvc puller.Service
+
+		if m.opts.Mode.IsStandalone() {
+			// Standalone mode: use local Puller service
+			if m.pullerService == nil {
+				return fmt.Errorf("puller service is required for trigger evaluator in standalone mode")
+			}
+			pullerSvc = m.pullerService
+			slog.Info("Trigger Evaluator using local Puller service")
+		} else {
+			// Distributed mode: use gRPC client
+			// Note: PullerAddr is validated at config load time via Config.Validate()
+			client, err := puller.NewClient(m.cfg.Trigger.Evaluator.PullerAddr, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create Puller gRPC client for Trigger Evaluator: %w", err)
+			}
+			pullerSvc = client
+			slog.Info("Trigger Evaluator using remote Puller service", "url", m.cfg.Trigger.Evaluator.PullerAddr)
 		}
 
 		// Create pubsub.Publisher for evaluator using injectable factory
@@ -467,7 +481,7 @@ func (m *Manager) initTriggerServices(ctx context.Context, useEmbeddedNATS bool)
 
 		evalSvc, err := evaluatorServiceFactory(evaluator.Dependencies{
 			Store:     sf.Document(),
-			Puller:    m.pullerService,
+			Puller:    pullerSvc,
 			Publisher: publisher,
 			Metrics:   nil, // TODO: Add metrics when available
 		}, m.cfg.Trigger.Evaluator)
