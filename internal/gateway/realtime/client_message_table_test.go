@@ -69,8 +69,14 @@ func TestClientHandleMessage_TableDriven(t *testing.T) {
 		checkClient     func(*testing.T, *Client)
 	}{
 		{
-			name:         "Auth_Ack_NoAuthService",
-			msg:          BaseMessage{Type: TypeAuth, ID: "req"},
+			name: "Auth_Ack_ValidToken",
+			msg: func() BaseMessage {
+				payload, _ := json.Marshal(AuthPayload{Token: "good"})
+				return BaseMessage{Type: TypeAuth, ID: "req", Payload: payload}
+			}(),
+			setupAuth: func(m *MockAuthService) {
+				m.On("ValidateToken", "good").Return(&identity.Claims{DatabaseID: "default"}, nil)
+			},
 			expectedType: TypeAuthAck,
 		},
 		{

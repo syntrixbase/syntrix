@@ -21,8 +21,9 @@ import (
 )
 
 func TestClientHandleMessage_AuthAck(t *testing.T) {
-	c := &Client{hub: NewTestHub(), queryService: &MockQueryService{}, send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string)}
-	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req"})
+	c := &Client{hub: NewTestHub(), queryService: &MockQueryService{}, send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string), auth: &mockAuthService{}}
+	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req", Payload: payload})
 
 	select {
 	case msg := <-c.send:
@@ -169,8 +170,9 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	hub := NewTestHub()
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
+	auth := &mockAuthService{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
+		ServeWs(hub, qs, auth, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 
@@ -183,7 +185,8 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	assert.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("{invalid")))
 
 	// Follow with valid auth to ensure readPump still processes
-	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-2"}
+	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-2", Payload: payload}
 	assert.NoError(t, conn.WriteJSON(authMsg))
 
 	var resp BaseMessage
@@ -199,8 +202,9 @@ func TestServeWs_RejectsCrossOrigin(t *testing.T) {
 	hub := NewTestHub()
 	go hub.Run(hubCtx)
 	qs := setupMockQuery()
+	auth := &mockAuthService{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
+		ServeWs(hub, qs, auth, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 
@@ -406,8 +410,9 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 	go hub.Run(hubCtx)
 
 	qs := setupMockQuery()
+	auth := &mockAuthService{}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ServeWs(hub, qs, nil, api_config.RealtimeConfig{}, w, r)
+		ServeWs(hub, qs, auth, api_config.RealtimeConfig{}, w, r)
 	}))
 	defer server.Close()
 
@@ -417,7 +422,8 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 	defer conn.Close()
 
 	// Auth message -> expect ack
-	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-1"}
+	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-1", Payload: payload}
 	assert.NoError(t, conn.WriteJSON(authMsg))
 
 	var resp BaseMessage

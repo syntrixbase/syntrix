@@ -256,12 +256,6 @@ func (c *Client) handleMessage(msg BaseMessage) {
 }
 
 func (c *Client) handleAuth(msg BaseMessage) {
-	if c.auth == nil {
-		c.authenticated = true
-		c.send <- BaseMessage{ID: msg.ID, Type: TypeAuthAck}
-		return
-	}
-
 	var payload AuthPayload
 	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "invalid_auth", Message: "invalid payload"})}
