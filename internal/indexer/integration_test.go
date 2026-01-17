@@ -66,6 +66,7 @@ func createTestEvent(database, collection, docID string, data map[string]any) *p
 
 // templateYAML defines test templates.
 const templateYAML = `
+database: default
 templates:
   - name: users_by_timestamp
     collectionPattern: "users"
@@ -99,20 +100,19 @@ func setupIndexerService(t *testing.T, mockPullerSvc *mockPuller) (indexer.Local
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	// Create temp file for templates
-	tmpFile, err := os.CreateTemp("", "templates-*.yaml")
+	// Create temp directory for templates
+	tmpDir, err := os.MkdirTemp("", "templates-*")
 	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
+		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
-	if _, err := tmpFile.WriteString(templateYAML); err != nil {
+	if err := os.WriteFile(tmpDir+"/default.yml", []byte(templateYAML), 0644); err != nil {
 		t.Fatalf("failed to write templates: %v", err)
 	}
-	tmpFile.Close()
 
 	cfg := config.Config{
-		TemplatePath: tmpFile.Name(),
+		TemplatePath: tmpDir,
 		ConsumerID:   "test-indexer",
 	}
 	svc, err := indexer.NewService(cfg, mockPullerSvc, logger)
@@ -150,20 +150,19 @@ func setupIndexerServiceWithPebble(t *testing.T, mockPullerSvc *mockPuller, data
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))
 
-	// Create temp file for templates
-	tmpFile, err := os.CreateTemp("", "templates-*.yaml")
+	// Create temp directory for templates
+	tmpDir, err := os.MkdirTemp("", "templates-*")
 	if err != nil {
-		t.Fatalf("failed to create temp file: %v", err)
+		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.Remove(tmpFile.Name()) })
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
 
-	if _, err := tmpFile.WriteString(templateYAML); err != nil {
+	if err := os.WriteFile(tmpDir+"/default.yml", []byte(templateYAML), 0644); err != nil {
 		t.Fatalf("failed to write templates: %v", err)
 	}
-	tmpFile.Close()
 
 	cfg := config.Config{
-		TemplatePath: tmpFile.Name(),
+		TemplatePath: tmpDir,
 		ConsumerID:   "test-indexer-pebble",
 		StorageMode:  "pebble",
 		Store: config.StoreConfig{

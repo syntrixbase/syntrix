@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -64,6 +65,8 @@ var (
 	ErrDuplicateField     = errors.New("duplicate field in template")
 	ErrDuplicateTemplate  = errors.New("duplicate template definition")
 	ErrConflictingPattern = errors.New("conflicting patterns with same priority")
+	ErrEmptyDatabase      = errors.New("database field cannot be empty")
+	ErrNotDirectory       = errors.New("path is not a directory")
 )
 
 // varPattern matches {anything} in collection patterns.
@@ -71,6 +74,7 @@ var varPattern = regexp.MustCompile(`^\{[^}]+\}$`)
 
 // Config represents the templates configuration file.
 type Config struct {
+	Database  string     `yaml:"database"`
 	Templates []Template `yaml:"templates"`
 }
 
@@ -278,4 +282,112 @@ func SelectBestTemplates(results []MatchResult) []MatchResult {
 		}
 	}
 	return best
+}
+
+// DatabaseTemplates holds templates grouped by database.
+type DatabaseTemplates map[string][]Template
+
+// LoadFromDir loads templates from all YAML files in a directory.
+// Templates are grouped by the database field in each file.
+// Same database can span multiple files; templates are merged.
+// Returns error if duplicate (database, name) is found.
+func LoadFromDir(dirPath string) (DatabaseTemplates, error) {
+	info, err := os.Stat(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to stat directory: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("%w: %s", ErrNotDirectory, dirPath)
+	}
+
+	entries, err := os.ReadDir(dirPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read directory: %w", err)
+	}
+
+	result := make(DatabaseTemplates)
+	// Track (database, name) -> source file for conflict detection
+	seen := make(map[string]string) // key: "database|name", value: filename
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".yml") && !strings.HasSuffix(name, ".yaml") {
+			continue
+		}
+
+		filePath := filepath.Join(dirPath, name)
+		cfg, err := loadConfigFromFile(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("file %s: %w", name, err)
+		}
+
+		if cfg.Database == "" {
+			return nil, fmt.Errorf("file %s: %w", name, ErrEmptyDatabase)
+		}
+
+		// Validate each template
+		for i := range cfg.Templates {
+			if err := ValidateTemplate(&cfg.Templates[i]); err != nil {
+				return nil, fmt.Errorf("file %s, template %q: %w", name, cfg.Templates[i].Name, err)
+			}
+
+			// Check for duplicate (database, name)
+			tmplName := cfg.Templates[i].Identity()
+			key := cfg.Database + "|" + tmplName
+			if existingFile, ok := seen[key]; ok {
+				return nil, fmt.Errorf("%w: template %q in database %q defined in both %s and %s",
+					ErrDuplicateTemplate, tmplName, cfg.Database, existingFile, name)
+			}
+			seen[key] = name
+		}
+
+		// Merge templates into result
+		result[cfg.Database] = append(result[cfg.Database], cfg.Templates...)
+	}
+
+	// Validate within each database (pattern+identity uniqueness)
+	for db, templates := range result {
+		if err := ValidateTemplates(templates); err != nil {
+			return nil, fmt.Errorf("database %q: %w", db, err)
+		}
+	}
+
+	return result, nil
+}
+
+// loadConfigFromFile loads a Config from a YAML file.
+func loadConfigFromFile(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	var cfg Config
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse YAML: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// AllTemplates returns all templates from all databases as a flat list.
+func (dt DatabaseTemplates) AllTemplates() []Template {
+	var all []Template
+	for _, templates := range dt {
+		all = append(all, templates...)
+	}
+	return all
+}
+
+// Databases returns a sorted list of database names.
+func (dt DatabaseTemplates) Databases() []string {
+	dbs := make([]string, 0, len(dt))
+	for db := range dt {
+		dbs = append(dbs, db)
+	}
+	sort.Strings(dbs)
+	return dbs
 }

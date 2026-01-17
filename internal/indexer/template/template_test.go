@@ -424,3 +424,221 @@ func TestMatchTemplates_Wildcard(t *testing.T) {
 		assert.True(t, foundWildcard, "should match wildcard template even for specific path")
 	})
 }
+
+func TestLoadFromDir(t *testing.T) {
+	t.Run("valid directory with single file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yaml := `
+database: testdb
+templates:
+  - name: users-by-created
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		err := writeFile(tmpDir+"/testdb.yml", []byte(yaml))
+		require.NoError(t, err)
+
+		dbTemplates, err := LoadFromDir(tmpDir)
+		require.NoError(t, err)
+		assert.Len(t, dbTemplates, 1)
+		assert.Contains(t, dbTemplates, "testdb")
+		assert.Len(t, dbTemplates["testdb"], 1)
+		assert.Equal(t, "users-by-created", dbTemplates["testdb"][0].Name)
+	})
+
+	t.Run("multiple files same database", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		yaml1 := `
+database: mydb
+templates:
+  - name: template1
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		yaml2 := `
+database: mydb
+templates:
+  - name: template2
+    collectionPattern: users/{uid}/messages
+    fields:
+      - { field: sentAt, order: asc }
+`
+		err := writeFile(tmpDir+"/mydb-part1.yml", []byte(yaml1))
+		require.NoError(t, err)
+		err = writeFile(tmpDir+"/mydb-part2.yml", []byte(yaml2))
+		require.NoError(t, err)
+
+		dbTemplates, err := LoadFromDir(tmpDir)
+		require.NoError(t, err)
+		assert.Len(t, dbTemplates, 1)
+		assert.Len(t, dbTemplates["mydb"], 2)
+	})
+
+	t.Run("multiple databases", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		yaml1 := `
+database: db1
+templates:
+  - name: template1
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		yaml2 := `
+database: db2
+templates:
+  - name: template2
+    collectionPattern: users/{uid}/messages
+    fields:
+      - { field: sentAt, order: asc }
+`
+		err := writeFile(tmpDir+"/db1.yml", []byte(yaml1))
+		require.NoError(t, err)
+		err = writeFile(tmpDir+"/db2.yml", []byte(yaml2))
+		require.NoError(t, err)
+
+		dbTemplates, err := LoadFromDir(tmpDir)
+		require.NoError(t, err)
+		assert.Len(t, dbTemplates, 2)
+		assert.Contains(t, dbTemplates, "db1")
+		assert.Contains(t, dbTemplates, "db2")
+	})
+
+	t.Run("conflict detection - same database and name", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		yaml1 := `
+database: mydb
+templates:
+  - name: duplicate-name
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		yaml2 := `
+database: mydb
+templates:
+  - name: duplicate-name
+    collectionPattern: users/{uid}/messages
+    fields:
+      - { field: sentAt, order: asc }
+`
+		err := writeFile(tmpDir+"/file1.yml", []byte(yaml1))
+		require.NoError(t, err)
+		err = writeFile(tmpDir+"/file2.yml", []byte(yaml2))
+		require.NoError(t, err)
+
+		_, err = LoadFromDir(tmpDir)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrDuplicateTemplate)
+	})
+
+	t.Run("empty database field", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yaml := `
+templates:
+  - name: test
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		err := writeFile(tmpDir+"/test.yml", []byte(yaml))
+		require.NoError(t, err)
+
+		_, err = LoadFromDir(tmpDir)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrEmptyDatabase)
+	})
+
+	t.Run("not a directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		tmpFile := tmpDir + "/file.yml"
+		err := writeFile(tmpFile, []byte("database: test\ntemplates: []"))
+		require.NoError(t, err)
+
+		_, err = LoadFromDir(tmpFile)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, ErrNotDirectory)
+	})
+
+	t.Run("non-existent directory", func(t *testing.T) {
+		_, err := LoadFromDir("/nonexistent/path")
+		assert.Error(t, err)
+	})
+
+	t.Run("empty directory", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		dbTemplates, err := LoadFromDir(tmpDir)
+		require.NoError(t, err)
+		assert.Len(t, dbTemplates, 0)
+	})
+
+	t.Run("ignores non-yaml files", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		yaml := `
+database: testdb
+templates:
+  - name: test
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		err := writeFile(tmpDir+"/test.yml", []byte(yaml))
+		require.NoError(t, err)
+		err = writeFile(tmpDir+"/readme.txt", []byte("ignore me"))
+		require.NoError(t, err)
+		err = writeFile(tmpDir+"/config.json", []byte("{}"))
+		require.NoError(t, err)
+
+		dbTemplates, err := LoadFromDir(tmpDir)
+		require.NoError(t, err)
+		assert.Len(t, dbTemplates, 1)
+	})
+
+	t.Run("invalid YAML file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		invalidYAML := `
+database: testdb
+templates:
+  - name: test
+    collectionPattern: users/{uid}/docs
+    fields: [invalid yaml syntax
+`
+		err := writeFile(tmpDir+"/bad.yml", []byte(invalidYAML))
+		require.NoError(t, err)
+
+		_, err = LoadFromDir(tmpDir)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to parse YAML")
+	})
+}
+
+func TestDatabaseTemplates_AllTemplates(t *testing.T) {
+	dt := DatabaseTemplates{
+		"db1": {
+			{Name: "t1", CollectionPattern: "a", Fields: []Field{{Field: "f", Order: Asc}}},
+			{Name: "t2", CollectionPattern: "b", Fields: []Field{{Field: "f", Order: Asc}}},
+		},
+		"db2": {
+			{Name: "t3", CollectionPattern: "c", Fields: []Field{{Field: "f", Order: Asc}}},
+		},
+	}
+
+	all := dt.AllTemplates()
+	assert.Len(t, all, 3)
+}
+
+func TestDatabaseTemplates_Databases(t *testing.T) {
+	dt := DatabaseTemplates{
+		"zdb": {},
+		"adb": {},
+		"mdb": {},
+	}
+
+	dbs := dt.Databases()
+	assert.Equal(t, []string{"adb", "mdb", "zdb"}, dbs)
+}

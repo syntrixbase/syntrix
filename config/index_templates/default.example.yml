@@ -1,3 +1,4 @@
+database: default
 templates:
   - name: orch-chats-by-updated
     collectionPattern: "users/*/orch-chats"

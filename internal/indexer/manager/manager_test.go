@@ -456,39 +456,128 @@ func TestManager_ComputeQueryScore(t *testing.T) {
 	})
 }
 
-func TestManager_LoadTemplates(t *testing.T) {
-	t.Run("valid template file", func(t *testing.T) {
-		// Create temp template file
-		tmpFile, err := os.CreateTemp("", "templates-*.yaml")
+func TestManager_LoadTemplatesFromDir(t *testing.T) {
+	t.Run("valid template directory", func(t *testing.T) {
+		// Create temp directory
+		tmpDir, err := os.MkdirTemp("", "templates-*")
 		require.NoError(t, err)
-		defer os.Remove(tmpFile.Name())
+		defer os.RemoveAll(tmpDir)
 
 		templateYAML := `
+database: default
 templates:
   - name: test_template
     collectionPattern: users/{uid}/docs
     fields:
       - { field: timestamp, order: desc }
 `
-		_, err = tmpFile.WriteString(templateYAML)
+		err = os.WriteFile(tmpDir+"/default.yml", []byte(templateYAML), 0644)
 		require.NoError(t, err)
-		tmpFile.Close()
 
 		st := mem_store.New()
 		m := New(st)
-		err = m.LoadTemplates(tmpFile.Name())
+		err = m.LoadTemplatesFromDir(tmpDir)
 		require.NoError(t, err)
 
 		assert.Len(t, m.Templates(), 1)
 		assert.Equal(t, "test_template", m.Templates()[0].Name)
 	})
 
-	t.Run("nonexistent file", func(t *testing.T) {
+	t.Run("nonexistent directory", func(t *testing.T) {
 		st := mem_store.New()
 		m := New(st)
-		err := m.LoadTemplates("/nonexistent/path/templates.yaml")
+		err := m.LoadTemplatesFromDir("/nonexistent/path/templates")
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrTemplateLoadFailed)
+	})
+}
+
+func TestManager_DatabaseTemplates(t *testing.T) {
+	t.Run("returns nil when no templates loaded", func(t *testing.T) {
+		st := mem_store.New()
+		m := New(st)
+		assert.Nil(t, m.DatabaseTemplates())
+	})
+
+	t.Run("returns templates grouped by database", func(t *testing.T) {
+		// Create temp directory with multiple databases
+		tmpDir, err := os.MkdirTemp("", "templates-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		db1YAML := `
+database: db1
+templates:
+  - name: template1
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+`
+		db2YAML := `
+database: db2
+templates:
+  - name: template2
+    collectionPattern: orders/{oid}/items
+    fields:
+      - { field: price, order: asc }
+`
+		err = os.WriteFile(tmpDir+"/db1.yml", []byte(db1YAML), 0644)
+		require.NoError(t, err)
+		err = os.WriteFile(tmpDir+"/db2.yml", []byte(db2YAML), 0644)
+		require.NoError(t, err)
+
+		st := mem_store.New()
+		m := New(st)
+		err = m.LoadTemplatesFromDir(tmpDir)
+		require.NoError(t, err)
+
+		dbTemplates := m.DatabaseTemplates()
+		assert.Len(t, dbTemplates, 2)
+		assert.Contains(t, dbTemplates, "db1")
+		assert.Contains(t, dbTemplates, "db2")
+		assert.Len(t, dbTemplates["db1"], 1)
+		assert.Len(t, dbTemplates["db2"], 1)
+	})
+}
+
+func TestManager_TemplatesForDatabase(t *testing.T) {
+	t.Run("returns nil for unknown database", func(t *testing.T) {
+		st := mem_store.New()
+		m := New(st)
+		assert.Nil(t, m.TemplatesForDatabase("unknown"))
+	})
+
+	t.Run("returns templates for specific database", func(t *testing.T) {
+		// Create temp directory
+		tmpDir, err := os.MkdirTemp("", "templates-*")
+		require.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		yaml := `
+database: mydb
+templates:
+  - name: tmpl1
+    collectionPattern: users/{uid}/docs
+    fields:
+      - { field: createdAt, order: desc }
+  - name: tmpl2
+    collectionPattern: users/{uid}/messages
+    fields:
+      - { field: sentAt, order: asc }
+`
+		err = os.WriteFile(tmpDir+"/mydb.yml", []byte(yaml), 0644)
+		require.NoError(t, err)
+
+		st := mem_store.New()
+		m := New(st)
+		err = m.LoadTemplatesFromDir(tmpDir)
+		require.NoError(t, err)
+
+		templates := m.TemplatesForDatabase("mydb")
+		assert.Len(t, templates, 2)
+
+		// Unknown database returns nil
+		assert.Nil(t, m.TemplatesForDatabase("other"))
 	})
 }
 
