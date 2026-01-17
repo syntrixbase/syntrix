@@ -14,15 +14,24 @@ import (
 	"strings"
 )
 
-// Thresholds for coverage analysis
-const (
-	ThresholdFunc    = 80.0
-	ThresholdPackage = 85.0
-	ThresholdPrint   = 85.0
-	ThresholdTotal   = 90.0
+// Config holds the configuration for coverage analysis
+type Config struct {
+	// Thresholds
+	ThresholdFunc    float64
+	ThresholdPackage float64
+	ThresholdPrint   float64
+	ThresholdTotal   float64
 
-	ModulePrefix = "github.com/syntrixbase/syntrix/"
-)
+	// Behavior
+	CIMode          bool   // Enable CI mode (GitHub Actions error format, fail on CRITICAL)
+	RaceDetection   bool   // Enable -race flag
+	ExcludePackages string // Packages to exclude (comma-separated)
+	CoverProfile    string // Coverage profile path
+	UncoveredLimit  int    // Max uncovered blocks to show
+	ShowTestCounts  bool   // Show TESTS column in package summary
+}
+
+const ModulePrefix = "github.com/syntrixbase/syntrix/"
 
 // ANSI color codes
 const (
@@ -60,52 +69,143 @@ type FuncCoverage struct {
 	Coverage float64
 }
 
-func main() {
-	coverProfile := os.Getenv("COVERPROFILE")
-	if coverProfile == "" {
-		coverProfile = "/tmp/coverage.out"
-	}
+// Global config
+var cfg Config
 
-	pkgs := "./internal/... ./tests/... ./pkg/..."
+func main() {
+	cfg = parseConfig()
 
 	fmt.Println()
 
 	// Run tests and collect results
-	results, testCounts, exitCode := runTests(pkgs, coverProfile)
+	results, testCounts, exitCode := runTests()
 	if exitCode != 0 && len(results) == 0 {
 		os.Exit(exitCode)
 	}
 
 	// Print package coverage summary
-	printPackageSummary(results, testCounts)
+	hasCriticalPackage := printPackageSummary(results, testCounts)
 
 	if exitCode != 0 {
 		os.Exit(exitCode)
 	}
 
 	// Get function coverage data
-	funcData := getFunctionCoverage(coverProfile)
+	funcData := getFunctionCoverage()
 
 	// Print function coverage details
-	printFunctionCoverage(funcData)
+	hasCriticalFunc := printFunctionCoverage(funcData)
+
+	// Print total and check threshold
+	hasCriticalTotal := printTotal()
 
 	// Print statistics
 	printStatistics(funcData, testCounts)
 
-	// Generate HTML report
-	generateHTMLReport(coverProfile)
+	// Generate HTML report (only in local mode)
+	if !cfg.CIMode {
+		generateHTMLReport()
+	}
 
 	// Analyze uncovered blocks
 	fmt.Println()
 	fmt.Println(strings.Repeat("-", 90))
-	analyzeUncoveredBlocks(coverProfile)
+	hasCriticalBlocks := analyzeUncoveredBlocks()
+
+	// In CI mode, exit with error if any CRITICAL issues
+	if cfg.CIMode && (hasCriticalPackage || hasCriticalFunc || hasCriticalTotal || hasCriticalBlocks) {
+		os.Exit(1)
+	}
+}
+
+// parseConfig parses configuration from environment variables and arguments
+func parseConfig() Config {
+	c := Config{
+		ThresholdFunc:    80.0,
+		ThresholdPackage: 85.0,
+		ThresholdPrint:   85.0,
+		ThresholdTotal:   90.0,
+		CIMode:           os.Getenv("CI") == "true",
+		RaceDetection:    false,
+		ExcludePackages:  "syntrix/cmd/,syntrix/api/,syntrix/scripts/",
+		CoverProfile:     "/tmp/coverage.out",
+		UncoveredLimit:   10,
+		ShowTestCounts:   true,
+	}
+
+	// CI mode has different defaults
+	if c.CIMode {
+		c.ThresholdPrint = 90.0
+		c.RaceDetection = true
+		c.CoverProfile = "coverage.out"
+		c.UncoveredLimit = 20
+		c.ShowTestCounts = false
+	}
+
+	// Override from environment
+	if v := os.Getenv("COVERPROFILE"); v != "" {
+		c.CoverProfile = v
+	}
+	if v := os.Getenv("THRESHOLD_FUNC"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.ThresholdFunc = f
+		}
+	}
+	if v := os.Getenv("THRESHOLD_PACKAGE"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.ThresholdPackage = f
+		}
+	}
+	if v := os.Getenv("THRESHOLD_PRINT"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.ThresholdPrint = f
+		}
+	}
+	if v := os.Getenv("THRESHOLD_TOTAL"); v != "" {
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			c.ThresholdTotal = f
+		}
+	}
+	if v := os.Getenv("UNCOVERED_LIMIT"); v != "" {
+		if i, err := strconv.Atoi(v); err == nil {
+			c.UncoveredLimit = i
+		}
+	}
+
+	return c
 }
 
 // runTests executes go test and parses JSON output
-func runTests(pkgs, coverProfile string) ([]PackageResult, map[string]int, int) {
+func runTests() ([]PackageResult, map[string]int, int) {
+	// Build package list
+	pkgCmd := exec.Command("go", "list", "./...")
+	pkgOutput, err := pkgCmd.Output()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error listing packages: %v\n", err)
+		return nil, nil, 1
+	}
+
+	var pkgs []string
+	excludes := strings.Split(cfg.ExcludePackages, ",")
+	for _, pkg := range strings.Split(strings.TrimSpace(string(pkgOutput)), "\n") {
+		excluded := false
+		for _, ex := range excludes {
+			if ex != "" && strings.Contains(pkg, ex) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			pkgs = append(pkgs, pkg)
+		}
+	}
+
 	args := []string{"test"}
-	args = append(args, strings.Fields(pkgs)...)
-	args = append(args, "-json", "-covermode=atomic", "-coverprofile="+coverProfile)
+	args = append(args, pkgs...)
+	args = append(args, "-json", "-covermode=atomic", "-coverprofile="+cfg.CoverProfile)
+	if cfg.RaceDetection {
+		args = append(args, "-race")
+	}
 
 	cmd := exec.Command("go", args...)
 	stdout, err := cmd.StdoutPipe()
@@ -216,9 +316,16 @@ func parsePackageResult(line string, results map[string]*PackageResult) {
 }
 
 // printPackageSummary prints the package coverage summary table
-func printPackageSummary(results []PackageResult, testCounts map[string]int) {
+// Returns true if any package is below threshold (CRITICAL)
+func printPackageSummary(results []PackageResult, testCounts map[string]int) bool {
+	hasCritical := false
+
 	fmt.Println("Package coverage summary:")
-	fmt.Printf("%-3s %-40s %-10s %-10s %s\n", "OK", "PACKAGE", "STATEMENTS", "TESTS", "COVERAGE")
+	if cfg.ShowTestCounts {
+		fmt.Printf("%-3s %-40s %-10s %-10s %s\n", "OK", "PACKAGE", "STATEMENTS", "TESTS", "COVERAGE")
+	} else {
+		fmt.Printf("%-3s %-40s %-10s %-10s %s\n", "OK", "PACKAGE", "STATEMENTS", "", "COVERAGE")
+	}
 	fmt.Println(strings.Repeat("-", 80))
 
 	// Sort by coverage descending
@@ -235,12 +342,24 @@ func printPackageSummary(results []PackageResult, testCounts map[string]int) {
 
 			tests := testCounts[r.Name]
 			coverageStr := r.CoverageStr
+			isCritical := r.Coverage < cfg.ThresholdPackage
 
-			if r.Coverage < ThresholdPackage {
-				coverageStr = fmt.Sprintf("%s%s%s (CRITICAL: < %.0f%%)", ColorRed, r.CoverageStr, ColorReset, ThresholdPackage)
+			if isCritical {
+				hasCritical = true
+				if cfg.CIMode {
+					fmt.Printf("::error::%-3s %-40s %-10s %-10s %s (CRITICAL: < %.0f%%)\n",
+						r.Status, r.Name, duration, "", coverageStr, cfg.ThresholdPackage)
+				} else {
+					coverageStr = fmt.Sprintf("%s%s%s (CRITICAL: < %.0f%%)", ColorRed, r.CoverageStr, ColorReset, cfg.ThresholdPackage)
+					fmt.Printf("%-3s %-40s %-10s %-10d %s\n", r.Status, r.Name, duration, tests, coverageStr)
+				}
+			} else {
+				if cfg.ShowTestCounts {
+					fmt.Printf("%-3s %-40s %-10s %-10d %s\n", r.Status, r.Name, duration, tests, coverageStr)
+				} else {
+					fmt.Printf("%-3s %-40s %-10s %-10s %s\n", r.Status, r.Name, duration, "", coverageStr)
+				}
 			}
-
-			fmt.Printf("%-3s %-40s %-10s %-10d %s\n", r.Status, r.Name, duration, tests, coverageStr)
 		}
 	}
 
@@ -250,11 +369,13 @@ func printPackageSummary(results []PackageResult, testCounts map[string]int) {
 			fmt.Printf("%-3s %-40s %s\n", r.Status, r.Name, "[no test files]")
 		}
 	}
+
+	return hasCritical
 }
 
 // getFunctionCoverage runs go tool cover -func and parses output
-func getFunctionCoverage(coverProfile string) []FuncCoverage {
-	cmd := exec.Command("go", "tool", "cover", "-func="+coverProfile)
+func getFunctionCoverage() []FuncCoverage {
+	cmd := exec.Command("go", "tool", "cover", "-func="+cfg.CoverProfile)
 	output, err := cmd.Output()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error getting function coverage: %v\n", err)
@@ -290,9 +411,12 @@ func getFunctionCoverage(coverProfile string) []FuncCoverage {
 }
 
 // printFunctionCoverage prints function coverage details
-func printFunctionCoverage(funcs []FuncCoverage) {
-	fmt.Printf("\nFunction coverage details (excluding >= %.0f%%):\n", ThresholdPrint)
-	fmt.Printf("%-60s %-35s %s\n", "LOCATION", "FUNCTION", "COVERAGE")
+// Returns true if any function is below threshold (CRITICAL)
+func printFunctionCoverage(funcs []FuncCoverage) bool {
+	hasCritical := false
+
+	fmt.Printf("\nFunction coverage details (excluding >= %.0f%%):\n", cfg.ThresholdPrint)
+	fmt.Printf("%-70s %-35s %s\n", "LOCATION", "FUNCTION", "COVERAGE")
 	fmt.Println(strings.Repeat("-", 105))
 
 	// Count functions above threshold
@@ -300,7 +424,7 @@ func printFunctionCoverage(funcs []FuncCoverage) {
 	var belowThreshold []FuncCoverage
 
 	for _, f := range funcs {
-		if f.Coverage >= ThresholdPrint {
+		if f.Coverage >= cfg.ThresholdPrint {
 			aboveThreshold++
 		} else {
 			belowThreshold = append(belowThreshold, f)
@@ -315,29 +439,61 @@ func printFunctionCoverage(funcs []FuncCoverage) {
 	})
 
 	for _, f := range belowThreshold {
-		covStr := fmt.Sprintf("%.1f%%", f.Coverage)
-		if f.Coverage < ThresholdFunc {
-			covStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, f.Coverage, ColorReset, ThresholdFunc)
+		isCritical := f.Coverage < cfg.ThresholdFunc
+		if isCritical {
+			hasCritical = true
 		}
-		fmt.Printf("%-60s %-35s %s\n", f.Location, f.Function, covStr)
+
+		covStr := fmt.Sprintf("%.1f%%", f.Coverage)
+		if isCritical {
+			if cfg.CIMode {
+				// Parse file and line from location
+				parts := strings.Split(f.Location, ":")
+				file := parts[0]
+				line := "1"
+				if len(parts) > 1 {
+					line = parts[1]
+				}
+				fmt.Printf("::error file=%s,line=%s::%-70s %-35s %s (CRITICAL < %.0f%%)\n",
+					file, line, f.Location, f.Function, covStr, cfg.ThresholdFunc)
+			} else {
+				covStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, f.Coverage, ColorReset, cfg.ThresholdFunc)
+				fmt.Printf("%-70s %-35s %s\n", f.Location, f.Function, covStr)
+			}
+		} else {
+			fmt.Printf("%-70s %-35s %s\n", f.Location, f.Function, covStr)
+		}
 	}
 
 	fmt.Println(strings.Repeat("-", 105))
-
-	// Print total
-	totalCov := getTotalCoverage(funcs)
-	totalStr := fmt.Sprintf("%.1f%%", totalCov)
-	if totalCov < ThresholdTotal {
-		totalStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, totalCov, ColorReset, ThresholdTotal)
-	}
-	fmt.Printf("%-96s %s\n", "TOTAL", totalStr)
-	fmt.Println(strings.Repeat("-", 105))
+	return hasCritical
 }
 
-// getTotalCoverage calculates total coverage from function data
-func getTotalCoverage(funcs []FuncCoverage) float64 {
-	// Re-run go tool cover to get total
-	cmd := exec.Command("go", "tool", "cover", "-func=/tmp/coverage.out")
+// printTotal prints total coverage and checks threshold
+// Returns true if total is below threshold (CRITICAL)
+func printTotal() bool {
+	totalCov := getTotalCoverage()
+	isCritical := totalCov < cfg.ThresholdTotal
+
+	totalStr := fmt.Sprintf("%.1f%%", totalCov)
+	if isCritical {
+		if cfg.CIMode {
+			fmt.Printf("::error::%-96s %s (CRITICAL: < %.0f%%)\n", "TOTAL", totalStr, cfg.ThresholdTotal)
+		} else {
+			totalStr = fmt.Sprintf("%s%.1f%%%s (CRITICAL: < %.0f%%)", ColorRed, totalCov, ColorReset, cfg.ThresholdTotal)
+			fmt.Printf("%-96s %s\n", "TOTAL", totalStr)
+		}
+	} else {
+		fmt.Printf("%-96s %s\n", "TOTAL", totalStr)
+	}
+	fmt.Println(strings.Repeat("-", 105))
+
+	return isCritical
+}
+
+// getTotalCoverage calculates total coverage from coverage profile
+func getTotalCoverage() float64 {
+	cmd := exec.Command("go", "tool", "cover", "-func="+cfg.CoverProfile)
 	output, err := cmd.Output()
 	if err != nil {
 		return 0
@@ -384,25 +540,30 @@ func printStatistics(funcs []FuncCoverage, testCounts map[string]int) {
 	fmt.Printf("Functions with <85%% coverage: %d\n", countLt85)
 
 	// Count total tests
-	totalTopLevel := 0
-	for _, count := range testCounts {
-		totalTopLevel += count
+	if cfg.ShowTestCounts {
+		totalTopLevel := 0
+		for _, count := range testCounts {
+			totalTopLevel += count
+		}
+		fmt.Printf("Total tests: %d top-level\n", totalTopLevel)
 	}
-	fmt.Printf("Total tests: %d top-level\n", totalTopLevel)
 }
 
 // generateHTMLReport generates an HTML coverage report
-func generateHTMLReport(coverProfile string) {
-	cmd := exec.Command("go", "tool", "cover", "-html="+coverProfile, "-o", "test_coverage.html")
+func generateHTMLReport() {
+	cmd := exec.Command("go", "tool", "cover", "-html="+cfg.CoverProfile, "-o", "test_coverage.html")
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating HTML report: %v\n", err)
 	}
 }
 
 // analyzeUncoveredBlocks calls the existing uncovered_blocks tool
-func analyzeUncoveredBlocks(coverProfile string) {
-	cmd := exec.Command("go", "run", "./scripts/lib/uncovered_blocks/", coverProfile, "false", "10")
+// Returns true if any CRITICAL blocks found
+func analyzeUncoveredBlocks() bool {
+	cmd := exec.Command("go", "run", "./scripts/lib/uncovered_blocks/",
+		cfg.CoverProfile, "false", strconv.Itoa(cfg.UncoveredLimit))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	_ = cmd.Run()
+	err := cmd.Run()
+	return err != nil
 }
