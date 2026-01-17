@@ -38,6 +38,7 @@ package puller
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
@@ -93,6 +94,9 @@ func NewService(cfg config.Config, logger *slog.Logger) LocalService {
 // NewClient creates a new remote Puller client (gRPC).
 // Use this when the puller service is running remotely.
 func NewClient(address string, logger *slog.Logger) (Service, error) {
+	if address == "" {
+		return nil, errors.New("puller address cannot be empty")
+	}
 	return client.New(address, logger)
 }
 

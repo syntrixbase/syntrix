@@ -145,5 +145,6 @@ func TestConfig_ResolvePaths_PrivateKeyAbsolute(t *testing.T) {
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
 	err := cfg.Validate(services.ModeDistributed)
-	assert.NoError(t, err)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "identity.authz.rules_file is required")
 }

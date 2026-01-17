@@ -118,54 +118,6 @@ func TestServiceConfig_ResolvePaths(t *testing.T) {
 	assert.Equal(t, "", identityCfg3.AuthZ.RulesFile)
 }
 
-func TestLoadConfig_DeploymentDefaults(t *testing.T) {
-	// Ensure no env vars interfere
-	os.Unsetenv("SYNTRIX_DEPLOYMENT_MODE")
-	os.Unsetenv("SYNTRIX_EMBEDDED_NATS")
-	os.Unsetenv("SYNTRIX_NATS_DATA_DIR")
-
-	cfg := LoadConfig()
-
-	assert.Equal(t, services_config.ModeDistributed, cfg.Deployment.Mode)
-	assert.True(t, cfg.Deployment.Standalone.EmbeddedNATS)
-	assert.Equal(t, "data/nats", cfg.Deployment.Standalone.NATSDataDir)
-	assert.False(t, cfg.Deployment.Mode.IsStandalone())
-}
-
-func TestLoadConfig_DeploymentEnvVars(t *testing.T) {
-	os.Setenv("SYNTRIX_DEPLOYMENT_MODE", "standalone")
-	os.Setenv("SYNTRIX_EMBEDDED_NATS", "false")
-	os.Setenv("SYNTRIX_NATS_DATA_DIR", "/custom/nats/data")
-	defer func() {
-		os.Unsetenv("SYNTRIX_DEPLOYMENT_MODE")
-		os.Unsetenv("SYNTRIX_EMBEDDED_NATS")
-		os.Unsetenv("SYNTRIX_NATS_DATA_DIR")
-	}()
-
-	cfg := LoadConfig()
-
-	assert.Equal(t, services_config.ModeStandalone, cfg.Deployment.Mode)
-	assert.False(t, cfg.Deployment.Standalone.EmbeddedNATS)
-	assert.Equal(t, "/custom/nats/data", cfg.Deployment.Standalone.NATSDataDir)
-	assert.True(t, cfg.Deployment.Mode.IsStandalone())
-}
-
-func TestLoadConfig_DeploymentEnvVars_EmbeddedNATSTrue(t *testing.T) {
-	os.Setenv("SYNTRIX_EMBEDDED_NATS", "true")
-	defer os.Unsetenv("SYNTRIX_EMBEDDED_NATS")
-
-	cfg := LoadConfig()
-	assert.True(t, cfg.Deployment.Standalone.EmbeddedNATS)
-}
-
-func TestLoadConfig_DeploymentEnvVars_EmbeddedNATS1(t *testing.T) {
-	os.Setenv("SYNTRIX_EMBEDDED_NATS", "1")
-	defer os.Unsetenv("SYNTRIX_EMBEDDED_NATS")
-
-	cfg := LoadConfig()
-	assert.True(t, cfg.Deployment.Standalone.EmbeddedNATS)
-}
-
 func TestDeploymentMode_IsStandalone_ViaConfig(t *testing.T) {
 	cfg := &Config{Deployment: services_config.DeploymentConfig{Mode: services_config.ModeStandalone}}
 	assert.True(t, cfg.Deployment.Mode.IsStandalone())

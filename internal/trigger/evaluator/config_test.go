@@ -131,9 +131,9 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
 	err := cfg.Validate(services.ModeStandalone)
-	// Empty StreamName should fail validation
+	// Empty RulesFile should fail validation first
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "stream_name is required")
+	assert.Contains(t, err.Error(), "trigger.evaluator.rules_file is required")
 }
 
 func TestConfig_Validate_Errors(t *testing.T) {
@@ -143,18 +143,23 @@ func TestConfig_Validate_Errors(t *testing.T) {
 		errMsg string
 	}{
 		{
+			name:   "empty rules file",
+			cfg:    Config{RulesFile: "", StreamName: "TEST"},
+			errMsg: "trigger.evaluator.rules_file is required",
+		},
+		{
 			name:   "empty stream name",
-			cfg:    Config{StreamName: ""},
+			cfg:    Config{RulesFile: "rules.json", StreamName: ""},
 			errMsg: "stream_name is required",
 		},
 		{
 			name:   "negative retry attempts",
-			cfg:    Config{StreamName: "TEST", RetryAttempts: -1},
+			cfg:    Config{RulesFile: "rules.json", StreamName: "TEST", RetryAttempts: -1},
 			errMsg: "retry_attempts must be non-negative",
 		},
 		{
 			name:   "invalid storage type",
-			cfg:    Config{StreamName: "TEST", StorageType: "invalid"},
+			cfg:    Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "invalid"},
 			errMsg: "storage_type must be 'file' or 'memory'",
 		},
 	}
@@ -179,19 +184,19 @@ func TestConfig_Validate_ValidConfigs(t *testing.T) {
 		},
 		{
 			name: "memory storage",
-			cfg:  Config{StreamName: "TEST", StorageType: "memory"},
+			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "memory"},
 		},
 		{
 			name: "file storage",
-			cfg:  Config{StreamName: "TEST", StorageType: "file"},
+			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "file"},
 		},
 		{
 			name: "empty storage type (defaults allowed)",
-			cfg:  Config{StreamName: "TEST", StorageType: ""},
+			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: ""},
 		},
 		{
 			name: "zero retry attempts",
-			cfg:  Config{StreamName: "TEST", RetryAttempts: 0},
+			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", RetryAttempts: 0},
 		},
 	}
 

@@ -181,11 +181,11 @@ func TestConfig_ResolvePaths_EmptyRulesFile(t *testing.T) {
 }
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
-	// Empty config is now invalid because StreamName is required
+	// Empty config is now invalid because RulesFile is required
 	cfg := Config{}
 	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "stream_name is required")
+	assert.Contains(t, err.Error(), "rules_file is required")
 }
 
 func TestConfig_Validate_CallsSubConfigs(t *testing.T) {
