@@ -37,14 +37,7 @@ func TestBuffer_NewAndClose(t *testing.T) {
 	}
 }
 
-func TestBuffer_Close_MultipleTimes(t *testing.T) {
-	t.Parallel()
-	buf, err := New(Options{Path: t.TempDir()})
-	require.NoError(t, err)
-
-	assert.NoError(t, buf.Close())
-	assert.NoError(t, buf.Close())
-}
+// TestBuffer_Close_MultipleTimes REMOVED - duplicate of TestBuffer_Close_Idempotent
 
 func TestBuffer_Close_DBError(t *testing.T) {
 	t.Parallel()
@@ -389,120 +382,15 @@ func TestNewForBackend(t *testing.T) {
 	}
 }
 
-func TestBuffer_Write_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
+// TestBuffer_Write_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
+// TestBuffer_Read_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
-	buf.Close()
+// TestBuffer_ScanFrom_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
-	evt := &events.StoreChangeEvent{
-		EventID:  "evt-1",
-		MgoColl:  "testcoll",
-		MgoDocID: "doc-1",
-		OpType:   events.StoreOperationInsert,
-		ClusterTime: events.ClusterTime{
-			T: 1234567890,
-			I: 1,
-		},
-	}
-	err = buf.Write(evt, testToken)
-	if err == nil {
-		t.Error("Write() should fail on closed buffer")
-	}
-}
+// TestBuffer_Head_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
-func TestBuffer_Read_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.Read("some-key")
-	if err == nil {
-		t.Error("Read() should fail on closed buffer")
-	}
-}
-
-func TestBuffer_ScanFrom_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.ScanFrom("")
-	if err == nil {
-		t.Error("ScanFrom() should fail on closed buffer")
-	}
-}
-
-func TestBuffer_Head_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.Head()
-	if err == nil {
-		t.Error("Head() should fail on closed buffer")
-	}
-}
-
-func TestBuffer_Delete_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	err = buf.Delete("some-key")
-	if err == nil {
-		t.Error("Delete() should fail on closed buffer")
-	}
-}
+// TestBuffer_Delete_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
 func TestBuffer_DeleteBefore(t *testing.T) {
 	t.Parallel()
@@ -562,47 +450,9 @@ func TestBuffer_DeleteBefore(t *testing.T) {
 	}
 }
 
-func TestBuffer_DeleteBefore_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
+// TestBuffer_DeleteBefore_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.DeleteBefore("some-key")
-	if err == nil {
-		t.Error("DeleteBefore() should fail on closed buffer")
-	}
-}
-
-func TestBuffer_Count_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.Count()
-	if err == nil {
-		t.Error("Count() should fail on closed buffer")
-	}
-}
+// TestBuffer_Count_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
 func TestBuffer_CountAfter(t *testing.T) {
 	t.Parallel()
@@ -662,26 +512,7 @@ func TestBuffer_CountAfter(t *testing.T) {
 	}
 }
 
-func TestBuffer_CountAfter_Closed(t *testing.T) {
-	t.Parallel()
-	dir, err := os.MkdirTemp("", "buffer-test-*")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(dir)
-
-	buf, err := New(Options{Path: dir})
-	if err != nil {
-		t.Fatalf("New() error = %v", err)
-	}
-
-	buf.Close()
-
-	_, err = buf.CountAfter("some-key")
-	if err == nil {
-		t.Error("CountAfter() should fail on closed buffer")
-	}
-}
+// TestBuffer_CountAfter_Closed REMOVED - covered by TestBuffer_ClosedScenarios
 
 func TestBuffer_Close_Idempotent(t *testing.T) {
 	t.Parallel()
