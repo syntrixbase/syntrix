@@ -212,22 +212,7 @@ func TestCELEvaluator(t *testing.T) {
 			wantMatch: true,
 			wantErr:   false,
 		},
-		{
-			name: "Invalid condition syntax",
-			trigger: &types.Trigger{
-				Events:     []string{"create"},
-				Collection: "users",
-				Condition:  "invalid syntax !!!",
-			},
-			event: events.SyntrixChangeEvent{
-				Type: events.EventCreate,
-				Document: &storage.StoredDoc{
-					Collection: "users",
-				},
-			},
-			wantMatch: false,
-			wantErr:   true,
-		},
+		// "Invalid condition syntax" test case REMOVED - duplicate of "Invalid CEL" above
 	}
 
 	for _, tt := range tests {
