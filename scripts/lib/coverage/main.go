@@ -241,6 +241,10 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 	subTestCounts := make(map[string]int)
 	decoder := json.NewDecoder(r)
 
+	// Buffer output per test, only print on failure
+	// Key: "pkg/test" or just "pkg" for package-level output
+	testOutputs := make(map[string][]string)
+
 	for {
 		var event TestEvent
 		if err := decoder.Decode(&event); err != nil {
@@ -252,6 +256,12 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 
 		pkg := strings.TrimPrefix(event.Package, ModulePrefix)
 
+		// Build key for output buffering
+		outputKey := pkg
+		if event.Test != "" {
+			outputKey = pkg + "/" + event.Test
+		}
+
 		// Count tests separately: top-level vs subtests
 		if event.Action == "run" && event.Test != "" {
 			if strings.Contains(event.Test, "/") {
@@ -261,13 +271,35 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 			}
 		}
 
-		// Parse coverage from output lines
-		if event.Action == "output" && strings.HasPrefix(event.Output, "ok") {
-			parsePackageResult(event.Output, results)
-		} else if event.Action == "output" && strings.HasPrefix(event.Output, "FAIL") {
-			parsePackageResult(event.Output, results)
-		} else if event.Action == "output" && strings.HasPrefix(event.Output, "?") {
-			parsePackageResult(event.Output, results)
+		// Buffer output for each test
+		if event.Action == "output" {
+			// Parse coverage/result lines
+			if strings.HasPrefix(event.Output, "ok") {
+				parsePackageResult(event.Output, results)
+			} else if strings.HasPrefix(event.Output, "FAIL") {
+				parsePackageResult(event.Output, results)
+			} else if strings.HasPrefix(event.Output, "?") {
+				parsePackageResult(event.Output, results)
+			} else {
+				// Buffer output for potential failure
+				testOutputs[outputKey] = append(testOutputs[outputKey], event.Output)
+			}
+		}
+
+		// On test failure, print buffered output
+		if event.Action == "fail" && event.Test != "" {
+			if outputs, ok := testOutputs[outputKey]; ok {
+				fmt.Printf("\n=== FAIL: %s/%s ===\n", pkg, event.Test)
+				for _, out := range outputs {
+					fmt.Print(out)
+				}
+			}
+			delete(testOutputs, outputKey)
+		}
+
+		// Clean up on pass
+		if event.Action == "pass" && event.Test != "" {
+			delete(testOutputs, outputKey)
 		}
 	}
 
@@ -365,6 +397,18 @@ func printPackageSummary(results []PackageResult, topLevelCounts, subTestCounts 
 					fmt.Printf("%-3s %-40s %-10s %s\n", r.Status, r.Name, duration, coverageStr)
 				}
 			}
+		}
+	}
+
+	// Print failed packages
+	for _, r := range results {
+		if r.Status == "FAIL" {
+			if cfg.CIMode {
+				fmt.Printf("::error::%-3s %-40s %s\n", r.Status, r.Name, "[FAILED]")
+			} else {
+				fmt.Printf("%s%-3s %-40s %s%s\n", ColorRed, r.Status, r.Name, "[FAILED]", ColorReset)
+			}
+			hasCritical = true
 		}
 	}
 
