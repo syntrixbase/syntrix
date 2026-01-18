@@ -127,7 +127,7 @@ func parseConfig() Config {
 		ThresholdTotal:   90.0,
 		CIMode:           os.Getenv("CI") == "true",
 		RaceDetection:    false,
-		ExcludePackages:  "syntrix/cmd/,syntrix/api/,syntrix/scripts/",
+		ExcludePackages:  "syntrix/cmd/,syntrix/api/,syntrix/scripts/,syntrix/tests/benchmark/",
 		CoverProfile:     "/tmp/coverage.out",
 		UncoveredLimit:   10,
 		ShowTestCounts:   true,
