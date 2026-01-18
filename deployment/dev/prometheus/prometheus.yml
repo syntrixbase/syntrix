@@ -1,0 +1,72 @@
+# Prometheus Configuration for Syntrix Development
+# =================================================
+
+global:
+  scrape_interval: 15s      # How often to scrape targets
+  evaluation_interval: 15s  # How often to evaluate rules
+  external_labels:
+    environment: "dev"
+    cluster: "local"
+
+# Alerting configuration
+alerting:
+  alertmanagers: []
+  # Uncomment when Alertmanager is configured
+  # alertmanagers:
+  #   - static_configs:
+  #       - targets: ["alertmanager:9093"]
+
+# Rule files
+rule_files:
+  - "alerts.yml"
+
+# Scrape configurations
+scrape_configs:
+  # =============================================================================
+  # Prometheus Self-Monitoring
+  # =============================================================================
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          service: "prometheus"
+
+  # =============================================================================
+  # Syntrix Application
+  # =============================================================================
+  - job_name: "syntrix"
+    # When running Syntrix outside Docker (local development)
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          service: "syntrix"
+          mode: "standalone"
+
+    # Metric relabeling to add consistent labels
+    metric_relabel_configs:
+      # Keep only metrics with syntrix_, puller_, trigger_, gateway_, query_, indexer_, streamer_ prefixes
+      # or standard go_*, process_* metrics
+      - source_labels: [__name__]
+        regex: "(syntrix_|puller_|trigger_|gateway_|query_|indexer_|streamer_|go_|process_|promhttp_).*"
+        action: keep
+
+  # =============================================================================
+  # Infrastructure Monitoring
+  # =============================================================================
+  - job_name: "nats"
+    static_configs:
+      - targets: ["nats:8222"]
+        labels:
+          service: "nats"
+    metrics_path: "/varz"
+    # NATS exposes metrics in a non-standard format, this is for basic health
+    # For full NATS metrics, use nats-exporter
+
+  # =============================================================================
+  # MongoDB (requires mongodb_exporter, optional)
+  # =============================================================================
+  # - job_name: "mongodb"
+  #   static_configs:
+  #     - targets: ["mongodb-exporter:9216"]
+  #       labels:
+  #         service: "mongodb"

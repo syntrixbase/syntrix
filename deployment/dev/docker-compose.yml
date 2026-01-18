@@ -1,0 +1,129 @@
+name: syntrix
+
+services:
+  # =============================================================================
+  # Core Infrastructure
+  # =============================================================================
+
+  mongodb:
+    image: mongo:7.0
+    container_name: syntrix-mongodb
+    command: ["--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/init.js:ro
+    healthcheck:
+      test: |
+        mongosh --eval "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}) }"
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    networks:
+      - syntrix-net
+
+  nats:
+    image: nats:2.10-alpine
+    container_name: syntrix-nats
+    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+    ports:
+      - "4222:4222"   # Client connections
+      - "8222:8222"   # Monitoring
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - syntrix-net
+
+  # =============================================================================
+  # Monitoring Stack
+  # =============================================================================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: syntrix-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+      - "--web.enable-admin-api"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - syntrix-net
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: syntrix-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - syntrix-net
+
+  # =============================================================================
+  # Syntrix Application (Optional - for local development, run outside Docker)
+  # =============================================================================
+
+  # Uncomment to run Syntrix in Docker
+  # syntrix:
+  #   build:
+  #     context: ../..
+  #     dockerfile: Dockerfile
+  #   container_name: syntrix-server
+  #   ports:
+  #     - "8080:8080"   # HTTP API + /metrics
+  #     - "9000:9000"   # gRPC
+  #   environment:
+  #     - MONGO_URI=mongodb://mongodb:27017
+  #     - NATS_URL=nats://nats:4222
+  #     - DB_NAME=syntrix
+  #   depends_on:
+  #     mongodb:
+  #       condition: service_healthy
+  #     nats:
+  #       condition: service_healthy
+  #   networks:
+  #     - syntrix-net
+
+networks:
+  syntrix-net:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  nats_data:
+  prometheus_data:
+  grafana_data:

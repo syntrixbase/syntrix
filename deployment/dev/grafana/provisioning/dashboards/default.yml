@@ -1,0 +1,17 @@
+# Grafana Dashboard Provisioning
+# ===============================
+# This file configures dashboard auto-loading from /var/lib/grafana/dashboards
+
+apiVersion: 1
+
+providers:
+  - name: "Syntrix Dashboards"
+    orgId: 1
+    folder: "Syntrix"
+    folderUid: "syntrix"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
