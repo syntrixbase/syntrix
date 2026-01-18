@@ -49,12 +49,15 @@ func (b *Buffer) Write(evt *events.StoreChangeEvent, token bson.Raw) error {
 	}
 
 	b.pending = append(b.pending, req)
+	shouldNotify := len(b.pending) >= b.batchSize
 	b.mu.Unlock()
 
-	// Notify batcher, non-blocking
-	select {
-	case b.notifyCh <- struct{}{}:
-	default:
+	if shouldNotify {
+		// Notify batcher, non-blocking
+		select {
+		case b.notifyCh <- struct{}{}:
+		default:
+		}
 	}
 
 	return nil

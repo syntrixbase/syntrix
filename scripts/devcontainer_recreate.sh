@@ -1,7 +1,7 @@
 #!/bin/bash
 
-cd $(dirname $0)/../
+cd $(dirname $0)/../deployment/dev
 
-docker compose -f .devcontainer/docker-compose.yml down
+docker compose down
 docker volume prune -f -a
-docker compose -f .devcontainer/docker-compose.yml up -d
+docker compose up -d

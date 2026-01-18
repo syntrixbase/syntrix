@@ -1,0 +1,122 @@
+# Syntrix Alert Rules
+# ====================
+#
+# Severity levels:
+#   - critical: Requires immediate attention, pages on-call
+#   - warning: Needs attention within hours, creates ticket
+#   - info: Informational, logged for visibility
+
+groups:
+  # ===========================================================================
+  # Service Health Alerts
+  # ===========================================================================
+  - name: syntrix.service.health
+    rules:
+      - alert: SyntrixDown
+        expr: up{job="syntrix"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Syntrix service is down"
+          description: "Syntrix instance {{ $labels.instance }} has been unreachable for more than 1 minute."
+
+      - alert: SyntrixHighErrorRate
+        expr: |
+          sum(rate(gateway_requests_total{status=~"5.."}[5m]))
+          / sum(rate(gateway_requests_total[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High error rate in Syntrix Gateway"
+          description: "Error rate is {{ $value | humanizePercentage }} (threshold: 5%)"
+
+  # ===========================================================================
+  # Latency Alerts
+  # ===========================================================================
+  - name: syntrix.latency
+    rules:
+      - alert: SyntrixHighLatencyP95
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(gateway_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P95 latency in Syntrix Gateway"
+          description: "P95 latency is {{ $value | humanizeDuration }} (threshold: 500ms)"
+
+      - alert: SyntrixHighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(gateway_request_duration_seconds_bucket[5m])) by (le)
+          ) > 1
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Very high P99 latency in Syntrix Gateway"
+          description: "P99 latency is {{ $value | humanizeDuration }} (threshold: 1s)"
+
+  # ===========================================================================
+  # Puller Alerts
+  # ===========================================================================
+  - name: syntrix.puller
+    rules:
+      - alert: PullerHighBackpressure
+        expr: puller_backpressure_events_total > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Puller experiencing high backpressure"
+          description: "Puller {{ $labels.backend }} has {{ $value }} backpressure events"
+
+      - alert: PullerPublishErrors
+        expr: rate(puller_publish_errors_total[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Puller publish errors detected"
+          description: "Puller {{ $labels.backend }} is experiencing {{ $value | humanize }}/s publish errors"
+
+  # ===========================================================================
+  # Trigger Alerts
+  # ===========================================================================
+  - name: syntrix.trigger
+    rules:
+      - alert: TriggerDeliveryFailures
+        expr: rate(trigger_delivery_failures_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trigger delivery failures detected"
+          description: "Database {{ $labels.database }} has {{ $value | humanize }}/s delivery failures"
+
+  # ===========================================================================
+  # Resource Alerts
+  # ===========================================================================
+  - name: syntrix.resources
+    rules:
+      - alert: HighGoroutineCount
+        expr: go_goroutines{job="syntrix"} > 1000
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High goroutine count in Syntrix"
+          description: "Goroutine count is {{ $value }} (threshold: 1000)"
+
+      - alert: HighMemoryUsage
+        expr: process_resident_memory_bytes{job="syntrix"} > 1e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in Syntrix"
+          description: "Memory usage is {{ $value | humanize1024 }}B (threshold: 1GB)"
