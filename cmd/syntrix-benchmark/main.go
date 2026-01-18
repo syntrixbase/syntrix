@@ -15,7 +15,8 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
-const version = "0.1.0"
+// Version is the benchmark tool version (can be overridden at build time).
+var Version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -32,7 +33,7 @@ func main() {
 			os.Exit(1)
 		}
 	case "version":
-		fmt.Printf("syntrix-benchmark version %s\n", version)
+		fmt.Printf("syntrix-benchmark version %s\n", Version)
 	case "help", "-h", "--help":
 		printUsage()
 	default:

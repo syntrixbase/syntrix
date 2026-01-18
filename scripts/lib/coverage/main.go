@@ -241,6 +241,9 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 	subTestCounts := make(map[string]int)
 	decoder := json.NewDecoder(r)
 
+	// Track which packages we've printed
+	printedPackages := make(map[string]bool)
+
 	// Buffer output per test, only print on failure
 	// Key: "pkg/test" or just "pkg" for package-level output
 	testOutputs := make(map[string][]string)
@@ -264,6 +267,12 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 
 		// Count tests separately: top-level vs subtests
 		if event.Action == "run" && event.Test != "" {
+			// Print package start only once (when first test runs)
+			if !printedPackages[pkg] {
+				fmt.Printf("Testing %s...\n", pkg)
+				printedPackages[pkg] = true
+			}
+
 			if strings.Contains(event.Test, "/") {
 				subTestCounts[pkg]++
 			} else {
