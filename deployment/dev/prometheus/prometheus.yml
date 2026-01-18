@@ -4,6 +4,8 @@
 global:
   scrape_interval: 15s      # How often to scrape targets
   evaluation_interval: 15s  # How often to evaluate rules
+  # Prometheus 3.x requires fallback protocol when Content-Type is missing
+  scrape_protocols: ["OpenMetricsText1.0.0", "OpenMetricsText0.0.1", "PrometheusText1.0.0", "PrometheusText0.0.4"]
   external_labels:
     environment: "dev"
     cluster: "local"

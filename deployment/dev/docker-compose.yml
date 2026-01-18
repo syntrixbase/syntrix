@@ -6,7 +6,7 @@ services:
   # =============================================================================
 
   mongodb:
-    image: mongo:7.0
+    image: mongo:8.0
     container_name: syntrix-mongodb
     command: ["--replSet", "rs0", "--bind_ip_all"]
     ports:
@@ -25,7 +25,7 @@ services:
       - syntrix-net
 
   nats:
-    image: nats:2.10-alpine
+    image: nats:2.12-alpine
     container_name: syntrix-nats
     command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
     ports:
@@ -46,7 +46,7 @@ services:
   # =============================================================================
 
   prometheus:
-    image: prom/prometheus:v2.48.0
+    image: prom/prometheus:v3.9.1
     container_name: syntrix-prometheus
     ports:
       - "9090:9090"
@@ -69,7 +69,7 @@ services:
       - syntrix-net
 
   grafana:
-    image: grafana/grafana:10.2.0
+    image: grafana/grafana:12.3.1
     container_name: syntrix-grafana
     ports:
       - "3000:3000"
