@@ -22,14 +22,21 @@ var (
 // The file format is:
 //
 //	database: mydb
+//	retryPolicy:        # optional, default for all triggers in this file
+//	  maxAttempts: 3
+//	  initialBackoff: 1s
+//	  maxBackoff: 30s
 //	triggers:
 //	  trigger-id:
 //	    collection: users
 //	    events: [create, update]
+//	    retryPolicy:    # optional, overrides file-level default
+//	      maxAttempts: 5
 //	    ...
 type TriggerFile struct {
-	Database string              `json:"database" yaml:"database"`
-	Triggers map[string]*Trigger `json:"triggers" yaml:"triggers"`
+	Database    string              `json:"database" yaml:"database"`
+	RetryPolicy *RetryPolicy        `json:"retryPolicy" yaml:"retryPolicy"`
+	Triggers    map[string]*Trigger `json:"triggers" yaml:"triggers"`
 }
 
 // LoadTriggersFromDir loads triggers from all YAML/JSON files in a directory.
@@ -81,10 +88,15 @@ func LoadTriggersFromDir(dirPath string) (map[string][]*Trigger, error) {
 		seen[triggerFile.Database] = name
 
 		// Convert map to slice and set ID and Database from file
+		// Apply file-level retryPolicy as default if trigger doesn't have one
 		triggers := make([]*Trigger, 0, len(triggerFile.Triggers))
 		for id, trigger := range triggerFile.Triggers {
 			trigger.ID = id
 			trigger.Database = triggerFile.Database
+			// Apply file-level retryPolicy if trigger doesn't have one set
+			if triggerFile.RetryPolicy != nil && isRetryPolicyEmpty(trigger.RetryPolicy) {
+				trigger.RetryPolicy = *triggerFile.RetryPolicy
+			}
 			triggers = append(triggers, trigger)
 		}
 
@@ -92,6 +104,11 @@ func LoadTriggersFromDir(dirPath string) (map[string][]*Trigger, error) {
 	}
 
 	return result, nil
+}
+
+// isRetryPolicyEmpty checks if a RetryPolicy has no values set.
+func isRetryPolicyEmpty(rp RetryPolicy) bool {
+	return rp.MaxAttempts == 0 && rp.InitialBackoff == 0 && rp.MaxBackoff == 0
 }
 
 // loadTriggerFile loads a TriggerFile from a YAML or JSON file.

@@ -1,4 +1,12 @@
 database: default
+
+# Default retry policy for all triggers in this file
+# Individual triggers can override these settings
+retryPolicy:
+  maxAttempts: 3
+  initialBackoff: 1s
+  maxBackoff: 30s
+
 triggers:
   example-trigger:
     version: "1.0"
@@ -10,7 +18,15 @@ triggers:
     url: http://localhost:8080/webhook-test
     headers:
       Content-Type: application/json
+    # This trigger uses the file-level retryPolicy defaults
+
+  high-priority-trigger:
+    collection: orders
+    events:
+      - create
+    url: http://localhost:8080/orders-webhook
+    # Override retry policy for this specific trigger
     retryPolicy:
-      maxAttempts: 3
-      initialBackoff: 1s
-      maxBackoff: 5s
+      maxAttempts: 5
+      initialBackoff: 500ms
+      maxBackoff: 10s
