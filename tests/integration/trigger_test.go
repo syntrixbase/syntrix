@@ -85,26 +85,26 @@ func TestTriggerIntegration(t *testing.T) {
 	}))
 	defer webhookServer.Close()
 
-	// 3. Create Temporary Trigger Rules File
+	// 3. Create Temporary Trigger Rules Directory
 	tmpDir := t.TempDir()
-	rulesFile := filepath.Join(tmpDir, "triggers.yaml")
-	rulesContent := fmt.Sprintf(`
-- triggerId: "integration-test-trigger"
-  database: "test-database"
-  collection: "users"
-  events: ["create"]
-  condition: "event.document.age >= 18"
-  url: "%s"
-  headers:
-    X-Test: "true"
+	rulesContent := fmt.Sprintf(`database: test-database
+triggers:
+  integration-test-trigger:
+    collection: users
+    events:
+      - create
+    condition: "event.document.age >= 18"
+    url: "%s"
+    headers:
+      X-Test: "true"
 `, webhookServer.URL)
 
-	err = os.WriteFile(rulesFile, []byte(rulesContent), 0644)
+	err = os.WriteFile(filepath.Join(tmpDir, "test-database.yml"), []byte(rulesContent), 0644)
 	require.NoError(t, err)
 
 	// 4. Configure and Start Service Manager
 	env := setupServiceEnv(t, "", func(cfg *config.Config) {
-		cfg.Trigger.Evaluator.RulesFile = rulesFile
+		cfg.Trigger.Evaluator.RulesPath = tmpDir
 		cfg.Trigger.Delivery.NumWorkers = 4
 		cfg.Trigger.NatsURL = natsURL
 		cfg.Trigger.Evaluator.StreamName = streamName

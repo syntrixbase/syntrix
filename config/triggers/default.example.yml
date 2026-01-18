@@ -1,0 +1,16 @@
+database: default
+triggers:
+  example-trigger:
+    version: "1.0"
+    collection: users
+    events:
+      - create
+      - update
+    condition: "event.document.data.age >= 18"
+    url: http://localhost:8080/webhook-test
+    headers:
+      Content-Type: application/json
+    retryPolicy:
+      maxAttempts: 3
+      initialBackoff: 1s
+      maxBackoff: 5s

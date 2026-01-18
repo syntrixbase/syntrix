@@ -49,7 +49,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	assert.Equal(t, "localhost:9000", cfg.PullerAddr)
 	assert.True(t, cfg.StartFromNow)
-	assert.Equal(t, "triggers.example.json", cfg.RulesFile)
+	assert.Equal(t, "config/triggers", cfg.RulesPath)
 	assert.Equal(t, "default", cfg.CheckpointDatabase)
 	assert.Equal(t, "TRIGGERS", cfg.StreamName)
 	assert.Equal(t, 3, cfg.RetryAttempts)
@@ -90,11 +90,11 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 	// No env vars, just verify no panic
 
 	// Test with env vars set
-	t.Setenv("TRIGGER_RULES_FILE", "/path/to/rules.json")
+	t.Setenv("TRIGGER_RULES_PATH", "/path/to/rules")
 	t.Setenv("TRIGGER_PULLER_ADDR", "puller:9001")
 	cfg2 := Config{}
 	cfg2.ApplyEnvOverrides()
-	assert.Equal(t, "/path/to/rules.json", cfg2.RulesFile)
+	assert.Equal(t, "/path/to/rules", cfg2.RulesPath)
 	assert.Equal(t, "puller:9001", cfg2.PullerAddr)
 }
 
@@ -122,14 +122,14 @@ func TestNewPublisher_NilConnection(t *testing.T) {
 
 func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 	cfg := Config{
-		RulesFile:          "my_rules.json",
+		RulesPath:          "my_rules",
 		CheckpointDatabase: "my_db",
 		// StreamName empty, should get default
 		// RetryAttempts 0, should get default
 	}
 	cfg.ApplyDefaults()
 
-	assert.Equal(t, "my_rules.json", cfg.RulesFile)
+	assert.Equal(t, "my_rules", cfg.RulesPath)
 	assert.Equal(t, "my_db", cfg.CheckpointDatabase)
 	assert.Equal(t, "TRIGGERS", cfg.StreamName)
 	assert.Equal(t, 3, cfg.RetryAttempts)
@@ -139,9 +139,9 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
 	cfg := Config{}
 	err := cfg.Validate(services.ModeStandalone)
-	// Empty RulesFile should fail validation first
+	// Empty RulesPath should fail validation first
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "trigger.evaluator.rules_file is required")
+	assert.Contains(t, err.Error(), "trigger.evaluator.rules_path is required")
 }
 
 func TestConfig_Validate_Errors(t *testing.T) {
@@ -151,23 +151,23 @@ func TestConfig_Validate_Errors(t *testing.T) {
 		errMsg string
 	}{
 		{
-			name:   "empty rules file",
-			cfg:    Config{RulesFile: "", StreamName: "TEST"},
-			errMsg: "trigger.evaluator.rules_file is required",
+			name:   "empty rules path",
+			cfg:    Config{RulesPath: "", StreamName: "TEST"},
+			errMsg: "trigger.evaluator.rules_path is required",
 		},
 		{
 			name:   "empty stream name",
-			cfg:    Config{RulesFile: "rules.json", StreamName: ""},
+			cfg:    Config{RulesPath: "rules", StreamName: ""},
 			errMsg: "stream_name is required",
 		},
 		{
 			name:   "negative retry attempts",
-			cfg:    Config{RulesFile: "rules.json", StreamName: "TEST", RetryAttempts: -1},
+			cfg:    Config{RulesPath: "rules", StreamName: "TEST", RetryAttempts: -1},
 			errMsg: "retry_attempts must be non-negative",
 		},
 		{
 			name:   "invalid storage type",
-			cfg:    Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "invalid"},
+			cfg:    Config{RulesPath: "rules", StreamName: "TEST", StorageType: "invalid"},
 			errMsg: "storage_type must be 'file' or 'memory'",
 		},
 	}
@@ -192,19 +192,19 @@ func TestConfig_Validate_ValidConfigs(t *testing.T) {
 		},
 		{
 			name: "memory storage",
-			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "memory"},
+			cfg:  Config{RulesPath: "rules", StreamName: "TEST", StorageType: "memory"},
 		},
 		{
 			name: "file storage",
-			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: "file"},
+			cfg:  Config{RulesPath: "rules", StreamName: "TEST", StorageType: "file"},
 		},
 		{
 			name: "empty storage type (defaults allowed)",
-			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", StorageType: ""},
+			cfg:  Config{RulesPath: "rules", StreamName: "TEST", StorageType: ""},
 		},
 		{
 			name: "zero retry attempts",
-			cfg:  Config{RulesFile: "rules.json", StreamName: "TEST", RetryAttempts: 0},
+			cfg:  Config{RulesPath: "rules", StreamName: "TEST", RetryAttempts: 0},
 		},
 	}
 
@@ -220,7 +220,7 @@ func TestConfig_StructFields(t *testing.T) {
 	cfg := Config{
 		PullerAddr:         "puller:9000",
 		StartFromNow:       false,
-		RulesFile:          "custom_rules.json",
+		RulesPath:          "custom_rules",
 		CheckpointDatabase: "custom_db",
 		StreamName:         "CUSTOM_STREAM",
 		RetryAttempts:      10,
@@ -229,7 +229,7 @@ func TestConfig_StructFields(t *testing.T) {
 
 	assert.Equal(t, "puller:9000", cfg.PullerAddr)
 	assert.False(t, cfg.StartFromNow)
-	assert.Equal(t, "custom_rules.json", cfg.RulesFile)
+	assert.Equal(t, "custom_rules", cfg.RulesPath)
 	assert.Equal(t, "custom_db", cfg.CheckpointDatabase)
 	assert.Equal(t, "CUSTOM_STREAM", cfg.StreamName)
 	assert.Equal(t, 10, cfg.RetryAttempts)
@@ -238,7 +238,7 @@ func TestConfig_StructFields(t *testing.T) {
 
 func TestConfig_Validate_DistributedMode(t *testing.T) {
 	// In distributed mode, PullerAddr is required
-	cfg := Config{RulesFile: "rules.json", StreamName: "TEST", PullerAddr: ""}
+	cfg := Config{RulesPath: "rules", StreamName: "TEST", PullerAddr: ""}
 	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "trigger.evaluator.puller_addr is required in distributed mode")

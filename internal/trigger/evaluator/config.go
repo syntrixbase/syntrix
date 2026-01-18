@@ -18,7 +18,7 @@ type Config struct {
 
 	// Service behavior
 	StartFromNow       bool   `yaml:"start_from_now"`
-	RulesFile          string `yaml:"rules_file"`
+	RulesPath          string `yaml:"rules_path"`
 	CheckpointDatabase string `yaml:"checkpoint_database"`
 
 	// Pubsub configuration
@@ -32,7 +32,7 @@ func DefaultConfig() Config {
 	return Config{
 		PullerAddr:         "localhost:9000",
 		StartFromNow:       true,
-		RulesFile:          "triggers.example.json",
+		RulesPath:          "config/triggers",
 		CheckpointDatabase: "default",
 		StreamName:         "TRIGGERS",
 		RetryAttempts:      3,
@@ -69,10 +69,9 @@ func (c *Config) ApplyDefaults() {
 }
 
 // ApplyEnvOverrides applies environment variable overrides.
-// No evaluator-specific env vars; parent config handles TRIGGER_RULES_FILE.
 func (c *Config) ApplyEnvOverrides() {
-	if val := os.Getenv("TRIGGER_RULES_FILE"); val != "" {
-		c.RulesFile = val
+	if val := os.Getenv("TRIGGER_RULES_PATH"); val != "" {
+		c.RulesPath = val
 	}
 	if val := os.Getenv("TRIGGER_PULLER_ADDR"); val != "" {
 		c.PullerAddr = val
@@ -85,8 +84,8 @@ func (c *Config) ResolvePaths(_ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(mode services.DeploymentMode) error {
-	if c.RulesFile == "" {
-		return errors.New("trigger.evaluator.rules_file is required")
+	if c.RulesPath == "" {
+		return errors.New("trigger.evaluator.rules_path is required")
 	}
 	if c.StreamName == "" {
 		return errors.New("stream_name is required")

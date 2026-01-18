@@ -29,13 +29,13 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 	os.Setenv("DB_NAME", "testdb")
 	os.Setenv("GATEWAY_QUERY_SERVICE_URL", "http://api-env")
 	os.Setenv("TRIGGER_NATS_URL", "nats://env:4222")
-	os.Setenv("TRIGGER_RULES_FILE", "custom.json")
+	os.Setenv("TRIGGER_RULES_PATH", "custom")
 	defer func() {
 		os.Unsetenv("MONGO_URI")
 		os.Unsetenv("DB_NAME")
 		os.Unsetenv("GATEWAY_QUERY_SERVICE_URL")
 		os.Unsetenv("TRIGGER_NATS_URL")
-		os.Unsetenv("TRIGGER_RULES_FILE")
+		os.Unsetenv("TRIGGER_RULES_PATH")
 	}()
 
 	cfg := LoadConfig()
@@ -44,7 +44,7 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 	assert.Equal(t, "testdb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
 	assert.Equal(t, "http://api-env", cfg.Gateway.QueryServiceURL)
 	assert.Equal(t, "nats://env:4222", cfg.Trigger.NatsURL)
-	assert.True(t, strings.HasSuffix(cfg.Trigger.Evaluator.RulesFile, filepath.Join("config", "custom.json")))
+	assert.True(t, strings.HasSuffix(cfg.Trigger.Evaluator.RulesPath, filepath.Join("config", "custom")))
 }
 
 func TestLoadConfig_LoadFileErrors(t *testing.T) {

@@ -36,7 +36,7 @@ func TestConfig_StructFields(t *testing.T) {
 		NatsURL: "nats://custom:4222",
 		Evaluator: evaluator.Config{
 			StreamName:         "custom_stream",
-			RulesFile:          "custom_triggers.json",
+			RulesPath:          "custom_triggers",
 			CheckpointDatabase: "custom_db",
 		},
 		Delivery: delivery.Config{
@@ -48,7 +48,7 @@ func TestConfig_StructFields(t *testing.T) {
 
 	assert.Equal(t, "nats://custom:4222", cfg.NatsURL)
 	assert.Equal(t, "custom_stream", cfg.Evaluator.StreamName)
-	assert.Equal(t, "custom_triggers.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "custom_triggers", cfg.Evaluator.RulesPath)
 	assert.Equal(t, "custom_db", cfg.Evaluator.CheckpointDatabase)
 	assert.Equal(t, "custom_stream", cfg.Delivery.StreamName)
 	assert.Equal(t, "custom-consumer", cfg.Delivery.ConsumerName)
@@ -67,11 +67,11 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 
 func TestConfig_ApplyEnvOverrides(t *testing.T) {
 	os.Setenv("TRIGGER_NATS_URL", "nats://env:4222")
-	os.Setenv("TRIGGER_RULES_FILE", "env_rules.json")
+	os.Setenv("TRIGGER_RULES_PATH", "env_rules")
 	os.Setenv("TRIGGER_PULLER_ADDR", "puller.env:9000")
 	defer func() {
 		os.Unsetenv("TRIGGER_NATS_URL")
-		os.Unsetenv("TRIGGER_RULES_FILE")
+		os.Unsetenv("TRIGGER_RULES_PATH")
 		os.Unsetenv("TRIGGER_PULLER_ADDR")
 	}()
 
@@ -79,25 +79,25 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 	cfg.ApplyEnvOverrides()
 
 	assert.Equal(t, "nats://env:4222", cfg.NatsURL)
-	assert.Equal(t, "env_rules.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "env_rules", cfg.Evaluator.RulesPath)
 	assert.Equal(t, "puller.env:9000", cfg.Evaluator.PullerAddr)
 }
 
 func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Evaluator.RulesFile = "triggers.json"
+	cfg.Evaluator.RulesPath = "triggers"
 	cfg.ResolvePaths("config")
 
-	assert.Equal(t, filepath.Join("config", "triggers.json"), cfg.Evaluator.RulesFile)
+	assert.Equal(t, filepath.Join("config", "triggers"), cfg.Evaluator.RulesPath)
 }
 
 func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 	cfg := DefaultConfig()
-	absPath := "/absolute/path/triggers.json"
-	cfg.Evaluator.RulesFile = absPath
+	absPath := "/absolute/path/triggers"
+	cfg.Evaluator.RulesPath = absPath
 	cfg.ResolvePaths("config")
 
-	assert.Equal(t, absPath, cfg.Evaluator.RulesFile)
+	assert.Equal(t, absPath, cfg.Evaluator.RulesPath)
 }
 
 func TestConfig_Validate(t *testing.T) {
@@ -111,7 +111,7 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 		NatsURL: "nats://custom:4223",
 		Evaluator: evaluator.Config{
 			StreamName:         "CUSTOM_STREAM",
-			RulesFile:          "custom_rules.json",
+			RulesPath:          "custom_rules",
 			CheckpointDatabase: "custom_db",
 			RetryAttempts:      5,
 			StorageType:        "memory",
@@ -127,7 +127,7 @@ func TestConfig_ApplyDefaults_CustomValuesPreserved(t *testing.T) {
 
 	assert.Equal(t, "nats://custom:4223", cfg.NatsURL)
 	assert.Equal(t, "CUSTOM_STREAM", cfg.Evaluator.StreamName)
-	assert.Equal(t, "custom_rules.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "custom_rules", cfg.Evaluator.RulesPath)
 	assert.Equal(t, "custom_db", cfg.Evaluator.CheckpointDatabase)
 	assert.Equal(t, 5, cfg.Evaluator.RetryAttempts)
 	assert.Equal(t, "memory", cfg.Evaluator.StorageType)
@@ -153,13 +153,13 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 
 func TestConfig_ApplyEnvOverrides_WithTSetenv(t *testing.T) {
 	t.Setenv("TRIGGER_NATS_URL", "nats://testenv:4222")
-	t.Setenv("TRIGGER_RULES_FILE", "testenv_rules.json")
+	t.Setenv("TRIGGER_RULES_PATH", "testenv_rules")
 
 	cfg := DefaultConfig()
 	cfg.ApplyEnvOverrides()
 
 	assert.Equal(t, "nats://testenv:4222", cfg.NatsURL)
-	assert.Equal(t, "testenv_rules.json", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "testenv_rules", cfg.Evaluator.RulesPath)
 }
 
 func TestConfig_ApplyEnvOverrides_NoEnvVars(t *testing.T) {
@@ -171,21 +171,21 @@ func TestConfig_ApplyEnvOverrides_NoEnvVars(t *testing.T) {
 	assert.Equal(t, originalURL, cfg.NatsURL)
 }
 
-func TestConfig_ResolvePaths_EmptyRulesFile(t *testing.T) {
+func TestConfig_ResolvePaths_EmptyRulesPath(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.Evaluator.RulesFile = ""
+	cfg.Evaluator.RulesPath = ""
 	cfg.ResolvePaths("/config")
 
 	// Empty path should stay empty (not get resolved to just baseDir)
-	assert.Equal(t, "", cfg.Evaluator.RulesFile)
+	assert.Equal(t, "", cfg.Evaluator.RulesPath)
 }
 
 func TestConfig_Validate_EmptyConfig(t *testing.T) {
-	// Empty config is now invalid because RulesFile is required
+	// Empty config is now invalid because RulesPath is required
 	cfg := Config{}
 	err := cfg.Validate(services.ModeDistributed)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "rules_file is required")
+	assert.Contains(t, err.Error(), "rules_path is required")
 }
 
 func TestConfig_Validate_CallsSubConfigs(t *testing.T) {
