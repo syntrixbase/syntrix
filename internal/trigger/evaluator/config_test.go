@@ -49,7 +49,7 @@ func TestDefaultConfig(t *testing.T) {
 
 	assert.Equal(t, "localhost:9000", cfg.PullerAddr)
 	assert.True(t, cfg.StartFromNow)
-	assert.Equal(t, "config/triggers", cfg.RulesPath)
+	assert.Equal(t, "triggers", cfg.RulesPath)
 	assert.Equal(t, "default", cfg.CheckpointDatabase)
 	assert.Equal(t, "TRIGGERS", cfg.StreamName)
 	assert.Equal(t, 3, cfg.RetryAttempts)

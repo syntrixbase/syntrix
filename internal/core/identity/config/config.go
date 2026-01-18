@@ -33,7 +33,7 @@ func DefaultConfig() Config {
 			PrivateKeyFile:  "keys/auth_private.pem",
 		},
 		AuthZ: AuthZConfig{
-			RulesPath: "config/security_rules",
+			RulesPath: "security_rules",
 		},
 	}
 }

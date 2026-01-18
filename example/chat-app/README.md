@@ -23,12 +23,12 @@ You will need **3 separate terminal windows** to run the full stack.
 ### Terminal 1: Start Syntrix Server
 
 1. Navigate to the root `syntrix` directory.
-2. Ensure your configuration points to the triggers file.
+2. Ensure your configuration points to the triggers directory.
      - Edit `config.yml` (or `config.local.yml`):
 
          ```yaml
          trigger:
-             rules_file: "example/orch-chat/triggers.json"
+             rules_path: "example/chat-app/config/triggers"
              # ... other config
          ```
 
@@ -121,5 +121,5 @@ This worker handles the "brain" of the agent.
 - **Worker Errors**: Check Terminal 2 logs. If you see "Missing credentials", check your `.env` file.
 - **No Response**:
    - Check Terminal 1 (Syntrix) logs to see if the Trigger was fired and if the Webhook delivery succeeded (HTTP 200).
-   - Check if `triggers.json` is correctly loaded by Syntrix.
+   - Check if `config/triggers/` directory is correctly loaded by Syntrix.
 - **Frontend Sync Issues**: Open Browser Console (F12). Check for WebSocket connection errors or RxDB replication errors.

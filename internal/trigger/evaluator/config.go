@@ -32,7 +32,7 @@ func DefaultConfig() Config {
 	return Config{
 		PullerAddr:         "localhost:9000",
 		StartFromNow:       true,
-		RulesPath:          "config/triggers",
+		RulesPath:          "triggers",
 		CheckpointDatabase: "default",
 		StreamName:         "TRIGGERS",
 		RetryAttempts:      3,
