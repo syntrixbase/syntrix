@@ -36,10 +36,10 @@ Tasks are organized by implementation phase and component. Each task includes:
 | ID | Task | Estimate | Dependencies | Status |
 |----|------|----------|--------------|--------|
 | P1-10 | Define core interfaces (Runner, Worker, Scenario, Operation) | M | P1-06 | ✅ Done |
-| P1-11 | Implement basic configuration struct | S | P1-10 | 📝 TODO |
-| P1-12 | Implement HTTP client wrapper | M | P1-10 | 📝 TODO |
-| P1-13 | Implement authentication token management | S | P1-12 | 📝 TODO |
-| P1-14 | Implement test data generator (documents) | M | P1-10 | 📝 TODO |
+| P1-11 | Implement basic configuration struct | S | P1-10 | ✅ Done |
+| P1-12 | Implement HTTP client wrapper | M | P1-10 | ✅ Done |
+| P1-13 | Implement automatic authentication token generation | S | P1-12 | ✅ Done |
+| P1-14 | Implement test data generator (documents) | M | P1-10 | ✅ Done |
 
 ### 1.3 Runner Engine
 

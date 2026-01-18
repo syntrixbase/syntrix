@@ -44,18 +44,18 @@ func TestLoadConfig_EnvVars(t *testing.T) {
 	assert.Equal(t, "testdb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
 	assert.Equal(t, "http://api-env", cfg.Gateway.QueryServiceURL)
 	assert.Equal(t, "nats://env:4222", cfg.Trigger.NatsURL)
-	assert.True(t, strings.HasSuffix(cfg.Trigger.Evaluator.RulesPath, filepath.Join("config", "custom")))
+	assert.True(t, strings.HasSuffix(cfg.Trigger.Evaluator.RulesPath, filepath.Join("configs", "custom")))
 }
 
 func TestLoadConfig_LoadFileErrors(t *testing.T) {
-	require.NoError(t, os.Mkdir("config", 0755))
-	defer os.RemoveAll("config")
+	require.NoError(t, os.Mkdir("configs", 0755))
+	defer os.RemoveAll("configs")
 
 	// Create a directory where a file is expected to trigger read error path
-	require.NoError(t, os.Mkdir("config/config.yml", 0755))
+	require.NoError(t, os.Mkdir("configs/config.yml", 0755))
 
 	// Malformed YAML to trigger parse error path
-	require.NoError(t, os.WriteFile("config/config.local.yml", []byte("not: [valid"), 0644))
+	require.NoError(t, os.WriteFile("configs/config.local.yml", []byte("not: [valid"), 0644))
 
 	cfg := LoadConfig()
 
@@ -65,9 +65,9 @@ func TestLoadConfig_LoadFileErrors(t *testing.T) {
 }
 
 func TestLoadConfig_File(t *testing.T) {
-	err := os.Mkdir("config", 0755)
+	err := os.Mkdir("configs", 0755)
 	require.NoError(t, err)
-	defer os.RemoveAll("config")
+	defer os.RemoveAll("configs")
 
 	// Create a temporary config.yml in the config directory
 	configContent := []byte(`
@@ -80,7 +80,7 @@ storage:
 gateway:
   port: 7070
 `)
-	err = os.WriteFile("config/config.yml", configContent, 0644)
+	err = os.WriteFile("configs/config.yml", configContent, 0644)
 	require.NoError(t, err)
 
 	cfg := LoadConfig()
@@ -98,23 +98,23 @@ func TestServiceConfig_ResolvePaths(t *testing.T) {
 		AuthZ: identity.AuthZConfig{RulesPath: "security.yaml"},
 		AuthN: identity.AuthNConfig{PrivateKeyFile: "keys/auth.pem"},
 	}
-	identityCfg.ResolvePaths("config")
-	assert.Equal(t, filepath.Join("config", "security.yaml"), identityCfg.AuthZ.RulesPath)
-	assert.Equal(t, filepath.Join("config", "keys/auth.pem"), identityCfg.AuthN.PrivateKeyFile)
+	identityCfg.ResolvePaths("configs")
+	assert.Equal(t, filepath.Join("configs", "security.yaml"), identityCfg.AuthZ.RulesPath)
+	assert.Equal(t, filepath.Join("configs", "keys/auth.pem"), identityCfg.AuthN.PrivateKeyFile)
 
 	// Test with absolute path - should not be modified
 	absPath := filepath.Join(t.TempDir(), "absolute", "path", "to", "file")
 	identityCfg2 := identity.Config{
 		AuthZ: identity.AuthZConfig{RulesPath: absPath},
 	}
-	identityCfg2.ResolvePaths("config")
+	identityCfg2.ResolvePaths("configs")
 	assert.Equal(t, absPath, identityCfg2.AuthZ.RulesPath)
 
 	// Test with empty path - should remain empty
 	identityCfg3 := identity.Config{
 		AuthZ: identity.AuthZConfig{RulesPath: ""},
 	}
-	identityCfg3.ResolvePaths("config")
+	identityCfg3.ResolvePaths("configs")
 	assert.Equal(t, "", identityCfg3.AuthZ.RulesPath)
 }
 

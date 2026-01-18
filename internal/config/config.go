@@ -53,14 +53,14 @@ func LoadConfig() *Config {
 	}
 
 	// 2. Load config.yml (overrides defaults)
-	loadFile("config/config.yml", cfg)
+	loadFile("configs/config.yml", cfg)
 
 	// 3. Load config.local.yml (overrides config.yml)
-	loadFile("config/config.local.yml", cfg)
+	loadFile("configs/config.local.yml", cfg)
 
 	// 4. Apply configuration lifecycle: ApplyDefaults fills gaps, ApplyEnvOverrides, ResolvePaths, Validate
 	// Note: We need to process Deployment first to get the mode, then pass it to other configs
-	configDir := "config"
+	configDir := "configs"
 	cfg.Deployment.ApplyDefaults()
 	cfg.Deployment.ApplyEnvOverrides()
 	cfg.Deployment.ResolvePaths(configDir)

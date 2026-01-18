@@ -13,6 +13,7 @@ import (
 	"github.com/syntrixbase/syntrix/pkg/benchmark/runner"
 	"github.com/syntrixbase/syntrix/pkg/benchmark/scenario"
 	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/utils"
 )
 
 // Version is the benchmark tool version (can be overridden at build time).
@@ -47,7 +48,6 @@ func runBenchmark(args []string) error {
 	// Parse flags
 	configFile := ""
 	target := ""
-	token := ""
 	duration := ""
 	workers := 0
 	noColor := false
@@ -65,12 +65,6 @@ func runBenchmark(args []string) error {
 				return fmt.Errorf("missing value for %s", args[i])
 			}
 			target = args[i+1]
-			i++
-		case "--token":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			token = args[i+1]
 			i++
 		case "-d", "--duration":
 			if i+1 >= len(args) {
@@ -128,9 +122,6 @@ func runBenchmark(args []string) error {
 	if target != "" {
 		cfg.Target = target
 	}
-	if token != "" {
-		cfg.Auth.Token = token
-	}
 	if duration != "" {
 		d, err := time.ParseDuration(duration)
 		if err != nil {
@@ -141,6 +132,14 @@ func runBenchmark(args []string) error {
 	if workers > 0 {
 		cfg.Workers = workers
 	}
+
+	// Always auto-generate token
+	fmt.Println("Generating authentication token...")
+	cfg.Auth.Token, err = utils.GenerateBenchmarkToken("keys/auth_private.pem", "benchmark", 365*24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %w", err)
+	}
+	fmt.Println("✓ Token generated successfully")
 
 	// Validate configuration
 	if err := config.Validate(cfg); err != nil {
@@ -262,13 +261,14 @@ func printRunUsage() {
 	fmt.Println("Flags:")
 	fmt.Println("  -c, --config <file>     Configuration file (YAML)")
 	fmt.Println("  -t, --target <url>      Target Syntrix URL")
-	fmt.Println("      --token <token>     Authentication token")
 	fmt.Println("  -d, --duration <time>   Benchmark duration (e.g., 10s, 1m)")
 	fmt.Println("  -w, --workers <n>       Number of concurrent workers")
 	fmt.Println("      --no-color          Disable colored output")
 	fmt.Println("  -h, --help              Show this help message")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  syntrix-benchmark run --config benchmark.yaml")
-	fmt.Println("  syntrix-benchmark run --target http://localhost:8080 --token mytoken --duration 30s --workers 10")
+	fmt.Println("  syntrix-benchmark run --config configs/benchmark.yaml")
+	fmt.Println("  syntrix-benchmark run --target http://localhost:8080 --duration 30s --workers 10")
+	fmt.Println()
+	fmt.Println("Note: Authentication tokens are generated automatically")
 }

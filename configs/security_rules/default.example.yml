@@ -1,0 +1,30 @@
+# Security Rules for Default Database
+#
+# This configuration provides examples for different access patterns.
+# Uncomment and modify the rules according to your security requirements.
+
+database: default
+rules_version: '1'
+service: syntrix
+
+match:
+  /databases/{database}/documents:
+    match:
+      # Option 1: Open access (Development/Testing only - NOT for production)
+      # Uncomment the following to allow all reads and writes
+      /{document=**}:
+        allow:
+          read, write: "true"
+
+      # Option 2: Benchmark-specific access with authentication
+      # Uncomment to require authentication for benchmark collections
+      # /benchmark_{collection=**}:
+      #   allow:
+      #     read, write: "request.auth != null && request.auth.roles.hasAny(['system', 'service:benchmark', 'admin'])"
+
+      # Option 3: Authenticated access for all collections
+      # Uncomment to require authentication for all collections
+      # /{collection=**}:
+      #   allow:
+      #     read: "request.auth != null"
+      #     write: "request.auth != null && request.auth.roles.hasAny(['admin', 'user'])"

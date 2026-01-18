@@ -1,3 +1,8 @@
+# Trigger Definitions for Default Database
+#
+# Triggers are webhook-based event handlers that fire when documents change.
+# This is an example configuration - modify according to your needs.
+
 database: default
 
 # Default retry policy for all triggers in this file
