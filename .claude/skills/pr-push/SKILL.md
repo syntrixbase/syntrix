@@ -1,7 +1,7 @@
 ---
 name: pr-push
 description: |
-  Push local commits to remote and generate comprehensive pull request messages.
+  Push local commits to remote, check for uncommitted changes, and create a PR with structured summary, changes list, and test plan.
 ---
 # PR Push
 
@@ -10,8 +10,11 @@ description: |
 1. **Gather Info**: `git status`, `git log origin/<branch>..HEAD --oneline`, `git remote -v`
 2. **Check Uncommitted**: If exist, ask user whether to commit first
 3. **Push**: `git push -u origin <current-branch>`
-4. **Analyze Diff**: Compare branch vs base (main/master/develop)
-5. **Create PR**: Use `gh pr create` with structured body
+4. **Check Existing PR**: Run `gh pr view --json url -q .url 2>/dev/null` to check if a PR already exists for this branch
+   - If PR exists: inform user and provide the PR URL, skip PR creation
+   - If no PR exists: proceed to create one
+5. **Analyze Diff**: Compare branch vs base (main/master/develop)
+6. **Create PR**: Use `gh pr create` with structured body
 
 ## Commands Reference
 
@@ -26,6 +29,9 @@ git diff <base>...HEAD
 
 # Push with upstream
 git push -u origin <branch>
+
+# Check if PR already exists for current branch
+gh pr view --json url -q .url 2>/dev/null
 
 # Create PR with heredoc
 gh pr create --title "<type>: <subject>" --body "$(cat <<'EOF'
@@ -82,6 +88,7 @@ How to verify the changes work correctly.
 | Push fails | Report error, suggest solutions |
 | Uncommitted changes | Ask user to commit first |
 | No base branch | Ask user which branch to compare |
+| PR already exists | Inform user and provide PR URL, skip creation |
 
 ## Examples
 
