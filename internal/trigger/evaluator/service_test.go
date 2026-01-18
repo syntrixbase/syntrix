@@ -535,15 +535,14 @@ func TestNewService_Success(t *testing.T) {
 func TestNewService_WithRulesFile(t *testing.T) {
 	mockPuller := new(MockPuller)
 
-	content := `[
-		{
-			"triggerId": "trigger1",
+	content := `{
+		"trigger1": {
 			"database": "db1",
 			"collection": "users",
 			"events": ["create"],
 			"url": "https://example.com/webhook"
 		}
-	]`
+	}`
 
 	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
 	err := os.WriteFile(tmpFile, []byte(content), 0644)
@@ -579,15 +578,14 @@ func TestNewService_WithInvalidRulesFile(t *testing.T) {
 func TestNewService_WithInvalidTrigger(t *testing.T) {
 	mockPuller := new(MockPuller)
 
-	// Invalid trigger - missing ID
-	content := `[
-		{
-			"database": "db1",
+	// Invalid trigger - missing database
+	content := `{
+		"trigger1": {
 			"collection": "users",
 			"events": ["create"],
 			"url": "https://example.com/webhook"
 		}
-	]`
+	}`
 
 	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
 	err := os.WriteFile(tmpFile, []byte(content), 0644)

@@ -11,9 +11,8 @@ import (
 
 func TestLoadTriggersFromFile(t *testing.T) {
 	// 1. Create Temp JSON File
-	jsonContent := `[
-		{
-			"triggerId": "t1",
+	jsonContent := `{
+		"t1": {
 			"collection": "users",
 			"events": ["create"],
 			"condition": "true",
@@ -24,7 +23,7 @@ func TestLoadTriggersFromFile(t *testing.T) {
 				"maxBackoff": "10s"
 			}
 		}
-	]`
+	}`
 	jsonFile, err := os.CreateTemp("", "triggers-*.json")
 	require.NoError(t, err)
 	defer os.Remove(jsonFile.Name())
@@ -43,7 +42,7 @@ func TestLoadTriggersFromFile(t *testing.T) {
 
 	// 3. Create Temp YAML File
 	yamlContent := `
-- triggerId: t2
+t2:
   collection: orders
   events:
     - update
@@ -72,7 +71,7 @@ func TestLoadTriggersFromFile(t *testing.T) {
 
 	// 5. Test Invalid YAML
 	invalidYamlContent := `
-- triggerId: t3
+t3:
   collection: [invalid
 `
 	invalidYamlFile, err := os.CreateTemp("", "triggers-invalid-*.yaml")
@@ -87,7 +86,7 @@ func TestLoadTriggersFromFile(t *testing.T) {
 	assert.Contains(t, err.Error(), "failed to parse YAML trigger rules")
 
 	// 6. Test Invalid JSON
-	invalidJsonContent := `[{"triggerId": "t4", "collection": "users", "events": ["create"]` // Missing closing bracket
+	invalidJsonContent := `{"t4": {"collection": "users", "events": ["create"]` // Missing closing bracket
 	invalidJsonFile, err := os.CreateTemp("", "triggers-invalid-*.json")
 	require.NoError(t, err)
 	defer os.Remove(invalidJsonFile.Name())
