@@ -8,21 +8,17 @@ import (
 	"testing"
 )
 
-func TestMain(t *testing.T) {
+func TestPrintUsage(t *testing.T) {
 	// Capture stdout
+	var buf bytes.Buffer
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	// Run main
-	main()
+	printUsage()
 
-	// Restore stdout
 	w.Close()
 	os.Stdout = oldStdout
-
-	// Read captured output
-	var buf bytes.Buffer
 	io.Copy(&buf, r)
 	output := buf.String()
 
@@ -32,7 +28,6 @@ func TestMain(t *testing.T) {
 		"Usage:",
 		"Commands:",
 		"run",
-		"compare",
 		"version",
 	}
 

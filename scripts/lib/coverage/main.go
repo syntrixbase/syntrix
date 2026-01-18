@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Config holds the configuration for coverage analysis
@@ -76,12 +77,19 @@ func main() {
 	cfg = parseConfig()
 
 	fmt.Println()
+	startTime := time.Now()
+	fmt.Printf("[%s] Starting test run...\n\n", startTime.Format("15:04:05"))
 
 	// Run tests and collect results
 	results, topLevelCounts, subTestCounts, exitCode := runTests()
 	if exitCode != 0 && len(results) == 0 {
 		os.Exit(exitCode)
 	}
+
+	testDuration := time.Since(startTime)
+	fmt.Printf("\n[%s] Test run completed in %.2fs\n", time.Now().Format("15:04:05"), testDuration.Seconds())
+	fmt.Println(strings.Repeat("=", 80))
+	fmt.Println()
 
 	// Print package coverage summary
 	hasCriticalPackage := printPackageSummary(results, topLevelCounts, subTestCounts)
@@ -241,6 +249,10 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 	subTestCounts := make(map[string]int)
 	decoder := json.NewDecoder(r)
 
+	// Track which packages we've printed and their start times
+	printedPackages := make(map[string]bool)
+	packageStartTimes := make(map[string]time.Time)
+
 	// Buffer output per test, only print on failure
 	// Key: "pkg/test" or just "pkg" for package-level output
 	testOutputs := make(map[string][]string)
@@ -264,10 +276,26 @@ func parseTestOutput(r io.Reader) ([]PackageResult, map[string]int, map[string]i
 
 		// Count tests separately: top-level vs subtests
 		if event.Action == "run" && event.Test != "" {
+			// Print package start only once (when first test runs)
+			if !printedPackages[pkg] {
+				now := time.Now()
+				packageStartTimes[pkg] = now
+				fmt.Printf("[%s] Testing %s...\n", now.Format("15:04:05"), pkg)
+				printedPackages[pkg] = true
+			}
+
 			if strings.Contains(event.Test, "/") {
 				subTestCounts[pkg]++
 			} else {
 				topLevelCounts[pkg]++
+			}
+		}
+
+		// Print package completion time
+		if event.Action == "pass" && event.Test == "" {
+			if startTime, ok := packageStartTimes[pkg]; ok {
+				elapsed := time.Since(startTime)
+				fmt.Printf("[%s] ✓ %s completed (%.2fs)\n", time.Now().Format("15:04:05"), pkg, elapsed.Seconds())
 			}
 		}
 
