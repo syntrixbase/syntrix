@@ -1,7 +1,8 @@
-.PHONY: build run test clean generate
+.PHONY: build run test clean generate build-benchmark test-benchmark clean-benchmark
 
 CLI_APP_NAME=syntrix-cli
 APP_NAME=syntrix
+BENCHMARK_APP_NAME=syntrix-benchmark
 BUILD_DIR=bin
 
 ifeq ($(OS),Windows_NT)
@@ -16,6 +17,7 @@ endif
 
 APP_BIN=$(BUILD_DIR)/$(APP_NAME)$(EXE_EXT)
 CLI_BIN=$(BUILD_DIR)/$(CLI_APP_NAME)$(EXE_EXT)
+BENCHMARK_BIN=$(BUILD_DIR)/$(BENCHMARK_APP_NAME)$(EXE_EXT)
 
 build:
 	@$(MKDIR_P)
@@ -49,3 +51,17 @@ clean:
 generate:
 	@echo "Running go generate..."
 	@go generate ./...
+
+# Benchmark tool targets
+build-benchmark:
+	@$(MKDIR_P)
+	@echo "Building $(BENCHMARK_APP_NAME)..."
+	@go build -o $(BENCHMARK_BIN) ./tests/benchmark/cmd/syntrix-benchmark
+
+test-benchmark:
+	@echo "Running benchmark tool tests..."
+	@go test ./tests/benchmark/... -count=1 -timeout=30s
+
+clean-benchmark:
+	@echo "Cleaning benchmark binary..."
+	@rm -f $(BENCHMARK_BIN)
