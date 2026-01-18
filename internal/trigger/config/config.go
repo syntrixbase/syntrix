@@ -52,8 +52,8 @@ func (c *Config) ApplyEnvOverrides() {
 
 // ResolvePaths resolves relative paths using the given base directory.
 func (c *Config) ResolvePaths(baseDir string) {
-	if c.Evaluator.RulesFile != "" && !filepath.IsAbs(c.Evaluator.RulesFile) {
-		c.Evaluator.RulesFile = filepath.Join(baseDir, c.Evaluator.RulesFile)
+	if c.Evaluator.RulesPath != "" && !filepath.IsAbs(c.Evaluator.RulesPath) {
+		c.Evaluator.RulesPath = filepath.Join(baseDir, c.Evaluator.RulesPath)
 	}
 	c.Evaluator.ResolvePaths(baseDir)
 	c.Delivery.ResolvePaths(baseDir)

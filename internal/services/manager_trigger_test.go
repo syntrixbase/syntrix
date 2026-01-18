@@ -61,7 +61,7 @@ func setupTriggerTestFactories(t *testing.T) func() {
 
 func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
@@ -136,7 +136,7 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 
 func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
@@ -264,13 +264,19 @@ func TestManager_InitTriggerServices_NatsError(t *testing.T) {
 	assert.ErrorContains(t, err, "nats error")
 }
 
-func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
+func TestManager_InitTriggerServices_WithRulesPath(t *testing.T) {
 	cfg := config.LoadConfig()
 	tmpDir := t.TempDir()
-	jsonRules := `[{"triggerId":"t1","database":"default","collection":"users","events":["create"],"url":"http://localhost:8080/webhook"}]`
-	rulesFile := filepath.Join(tmpDir, "rules.json")
-	assert.NoError(t, os.WriteFile(rulesFile, []byte(jsonRules), 0644))
-	cfg.Trigger.Evaluator.RulesFile = rulesFile
+	yamlRules := `database: default
+triggers:
+  t1:
+    collection: users
+    events:
+      - create
+    url: http://localhost:8080/webhook
+`
+	assert.NoError(t, os.WriteFile(filepath.Join(tmpDir, "default.yml"), []byte(yamlRules), 0644))
+	cfg.Trigger.Evaluator.RulesPath = tmpDir
 
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
@@ -298,9 +304,9 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 	// Set up fake puller service
 	mgr.pullerService = &mockTriggerPuller{}
 
-	// Mock evaluator factory - verify rules file is passed
+	// Mock evaluator factory - verify rules path is passed
 	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
-		assert.Equal(t, rulesFile, cfg.RulesFile)
+		assert.Equal(t, tmpDir, cfg.RulesPath)
 		return &fakeEvaluator{}, nil
 	}
 
@@ -315,7 +321,7 @@ func TestManager_InitTriggerServices_WithRulesFile(t *testing.T) {
 
 func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 	cfg := config.LoadConfig()
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
 
 	restore := setupTriggerTestFactories(t)
@@ -368,7 +374,7 @@ func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
 func TestManager_InitTriggerServices_Distributed_EvaluatorSuccess(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
@@ -400,7 +406,7 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorSuccess(t *testing.T) 
 func TestManager_InitTriggerServices_Distributed_EvaluatorPublisherError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
@@ -426,7 +432,7 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorPublisherError(t *test
 func TestManager_InitTriggerServices_Distributed_EvaluatorServiceError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.PullerAddr = "localhost:9000"
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)

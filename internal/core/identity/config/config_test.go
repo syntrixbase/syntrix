@@ -19,7 +19,7 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
 
 	// Verify AuthZ defaults
-	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
+	assert.Equal(t, "security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_StructFields(t *testing.T) {
@@ -50,7 +50,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 2*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
+	assert.Equal(t, "security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ApplyEnvOverrides(t *testing.T) {
@@ -63,7 +63,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.ResolvePaths("base")
 
-	assert.Equal(t, filepath.Join("base", "config/security_rules"), cfg.AuthZ.RulesPath)
+	assert.Equal(t, filepath.Join("base", "security_rules"), cfg.AuthZ.RulesPath)
 	assert.Equal(t, filepath.Join("base", "keys/auth_private.pem"), cfg.AuthN.PrivateKeyFile)
 }
 
@@ -115,7 +115,7 @@ func TestConfig_ApplyDefaults_PartialConfig(t *testing.T) {
 	assert.Equal(t, 7*24*time.Hour, cfg.AuthN.RefreshTokenTTL)
 	assert.Equal(t, 2*time.Minute, cfg.AuthN.AuthCodeTTL)
 	assert.Equal(t, "keys/auth_private.pem", cfg.AuthN.PrivateKeyFile)
-	assert.Equal(t, "config/security_rules", cfg.AuthZ.RulesPath)
+	assert.Equal(t, "security_rules", cfg.AuthZ.RulesPath)
 }
 
 func TestConfig_ResolvePaths_EmptyPaths(t *testing.T) {

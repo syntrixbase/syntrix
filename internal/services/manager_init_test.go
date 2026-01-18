@@ -537,7 +537,7 @@ func TestManager_Init_StandaloneMode(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesPath = ""
-	cfg.Trigger.Evaluator.RulesFile = "" // Clear trigger rules for unit tests
+	cfg.Trigger.Evaluator.RulesPath = "" // Clear trigger rules for unit tests
 	cfg.Puller.Backends = nil            // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
 		Mode:      ModeStandalone,
@@ -573,7 +573,7 @@ func TestManager_Init_StandaloneMode_NoHTTPForCSP(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesPath = ""
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	cfg.Puller.Backends = nil // Clear puller backends for unit tests
 	mgr := NewManager(cfg, Options{
 		Mode:      ModeStandalone,
@@ -982,7 +982,7 @@ func TestManager_initStandalone_WithPuller(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesPath = ""
-	cfg.Trigger.Evaluator.RulesFile = ""
+	cfg.Trigger.Evaluator.RulesPath = ""
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
 
@@ -1137,7 +1137,7 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 	cfg.Indexer.TemplatePath = ""
 	cfg.Puller.Buffer.Path = t.TempDir()
 	cfg.Puller.Backends = []puller_config.PullerBackendConfig{{Name: "default"}}
-	cfg.Trigger.Evaluator.RulesFile = "" // Mock factory handles this
+	cfg.Trigger.Evaluator.RulesPath = "" // Mock factory handles this
 
 	mgr := NewManager(cfg, Options{
 		Mode:       ModeStandalone,

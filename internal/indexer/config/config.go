@@ -74,7 +74,7 @@ type StoreConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		PullerAddr:        "localhost:9000",
-		TemplatePath:      "config/index_templates",
+		TemplatePath:      "index_templates",
 		ProgressPath:      "data/indexer/progress",
 		ConsumerID:        "indexer",
 		ReconcileInterval: 5 * time.Second,

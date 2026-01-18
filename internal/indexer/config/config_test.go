@@ -11,7 +11,7 @@ import (
 func TestDefaultConfig(t *testing.T) {
 	cfg := DefaultConfig()
 
-	assert.Equal(t, "config/index_templates", cfg.TemplatePath)
+	assert.Equal(t, "index_templates", cfg.TemplatePath)
 	assert.Equal(t, "data/indexer/progress", cfg.ProgressPath)
 	assert.Equal(t, "indexer", cfg.ConsumerID)
 	assert.Equal(t, 5*time.Second, cfg.ReconcileInterval)
@@ -63,7 +63,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 			initial: Config{},
 			check: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "localhost:9000", cfg.PullerAddr)
-				assert.Equal(t, "config/index_templates", cfg.TemplatePath)
+				assert.Equal(t, "index_templates", cfg.TemplatePath)
 				assert.Equal(t, "data/indexer/progress", cfg.ProgressPath)
 				assert.Equal(t, "indexer", cfg.ConsumerID)
 				assert.Equal(t, 5*time.Second, cfg.ReconcileInterval)
@@ -114,7 +114,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 			},
 			check: func(t *testing.T, cfg *Config) {
 				assert.Equal(t, "partial:9002", cfg.PullerAddr)
-				assert.Equal(t, "config/index_templates", cfg.TemplatePath)
+				assert.Equal(t, "index_templates", cfg.TemplatePath)
 				assert.Equal(t, "data/indexer/progress", cfg.ProgressPath)
 				assert.Equal(t, "indexer", cfg.ConsumerID)
 				assert.Equal(t, 5*time.Second, cfg.ReconcileInterval)

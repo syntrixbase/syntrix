@@ -22,7 +22,6 @@ IMMEDIATELY STOP and ask user when:
 - Using `cat` or `echo` to write or append to files in the terminal.
 - Start coding without a **confirmed plan** from the user.
 - Adding "Generated with Claude Code", "via Happy", or any co-author credits in commit messages.
-- **Git commits without explicit single-use authorization**: Each git commit instruction only authorizes ONE commit. Never auto-commit or batch commit without explicit user consent for each commit.
 - **Git force push**: Never use `git push --force` or `git push -f`. Use `git push --force-with-lease` only when absolutely necessary and with explicit user consent.
 
 ## 🔄 DECISION TREE

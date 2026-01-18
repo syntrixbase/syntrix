@@ -532,28 +532,28 @@ func TestNewService_Success(t *testing.T) {
 	assert.NotNil(t, svc)
 }
 
-func TestNewService_WithRulesFile(t *testing.T) {
+func TestNewService_WithRulesPath(t *testing.T) {
 	mockPuller := new(MockPuller)
 
-	content := `[
-		{
-			"triggerId": "trigger1",
-			"database": "db1",
-			"collection": "users",
-			"events": ["create"],
-			"url": "https://example.com/webhook"
-		}
-	]`
+	// Create directory with trigger file in new format
+	tmpDir := t.TempDir()
+	content := `database: db1
+triggers:
+  trigger1:
+    collection: users
+    events:
+      - create
+    url: https://example.com/webhook
+`
 
-	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "db1.yml"), []byte(content), 0644)
 	require.NoError(t, err)
 
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
 	cfg := Config{
-		RulesFile: tmpFile,
+		RulesPath: tmpDir,
 	}
 
 	svc, err := NewService(deps, cfg)
@@ -561,14 +561,14 @@ func TestNewService_WithRulesFile(t *testing.T) {
 	assert.NotNil(t, svc)
 }
 
-func TestNewService_WithInvalidRulesFile(t *testing.T) {
+func TestNewService_WithInvalidRulesPath(t *testing.T) {
 	mockPuller := new(MockPuller)
 
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
 	cfg := Config{
-		RulesFile: "/nonexistent/file.json",
+		RulesPath: "/nonexistent/directory",
 	}
 
 	_, err := NewService(deps, cfg)
@@ -579,25 +579,24 @@ func TestNewService_WithInvalidRulesFile(t *testing.T) {
 func TestNewService_WithInvalidTrigger(t *testing.T) {
 	mockPuller := new(MockPuller)
 
-	// Invalid trigger - missing ID
-	content := `[
-		{
-			"database": "db1",
-			"collection": "users",
-			"events": ["create"],
-			"url": "https://example.com/webhook"
-		}
-	]`
+	// Invalid trigger - missing collection
+	tmpDir := t.TempDir()
+	content := `database: db1
+triggers:
+  trigger1:
+    events:
+      - create
+    url: https://example.com/webhook
+`
 
-	tmpFile := filepath.Join(t.TempDir(), "triggers.json")
-	err := os.WriteFile(tmpFile, []byte(content), 0644)
+	err := os.WriteFile(filepath.Join(tmpDir, "db1.yml"), []byte(content), 0644)
 	require.NoError(t, err)
 
 	deps := Dependencies{
 		Puller: mockPuller,
 	}
 	cfg := Config{
-		RulesFile: tmpFile,
+		RulesPath: tmpDir,
 	}
 
 	_, err = NewService(deps, cfg)

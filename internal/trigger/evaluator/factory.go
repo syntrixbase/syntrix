@@ -56,13 +56,18 @@ func NewService(deps Dependencies, cfg Config) (Service, error) {
 		publisher: pub,
 	}
 
-	// Load trigger rules from file if configured
-	if cfg.RulesFile != "" {
-		triggers, err := types.LoadTriggersFromFile(cfg.RulesFile)
+	// Load trigger rules from directory if configured
+	if cfg.RulesPath != "" {
+		triggersByDB, err := types.LoadTriggersFromDir(cfg.RulesPath)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load trigger rules from %s: %w", cfg.RulesFile, err)
+			return nil, fmt.Errorf("failed to load trigger rules from %s: %w", cfg.RulesPath, err)
 		}
-		if err := svc.LoadTriggers(triggers); err != nil {
+		// Flatten all triggers for loading
+		var allTriggers []*types.Trigger
+		for _, triggers := range triggersByDB {
+			allTriggers = append(allTriggers, triggers...)
+		}
+		if err := svc.LoadTriggers(allTriggers); err != nil {
 			return nil, fmt.Errorf("failed to load triggers: %w", err)
 		}
 	}
