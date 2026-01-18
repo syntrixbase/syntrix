@@ -147,6 +147,17 @@ func TestSubscriptionClose(t *testing.T) {
 	if !closed {
 		t.Error("Expected closeFn to be called")
 	}
+
+	// Test subscription with nil closeFn
+	sub2 := &Subscription{
+		ID:      "sub-456",
+		closeFn: nil,
+	}
+
+	err = sub2.Close()
+	if err != nil {
+		t.Errorf("Expected no error with nil closeFn, got %v", err)
+	}
 }
 
 // TestTestEnv tests TestEnv structure.
