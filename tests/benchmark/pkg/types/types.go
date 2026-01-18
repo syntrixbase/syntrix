@@ -11,11 +11,11 @@ import (
 type Config struct {
 	// Benchmark metadata
 	Name     string        `json:"name" yaml:"name"`
-	Target   string        `json:"target" yaml:"target"`         // Target Syntrix URL
-	Duration time.Duration `json:"duration" yaml:"duration"`     // Total benchmark duration
-	Warmup   time.Duration `json:"warmup" yaml:"warmup"`         // Warmup period
-	Rampup   time.Duration `json:"rampup" yaml:"rampup"`         // Rampup period
-	Workers  int           `json:"workers" yaml:"workers"`       // Number of concurrent workers
+	Target   string        `json:"target" yaml:"target"`     // Target Syntrix URL
+	Duration time.Duration `json:"duration" yaml:"duration"` // Total benchmark duration
+	Warmup   time.Duration `json:"warmup" yaml:"warmup"`     // Warmup period
+	Rampup   time.Duration `json:"rampup" yaml:"rampup"`     // Rampup period
+	Workers  int           `json:"workers" yaml:"workers"`   // Number of concurrent workers
 
 	// Authentication
 	Auth AuthConfig `json:"auth" yaml:"auth"`
@@ -60,16 +60,16 @@ type OperationConfig struct {
 
 // DataConfig holds data generation configuration.
 type DataConfig struct {
-	DocumentSize  string `json:"documentSize" yaml:"document_size"`   // e.g., "1KB", "10KB"
-	FieldsCount   int    `json:"fieldsCount" yaml:"fields_count"`     // Number of fields per document
-	SeedData      int    `json:"seedData" yaml:"seed_data"`           // Pre-populate N documents
-	Cleanup       bool   `json:"cleanup" yaml:"cleanup"`              // Clean up data after benchmark
+	DocumentSize     string `json:"documentSize" yaml:"document_size"`         // e.g., "1KB", "10KB"
+	FieldsCount      int    `json:"fieldsCount" yaml:"fields_count"`           // Number of fields per document
+	SeedData         int    `json:"seedData" yaml:"seed_data"`                 // Pre-populate N documents
+	Cleanup          bool   `json:"cleanup" yaml:"cleanup"`                    // Clean up data after benchmark
 	CollectionPrefix string `json:"collectionPrefix" yaml:"collection_prefix"` // Prefix for test collections
 }
 
 // MetricsConfig holds metrics collection configuration.
 type MetricsConfig struct {
-	Interval time.Duration `json:"interval" yaml:"interval"` // Progress reporting interval
+	Interval  time.Duration   `json:"interval" yaml:"interval"` // Progress reporting interval
 	Histogram HistogramConfig `json:"histogram" yaml:"histogram"`
 }
 
@@ -133,8 +133,8 @@ type OperationResult struct {
 // AggregatedMetrics holds aggregated statistical metrics.
 type AggregatedMetrics struct {
 	// Counts
-	TotalOperations int64 `json:"total_operations"`
-	TotalErrors     int64 `json:"total_errors"`
+	TotalOperations int64   `json:"total_operations"`
+	TotalErrors     int64   `json:"total_errors"`
 	SuccessRate     float64 `json:"success_rate"`
 
 	// Throughput
@@ -169,11 +169,11 @@ type ErrorEntry struct {
 
 // TimelinePoint represents metrics at a specific point in time.
 type TimelinePoint struct {
-	Timestamp    time.Time `json:"timestamp"`
-	Elapsed      float64   `json:"elapsed_seconds"`
-	Throughput   float64   `json:"throughput"`
-	LatencyP99   int64     `json:"latency_p99"`
-	ErrorRate    float64   `json:"error_rate"`
+	Timestamp  time.Time `json:"timestamp"`
+	Elapsed    float64   `json:"elapsed_seconds"`
+	Throughput float64   `json:"throughput"`
+	LatencyP99 int64     `json:"latency_p99"`
+	ErrorRate  float64   `json:"error_rate"`
 }
 
 // TestEnv provides access to the test environment for scenarios.
@@ -222,7 +222,7 @@ func (s *Subscription) Close() error {
 
 // SubscriptionEvent represents a realtime event.
 type SubscriptionEvent struct {
-	Type     string    // "create", "update", "delete"
+	Type     string // "create", "update", "delete"
 	Document *Document
 }
 
@@ -241,9 +241,9 @@ const (
 
 // WorkerStatus represents the status of a single worker.
 type WorkerStatus struct {
-	ID                  string    `json:"id"`
-	Status              string    `json:"status"` // active, idle, stopped
-	OperationsCompleted int64     `json:"operations_completed"`
-	CurrentOperation    string    `json:"current_operation,omitempty"`
+	ID                  string      `json:"id"`
+	Status              string      `json:"status"` // active, idle, stopped
+	OperationsCompleted int64       `json:"operations_completed"`
+	CurrentOperation    string      `json:"current_operation,omitempty"`
 	LastError           *ErrorEntry `json:"last_error,omitempty"`
 }
