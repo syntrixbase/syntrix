@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 // HTTPClient implements the Client interface for HTTP communication.

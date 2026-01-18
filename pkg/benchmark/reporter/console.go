@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 // ConsoleReporter outputs benchmark results to the console.

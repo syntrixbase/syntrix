@@ -8,9 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/client"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/utils"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/client"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/utils"
 )
 
 // BasicRunner implements the Runner interface for executing benchmarks.
