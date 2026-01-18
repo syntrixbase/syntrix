@@ -86,9 +86,9 @@ match:
 	backend := factory.Document()
 
 	docs := []storage.StoredDoc{
-		{Id: storage.CalculateDatabaseID("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
-		{Id: storage.CalculateDatabaseID("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
-		{Id: storage.CalculateDatabaseID("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
+		{Id: storage.CalculateDatabase("default", "public/doc1"), Collection: "public", Data: map[string]interface{}{"foo": "bar"}},
+		{Id: storage.CalculateDatabase("default", "private/doc1"), Collection: "private", Data: map[string]interface{}{"secret": "data"}},
+		{Id: storage.CalculateDatabase("default", "admin/doc1"), Collection: "admin", Data: map[string]interface{}{"top": "secret"}},
 	}
 	for _, d := range docs {
 		err := backend.Create(ctx, "default", d)

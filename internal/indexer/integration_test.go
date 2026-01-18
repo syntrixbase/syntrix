@@ -49,12 +49,12 @@ func createTestEvent(database, collection, docID string, data map[string]any) *p
 		data["id"] = docID
 	}
 	return &puller.ChangeEvent{
-		EventID:    "evt-" + docID,
-		DatabaseID: database,
-		OpType:     puller.OperationInsert,
+		EventID:  "evt-" + docID,
+		Database: database,
+		OpType:   puller.OperationInsert,
 		FullDocument: &storage.StoredDoc{
 			Id:         docID,
-			DatabaseID: database,
+			Database:   database,
 			Collection: collection,
 			Fullpath:   collection + "/" + docID,
 			Data:       data,

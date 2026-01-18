@@ -115,7 +115,7 @@ func TestWatch_WithCheckpoint(t *testing.T) {
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-doc1",
-				DatabaseID:   "database1",
+				Database:     "database1",
 				OpType:       events.StoreOperationInsert,
 				MgoDocID:     "doc1",
 				FullDocument: &storage.StoredDoc{Id: "doc1"},
@@ -173,7 +173,7 @@ func TestWatch_AllDatabaseEvents(t *testing.T) {
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-db1",
-				DatabaseID:   "database1",
+				Database:     "database1",
 				OpType:       events.StoreOperationInsert,
 				FullDocument: &storage.StoredDoc{Id: "doc1"},
 			},
@@ -182,7 +182,7 @@ func TestWatch_AllDatabaseEvents(t *testing.T) {
 		ch <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
 				EventID:      "evt-db2",
-				DatabaseID:   "database2",
+				Database:     "database2",
 				OpType:       events.StoreOperationInsert,
 				FullDocument: &storage.StoredDoc{Id: "doc2"},
 			},
@@ -293,7 +293,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Insert
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc1", MgoDocID: "doc1", DatabaseID: "database1", OpType: events.StoreOperationInsert,
+				EventID: "evt-doc1", MgoDocID: "doc1", Database: "database1", OpType: events.StoreOperationInsert,
 				FullDocument: &storage.StoredDoc{Id: "doc1", Data: map[string]interface{}{"a": 1}},
 			},
 			Progress: "t1",
@@ -301,7 +301,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Update
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc2", MgoDocID: "doc2", DatabaseID: "database1", OpType: events.StoreOperationUpdate,
+				EventID: "evt-doc2", MgoDocID: "doc2", Database: "database1", OpType: events.StoreOperationUpdate,
 				FullDocument: &storage.StoredDoc{Id: "doc2", Data: map[string]interface{}{"a": 2}},
 			},
 			Progress: "t2",
@@ -310,7 +310,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// So we don't expect to receive this event
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc3", MgoDocID: "doc3", DatabaseID: "database1", OpType: events.StoreOperationDelete,
+				EventID: "evt-doc3", MgoDocID: "doc3", Database: "database1", OpType: events.StoreOperationDelete,
 				MgoColl: "users",
 			},
 			Progress: "t3",
@@ -318,7 +318,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Soft Delete (Update with Deleted=true) - transforms to EventDelete
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc4", MgoDocID: "doc4", DatabaseID: "database1", OpType: events.StoreOperationUpdate,
+				EventID: "evt-doc4", MgoDocID: "doc4", Database: "database1", OpType: events.StoreOperationUpdate,
 				FullDocument: &storage.StoredDoc{Id: "doc4", Deleted: true},
 			},
 			Progress: "t4",
@@ -326,7 +326,7 @@ func TestWatch_EventTypes(t *testing.T) {
 		// Replace - transforms to EventCreate (recreate after soft delete)
 		pullerCh <- &events.PullerEvent{
 			Change: &events.StoreChangeEvent{
-				EventID: "evt-doc5", MgoDocID: "doc5", DatabaseID: "database1", OpType: events.StoreOperationReplace,
+				EventID: "evt-doc5", MgoDocID: "doc5", Database: "database1", OpType: events.StoreOperationReplace,
 				FullDocument: &storage.StoredDoc{Id: "doc5", Data: map[string]interface{}{"b": 1}},
 			},
 			Progress: "t5",

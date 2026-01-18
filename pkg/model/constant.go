@@ -1,5 +1,5 @@
 package model
 
 const (
-	DefaultDatabaseID = "default"
+	DefaultDatabase = "default"
 )

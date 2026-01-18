@@ -98,7 +98,7 @@ func TestTriggerAuth(t *testing.T) {
 	mockStorage.On("GetUserByUsername", mock.Anything, "default", "user1").Return(nil, identity.ErrUserNotFound)
 	mockStorage.On("CreateUser", mock.Anything, "default", mock.Anything).Return(nil)
 
-	userToken, err := authService.SignUp(context.Background(), identity.SignupRequest{DatabaseID: "default", Username: "user1", Password: "password12345"})
+	userToken, err := authService.SignUp(context.Background(), identity.SignupRequest{Database: "default", Username: "user1", Password: "password12345"})
 	if err != nil {
 		t.Fatalf("Failed to sign up: %v", err)
 	}

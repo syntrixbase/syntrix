@@ -285,7 +285,7 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 	// Skip deleted documents unless template includes them
 	if doc.Deleted && !tmpl.IncludeDeleted {
 		// Delete from index
-		st.Delete(evt.DatabaseID, pattern, tmplID, docID, progress)
+		st.Delete(evt.Database, pattern, tmplID, docID, progress)
 		return nil
 	}
 
@@ -296,7 +296,7 @@ func (s *service) applyEventToTemplate(ctx context.Context, evt *ChangeEvent, tm
 	}
 
 	// Upsert document using the user-facing document ID
-	st.Upsert(evt.DatabaseID, pattern, tmplID, docID, orderKey, progress)
+	st.Upsert(evt.Database, pattern, tmplID, docID, orderKey, progress)
 
 	return nil
 }

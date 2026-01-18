@@ -105,12 +105,12 @@ func TestIntegration_ConcurrentUpdates(t *testing.T) {
 		for i := 0; i < docCount; i++ {
 			docID := fmt.Sprintf("user%03d", i)
 			updateEvt := &puller.ChangeEvent{
-				EventID:    fmt.Sprintf("evt-update-%d-%d", round, i),
-				DatabaseID: "db1",
-				OpType:     puller.OperationUpdate,
+				EventID:  fmt.Sprintf("evt-update-%d-%d", round, i),
+				Database: "db1",
+				OpType:   puller.OperationUpdate,
 				FullDocument: &storage.StoredDoc{
 					Id:         docID,
-					DatabaseID: "db1",
+					Database:   "db1",
 					Collection: "users",
 					Fullpath:   "users/" + docID,
 					Data: map[string]any{
@@ -300,12 +300,12 @@ func TestIntegration_BulkDeletes(t *testing.T) {
 	for i := 0; i < docCount; i += 2 {
 		docID := fmt.Sprintf("user%03d", i)
 		deleteEvt := &puller.ChangeEvent{
-			EventID:    fmt.Sprintf("evt-delete-%d", i),
-			DatabaseID: "db1",
-			OpType:     puller.OperationUpdate,
+			EventID:  fmt.Sprintf("evt-delete-%d", i),
+			Database: "db1",
+			OpType:   puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Fullpath:   "users/" + docID,
 				Data: map[string]any{
@@ -510,12 +510,12 @@ func TestIntegration_MixedOperations(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		docID := fmt.Sprintf("user%03d", i)
 		updateEvt := &puller.ChangeEvent{
-			EventID:    fmt.Sprintf("evt-update-%d", i),
-			DatabaseID: "db1",
-			OpType:     puller.OperationUpdate,
+			EventID:  fmt.Sprintf("evt-update-%d", i),
+			Database: "db1",
+			OpType:   puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Fullpath:   "users/" + docID,
 				Data: map[string]any{
@@ -534,12 +534,12 @@ func TestIntegration_MixedOperations(t *testing.T) {
 	for i := 80; i < 100; i++ {
 		docID := fmt.Sprintf("user%03d", i)
 		deleteEvt := &puller.ChangeEvent{
-			EventID:    fmt.Sprintf("evt-delete-%d", i),
-			DatabaseID: "db1",
-			OpType:     puller.OperationUpdate,
+			EventID:  fmt.Sprintf("evt-delete-%d", i),
+			Database: "db1",
+			OpType:   puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Fullpath:   "users/" + docID,
 				Data:       map[string]any{"id": docID, "timestamp": int64(i)},
@@ -780,12 +780,12 @@ func TestIntegration_DocumentUpdate(t *testing.T) {
 
 	// Update the document with a new timestamp
 	updateEvt := &puller.ChangeEvent{
-		EventID:    "evt-update1",
-		DatabaseID: "db1",
-		OpType:     puller.OperationUpdate,
+		EventID:  "evt-update1",
+		Database: "db1",
+		OpType:   puller.OperationUpdate,
 		FullDocument: &storage.StoredDoc{
 			Id:         "user1",
-			DatabaseID: "db1",
+			Database:   "db1",
 			Collection: "users",
 			Fullpath:   "users/user1",
 			Data: map[string]any{
@@ -857,12 +857,12 @@ func TestIntegration_DocumentDelete(t *testing.T) {
 
 	// Delete user2 (soft delete)
 	deleteEvt := &puller.ChangeEvent{
-		EventID:    "evt-delete1",
-		DatabaseID: "db1",
-		OpType:     puller.OperationUpdate,
+		EventID:  "evt-delete1",
+		Database: "db1",
+		OpType:   puller.OperationUpdate,
 		FullDocument: &storage.StoredDoc{
 			Id:         "user2",
-			DatabaseID: "db1",
+			Database:   "db1",
 			Collection: "users",
 			Fullpath:   "users/user2",
 			Data: map[string]any{

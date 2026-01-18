@@ -59,7 +59,7 @@ func (s *AuthService) ValidateToken(tokenString string) (*Claims, error) {
 }
 
 func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair, error) {
-	database := req.DatabaseID
+	database := req.Database
 	if database == "" {
 		return nil, ErrDatabaseRequired
 	}
@@ -103,7 +103,7 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 }
 
 func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair, error) {
-	database := req.DatabaseID
+	database := req.Database
 	if database == "" {
 		return nil, ErrDatabaseRequired
 	}
@@ -131,7 +131,7 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 	user := &User{
 		ID:           uuid.New().String(),
 		Username:     req.Username,
-		DatabaseID:   database,
+		Database:     database,
 		PasswordHash: hash,
 		PasswordAlgo: algo,
 		CreatedAt:    time.Now(),
@@ -162,7 +162,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 	}
 
 	// Check revocation with overlap
-	revoked, err := s.revocations.IsRevoked(ctx, claims.DatabaseID, claims.ID, s.tokenService.RefreshOverlap())
+	revoked, err := s.revocations.IsRevoked(ctx, claims.Database, claims.ID, s.tokenService.RefreshOverlap())
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 	}
 
 	// Get user to ensure still exists/active
-	user, err := s.users.GetUserByID(ctx, claims.DatabaseID, claims.Subject)
+	user, err := s.users.GetUserByID(ctx, claims.Database, claims.Subject)
 	if err != nil {
 		return nil, ErrInvalidToken
 	}
@@ -181,7 +181,7 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 
 	// Revoke old token (soft revoke for overlap)
 	// We use the Expiration time from claims to clean up later
-	if err := s.revocations.RevokeToken(ctx, claims.DatabaseID, claims.ID, claims.ExpiresAt.Time); err != nil {
+	if err := s.revocations.RevokeToken(ctx, claims.Database, claims.ID, claims.ExpiresAt.Time); err != nil {
 		return nil, err
 	}
 
@@ -195,7 +195,7 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 		return ErrInvalidToken
 	}
 
-	return s.revocations.RevokeTokenImmediate(ctx, claims.DatabaseID, claims.ID, claims.ExpiresAt.Time)
+	return s.revocations.RevokeTokenImmediate(ctx, claims.Database, claims.ID, claims.ExpiresAt.Time)
 }
 
 func (s *AuthService) GenerateSystemToken(serviceName string) (string, error) {
@@ -223,7 +223,7 @@ func (s *AuthService) Middleware(next http.Handler) http.Handler {
 			return
 		}
 
-		if claims.DatabaseID == "" {
+		if claims.Database == "" {
 			http.Error(w, "Invalid token: missing database ID", http.StatusUnauthorized)
 			return
 		}
@@ -233,7 +233,7 @@ func (s *AuthService) Middleware(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
 		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 		ctx = context.WithValue(ctx, ContextKeyClaims, claims)
-		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.DatabaseID)
+		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.Database)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
@@ -260,7 +260,7 @@ func (s *AuthService) MiddlewareOptional(next http.Handler) http.Handler {
 			return
 		}
 
-		if claims.DatabaseID == "" {
+		if claims.Database == "" {
 			http.Error(w, "Invalid token: missing database ID", http.StatusUnauthorized)
 			return
 		}
@@ -270,7 +270,7 @@ func (s *AuthService) MiddlewareOptional(next http.Handler) http.Handler {
 		ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
 		ctx = context.WithValue(ctx, ContextKeyRoles, claims.Roles)
 		ctx = context.WithValue(ctx, ContextKeyClaims, claims)
-		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.DatabaseID)
+		ctx = context.WithValue(ctx, ContextKeyDatabase, claims.Database)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})

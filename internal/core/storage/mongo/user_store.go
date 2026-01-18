@@ -30,10 +30,10 @@ func NewUserStore(db *mongo.Database, collectionName string) types.UserStore {
 func (s *userStore) CreateUser(ctx context.Context, database string, user *types.User) error {
 	// Ensure username is lowercase
 	user.Username = strings.ToLower(user.Username)
-	user.DatabaseID = database
+	user.Database = database
 
 	// Check if user exists
-	filter := bson.M{"database_id": database, "username": user.Username}
+	filter := bson.M{"database": database, "username": user.Username}
 	count, err := s.coll.CountDocuments(ctx, filter)
 	if err != nil {
 		return err
@@ -57,7 +57,7 @@ func (s *userStore) CreateUser(ctx context.Context, database string, user *types
 
 func (s *userStore) GetUserByUsername(ctx context.Context, database string, username string) (*types.User, error) {
 	username = strings.ToLower(username)
-	filter := bson.M{"database_id": database, "username": username}
+	filter := bson.M{"database": database, "username": username}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -71,7 +71,7 @@ func (s *userStore) GetUserByUsername(ctx context.Context, database string, user
 }
 
 func (s *userStore) GetUserByID(ctx context.Context, database string, id string) (*types.User, error) {
-	filter := bson.M{"_id": id, "database_id": database}
+	filter := bson.M{"_id": id, "database": database}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -85,7 +85,7 @@ func (s *userStore) GetUserByID(ctx context.Context, database string, id string)
 }
 
 func (s *userStore) UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	filter := bson.M{"_id": id, "database_id": database}
+	filter := bson.M{"_id": id, "database": database}
 	update := bson.M{
 		"$set": bson.M{
 			"last_login_at":  lastLogin,
@@ -99,7 +99,7 @@ func (s *userStore) UpdateUserLoginStats(ctx context.Context, database string, i
 
 func (s *userStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*types.User, error) {
 	opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(offset))
-	cursor, err := s.coll.Find(ctx, bson.M{"database_id": database}, opts)
+	cursor, err := s.coll.Find(ctx, bson.M{"database": database}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +113,7 @@ func (s *userStore) ListUsers(ctx context.Context, database string, limit int, o
 }
 
 func (s *userStore) UpdateUser(ctx context.Context, database string, user *types.User) error {
-	filter := bson.M{"_id": user.ID, "database_id": database}
+	filter := bson.M{"_id": user.ID, "database": database}
 	update := bson.M{
 		"$set": bson.M{
 			"roles":      user.Roles,
@@ -128,7 +128,7 @@ func (s *userStore) UpdateUser(ctx context.Context, database string, user *types
 func (s *userStore) EnsureIndexes(ctx context.Context) error {
 	// User username unique index per database
 	_, err := s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "username", Value: 1}},
+		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "username", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	return err

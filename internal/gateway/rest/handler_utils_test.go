@@ -16,19 +16,19 @@ func TestNewHandler_Panic(t *testing.T) {
 	})
 }
 
-func TestGetDatabaseId(t *testing.T) {
+func TestGetDatabase(t *testing.T) {
 	h := &Handler{}
 
 	// Case 1: Database present
 	ctx := context.WithValue(context.Background(), ContextKeyDatabase, "t1")
 	req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
-	database, err := h.getDatabaseId(req)
+	database, err := h.getDatabase(req)
 	assert.NoError(t, err)
 	assert.Equal(t, "t1", database)
 
 	// Case 2: Database missing
 	req2 := httptest.NewRequest("GET", "/", nil)
-	database2, err2 := h.getDatabaseId(req2)
+	database2, err2 := h.getDatabase(req2)
 	assert.Error(t, err2)
 	assert.Equal(t, "", database2)
 }
@@ -60,12 +60,14 @@ func TestClaimsToMap(t *testing.T) {
 
 	// Case 2: Valid claims
 	claims := &identity.Claims{
-		DatabaseID: "t1",
-		UserID:     "u1",
-		Username:   "user1",
-		Roles:      []string{"admin"},
+		Database: "db1",
+		TenantID: "t1",
+		UserID:   "u1",
+		Username: "user1",
+		Roles:    []string{"admin"},
 	}
 	m := claimsToMap(claims)
+	assert.Equal(t, "db1", m["database"])
 	assert.Equal(t, "t1", m["tid"])
 	assert.Equal(t, "u1", m["oid"])
 	assert.Equal(t, "user1", m["username"])

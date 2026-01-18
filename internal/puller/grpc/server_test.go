@@ -105,11 +105,11 @@ func TestServer_ConvertEvent(t *testing.T) {
 			name:    "basic event",
 			backend: "backend-1",
 			event: &events.StoreChangeEvent{
-				EventID:    "evt-123",
-				DatabaseID: "database-1",
-				MgoColl:    "users",
-				MgoDocID:   "doc-1",
-				OpType:     events.StoreOperationInsert,
+				EventID:  "evt-123",
+				Database: "database-1",
+				MgoColl:  "users",
+				MgoDocID: "doc-1",
+				OpType:   events.StoreOperationInsert,
 				ClusterTime: events.ClusterTime{
 					T: 100,
 					I: 1,
@@ -156,8 +156,8 @@ func TestServer_ConvertEvent(t *testing.T) {
 			if result.EventId != tt.event.EventID {
 				t.Errorf("Id = %v, want %v", result.EventId, tt.event.EventID)
 			}
-			if result.Database != tt.event.DatabaseID {
-				t.Errorf("Database = %v, want %v", result.Database, tt.event.DatabaseID)
+			if result.Database != tt.event.Database {
+				t.Errorf("Database = %v, want %v", result.Database, tt.event.Database)
 			}
 			if result.MgoColl != tt.event.MgoColl {
 				t.Errorf("Collection = %v, want %v", result.MgoColl, tt.event.MgoColl)

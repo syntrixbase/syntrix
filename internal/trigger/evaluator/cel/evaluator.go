@@ -52,9 +52,9 @@ func (e *celeEvaluator) Evaluate(ctx context.Context, t *types.Trigger, event ev
 	if t.Database != "" && t.Database != "*" {
 		eventDB := ""
 		if event.Document != nil {
-			eventDB = event.Document.DatabaseID
+			eventDB = event.Document.Database
 		} else if event.Before != nil {
-			eventDB = event.Before.DatabaseID
+			eventDB = event.Before.Database
 		}
 		if eventDB != t.Database {
 			return false, nil

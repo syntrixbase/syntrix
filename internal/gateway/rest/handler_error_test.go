@@ -20,7 +20,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("SignUp_DatabaseRequired", func(t *testing.T) {
-		reqBody := identity.SignupRequest{Username: "user", Password: "password"} // Missing DatabaseID
+		reqBody := identity.SignupRequest{Username: "user", Password: "password"} // Missing Database
 		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -34,7 +34,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_AccountLocked", func(t *testing.T) {
-		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "locked", Password: "password"}
+		reqBody := identity.LoginRequest{Database: "default", Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -61,7 +61,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_InternalError", func(t *testing.T) {
-		reqBody := identity.LoginRequest{DatabaseID: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{Database: "default", Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("db error")).Once()
 
 		body, _ := json.Marshal(reqBody)

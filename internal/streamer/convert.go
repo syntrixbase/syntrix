@@ -194,7 +194,7 @@ func syntrixEventToDelivery(event events.SyntrixChangeEvent, doc model.Document,
 		SubscriptionIDs: subscriptionIDs,
 		Event: &Event{
 			EventID:    event.Id,
-			Database:   event.DatabaseID,
+			Database:   event.Database,
 			Collection: event.Document.Collection,
 			DocumentID: doc.GetID(),
 			Operation:  eventTypeToOperationType(event.Type),

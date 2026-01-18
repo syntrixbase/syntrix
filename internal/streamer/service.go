@@ -261,12 +261,12 @@ func (s *streamerService) ProcessEvent(event events.SyntrixChangeEvent) error {
 	}
 
 	s.logger.Debug("Streamer: processing event",
-		"databaseID", event.DatabaseID,
+		"database", event.Database,
 		"collection", event.Document.Collection,
 	)
 
 	doc := helper.FlattenStorageDocument(event.Document)
-	matches := s.manager.Match(event.DatabaseID, event.Document.Collection, doc.GetID(), doc)
+	matches := s.manager.Match(event.Database, event.Document.Collection, doc.GetID(), doc)
 
 	if len(matches) == 0 {
 		return nil

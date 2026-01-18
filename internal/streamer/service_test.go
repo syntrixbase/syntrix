@@ -34,7 +34,7 @@ func testStoredDoc(collection, docID, database string, data map[string]interface
 
 	return &storage.StoredDoc{
 		Id:         "_id_" + docID, // MongoDB _id (not the user document ID)
-		DatabaseID: database,
+		Database:   database,
 		Collection: collection,
 		Fullpath:   collection + "/" + docID, // User document ID is extracted from here
 		Data:       data,
@@ -45,11 +45,11 @@ func testStoredDoc(collection, docID, database string, data map[string]interface
 // This is the business-layer event that ProcessEvent expects.
 func testSyntrixEvent(eventID, database, collection, docID string, eventType events.EventType, data map[string]interface{}) events.SyntrixChangeEvent {
 	return events.SyntrixChangeEvent{
-		Id:         eventID,
-		DatabaseID: database,
-		Type:       eventType,
-		Document:   testStoredDoc(collection, docID, database, data),
-		Timestamp:  time.Now().UnixMilli(),
+		Id:        eventID,
+		Database:  database,
+		Type:      eventType,
+		Document:  testStoredDoc(collection, docID, database, data),
+		Timestamp: time.Now().UnixMilli(),
 	}
 }
 
@@ -267,7 +267,7 @@ func TestService_ProcessEventJSON(t *testing.T) {
 			"opType": "insert",
 			"fullDoc": {
 				"id": "_id_doc1",
-				"databaseId": "database1",
+				"database": "database1",
 				"collection": "users",
 				"fullpath": "users/doc1",
 				"data": {"id": "doc1", "name": "Alice"}

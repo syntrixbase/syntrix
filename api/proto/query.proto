@@ -39,11 +39,11 @@ service QueryService {
 // Document represents a stored document.
 // The document data is stored as JSON bytes for flexibility.
 message Document {
-  // Unique document identifier (database_id:hash(fullpath)).
+  // Unique document identifier (database:hash(fullpath)).
   string id = 1;
 
   // Database identifier.
-  string database_id = 2;
+  string database = 2;
 
   // Full pathname of the document.
   string fullpath = 3;

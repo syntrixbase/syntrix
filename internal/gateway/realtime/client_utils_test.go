@@ -124,7 +124,7 @@ func TestDatabaseFromContext(t *testing.T) {
 	assert.False(t, allowAll)
 
 	// Case 3: Database in claims
-	claims := &identity.Claims{DatabaseID: "database2"}
+	claims := &identity.Claims{Database: "database2"}
 	ctx2 := context.WithValue(context.Background(), identity.ContextKeyClaims, claims)
 	database, allowAll = databaseFromContext(ctx2)
 	assert.Equal(t, "database2", database)
@@ -137,7 +137,7 @@ func TestDatabaseFromContext(t *testing.T) {
 	assert.False(t, allowAll)
 
 	// Case 5: System role
-	claimsSystem := &identity.Claims{DatabaseID: "database3", Roles: []string{"system"}}
+	claimsSystem := &identity.Claims{Database: "database3", Roles: []string{"system"}}
 	ctx4 := context.WithValue(context.Background(), identity.ContextKeyClaims, claimsSystem)
 	database, allowAll = databaseFromContext(ctx4)
 	assert.Equal(t, "database3", database)

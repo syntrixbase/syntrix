@@ -94,19 +94,19 @@ func TestBuffer_WriteAndRead(t *testing.T) {
 	defer buf.Close()
 
 	evt := &events.StoreChangeEvent{
-		EventID:    "evt-1",
-		DatabaseID: "database-1",
-		MgoColl:    "testcoll",
-		MgoDocID:   "doc-1",
-		OpType:     events.StoreOperationInsert,
+		EventID:  "evt-1",
+		Database: "database-1",
+		MgoColl:  "testcoll",
+		MgoDocID: "doc-1",
+		OpType:   events.StoreOperationInsert,
 		ClusterTime: events.ClusterTime{
 			T: 1234567890,
 			I: 1,
 		},
 		Timestamp: time.Now().UnixMilli(),
 		FullDocument: &storage.StoredDoc{
-			Id:         "doc-1",
-			DatabaseID: "database-1",
+			Id:       "doc-1",
+			Database: "database-1",
 		},
 	}
 
@@ -154,11 +154,11 @@ func TestBuffer_ScanFrom(t *testing.T) {
 	// Write multiple events
 	for i := 0; i < 5; i++ {
 		evt := &events.StoreChangeEvent{
-			EventID:    "evt-" + string(rune('a'+i)),
-			DatabaseID: "database-1",
-			MgoColl:    "testcoll",
-			MgoDocID:   "doc-" + string(rune('a'+i)),
-			OpType:     events.StoreOperationInsert,
+			EventID:  "evt-" + string(rune('a'+i)),
+			Database: "database-1",
+			MgoColl:  "testcoll",
+			MgoDocID: "doc-" + string(rune('a'+i)),
+			OpType:   events.StoreOperationInsert,
 			ClusterTime: events.ClusterTime{
 				T: uint32(1234567890 + i),
 				I: 1,

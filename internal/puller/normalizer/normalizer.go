@@ -73,9 +73,9 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) 
 	}
 
 	// Extract database ID
-	var databaseID string
+	var database string
 	if fullDoc != nil {
-		databaseID = fullDoc.DatabaseID
+		database = fullDoc.Database
 	}
 
 	// Generate event ID
@@ -84,7 +84,7 @@ func (n *Normalizer) Normalize(raw *RawEvent) (*events.StoreChangeEvent, error) 
 	// Create change event
 	evt := &events.StoreChangeEvent{
 		EventID:      eventID,
-		DatabaseID:   databaseID,
+		Database:     database,
 		MgoColl:      raw.Namespace.Coll,
 		MgoDocID:     docID,
 		OpType:       opType,

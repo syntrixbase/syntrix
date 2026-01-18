@@ -72,7 +72,7 @@ The watcher subscribes to Puller and emits filtered change events.
 
 **Key behaviors:**
 - Subscribes to Puller with a consumer ID
-- Filters events by `DatabaseID` field (Syntrix logical database)
+- Filters events by `Database` field (Syntrix logical database)
 - Transforms `PullerEvent` to `SyntrixChangeEvent`
 - Manages checkpoint for resume capability
 

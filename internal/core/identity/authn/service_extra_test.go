@@ -78,7 +78,7 @@ func TestUpdateUser_Coverage(t *testing.T) {
 
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.WithValue(context.Background(), ContextKeyDatabase, "database1")
-		user := &User{ID: "u1", DatabaseID: "database1", Roles: []string{"user"}}
+		user := &User{ID: "u1", Database: "database1", Roles: []string{"user"}}
 
 		mockStorage.On("GetUserByID", ctx, "database1", "u1").Return(user, nil).Once()
 		mockStorage.On("UpdateUser", ctx, "database1", mock.MatchedBy(func(u *User) bool {

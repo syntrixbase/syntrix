@@ -51,10 +51,10 @@ func (m *documentStore) getCollection(nameOrPath string) *mongo.Collection {
 
 func (m *documentStore) Get(ctx context.Context, database string, fullpath string) (*types.StoredDoc, error) {
 	collection := m.getCollection(fullpath)
-	id := types.CalculateDatabaseID(database, fullpath)
+	id := types.CalculateDatabase(database, fullpath)
 
 	var doc types.StoredDoc
-	err := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database, "deleted": bson.M{"$ne": true}}).Decode(&doc)
+	err := collection.FindOne(ctx, bson.M{"_id": id, "database": database, "deleted": bson.M{"$ne": true}}).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, model.ErrNotFound
@@ -71,13 +71,13 @@ func (m *documentStore) GetMany(ctx context.Context, database string, paths []st
 	}
 	ids := make([]string, len(paths))
 	for i, path := range paths {
-		ids[i] = types.CalculateDatabaseID(database, path)
+		ids[i] = types.CalculateDatabase(database, path)
 	}
 	collection := m.getCollection(paths[0])
 	filter := bson.M{
-		"_id":         bson.M{"$in": ids},
-		"database_id": database,
-		"deleted":     bson.M{"$ne": true},
+		"_id":      bson.M{"$in": ids},
+		"database": database,
+		"deleted":  bson.M{"$ne": true},
 	}
 	cursor, err := collection.Find(ctx, filter)
 	if err != nil {
@@ -109,7 +109,7 @@ func (m *documentStore) Create(ctx context.Context, database string, doc types.S
 	if doc.CollectionHash == "" {
 		doc.CollectionHash = types.CalculateCollectionHash(doc.Collection)
 	}
-	doc.DatabaseID = database
+	doc.Database = database
 
 	// Ensure soft-delete fields are reset
 	doc.Deleted = false
@@ -117,12 +117,12 @@ func (m *documentStore) Create(ctx context.Context, database string, doc types.S
 	_, err := collection.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
 		// Check if the document exists but is soft-deleted
-		id := types.CalculateDatabaseID(database, doc.Fullpath)
+		id := types.CalculateDatabase(database, doc.Fullpath)
 		var existingDoc types.StoredDoc
-		if findErr := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database}).Decode(&existingDoc); findErr == nil {
+		if findErr := collection.FindOne(ctx, bson.M{"_id": id, "database": database}).Decode(&existingDoc); findErr == nil {
 			if existingDoc.Deleted {
 				// Overwrite the soft-deleted document
-				_, replaceErr := collection.ReplaceOne(ctx, bson.M{"_id": id, "database_id": database}, doc)
+				_, replaceErr := collection.ReplaceOne(ctx, bson.M{"_id": id, "database": database}, doc)
 				return replaceErr
 			}
 		}
@@ -133,11 +133,11 @@ func (m *documentStore) Create(ctx context.Context, database string, doc types.S
 
 func (m *documentStore) Update(ctx context.Context, database string, path string, data map[string]interface{}, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateDatabaseID(database, path)
+	id := types.CalculateDatabase(database, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
-	filter["database_id"] = database
+	filter["database"] = database
 	filter["deleted"] = bson.M{"$ne": true}
 
 	update := bson.M{
@@ -156,7 +156,7 @@ func (m *documentStore) Update(ctx context.Context, database string, path string
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database": database})
 		if count == 0 {
 			return model.ErrNotFound
 		}
@@ -168,11 +168,11 @@ func (m *documentStore) Update(ctx context.Context, database string, path string
 
 func (m *documentStore) Patch(ctx context.Context, database string, path string, data map[string]interface{}, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateDatabaseID(database, path)
+	id := types.CalculateDatabase(database, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
-	filter["database_id"] = database
+	filter["database"] = database
 	filter["deleted"] = bson.M{"$ne": true}
 
 	updates := bson.M{
@@ -195,7 +195,7 @@ func (m *documentStore) Patch(ctx context.Context, database string, path string,
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database": database})
 		if count == 0 {
 			return model.ErrNotFound
 		}
@@ -207,11 +207,11 @@ func (m *documentStore) Patch(ctx context.Context, database string, path string,
 
 func (m *documentStore) Delete(ctx context.Context, database string, path string, precond model.Filters) error {
 	collection := m.getCollection(path)
-	id := types.CalculateDatabaseID(database, path)
+	id := types.CalculateDatabase(database, path)
 
 	filter := makeFilterBSON(precond)
 	filter["_id"] = id
-	filter["database_id"] = database
+	filter["database"] = database
 	filter["deleted"] = bson.M{"$ne": true}
 
 	update := bson.M{
@@ -232,14 +232,14 @@ func (m *documentStore) Delete(ctx context.Context, database string, path string
 	}
 
 	if result.MatchedCount == 0 {
-		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database_id": database})
+		count, _ := collection.CountDocuments(ctx, bson.M{"_id": id, "database": database})
 		if count == 0 {
 			return model.ErrNotFound
 		}
 		// If document exists but matched count is 0, it means version conflict or already deleted
 		// We can check if it is already deleted
 		var doc types.StoredDoc
-		if err := collection.FindOne(ctx, bson.M{"_id": id, "database_id": database}).Decode(&doc); err == nil {
+		if err := collection.FindOne(ctx, bson.M{"_id": id, "database": database}).Decode(&doc); err == nil {
 			if doc.Deleted {
 				return model.ErrNotFound // Already deleted
 			}
@@ -254,7 +254,7 @@ func (m *documentStore) Query(ctx context.Context, database string, q model.Quer
 	collection := m.getCollection(q.Collection)
 
 	filter := makeFilterBSON(q.Filters)
-	filter["database_id"] = database
+	filter["database"] = database
 	filter["collection_hash"] = types.CalculateCollectionHash(q.Collection)
 	if !q.ShowDeleted {
 		filter["deleted"] = bson.M{"$ne": true}
@@ -306,7 +306,7 @@ func (m *documentStore) Watch(ctx context.Context, database string, collectionNa
 			{Key: "$or", Value: bson.A{
 				bson.D{
 					{Key: "operationType", Value: bson.D{{Key: "$in", Value: bson.A{"insert", "update", "replace"}}}},
-					{Key: "fullDocument.database_id", Value: database},
+					{Key: "fullDocument.database", Value: database},
 				},
 				bson.D{
 					{Key: "operationType", Value: "delete"},
@@ -400,7 +400,7 @@ func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, databa
 				return nil, false
 			}
 		} else {
-			if changeEvent.FullDocument == nil || changeEvent.FullDocument.DatabaseID != database {
+			if changeEvent.FullDocument == nil || changeEvent.FullDocument.Database != database {
 				return nil, false
 			}
 		}
@@ -417,7 +417,7 @@ func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, databa
 	eventDatabase := database
 	if eventDatabase == "" {
 		if changeEvent.FullDocument != nil {
-			eventDatabase = changeEvent.FullDocument.DatabaseID
+			eventDatabase = changeEvent.FullDocument.Database
 		} else if strings.Contains(changeEvent.DocumentKey.ID, ":") {
 			parts := strings.SplitN(changeEvent.DocumentKey.ID, ":", 2)
 			eventDatabase = parts[0]
@@ -426,7 +426,7 @@ func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, databa
 
 	evt := types.Event{
 		Id:          changeEvent.DocumentKey.ID,
-		DatabaseID:  eventDatabase,
+		Database:    eventDatabase,
 		ResumeToken: changeEvent.ID,
 		Timestamp:   time.Now().UnixNano(),
 		Before:      changeEvent.FullDocumentBeforeChange,
@@ -464,9 +464,9 @@ func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, databa
 func (s *documentStore) EnsureIndexes(ctx context.Context) error {
 	coll := s.getCollection("")
 
-	// (database_id, collection_hash)
+	// (database, collection_hash)
 	_, err := coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "collection_hash", Value: 1}},
+		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "collection_hash", Value: 1}},
 		Options: options.Index().SetUnique(false),
 	})
 	if err != nil {

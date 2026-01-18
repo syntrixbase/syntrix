@@ -25,10 +25,10 @@ const (
 // The document data is stored as JSON bytes for flexibility.
 type Document struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unique document identifier (database_id:hash(fullpath)).
+	// Unique document identifier (database:hash(fullpath)).
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
 	// Database identifier.
-	DatabaseId string `protobuf:"bytes,2,opt,name=database_id,json=databaseId,proto3" json:"database_id,omitempty"`
+	Database string `protobuf:"bytes,2,opt,name=database,proto3" json:"database,omitempty"`
 	// Full pathname of the document.
 	Fullpath string `protobuf:"bytes,3,opt,name=fullpath,proto3" json:"fullpath,omitempty"`
 	// Parent collection name.
@@ -88,9 +88,9 @@ func (x *Document) GetId() string {
 	return ""
 }
 
-func (x *Document) GetDatabaseId() string {
+func (x *Document) GetDatabase() string {
 	if x != nil {
-		return x.DatabaseId
+		return x.Database
 	}
 	return ""
 }
@@ -1265,11 +1265,10 @@ var File_query_proto protoreflect.FileDescriptor
 
 const file_query_proto_rawDesc = "" +
 	"\n" +
-	"\vquery.proto\x12\x10syntrix.query.v1\"\xbe\x02\n" +
+	"\vquery.proto\x12\x10syntrix.query.v1\"\xb9\x02\n" +
 	"\bDocument\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
-	"\vdatabase_id\x18\x02 \x01(\tR\n" +
-	"databaseId\x12\x1a\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1a\n" +
+	"\bdatabase\x18\x02 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\bfullpath\x18\x03 \x01(\tR\bfullpath\x12\x1e\n" +
 	"\n" +
 	"collection\x18\x04 \x01(\tR\n" +
