@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 func TestNewHTTPClient(t *testing.T) {

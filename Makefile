@@ -56,11 +56,11 @@ generate:
 build-benchmark:
 	@$(MKDIR_P)
 	@echo "Building $(BENCHMARK_APP_NAME)..."
-	@go build -o $(BENCHMARK_BIN) ./tests/benchmark/cmd/syntrix-benchmark
+	@go build -o $(BENCHMARK_BIN) ./cmd/syntrix-benchmark
 
 test-benchmark:
 	@echo "Running benchmark tool tests..."
-	@go test ./tests/benchmark/... -count=1 -timeout=30s
+	@go test ./pkg/benchmark/... -count=1 -timeout=30s
 
 clean-benchmark:
 	@echo "Cleaning benchmark binary..."

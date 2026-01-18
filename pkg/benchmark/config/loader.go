@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 	"gopkg.in/yaml.v3"
 )
 

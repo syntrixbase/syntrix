@@ -7,12 +7,12 @@ import (
 	"os"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/config"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/metrics"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/reporter"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/runner"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/scenario"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/config"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/metrics"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/reporter"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/runner"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/scenario"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 const version = "0.1.0"

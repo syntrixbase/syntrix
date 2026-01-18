@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 // Worker executes operations concurrently.

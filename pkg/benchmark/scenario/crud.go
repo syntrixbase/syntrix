@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"sync"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/generator"
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/generator"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 // CRUDScenario implements a basic CRUD benchmark scenario.

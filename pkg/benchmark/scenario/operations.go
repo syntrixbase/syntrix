@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/syntrixbase/syntrix/tests/benchmark/pkg/types"
+	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
 )
 
 // CreateOperation implements the Operation interface for document creation.
