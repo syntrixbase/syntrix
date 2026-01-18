@@ -17,7 +17,7 @@ describe('DefaultTokenProvider', () => {
     }) as any;
     axios.post = postMock;
 
-    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', databaseId: 't1' });
+    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', database: 't1' });
     const resp = await provider.login('alice', 'pw');
 
     expect(resp.access_token).toBe('at');

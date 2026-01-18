@@ -27,10 +27,10 @@ func NewRevocationStore(db *mongo.Database, collectionName string) types.TokenRe
 func (s *revocationStore) RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error {
 	id := database + ":" + jti
 	doc := types.RevokedToken{
-		JTI:        id,
-		DatabaseID: database,
-		ExpiresAt:  expiresAt,
-		RevokedAt:  time.Now(),
+		JTI:       id,
+		Database:  database,
+		ExpiresAt: expiresAt,
+		RevokedAt: time.Now(),
 	}
 	_, err := s.coll.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
@@ -43,10 +43,10 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, database str
 	// Set RevokedAt to the past to bypass grace period
 	id := database + ":" + jti
 	doc := types.RevokedToken{
-		JTI:        id,
-		DatabaseID: database,
-		ExpiresAt:  expiresAt,
-		RevokedAt:  time.Now().Add(-24 * time.Hour),
+		JTI:       id,
+		Database:  database,
+		ExpiresAt: expiresAt,
+		RevokedAt: time.Now().Add(-24 * time.Hour),
 	}
 	_, err := s.coll.InsertOne(ctx, doc)
 	if mongo.IsDuplicateKeyError(err) {
@@ -57,7 +57,7 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, database str
 
 func (s *revocationStore) IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error) {
 	id := database + ":" + jti
-	filter := bson.M{"_id": id, "database_id": database}
+	filter := bson.M{"_id": id, "database": database}
 	var doc types.RevokedToken
 	err := s.coll.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
@@ -92,7 +92,7 @@ func (s *revocationStore) EnsureIndexes(ctx context.Context) error {
 
 	// Per-database expiration query index
 	_, err = s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database_id", Value: 1}, {Key: "expires_at", Value: 1}},
+		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "expires_at", Value: 1}},
 		Options: options.Index().SetUnique(false),
 	})
 	return err

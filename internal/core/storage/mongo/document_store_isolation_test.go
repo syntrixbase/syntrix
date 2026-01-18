@@ -72,7 +72,7 @@ func TestDocumentStore_DatabaseIsolation(t *testing.T) {
 	assert.Contains(t, retrievedB.Id, databaseB+":")
 }
 
-func TestDocumentStore_DatabaseIDGeneration(t *testing.T) {
+func TestDocumentStore_DatabaseGeneration(t *testing.T) {
 	t.Parallel()
 	database := "mydatabase"
 	collection := "some"
@@ -80,11 +80,11 @@ func TestDocumentStore_DatabaseIDGeneration(t *testing.T) {
 	path := collection + "/" + docid
 
 	// Calculate expected ID
-	expectedID := types.CalculateDatabaseID(database, path)
+	expectedID := types.CalculateDatabase(database, path)
 
 	// Create doc
 	doc := types.NewStoredDoc(database, collection, docid, nil)
 
 	assert.Equal(t, expectedID, doc.Id)
-	assert.Equal(t, database, doc.DatabaseID)
+	assert.Equal(t, database, doc.Database)
 }

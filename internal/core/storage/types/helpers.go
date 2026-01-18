@@ -9,16 +9,16 @@ import (
 	"github.com/zeebo/blake3"
 )
 
-// CalculateDatabaseID calculates the database-aware document ID
-// Format: database_id:hash(fullpath)
-func CalculateDatabaseID(database, fullpath string) string {
+// CalculateDatabase calculates the database-aware document ID
+// Format: database:hash(fullpath)
+func CalculateDatabase(database, fullpath string) string {
 	hash := blake3.Sum256([]byte(fullpath))
 	hashStr := hex.EncodeToString(hash[:16])
 	return database + ":" + hashStr
 }
 
 // CalculateID calculates the document ID (hash) from the full path
-// Deprecated: Use CalculateDatabaseID instead
+// Deprecated: Use CalculateDatabase instead
 func CalculateID(fullpath string) string {
 	hash := blake3.Sum256([]byte(fullpath))
 	return hex.EncodeToString(hash[:16])
@@ -49,14 +49,14 @@ func NewStoredDoc(database, collection, docid string, data map[string]interface{
 	model.StripProtectedFields(data)
 
 	fullpath := collection + "/" + docid
-	id := CalculateDatabaseID(database, fullpath)
+	id := CalculateDatabase(database, fullpath)
 	collectionHash := CalculateCollectionHash(collection)
 
 	now := time.Now().UnixMilli()
 
 	return StoredDoc{
 		Id:             id,
-		DatabaseID:     database,
+		Database:       database,
 		Fullpath:       fullpath,
 		Collection:     collection,
 		CollectionHash: collectionHash,

@@ -19,7 +19,7 @@ func TestStoredDocToProto(t *testing.T) {
 	t.Run("full document", func(t *testing.T) {
 		doc := &storage.StoredDoc{
 			Id:             "database1:abc123",
-			DatabaseID:     "database1",
+			Database:       "database1",
 			Fullpath:       "users/user1",
 			Collection:     "users",
 			CollectionHash: "abc",
@@ -34,7 +34,7 @@ func TestStoredDocToProto(t *testing.T) {
 		result := storedDocToProto(doc)
 
 		assert.Equal(t, "database1:abc123", result.Id)
-		assert.Equal(t, "database1", result.DatabaseId)
+		assert.Equal(t, "database1", result.Database)
 		assert.Equal(t, "users/user1", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, int64(1704067200000), result.UpdatedAt)
@@ -60,7 +60,7 @@ func TestProtoToStoredDoc(t *testing.T) {
 		data, _ := json.Marshal(map[string]interface{}{"name": "Bob"})
 		proto := &pb.Document{
 			Id:         "database1:xyz",
-			DatabaseId: "database1",
+			Database:   "database1",
 			Fullpath:   "users/user2",
 			Collection: "users",
 			UpdatedAt:  1704067300000,
@@ -73,7 +73,7 @@ func TestProtoToStoredDoc(t *testing.T) {
 		result := protoToStoredDoc(proto)
 
 		assert.Equal(t, "database1:xyz", result.Id)
-		assert.Equal(t, "database1", result.DatabaseID)
+		assert.Equal(t, "database1", result.Database)
 		assert.Equal(t, "users/user2", result.Fullpath)
 		assert.Equal(t, "users", result.Collection)
 		assert.Equal(t, int64(3), result.Version)

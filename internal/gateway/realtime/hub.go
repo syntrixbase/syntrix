@@ -236,10 +236,10 @@ func (h *Hub) Done() <-chan struct{} {
 
 func eventDeliveryToStorageEvent(delivery *streamer.EventDelivery) storage.Event {
 	evt := storage.Event{
-		Id:         fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
-		DatabaseID: delivery.Event.Database,
-		Type:       operationToEventType(delivery.Event.Operation),
-		Timestamp:  delivery.Event.Timestamp,
+		Id:        fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
+		Database:  delivery.Event.Database,
+		Type:      operationToEventType(delivery.Event.Operation),
+		Timestamp: delivery.Event.Timestamp,
 	}
 
 	if delivery.Event.Document != nil {

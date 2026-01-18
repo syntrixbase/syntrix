@@ -395,8 +395,8 @@ func TestOrchestrator_WithEventReplay(t *testing.T) {
 
 	replayer := &mockEventReplayer{
 		events: []*Event{
-			{DatabaseID: "testdb", DocID: "doc2", Data: map[string]any{"id": "b"}},
-			{DatabaseID: "testdb", DocID: "doc3", Data: map[string]any{"id": "c"}},
+			{Database: "testdb", DocID: "doc2", Data: map[string]any{"id": "b"}},
+			{Database: "testdb", DocID: "doc3", Data: map[string]any{"id": "c"}},
 		},
 	}
 
@@ -544,7 +544,7 @@ func TestOrchestrator_DeletedEvents(t *testing.T) {
 
 	replayer := &mockEventReplayer{
 		events: []*Event{
-			{DatabaseID: "testdb", DocID: "doc1", Deleted: true}, // Delete doc1
+			{Database: "testdb", DocID: "doc1", Deleted: true}, // Delete doc1
 		},
 	}
 
@@ -726,7 +726,7 @@ func TestOrchestrator_ReplayDifferentDatabase(t *testing.T) {
 	// Events from a different database should be ignored
 	replayer := &mockEventReplayer{
 		events: []*Event{
-			{DatabaseID: "other-db", DocID: "doc1", Data: map[string]any{"id": "a"}},
+			{Database: "other-db", DocID: "doc1", Data: map[string]any{"id": "a"}},
 		},
 	}
 
@@ -765,7 +765,7 @@ func TestOrchestrator_ReplayBuildKeyError(t *testing.T) {
 
 	replayer := &mockEventReplayer{
 		events: []*Event{
-			{DatabaseID: "testdb", DocID: "doc1", Data: map[string]any{"id": "a"}},
+			{Database: "testdb", DocID: "doc1", Data: map[string]any{"id": "a"}},
 		},
 	}
 
@@ -819,7 +819,7 @@ func TestOrchestrator_ReplayUsesCurrentPosition(t *testing.T) {
 	replayer := &mockEventReplayer{
 		currentPosition: expectedStartKey,
 		events: []*Event{
-			{DatabaseID: "testdb", DocID: "doc3", Data: map[string]any{"id": "c"}},
+			{Database: "testdb", DocID: "doc3", Data: map[string]any{"id": "c"}},
 		},
 	}
 

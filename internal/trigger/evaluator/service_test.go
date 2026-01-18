@@ -154,7 +154,7 @@ func TestService_Start(t *testing.T) {
 			Type: events.EventCreate,
 			Document: &storage.StoredDoc{
 				Id:         "doc1",
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Data:       map[string]interface{}{"name": "test"},
 			},
@@ -221,7 +221,7 @@ func TestService_Start_EvaluateError(t *testing.T) {
 			Type: events.EventCreate,
 			Document: &storage.StoredDoc{
 				Id:         "doc1",
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Data:       map[string]interface{}{"name": "test"},
 			},
@@ -305,7 +305,7 @@ func TestService_Start_PublishError(t *testing.T) {
 			Type: events.EventCreate,
 			Document: &storage.StoredDoc{
 				Id:         "doc1",
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Data:       map[string]interface{}{"name": "test"},
 			},
@@ -352,7 +352,7 @@ func TestService_Start_SaveCheckpointError(t *testing.T) {
 			Type: events.EventCreate,
 			Document: &storage.StoredDoc{
 				Id:         "doc1",
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Data:       map[string]interface{}{"name": "test"},
 			},
@@ -398,7 +398,7 @@ func TestService_Start_BeforeOnlyEvent(t *testing.T) {
 			Type: events.EventDelete,
 			Before: &storage.StoredDoc{
 				Id:         "doc1",
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Data:       map[string]interface{}{"name": "test"},
 			},

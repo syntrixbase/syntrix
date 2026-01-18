@@ -139,7 +139,7 @@ func protoToStoredDoc(doc *pb.Document) *storage.StoredDoc {
 
 	return &storage.StoredDoc{
 		Id:             doc.Id,
-		DatabaseID:     doc.DatabaseId,
+		Database:       doc.Database,
 		Fullpath:       doc.Fullpath,
 		Collection:     doc.Collection,
 		CollectionHash: doc.CollectionHash,
@@ -165,7 +165,7 @@ func storedDocToProto(doc *storage.StoredDoc) *pb.Document {
 
 	return &pb.Document{
 		Id:             doc.Id,
-		DatabaseId:     doc.DatabaseID,
+		Database:       doc.Database,
 		Fullpath:       doc.Fullpath,
 		Collection:     doc.Collection,
 		CollectionHash: doc.CollectionHash,

@@ -16,7 +16,7 @@ var (
 // User represents a user in the system
 type User struct {
 	ID            string                 `json:"id" bson:"_id"`
-	DatabaseID    string                 `json:"databaseId" bson:"database_id"`
+	Database      string                 `json:"database" bson:"database"`
 	Username      string                 `json:"username" bson:"username"`
 	PasswordHash  string                 `json:"password_hash" bson:"password_hash"`
 	PasswordAlgo  string                 `json:"password_algo" bson:"password_algo"` // "argon2id" or "bcrypt"
@@ -32,19 +32,19 @@ type User struct {
 
 // RevokedToken represents a revoked JWT
 type RevokedToken struct {
-	JTI        string    `bson:"_id"`
-	DatabaseID string    `bson:"database_id"`
-	ExpiresAt  time.Time `bson:"expires_at"`
-	RevokedAt  time.Time `bson:"revoked_at"`
+	JTI       string    `bson:"_id"`
+	Database  string    `bson:"database"`
+	ExpiresAt time.Time `bson:"expires_at"`
+	RevokedAt time.Time `bson:"revoked_at"`
 }
 
 // StoredDoc represents a stored document in the database
 type StoredDoc struct {
-	// Id is the unique identifier for the document, database_id:hash(fullpath)
+	// Id is the unique identifier for the document, database:hash(fullpath)
 	Id string `json:"id" bson:"_id"`
 
-	// DatabaseID is the database identifier
-	DatabaseID string `json:"databaseId" bson:"database_id"`
+	// Database is the database identifier
+	Database string `json:"database" bson:"database"`
 
 	// Fullpath is the Full Pathname of document
 	Fullpath string `json:"-" bson:"fullpath"`
@@ -192,7 +192,7 @@ const (
 // Event represents a database change event
 type Event struct {
 	Id          string      `json:"id"`
-	DatabaseID  string      `json:"databaseId"`
+	Database    string      `json:"database"`
 	Type        EventType   `json:"type"`
 	Document    *StoredDoc  `json:"document,omitempty"` // Nil for delete
 	Before      *StoredDoc  `json:"before,omitempty"`   // Previous state, if available

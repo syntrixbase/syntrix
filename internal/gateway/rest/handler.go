@@ -145,7 +145,7 @@ func withTimeout(next http.HandlerFunc, timeout time.Duration) http.HandlerFunc 
 	}
 }
 
-func (h *Handler) getDatabaseId(r *http.Request) (string, error) {
+func (h *Handler) getDatabase(r *http.Request) (string, error) {
 	if database, ok := r.Context().Value(ContextKeyDatabase).(string); ok && database != "" {
 		return database, nil
 	}
@@ -154,7 +154,7 @@ func (h *Handler) getDatabaseId(r *http.Request) (string, error) {
 }
 
 func (h *Handler) databaseOrError(w http.ResponseWriter, r *http.Request) (string, bool) {
-	database, err := h.getDatabaseId(r)
+	database, err := h.getDatabase(r)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Database identification required")
 		return "", false
@@ -324,7 +324,8 @@ func claimsToMap(claims *identity.Claims) map[string]interface{} {
 
 	return map[string]interface{}{
 		"sub":      claims.Subject,
-		"tid":      claims.DatabaseID,
+		"database": claims.Database,
+		"tid":      claims.TenantID,
 		"oid":      claims.UserID,
 		"username": claims.Username,
 		"roles":    append([]string{}, claims.Roles...),

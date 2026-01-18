@@ -18,7 +18,7 @@ Use this client in external applications (Web, Mobile, Backend). Multi-database 
 import { SyntrixClient } from '@syntrix/client';
 
 const client = new SyntrixClient('<URL_ENDPOINT>', {
-  databaseId: 'my-database',
+  database: 'my-database',
 });
 
 await client.login('username', 'password', 'my-database');

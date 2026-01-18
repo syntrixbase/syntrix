@@ -77,7 +77,7 @@ Hub currently expects `storage.Event`, but Streamer delivers `streamer.EventDeli
 | Event Type | `storage.EventType` (string: "create", "update", "delete") | `streamer.OperationType` (int: Insert, Update, Delete) |
 | Document | `*storage.StoredDoc` | `model.Document` (map[string]interface{}) |
 | ID Format | `Id` (full path like "users/1") | `DocumentID` (just ID) + `Collection` |
-| Database | `DatabaseID` | `Database` |
+| Database | `Database` | `Database` |
 
 ### Conversion Function Needed
 
@@ -85,7 +85,7 @@ Hub currently expects `storage.Event`, but Streamer delivers `streamer.EventDeli
 func eventDeliveryToStorageEvent(delivery *streamer.EventDelivery) storage.Event {
     evt := storage.Event{
         Id:        fmt.Sprintf("%s/%s", delivery.Event.Collection, delivery.Event.DocumentID),
-        DatabaseID:  delivery.Event.Database,
+        Database:  delivery.Event.Database,
         Type:      operationToEventType(delivery.Event.Operation),
         Timestamp: delivery.Event.Timestamp,
     }

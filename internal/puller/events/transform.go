@@ -24,7 +24,7 @@ var (
 // It is decoupled from the underlying storage event to allow different sources (e.g. Puller).
 type SyntrixChangeEvent struct {
 	Id         string
-	DatabaseID string
+	Database   string
 	Type       EventType
 	Document   *storage.StoredDoc // Using storage.StoredDoc as the common data model
 	Before     *storage.StoredDoc
@@ -41,7 +41,7 @@ func Transform(pEvent *PullerEvent) (SyntrixChangeEvent, error) {
 
 	evt := SyntrixChangeEvent{
 		Id:         pEvent.Change.EventID,
-		DatabaseID: pEvent.Change.DatabaseID,
+		Database:   pEvent.Change.Database,
 		Timestamp:  pEvent.Change.Timestamp,
 		UpdateDesc: pEvent.Change.UpdateDesc,
 		Progress:   pEvent.Progress,

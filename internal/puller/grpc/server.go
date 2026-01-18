@@ -365,7 +365,7 @@ func (s *Server) convertEvent(backend string, evt *events.StoreChangeEvent) (*pu
 
 	return &pullerv1.ChangeEvent{
 		EventId:    evt.EventID,
-		Database:   evt.DatabaseID,
+		Database:   evt.Database,
 		MgoColl:    evt.MgoColl,
 		MgoDocId:   evt.MgoDocID,
 		OpType:     string(evt.OpType),

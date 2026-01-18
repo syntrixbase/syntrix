@@ -2,7 +2,7 @@ export interface AuthConfig {
   token?: string;
   refreshToken?: string;
   refreshUrl?: string;
-  databaseId?: string;
+  database?: string;
   onTokenRefresh?: (newToken: string) => void;
   onAuthError?: (error: Error) => void;
 }
@@ -21,7 +21,7 @@ export interface LoginResponse {
 }
 
 export interface AuthService {
-  login(username: string, password: string, databaseId?: string): Promise<LoginResponse>;
+  login(username: string, password: string, database?: string): Promise<LoginResponse>;
   logout(): Promise<void>;
   isAuthenticated(): boolean;
 }

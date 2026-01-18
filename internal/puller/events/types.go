@@ -98,8 +98,8 @@ type PullerEvent struct {
 // Field names use short JSON keys with Mongo provenance as defined in the design docs.
 type StoreChangeEvent struct {
 	// Identity
-	EventID    string `json:"eventId"`
-	DatabaseID string `json:"database"` // Derived from FullDocument.DatabaseID
+	EventID  string `json:"eventId"`
+	Database string `json:"database"` // Derived from FullDocument.Database
 
 	// Mongo Provenance
 	MgoColl  string `json:"mgoColl"`

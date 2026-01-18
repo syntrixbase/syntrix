@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCalculateDatabaseID(t *testing.T) {
-	id1 := CalculateDatabaseID("database1", "/path/to/doc1")
-	id2 := CalculateDatabaseID("database1", "/path/to/doc1")
-	id3 := CalculateDatabaseID("database2", "/path/to/doc1")
-	id4 := CalculateDatabaseID("database1", "/path/to/doc2")
+func TestCalculateDatabase(t *testing.T) {
+	id1 := CalculateDatabase("database1", "/path/to/doc1")
+	id2 := CalculateDatabase("database1", "/path/to/doc1")
+	id3 := CalculateDatabase("database2", "/path/to/doc1")
+	id4 := CalculateDatabase("database1", "/path/to/doc2")
 
 	assert.Equal(t, id1, id2)
 	assert.NotEqual(t, id1, id3)
@@ -45,12 +45,12 @@ func TestNewDocument(t *testing.T) {
 	}
 	doc := NewStoredDoc("database1", "users", "123", data)
 
-	assert.Equal(t, "database1", doc.DatabaseID)
+	assert.Equal(t, "database1", doc.Database)
 	assert.Equal(t, "users/123", doc.Fullpath)
 	assert.Equal(t, "users", doc.Collection)
 	assert.Equal(t, data, doc.Data)
 	assert.NotEmpty(t, doc.Id)
-	assert.Equal(t, CalculateDatabaseID("database1", "users/123"), doc.Id)
+	assert.Equal(t, CalculateDatabase("database1", "users/123"), doc.Id)
 	assert.Equal(t, CalculateCollectionHash("users"), doc.CollectionHash)
 	assert.NotZero(t, doc.CreatedAt)
 	assert.NotZero(t, doc.UpdatedAt)

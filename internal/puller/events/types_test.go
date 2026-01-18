@@ -89,15 +89,15 @@ func TestClusterTime_PrimitiveConversion(t *testing.T) {
 func TestChangeEvent_JSON(t *testing.T) {
 	evt := &StoreChangeEvent{
 		EventID:     "evt-123",
-		DatabaseID:  "database-abc",
+		Database:    "database-abc",
 		MgoColl:     "users",
 		MgoDocID:    "doc-456",
 		OpType:      StoreOperationInsert,
 		ClusterTime: ClusterTime{T: 1735567890, I: 1},
 		Timestamp:   1735567890000,
 		FullDocument: &storage.StoredDoc{
-			Id:         "doc-456",
-			DatabaseID: "database-abc",
+			Id:       "doc-456",
+			Database: "database-abc",
 		},
 	}
 
@@ -134,8 +134,8 @@ func TestChangeEvent_JSON(t *testing.T) {
 	if decoded.EventID != evt.EventID {
 		t.Errorf("EventID = %q, want %q", decoded.EventID, evt.EventID)
 	}
-	if decoded.DatabaseID != evt.DatabaseID {
-		t.Errorf("DatabaseID = %q, want %q", decoded.DatabaseID, evt.DatabaseID)
+	if decoded.Database != evt.Database {
+		t.Errorf("Database = %q, want %q", decoded.Database, evt.Database)
 	}
 	if decoded.OpType != evt.OpType {
 		t.Errorf("OpType = %q, want %q", decoded.OpType, evt.OpType)

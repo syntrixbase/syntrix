@@ -69,12 +69,12 @@ func TestTokenService_ErrorPaths(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("ValidateToken_MissingDatabaseID", func(t *testing.T) {
+	t.Run("ValidateToken_MissingDatabase", func(t *testing.T) {
 		keyFile := getTestKeyPath(t)
 		cfg := config.AuthNConfig{PrivateKeyFile: keyFile}
 		ts, _ := NewTokenService(cfg)
 
-		// Manually create a token with missing DatabaseID
+		// Manually create a token with missing Database
 		claims := Claims{
 			Username: "user",
 			UserID:   "u1",
@@ -82,7 +82,7 @@ func TestTokenService_ErrorPaths(t *testing.T) {
 				Subject: "u1",
 			},
 		}
-		// DatabaseID is empty by default
+		// Database is empty by default
 
 		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
 		tokenString, _ := token.SignedString(ts.privateKey)
@@ -147,11 +147,11 @@ func TestTokenService_GenerateTokenPair_DefaultDatabase(t *testing.T) {
 	}
 	ts, _ := NewTokenService(cfg)
 
-	user := &User{ID: "u1", Username: "user"} // Empty DatabaseID
+	user := &User{ID: "u1", Username: "user"} // Empty Database
 	pair, err := ts.GenerateTokenPair(user)
 	require.NoError(t, err)
 
 	claims, err := ts.ValidateToken(pair.AccessToken)
 	require.NoError(t, err)
-	assert.Equal(t, "default", claims.DatabaseID)
+	assert.Equal(t, "default", claims.Database)
 }

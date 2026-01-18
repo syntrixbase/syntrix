@@ -261,12 +261,12 @@ func TestGRPCAdapter_OutgoingDelivery(t *testing.T) {
 
 	// Process an event that matches the subscription
 	err = internal.ProcessEvent(events.SyntrixChangeEvent{
-		Id:         "evt-grpc-1",
-		DatabaseID: "database1",
-		Type:       events.EventCreate,
+		Id:       "evt-grpc-1",
+		Database: "database1",
+		Type:     events.EventCreate,
 		Document: &storage.StoredDoc{
 			Id:         "_id_doc1",
-			DatabaseID: "database1",
+			Database:   "database1",
 			Collection: "users",
 			Fullpath:   "users/doc1",
 			Data:       map[string]interface{}{"id": "doc1", "name": "Alice"},
@@ -334,12 +334,12 @@ func TestGRPCAdapter_OutgoingSendError(t *testing.T) {
 
 	// Process an event to trigger delivery send
 	err = internal.ProcessEvent(events.SyntrixChangeEvent{
-		Id:         "evt-send-err",
-		DatabaseID: "database1",
-		Type:       events.EventCreate,
+		Id:       "evt-send-err",
+		Database: "database1",
+		Type:     events.EventCreate,
 		Document: &storage.StoredDoc{
 			Id:         "_id_doc1",
-			DatabaseID: "database1",
+			Database:   "database1",
 			Collection: "products",
 			Fullpath:   "products/doc1",
 			Data: map[string]interface{}{

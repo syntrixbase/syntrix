@@ -64,7 +64,7 @@ func (m *mockAuthService) ValidateToken(tokenString string) (*identity.Claims, e
 	if tokenString != "good" {
 		return nil, identity.ErrInvalidToken
 	}
-	return &identity.Claims{DatabaseID: "default", Roles: []string{"user"}}, nil
+	return &identity.Claims{Database: "default", Roles: []string{"user"}}, nil
 }
 
 func withDatabaseAndRole(ctx context.Context, database string, roles []string) context.Context {

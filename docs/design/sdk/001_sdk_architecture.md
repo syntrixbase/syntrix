@@ -90,7 +90,7 @@ pkg/syntrix-client-ts/src/
 
 ### 4.2 Auth
 
-- AuthConfig carries `databaseId`; login accepts `databaseId` and derives `/auth/v1/login`.
+- AuthConfig carries `database`; login accepts `database` and derives `/auth/v1/login`.
 - Token refresh serialized; hooks for refresh/error callbacks.
 - Realtime WS retries auth once after refresh; SSE relies on header-only auth.
 

@@ -263,13 +263,13 @@ func (c *Client) handleAuth(msg BaseMessage) {
 	}
 
 	claims, err := c.auth.ValidateToken(payload.Token)
-	if err != nil || claims == nil || claims.DatabaseID == "" {
+	if err != nil || claims == nil || claims.Database == "" {
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "invalid token"})}
 		return
 	}
 
 	c.mu.Lock()
-	c.database = claims.DatabaseID
+	c.database = claims.Database
 	c.allowAllDatabases = hasSystemRoleFromClaims(claims)
 	c.authenticated = true
 	c.mu.Unlock()
@@ -330,7 +330,7 @@ func databaseFromContext(ctx context.Context) (string, bool) {
 	database, _ := ctx.Value(identity.ContextKeyDatabase).(string)
 	if database == "" {
 		if claims, ok := ctx.Value(identity.ContextKeyClaims).(*identity.Claims); ok && claims != nil {
-			database = claims.DatabaseID
+			database = claims.Database
 		}
 	}
 	allowAll := hasSystemRole(ctx)

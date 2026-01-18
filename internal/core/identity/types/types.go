@@ -22,11 +22,12 @@ const (
 
 // Claims represents JWT claims returned by token validation.
 type Claims struct {
-	Username   string   `json:"username"`
-	Roles      []string `json:"roles,omitempty"`
-	Disabled   bool     `json:"disabled"`
-	DatabaseID string   `json:"tid"`
-	UserID     string   `json:"oid"`
+	Username string   `json:"username"`
+	Roles    []string `json:"roles,omitempty"`
+	Disabled bool     `json:"disabled"`
+	Database string   `json:"database"`
+	TenantID string   `json:"tid"`
+	UserID   string   `json:"oid"`
 	jwt.RegisteredClaims
 }
 
@@ -39,16 +40,16 @@ type TokenPair struct {
 
 // SignupRequest represents the signup payload.
 type SignupRequest struct {
-	DatabaseID string `json:"database,omitempty"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
+	Database string `json:"database,omitempty"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // LoginRequest represents the login payload.
 type LoginRequest struct {
-	DatabaseID string `json:"database,omitempty"`
-	Username   string `json:"username"`
-	Password   string `json:"password"`
+	Database string `json:"database,omitempty"`
+	Username string `json:"username"`
+	Password string `json:"password"`
 }
 
 // RefreshRequest represents the refresh payload.

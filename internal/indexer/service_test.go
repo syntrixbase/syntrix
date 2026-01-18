@@ -197,7 +197,7 @@ func TestService_ApplyEvent(t *testing.T) {
 
 		evt := &ChangeEvent{
 			EventID:      "evt1",
-			DatabaseID:   "testdb",
+			Database:     "testdb",
 			FullDocument: nil,
 		}
 		err = svc.ApplyEvent(context.Background(), evt, "")
@@ -211,8 +211,8 @@ func TestService_ApplyEvent(t *testing.T) {
 		defer svc.Stop(context.Background())
 
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "",
@@ -229,8 +229,8 @@ func TestService_ApplyEvent(t *testing.T) {
 		defer svc.Stop(context.Background())
 
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "unknown/collection",
@@ -260,8 +260,8 @@ templates:
 		defer svc.Stop(context.Background())
 
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
@@ -302,8 +302,8 @@ templates:
 
 		// First, insert a document
 		evt1 := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
@@ -326,8 +326,8 @@ templates:
 
 		// Now mark as deleted
 		evt2 := &ChangeEvent{
-			EventID:    "evt2",
-			DatabaseID: "testdb",
+			EventID:  "evt2",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
@@ -368,8 +368,8 @@ templates:
 
 		// Insert a deleted document
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",
@@ -414,8 +414,8 @@ templates:
 	for i := 1; i <= 5; i++ {
 		docID := "doc" + string(rune('0'+i))
 		evt := &ChangeEvent{
-			EventID:    "evt" + string(rune('0'+i)),
-			DatabaseID: "testdb",
+			EventID:  "evt" + string(rune('0'+i)),
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
 				Collection: "users/alice/chats",
@@ -513,8 +513,8 @@ templates:
 
 	// Add an event
 	evt := &ChangeEvent{
-		EventID:    "evt1",
-		DatabaseID: "testdb",
+		EventID:  "evt1",
+		Database: "testdb",
 		FullDocument: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users/alice/chats",
@@ -568,8 +568,8 @@ templates:
 		// Send an event through puller
 		mockPuller.SendEvent(&puller.Event{
 			Change: &events.StoreChangeEvent{
-				EventID:    "evt1",
-				DatabaseID: "testdb",
+				EventID:  "evt1",
+				Database: "testdb",
 				FullDocument: &storage.StoredDoc{
 					Id:         "doc1",
 					Collection: "users/alice/chats",
@@ -800,8 +800,8 @@ templates:
 
 		// Event with unsupported type (slice)
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/docs",
@@ -910,7 +910,7 @@ templates:
 	// Event with nil FullDocument
 	evt := &ChangeEvent{
 		EventID:      "evt1",
-		DatabaseID:   "testdb",
+		Database:     "testdb",
 		FullDocument: nil,
 	}
 
@@ -940,8 +940,8 @@ templates:
 
 	// Event with FullDocument that has no "id" in Data but has Fullpath
 	evt := &ChangeEvent{
-		EventID:    "evt1",
-		DatabaseID: "testdb",
+		EventID:  "evt1",
+		Database: "testdb",
 		FullDocument: &storage.StoredDoc{
 			Fullpath:   "users/user123", // ID should be extracted from here
 			Collection: "users",
@@ -1133,8 +1133,8 @@ templates:
 
 	// Apply an event with progress
 	evt := &ChangeEvent{
-		EventID:    "evt1",
-		DatabaseID: "testdb",
+		EventID:  "evt1",
+		Database: "testdb",
 		FullDocument: &storage.StoredDoc{
 			Id:         "doc1",
 			Collection: "users/alice/chats",
@@ -1197,8 +1197,8 @@ templates:
 
 		// Apply event with progress
 		evt := &ChangeEvent{
-			EventID:    "evt1",
-			DatabaseID: "testdb",
+			EventID:  "evt1",
+			Database: "testdb",
 			FullDocument: &storage.StoredDoc{
 				Id:         "doc1",
 				Collection: "users/alice/chats",

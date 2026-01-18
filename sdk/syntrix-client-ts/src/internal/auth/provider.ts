@@ -29,9 +29,9 @@ export class DefaultTokenProvider implements TokenProvider, AuthService {
     return this.token !== null;
   }
 
-  async login(username: string, password: string, databaseId?: string): Promise<LoginResponse> {
+  async login(username: string, password: string, database?: string): Promise<LoginResponse> {
     const url = this.config.refreshUrl?.replace('/refresh', '/login') || `${this.baseUrl}/auth/v1/login`;
-    const response = await axios.post<LoginResponse>(url, { username, password, database: databaseId || this.config.databaseId });
+    const response = await axios.post<LoginResponse>(url, { username, password, database: database || this.config.database });
 
     this.token = response.data.access_token;
     this._refreshToken = response.data.refresh_token;

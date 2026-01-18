@@ -153,7 +153,7 @@ function updateQuickConnectButton() {
             // Ensure user exists (signup if needed)
             await signupOrLogin(username, password);
 
-            const syntrix = new SyntrixClient(API_BASE, { databaseId: 'default' });
+            const syntrix = new SyntrixClient(API_BASE, { database: 'default' });
             await syntrix.login(username, password);
             clients[panelId].syntrix = syntrix;
             log(panelId, `✅ Logged in as ${username}`, 'event');
@@ -270,7 +270,7 @@ function updateQuickConnectButton() {
         // Ensure user exists (signup if needed) and login
         await signupOrLogin(username, password);
 
-        const syntrix = new SyntrixClient(API_BASE, { databaseId: 'default' });
+        const syntrix = new SyntrixClient(API_BASE, { database: 'default' });
         await syntrix.login(username, password);
         clients[panelId].syntrix = syntrix;
         log(panelId, `✅ Logged in as ${username}`, 'event');

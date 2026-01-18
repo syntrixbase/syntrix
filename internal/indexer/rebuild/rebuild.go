@@ -139,7 +139,7 @@ type EventReplayer interface {
 
 // Event represents a change event for replay.
 type Event struct {
-	DatabaseID string
+	Database   string
 	Collection string
 	DocID      string
 	Data       map[string]any
@@ -463,7 +463,7 @@ func (o *Orchestrator) replayEvents(
 
 		// Check if this event matches our index's collection pattern
 		// This is simplified - in production, we'd check pattern matching
-		if evt.DatabaseID != job.Database {
+		if evt.Database != job.Database {
 			return nil
 		}
 

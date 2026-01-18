@@ -223,7 +223,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 
 		select {
 		case evt := <-ch:
-			assert.Equal(t, "database1", evt.DatabaseID)
+			assert.Equal(t, "database1", evt.Database)
 		case <-time.After(5 * time.Second):
 			t.Fatal("timeout waiting for global event")
 		}
@@ -269,7 +269,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		// We need to access the underlying collection, but store is an interface.
 		// We can use reflection or just assume it's *documentStore if we created it that way.
 		// But here we can just use env.DB directly.
-		id := types.CalculateDatabaseID(database, path)
+		id := types.CalculateDatabase(database, path)
 		_, err = env.DB.Collection("docs").DeleteOne(ctx, map[string]interface{}{"_id": id})
 		require.NoError(t, err)
 
@@ -313,7 +313,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		// Replace with soft-deleted before-state should yield create
 		change := changeStreamEvent{
 			OperationType:            "replace",
-			FullDocument:             &types.StoredDoc{DatabaseID: "t1", Collection: "c1"},
+			FullDocument:             &types.StoredDoc{Database: "t1", Collection: "c1"},
 			FullDocumentBeforeChange: &types.StoredDoc{Deleted: true},
 			DocumentKey: struct {
 				ID string `bson:"_id"`
@@ -322,7 +322,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		evt, ok := ds.convertChangeEvent(change, "", "")
 		assert.True(t, ok)
 		assert.Equal(t, types.EventCreate, evt.Type)
-		assert.Equal(t, "t1", evt.DatabaseID)
+		assert.Equal(t, "t1", evt.Database)
 	})
 
 	t.Run("ConvertChangeEvent_UpdateFromDeleted", func(t *testing.T) {
@@ -330,7 +330,7 @@ func TestDocumentStore_Watch_Coverage(t *testing.T) {
 		change := changeStreamEvent{
 			OperationType:            "update",
 			FullDocumentBeforeChange: &types.StoredDoc{Deleted: true},
-			FullDocument:             &types.StoredDoc{DatabaseID: "t1", Collection: "c1"},
+			FullDocument:             &types.StoredDoc{Database: "t1", Collection: "c1"},
 			DocumentKey: struct {
 				ID string `bson:"_id"`
 			}{ID: "t1:path"},
@@ -386,7 +386,7 @@ func (s *stubChangeStream) Next(ctx context.Context) bool {
 func (s *stubChangeStream) Decode(v any) error {
 	ce := v.(*changeStreamEvent)
 	ce.OperationType = "insert"
-	ce.FullDocument = &types.StoredDoc{DatabaseID: "database", Collection: "docs"}
+	ce.FullDocument = &types.StoredDoc{Database: "database", Collection: "docs"}
 	ce.DocumentKey = struct {
 		ID string `bson:"_id"`
 	}{ID: "database:docs/id"}

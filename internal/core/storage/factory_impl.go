@@ -64,7 +64,7 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 
 	databaseDocRouters := make(map[string]types.DocumentRouter)
 	for tID, tCfg := range cfg.Databases {
-		if tID == model.DefaultDatabaseID {
+		if tID == model.DefaultDatabase {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)
@@ -84,7 +84,7 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 
 	databaseUserRouters := make(map[string]types.UserRouter)
 	for tID, tCfg := range cfg.Databases {
-		if tID == model.DefaultDatabaseID {
+		if tID == model.DefaultDatabase {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)
@@ -104,7 +104,7 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 
 	databaseRevRouters := make(map[string]types.RevocationRouter)
 	for tID, tCfg := range cfg.Databases {
-		if tID == model.DefaultDatabaseID {
+		if tID == model.DefaultDatabase {
 			continue
 		}
 		p, err := f.getMongoProvider(tCfg.Backend)

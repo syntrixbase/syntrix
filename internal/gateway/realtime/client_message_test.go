@@ -95,7 +95,7 @@ type mockAuthServiceSystem struct {
 
 func (m *mockAuthServiceSystem) ValidateToken(tokenString string) (*identity.Claims, error) {
 	if tokenString == "system" {
-		return &identity.Claims{DatabaseID: "default", Roles: []string{"system"}}, nil
+		return &identity.Claims{Database: "default", Roles: []string{"system"}}, nil
 	}
 	return m.mockAuthService.ValidateToken(tokenString)
 }

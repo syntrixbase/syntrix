@@ -406,7 +406,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 			event: events.SyntrixChangeEvent{
 				Type: events.EventCreate,
 				Document: &storage.StoredDoc{
-					DatabaseID: "mydb",
+					Database:   "mydb",
 					Collection: "users",
 				},
 			},
@@ -423,7 +423,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 			event: events.SyntrixChangeEvent{
 				Type: events.EventCreate,
 				Document: &storage.StoredDoc{
-					DatabaseID: "otherdb",
+					Database:   "otherdb",
 					Collection: "users",
 				},
 			},
@@ -441,7 +441,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 				Type:     events.EventDelete,
 				Document: nil,
 				Before: &storage.StoredDoc{
-					DatabaseID: "mydb",
+					Database:   "mydb",
 					Collection: "users",
 				},
 			},
@@ -459,7 +459,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 				Type:     events.EventDelete,
 				Document: nil,
 				Before: &storage.StoredDoc{
-					DatabaseID: "otherdb",
+					Database:   "otherdb",
 					Collection: "users",
 				},
 			},
@@ -476,7 +476,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 			event: events.SyntrixChangeEvent{
 				Type: events.EventCreate,
 				Document: &storage.StoredDoc{
-					DatabaseID: "anydb",
+					Database:   "anydb",
 					Collection: "users",
 				},
 			},
@@ -493,7 +493,7 @@ func TestCELEvaluator_DatabaseFilter(t *testing.T) {
 			event: events.SyntrixChangeEvent{
 				Type: events.EventCreate,
 				Document: &storage.StoredDoc{
-					DatabaseID: "anydb",
+					Database:   "anydb",
 					Collection: "users",
 				},
 			},

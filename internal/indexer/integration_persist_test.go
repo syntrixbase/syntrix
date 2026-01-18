@@ -216,12 +216,12 @@ func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		docID := fmt.Sprintf("user%03d", i)
 		updateEvt := &puller.ChangeEvent{
-			EventID:    fmt.Sprintf("evt-update-%d", i),
-			DatabaseID: "db1",
-			OpType:     puller.OperationUpdate,
+			EventID:  fmt.Sprintf("evt-update-%d", i),
+			Database: "db1",
+			OpType:   puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Fullpath:   "users/" + docID,
 				Data: map[string]any{
@@ -240,12 +240,12 @@ func TestIntegration_Pebble_UpdatesAndDeletes(t *testing.T) {
 	for i := 40; i < 50; i++ {
 		docID := fmt.Sprintf("user%03d", i)
 		deleteEvt := &puller.ChangeEvent{
-			EventID:    fmt.Sprintf("evt-delete-%d", i),
-			DatabaseID: "db1",
-			OpType:     puller.OperationUpdate,
+			EventID:  fmt.Sprintf("evt-delete-%d", i),
+			Database: "db1",
+			OpType:   puller.OperationUpdate,
 			FullDocument: &storage.StoredDoc{
 				Id:         docID,
-				DatabaseID: "db1",
+				Database:   "db1",
 				Collection: "users",
 				Fullpath:   "users/" + docID,
 				Data:       map[string]any{"id": docID, "timestamp": int64(i)},
