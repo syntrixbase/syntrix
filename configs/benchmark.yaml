@@ -24,13 +24,8 @@ auth:
   # Database to use (default: "default")
   database: "default"
 
-  # Authentication token (can be generated using: syntrix-benchmark token)
-  # You can also set this via --token flag or SYNTRIX_BENCHMARK_TOKEN env var
-  # token: ""
-
-  # Or use username/password (not recommended for production)
-  # username: "admin"
-  # password: "password"
+  # Note: Authentication tokens are generated automatically
+  # No need to configure tokens manually
 
 # Scenario configuration
 scenario:
