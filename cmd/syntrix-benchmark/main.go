@@ -33,11 +33,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
-	case "token":
-		if err := generateToken(os.Args[2:]); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
 	case "version":
 		fmt.Printf("syntrix-benchmark version %s\n", Version)
 	case "help", "-h", "--help":
@@ -53,7 +48,6 @@ func runBenchmark(args []string) error {
 	// Parse flags
 	configFile := ""
 	target := ""
-	token := ""
 	duration := ""
 	workers := 0
 	noColor := false
@@ -71,12 +65,6 @@ func runBenchmark(args []string) error {
 				return fmt.Errorf("missing value for %s", args[i])
 			}
 			target = args[i+1]
-			i++
-		case "--token":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			token = args[i+1]
 			i++
 		case "-d", "--duration":
 			if i+1 >= len(args) {
@@ -134,9 +122,6 @@ func runBenchmark(args []string) error {
 	if target != "" {
 		cfg.Target = target
 	}
-	if token != "" {
-		cfg.Auth.Token = token
-	}
 	if duration != "" {
 		d, err := time.ParseDuration(duration)
 		if err != nil {
@@ -147,6 +132,14 @@ func runBenchmark(args []string) error {
 	if workers > 0 {
 		cfg.Workers = workers
 	}
+
+	// Always auto-generate token
+	fmt.Println("Generating authentication token...")
+	cfg.Auth.Token, err = utils.GenerateBenchmarkToken("keys/auth_private.pem", "benchmark", 365*24*time.Hour)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %w", err)
+	}
+	fmt.Println("✓ Token generated successfully")
 
 	// Validate configuration
 	if err := config.Validate(cfg); err != nil {
@@ -245,79 +238,6 @@ func runBenchmark(args []string) error {
 	return nil
 }
 
-func generateToken(args []string) error {
-	// Parse flags
-	keyFile := "keys/auth_private.pem"
-	ttl := 365 * 24 * time.Hour // 1 year by default
-	output := ""
-	serviceName := "benchmark"
-
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "-k", "--key":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			keyFile = args[i+1]
-			i++
-		case "-t", "--ttl":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			var err error
-			ttl, err = time.ParseDuration(args[i+1])
-			if err != nil {
-				return fmt.Errorf("invalid TTL: %w", err)
-			}
-			i++
-		case "-o", "--output":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			output = args[i+1]
-			i++
-		case "-s", "--service":
-			if i+1 >= len(args) {
-				return fmt.Errorf("missing value for %s", args[i])
-			}
-			serviceName = args[i+1]
-			i++
-		case "-h", "--help":
-			printTokenUsage()
-			return nil
-		default:
-			return fmt.Errorf("unknown flag: %s", args[i])
-		}
-	}
-
-	// Generate token
-	token, err := utils.GenerateBenchmarkToken(keyFile, serviceName, ttl)
-	if err != nil {
-		return fmt.Errorf("failed to generate token: %w", err)
-	}
-
-	// Output token
-	if output != "" {
-		if err := os.WriteFile(output, []byte(token), 0600); err != nil {
-			return fmt.Errorf("failed to write token to file: %w", err)
-		}
-		fmt.Printf("Token generated and saved to: %s\n", output)
-	} else {
-		fmt.Println(token)
-	}
-
-	fmt.Fprintf(os.Stderr, "\nToken details:\n")
-	fmt.Fprintf(os.Stderr, "  Service: system:%s\n", serviceName)
-	fmt.Fprintf(os.Stderr, "  Roles: system, service:%s\n", serviceName)
-	fmt.Fprintf(os.Stderr, "  TTL: %s\n", ttl)
-	fmt.Fprintf(os.Stderr, "\nUsage:\n")
-	fmt.Fprintf(os.Stderr, "  syntrix-benchmark run --token <token>\n")
-	fmt.Fprintf(os.Stderr, "  syntrix-benchmark run --config benchmark.yaml (set auth.token in config)\n")
-	fmt.Fprintf(os.Stderr, "  export SYNTRIX_BENCHMARK_TOKEN=<token>\n")
-
-	return nil
-}
-
 func printUsage() {
 	fmt.Println("Syntrix Benchmark Tool")
 	fmt.Println()
@@ -326,7 +246,6 @@ func printUsage() {
 	fmt.Println()
 	fmt.Println("Commands:")
 	fmt.Println("  run       Run a benchmark")
-	fmt.Println("  token     Generate a benchmark authentication token")
 	fmt.Println("  version   Show version information")
 	fmt.Println("  help      Show this help message")
 	fmt.Println()
@@ -342,41 +261,14 @@ func printRunUsage() {
 	fmt.Println("Flags:")
 	fmt.Println("  -c, --config <file>     Configuration file (YAML)")
 	fmt.Println("  -t, --target <url>      Target Syntrix URL")
-	fmt.Println("      --token <token>     Authentication token")
 	fmt.Println("  -d, --duration <time>   Benchmark duration (e.g., 10s, 1m)")
 	fmt.Println("  -w, --workers <n>       Number of concurrent workers")
 	fmt.Println("      --no-color          Disable colored output")
 	fmt.Println("  -h, --help              Show this help message")
 	fmt.Println()
 	fmt.Println("Examples:")
-	fmt.Println("  syntrix-benchmark run --config benchmark.yaml")
-	fmt.Println("  syntrix-benchmark run --target http://localhost:8080 --token mytoken --duration 30s --workers 10")
-}
-
-func printTokenUsage() {
-	fmt.Println("Generate a benchmark authentication token")
+	fmt.Println("  syntrix-benchmark run --config configs/benchmark.yaml")
+	fmt.Println("  syntrix-benchmark run --target http://localhost:8080 --duration 30s --workers 10")
 	fmt.Println()
-	fmt.Println("Usage:")
-	fmt.Println("  syntrix-benchmark token [flags]")
-	fmt.Println()
-	fmt.Println("Flags:")
-	fmt.Println("  -k, --key <file>        Path to private key file (default: keys/auth_private.pem)")
-	fmt.Println("  -t, --ttl <duration>    Token TTL (default: 8760h = 1 year)")
-	fmt.Println("  -o, --output <file>     Save token to file instead of stdout")
-	fmt.Println("  -s, --service <name>    Service name (default: benchmark)")
-	fmt.Println("  -h, --help              Show this help message")
-	fmt.Println()
-	fmt.Println("Examples:")
-	fmt.Println("  # Generate token and print to stdout")
-	fmt.Println("  syntrix-benchmark token")
-	fmt.Println()
-	fmt.Println("  # Generate token with custom TTL and save to file")
-	fmt.Println("  syntrix-benchmark token --ttl 720h --output ~/.syntrix-benchmark-token")
-	fmt.Println()
-	fmt.Println("  # Generate token with custom service name")
-	fmt.Println("  syntrix-benchmark token --service benchmark-ci")
-	fmt.Println()
-	fmt.Println("  # Use generated token in benchmark")
-	fmt.Println("  export SYNTRIX_BENCHMARK_TOKEN=$(syntrix-benchmark token)")
-	fmt.Println("  syntrix-benchmark run --config benchmark.yaml")
+	fmt.Println("Note: Authentication tokens are generated automatically")
 }

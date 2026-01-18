@@ -28,7 +28,6 @@ func TestPrintUsage(t *testing.T) {
 		"Usage:",
 		"Commands:",
 		"run",
-		"token",
 		"version",
 	}
 
