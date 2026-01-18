@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
+
+	"github.com/syntrixbase/syntrix/internal/core/identity/authn"
+	"github.com/syntrixbase/syntrix/internal/core/identity/config"
 )
 
 // TokenSource represents a source for authentication tokens.
@@ -121,4 +125,25 @@ func LoadToken(tokenConfig string) (string, error) {
 	}
 
 	return "", fmt.Errorf("invalid token configuration: %s", tokenConfig)
+}
+
+// GenerateBenchmarkToken generates a system token for benchmark usage.
+// It uses the existing TokenService from the identity package.
+func GenerateBenchmarkToken(keyFile string, serviceName string, ttl time.Duration) (string, error) {
+	// Create AuthN config with the specified key file and TTL
+	cfg := config.AuthNConfig{
+		AccessTokenTTL:  ttl,
+		RefreshTokenTTL: ttl, // Not used for system tokens, but required
+		AuthCodeTTL:     2 * time.Minute,
+		PrivateKeyFile:  keyFile,
+	}
+
+	// Create token service
+	tokenService, err := authn.NewTokenService(cfg)
+	if err != nil {
+		return "", fmt.Errorf("failed to create token service: %w", err)
+	}
+
+	// Generate system token
+	return tokenService.GenerateSystemToken(serviceName)
 }

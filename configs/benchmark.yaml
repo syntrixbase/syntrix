@@ -1,0 +1,151 @@
+# Syntrix Benchmark Configuration
+# This file contains all available configuration options for the benchmark tool.
+
+# Benchmark name (required)
+name: "syntrix-crud-benchmark"
+
+# Target Syntrix instance
+target: "http://localhost:8080"
+
+# Benchmark duration (examples: "30s", "5m", "1h")
+duration: 60s
+
+# Warmup period before actual benchmark starts
+warmup: 10s
+
+# Rampup period to gradually increase load
+rampup: 5s
+
+# Number of concurrent workers
+workers: 10
+
+# Authentication configuration
+auth:
+  # Database to use (default: "default")
+  database: "default"
+
+  # Authentication token (can be generated using: syntrix-benchmark token)
+  # You can also set this via --token flag or SYNTRIX_BENCHMARK_TOKEN env var
+  # token: ""
+
+  # Or use username/password (not recommended for production)
+  # username: "admin"
+  # password: "password"
+
+# Scenario configuration
+scenario:
+  # Scenario type: "crud", "query", "realtime", or "mixed"
+  type: "crud"
+
+  # Operation definitions with weights
+  # Weights determine the distribution of operations (don't need to sum to 100)
+  operations:
+    - type: "create"
+      weight: 30  # 30% creates
+
+    - type: "read"
+      weight: 40  # 40% reads
+
+    - type: "update"
+      weight: 20  # 20% updates
+
+    - type: "delete"
+      weight: 10  # 10% deletes
+
+# Data generation configuration
+data:
+  # Collection name prefix for benchmark documents
+  collection_prefix: "benchmark_"
+
+  # Number of fields per document
+  fields_count: 10
+
+  # Document size: "1KB", "10KB", "100KB", "1MB"
+  document_size: "1KB"
+
+  # Seed data: number of documents to pre-create before benchmark starts
+  # 0 = no seed data (create documents on-the-fly)
+  seed_data: 100
+
+  # Cleanup: whether to delete created documents after benchmark completes
+  cleanup: true
+
+# Metrics configuration
+metrics:
+  # Progress reporting interval
+  interval: 5s
+
+  # Latency histogram buckets (milliseconds)
+  histogram:
+    buckets: [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000]
+
+# Monitoring configuration (Phase 2 feature - not yet implemented)
+monitor:
+  # Enable real-time monitoring HTTP server
+  enabled: false
+
+  # Listen address for monitoring server
+  address: "localhost:9090"
+
+  # Auto-open browser when starting benchmark
+  auto_open: false
+
+  # Metrics update interval
+  interval: 2s
+
+# Output configuration
+output:
+  # Enable console output
+  console: true
+
+  # Output format: "json", "prometheus", or "csv"
+  format: "json"
+
+  # Report file path (optional, for saving results)
+  # file: "./benchmark-results.json"
+
+# Examples of different workload patterns:
+#
+# Read-heavy workload (e.g., typical web application):
+#   operations:
+#     - type: "create"
+#       weight: 5
+#     - type: "read"
+#       weight: 80
+#     - type: "update"
+#       weight: 10
+#     - type: "delete"
+#       weight: 5
+#
+# Write-heavy workload (e.g., logging, analytics):
+#   operations:
+#     - type: "create"
+#       weight: 70
+#     - type: "read"
+#       weight: 20
+#     - type: "update"
+#       weight: 5
+#     - type: "delete"
+#       weight: 5
+#
+# Balanced CRUD workload:
+#   operations:
+#     - type: "create"
+#       weight: 25
+#     - type: "read"
+#       weight: 25
+#     - type: "update"
+#       weight: 25
+#     - type: "delete"
+#       weight: 25
+#
+# Update-intensive workload (e.g., live collaboration):
+#   operations:
+#     - type: "create"
+#       weight: 10
+#     - type: "read"
+#       weight: 30
+#     - type: "update"
+#       weight: 55
+#     - type: "delete"
+#       weight: 5

@@ -1,5 +1,24 @@
+# Index Templates for Default Database
+#
+# These templates define composite indexes for query optimization.
+# The indexer will automatically create and maintain these indexes.
+
 database: default
 templates:
+  # Benchmark collections - basic temporal sorting
+  - name: benchmark-by-created
+    collectionPattern: "benchmark_*"
+    fields:
+      - field: createdAt
+        order: desc
+
+  - name: benchmark-by-updated
+    collectionPattern: "benchmark_*"
+    fields:
+      - field: updatedAt
+        order: desc
+
+  # Example application templates - uncomment and modify as needed
   - name: orch-chats-by-updated
     collectionPattern: "users/*/orch-chats"
     fields:

@@ -1,9 +1,0 @@
-database: default
-rules_version: '1'
-service: syntrix
-match:
-  /databases/{database}/documents:
-    match:
-      /{document=**}:
-        allow:
-          read, write: "true"
