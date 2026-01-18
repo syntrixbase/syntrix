@@ -35,7 +35,7 @@ Tasks are organized by implementation phase and component. Each task includes:
 
 | ID | Task | Estimate | Dependencies | Status |
 |----|------|----------|--------------|--------|
-| P1-10 | Define core interfaces (Runner, Worker, Scenario, Operation) | M | P1-06 | 📝 TODO |
+| P1-10 | Define core interfaces (Runner, Worker, Scenario, Operation) | M | P1-06 | ✅ Done |
 | P1-11 | Implement basic configuration struct | S | P1-10 | 📝 TODO |
 | P1-12 | Implement HTTP client wrapper | M | P1-10 | 📝 TODO |
 | P1-13 | Implement authentication token management | S | P1-12 | 📝 TODO |
@@ -337,10 +337,10 @@ make coverage
 
 ## Progress Tracking
 
-### Phase 1 Progress: 6/78 tasks complete (8%)
-- ✅ Completed: 6
+### Phase 1 Progress: 7/78 tasks complete (9%)
+- ✅ Completed: 7
 - 🚧 In Progress: 0
-- 📝 TODO: 72
+- 📝 TODO: 71
 
 ### Phase 2 Progress: 0/49 tasks complete (0%)
 - ✅ Completed: 0
@@ -352,7 +352,7 @@ make coverage
 - 🚧 In Progress: 0
 - 📝 TODO: 35
 
-### Overall Progress: 6/162 tasks complete (4%)
+### Overall Progress: 7/162 tasks complete (4%)
 
 ---
 
