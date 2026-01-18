@@ -23,9 +23,7 @@ workers: 10
 auth:
   # Database to use (default: "default")
   database: "default"
-
-  # Note: Authentication tokens are generated automatically
-  # No need to configure tokens manually
+  # Note: Authentication tokens are generated automatically at runtime
 
 # Scenario configuration
 scenario:

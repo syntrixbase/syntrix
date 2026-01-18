@@ -39,9 +39,7 @@ type Config struct {
 // AuthConfig holds authentication configuration.
 type AuthConfig struct {
 	Database string `json:"database" yaml:"database"`
-	Username string `json:"username" yaml:"username"`
-	Password string `json:"password" yaml:"password"`
-	Token    string `json:"token" yaml:"token"` // Pre-generated token (optional)
+	Token    string `json:"-" yaml:"-"` // Auto-generated at runtime, not configurable
 }
 
 // ScenarioConfig defines the benchmark scenario.
