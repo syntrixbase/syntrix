@@ -260,3 +260,21 @@ func TestLoggingConfigValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestLoggingConfigApplyEnvOverrides(t *testing.T) {
+	// ApplyEnvOverrides is currently a placeholder for future environment variable support.
+	// This test verifies it can be called without error and doesn't modify the config.
+	cfg := LoggingConfig{
+		Level:  "info",
+		Format: "text",
+		Dir:    "logs",
+	}
+
+	// Call should not panic or error
+	cfg.ApplyEnvOverrides()
+
+	// Config should remain unchanged (placeholder does nothing)
+	assert.Equal(t, "info", cfg.Level)
+	assert.Equal(t, "text", cfg.Format)
+	assert.Equal(t, "logs", cfg.Dir)
+}

@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -125,4 +126,32 @@ func TestLevelFilter_WithChaining(t *testing.T) {
 	assert.Contains(t, output, "component=test")
 	assert.Contains(t, output, "request.id=123")
 	assert.Contains(t, output, "error message")
+}
+
+func TestLevelFilter_Handle_BelowThreshold(t *testing.T) {
+	buf := &bytes.Buffer{}
+	handler := slog.NewTextHandler(buf, &slog.HandlerOptions{Level: slog.LevelDebug})
+
+	// Create filter that only allows Error level
+	errorFilter := NewLevelFilter(handler, slog.LevelError)
+
+	ctx := context.Background()
+
+	// Create a record with level below threshold (Info < Error)
+	var pc uintptr
+	record := slog.NewRecord(
+		time.Now(),
+		slog.LevelInfo,
+		"info message below threshold",
+		pc,
+	)
+
+	// Directly call Handle with below-threshold level
+	err := errorFilter.Handle(ctx, record)
+
+	// Should return nil without error
+	assert.NoError(t, err)
+
+	// Buffer should be empty (message not written)
+	assert.Empty(t, buf.String())
 }

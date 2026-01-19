@@ -117,6 +117,7 @@ func (c *LoggingConfig) ApplyDefaults() {
 // ApplyEnvOverrides applies environment variable overrides
 func (c *LoggingConfig) ApplyEnvOverrides() {
 	// Future: Add environment variable support
+	_ = c
 }
 
 // ResolvePaths resolves relative paths based on config directory
