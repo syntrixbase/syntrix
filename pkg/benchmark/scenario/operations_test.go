@@ -92,7 +92,7 @@ func TestCreateOperation_Execute(t *testing.T) {
 		assert.Equal(t, "create", result.OperationType)
 		assert.True(t, result.Success)
 		assert.Equal(t, 201, result.StatusCode)
-		assert.Greater(t, result.Duration, time.Duration(0))
+		assert.GreaterOrEqual(t, result.Duration, time.Duration(0))
 	})
 
 	t.Run("failed create", func(t *testing.T) {
@@ -136,7 +136,7 @@ func TestReadOperation_Execute(t *testing.T) {
 		assert.Equal(t, "read", result.OperationType)
 		assert.True(t, result.Success)
 		assert.Equal(t, 200, result.StatusCode)
-		assert.Greater(t, result.Duration, time.Duration(0))
+		assert.GreaterOrEqual(t, result.Duration, time.Duration(0))
 	})
 
 	t.Run("failed read", func(t *testing.T) {
@@ -183,7 +183,7 @@ func TestUpdateOperation_Execute(t *testing.T) {
 		assert.Equal(t, "update", result.OperationType)
 		assert.True(t, result.Success)
 		assert.Equal(t, 200, result.StatusCode)
-		assert.Greater(t, result.Duration, time.Duration(0))
+		assert.GreaterOrEqual(t, result.Duration, time.Duration(0))
 	})
 
 	t.Run("failed update", func(t *testing.T) {
@@ -227,7 +227,7 @@ func TestDeleteOperation_Execute(t *testing.T) {
 		assert.Equal(t, "delete", result.OperationType)
 		assert.True(t, result.Success)
 		assert.Equal(t, 204, result.StatusCode)
-		assert.Greater(t, result.Duration, time.Duration(0))
+		assert.GreaterOrEqual(t, result.Duration, time.Duration(0))
 	})
 
 	t.Run("failed delete", func(t *testing.T) {

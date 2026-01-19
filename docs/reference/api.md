@@ -10,6 +10,36 @@ All API endpoints are prefixed with `/api/v1`, except for the health check.
 
 Syntrix uses JWT (JSON Web Tokens) for authentication.
 
+### Sign Up
+
+Create a new user account and receive a token pair.
+
+**Endpoint:** `POST /auth/v1/signup`
+
+**Request Body:**
+
+```json
+{
+  "username": "newuser",
+  "password": "securepassword123",
+  "email": "user@example.com"
+}
+```
+
+**Response (200 OK):**
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1Ni...",
+  "refresh_token": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "expires_in": 3600
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Invalid request body or database is required
+- `409 Conflict`: Username already exists
+
 ### Login
 
 Authenticate a user and receive a token pair (Access Token and Refresh Token).
