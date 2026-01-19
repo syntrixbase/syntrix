@@ -39,9 +39,11 @@ type DedupHandler struct {
 }
 
 // dedupEntry tracks duplicate log occurrences
+// Stores the handler that should be used to output this record
 type dedupEntry struct {
-	record slog.Record
-	count  int
+	record  slog.Record
+	handler slog.Handler // The handler to use when flushing this record
+	count   int
 }
 
 // DedupHandlerConfig holds configuration for DedupHandler
@@ -112,10 +114,11 @@ func (h *DedupHandler) Handle(ctx context.Context, r slog.Record) error {
 		// Duplicate found, increment count
 		entry.count++
 	} else {
-		// New entry
+		// New entry - store record AND the handler to use for this record
 		h.state.dedupMap[key] = &dedupEntry{
-			record: r.Clone(),
-			count:  1,
+			record:  r.Clone(),
+			handler: h.handler, // Store the handler that should output this record
+			count:   1,
 		}
 		h.state.dedupOrder = append(h.state.dedupOrder, key)
 
@@ -200,8 +203,14 @@ func (h *DedupHandler) flushBatchLocked() {
 		return
 	}
 
-	// Collect all records to flush while holding the lock
-	records := make([]slog.Record, 0, len(h.state.dedupOrder))
+	// Collect all entries to flush while holding the lock
+	// Each entry contains both the record AND the handler to use
+	type flushEntry struct {
+		record  slog.Record
+		handler slog.Handler
+	}
+	entries := make([]flushEntry, 0, len(h.state.dedupOrder))
+
 	for _, key := range h.state.dedupOrder {
 		entry := h.state.dedupMap[key]
 
@@ -218,20 +227,23 @@ func (h *DedupHandler) flushBatchLocked() {
 			r.AddAttrs(slog.Int("repeated_count", entry.count))
 		}
 
-		records = append(records, r)
+		entries = append(entries, flushEntry{
+			record:  r,
+			handler: entry.handler, // Use the handler stored with this entry
+		})
 	}
 
 	// Clear the batch before releasing the lock
 	h.state.dedupMap = make(map[uint64]*dedupEntry)
 	h.state.dedupOrder = h.state.dedupOrder[:0]
 
-	// Release the lock before calling the underlying handler
+	// Release the lock before calling the underlying handlers
 	// This prevents deadlock if the handler logs anything
 	h.state.mu.Unlock()
 
-	// Send all records to underlying handler (this adds the timestamp)
-	for _, r := range records {
-		_ = h.handler.Handle(context.Background(), r)
+	// Send each record to its corresponding handler
+	for _, e := range entries {
+		_ = e.handler.Handle(context.Background(), e.record)
 	}
 
 	// Re-acquire the lock before returning
