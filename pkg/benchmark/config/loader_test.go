@@ -25,8 +25,6 @@ workers: 50
 
 auth:
   database: "testdb"
-  username: "testuser"
-  password: "testpass"
 
 scenario:
   type: "crud"
@@ -70,8 +68,6 @@ output:
 	assert.Equal(t, 50, config.Workers)
 
 	assert.Equal(t, "testdb", config.Auth.Database)
-	assert.Equal(t, "testuser", config.Auth.Username)
-	assert.Equal(t, "testpass", config.Auth.Password)
 
 	assert.Equal(t, "crud", config.Scenario.Type)
 	assert.Len(t, config.Scenario.Operations, 2)

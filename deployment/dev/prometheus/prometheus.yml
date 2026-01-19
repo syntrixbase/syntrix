@@ -1,42 +1,40 @@
 # Prometheus Configuration for Syntrix Development
 # =================================================
+# Optimized for low CPU usage when idle
 
 global:
-  scrape_interval: 15s      # How often to scrape targets
-  evaluation_interval: 15s  # How often to evaluate rules
+  scrape_interval: 60s      # Increased to 60s - minimal CPU impact
+  evaluation_interval: 60s  # Increased to 60s
   # Prometheus 3.x requires fallback protocol when Content-Type is missing
   scrape_protocols: ["OpenMetricsText1.0.0", "OpenMetricsText0.0.1", "PrometheusText1.0.0", "PrometheusText0.0.4"]
   external_labels:
     environment: "dev"
     cluster: "local"
 
-# Alerting configuration
+# Alerting configuration - disabled for dev to reduce CPU
 alerting:
   alertmanagers: []
-  # Uncomment when Alertmanager is configured
-  # alertmanagers:
-  #   - static_configs:
-  #       - targets: ["alertmanager:9093"]
 
-# Rule files
-rule_files:
-  - "alerts.yml"
+# Rule files - commented out to disable rule evaluation
+# rule_files:
+#   - "alerts.yml"
 
 # Scrape configurations
 scrape_configs:
   # =============================================================================
-  # Prometheus Self-Monitoring
+  # Prometheus Self-Monitoring (optional - can be disabled to save CPU)
   # =============================================================================
-  - job_name: "prometheus"
-    static_configs:
-      - targets: ["localhost:9090"]
-        labels:
-          service: "prometheus"
+  # - job_name: "prometheus"
+  #   static_configs:
+  #     - targets: ["localhost:9090"]
+  #       labels:
+  #         service: "prometheus"
 
   # =============================================================================
   # Syntrix Application
   # =============================================================================
   - job_name: "syntrix"
+    scrape_interval: 60s  # Override global for this job
     # When running Syntrix outside Docker (local development)
     static_configs:
       - targets: ["host.docker.internal:8080"]
@@ -44,25 +42,23 @@ scrape_configs:
           service: "syntrix"
           mode: "standalone"
 
-    # Metric relabeling to add consistent labels
+    # Metric relabeling to filter out unnecessary metrics
     metric_relabel_configs:
-      # Keep only metrics with syntrix_, puller_, trigger_, gateway_, query_, indexer_, streamer_ prefixes
-      # or standard go_*, process_* metrics
+      # Keep only Syntrix-specific metrics and essential Go metrics
       - source_labels: [__name__]
-        regex: "(syntrix_|puller_|trigger_|gateway_|query_|indexer_|streamer_|go_|process_|promhttp_).*"
+        regex: "(syntrix_|puller_|trigger_|gateway_|query_|indexer_|streamer_|go_goroutines|go_memstats_alloc_bytes|process_cpu_seconds_total).*"
         action: keep
 
   # =============================================================================
-  # Infrastructure Monitoring
+  # Infrastructure Monitoring (optional - can be disabled to save CPU)
   # =============================================================================
-  - job_name: "nats"
-    static_configs:
-      - targets: ["nats:8222"]
-        labels:
-          service: "nats"
-    metrics_path: "/varz"
-    # NATS exposes metrics in a non-standard format, this is for basic health
-    # For full NATS metrics, use nats-exporter
+  # - job_name: "nats"
+  #   scrape_interval: 60s
+  #   static_configs:
+  #     - targets: ["nats:8222"]
+  #       labels:
+  #         service: "nats"
+  #   metrics_path: "/varz"
 
   # =============================================================================
   # MongoDB (requires mongodb_exporter, optional)
