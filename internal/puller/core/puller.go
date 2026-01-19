@@ -363,11 +363,11 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 		}
 		evt.Backend = backend.name
 
-		logger.Debug("Puller: received event from mongo",
+		logger.Info("Puller: received event from mongo",
 			"eventID", evt.EventID,
 			"op", evt.OpType,
 			"backend", evt.Backend,
-			"docID", evt.MgoDocID,
+			"_id", evt.MgoDocID,
 		)
 
 		// Check for gaps
