@@ -29,6 +29,12 @@ type service struct {
 	publisher TaskPublisher
 	triggers  []*types.Trigger
 	mu        sync.RWMutex
+
+	// Async checkpoint saving
+	latestProgress   string
+	progressMu       sync.Mutex
+	checkpointNotify chan struct{}
+	checkpointDone   chan struct{}
 }
 
 // LoadTriggers validates and loads the given triggers.
@@ -53,12 +59,23 @@ func (s *service) Start(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize async checkpoint saving
+	s.checkpointNotify = make(chan struct{}, 1)
+	s.checkpointDone = make(chan struct{})
+
+	// Start checkpoint saver goroutine
+	go s.checkpointSaver(ctx)
+
 	for {
 		select {
 		case <-ctx.Done():
+			// Wait for checkpoint saver to finish
+			<-s.checkpointDone
 			return nil
 		case evt, ok := <-stream:
 			if !ok {
+				// Wait for checkpoint saver to finish
+				<-s.checkpointDone
 				return nil
 			}
 
@@ -114,12 +131,51 @@ func (s *service) Start(ctx context.Context) error {
 				}
 			}
 
+			// Update latest progress and notify (non-blocking)
 			if evt.Progress != "" {
-				if err := s.watcher.SaveCheckpoint(ctx, evt.Progress); err != nil {
-					slog.Error("Failed to save checkpoint", "error", err)
+				s.progressMu.Lock()
+				s.latestProgress = evt.Progress
+				s.progressMu.Unlock()
+
+				// Non-blocking send to notify
+				select {
+				case s.checkpointNotify <- struct{}{}:
+				default:
+					// Already notified, skip
 				}
 			}
 		}
+	}
+}
+
+// checkpointSaver runs in a goroutine and saves checkpoints asynchronously.
+func (s *service) checkpointSaver(ctx context.Context) {
+	defer close(s.checkpointDone)
+
+	for {
+		select {
+		case <-ctx.Done():
+			// Save final checkpoint before exit
+			s.saveLatestCheckpoint(ctx)
+			return
+		case <-s.checkpointNotify:
+			s.saveLatestCheckpoint(ctx)
+		}
+	}
+}
+
+// saveLatestCheckpoint saves the current latest progress.
+func (s *service) saveLatestCheckpoint(ctx context.Context) {
+	s.progressMu.Lock()
+	progress := s.latestProgress
+	s.progressMu.Unlock()
+
+	if progress == "" {
+		return
+	}
+
+	if err := s.watcher.SaveCheckpoint(ctx, progress); err != nil {
+		slog.Error("Failed to save checkpoint", "error", err)
 	}
 }
 
