@@ -175,7 +175,7 @@ func (c *HTTPClient) doRequest(ctx context.Context, method, urlStr string, body 
 	// Parse response if result is provided
 	if result != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
+			return fmt.Errorf("failed to unmarshal response: %w, body: %s", err, string(respBody))
 		}
 	}
 
