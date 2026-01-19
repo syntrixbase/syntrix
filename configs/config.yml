@@ -114,3 +114,42 @@ indexer:
     batch_interval: 100ms
     queue_size: 10000
     block_cache_size: 134217728
+
+# Logging configuration
+logging:
+  # Global log level: debug, info, warn, error
+  level: "info"
+
+  # Log format: text (human-readable) or json (machine-readable)
+  format: "text"
+
+  # Log directory (relative or absolute path)
+  # Relative paths are resolved from the parent of the config directory
+  # Default: "logs" (creates ./logs directory)
+  dir: "logs"
+
+  # File rotation settings
+  rotation:
+    # Maximum size in megabytes before rotation (default: 100)
+    max_size: 100
+
+    # Maximum number of old log files to retain (default: 10)
+    max_backups: 10
+
+    # Maximum days to retain old log files (default: 30)
+    max_age: 30
+
+    # Compress rotated files with gzip (default: true)
+    compress: true
+
+  # Console output (stdout) configuration
+  console:
+    enabled: true
+    level: "info"    # Can override global level
+    format: "text"   # text or json
+
+  # Main file output configuration
+  file:
+    enabled: true
+    level: "info"    # Can override global level
+    format: "text"   # text or json

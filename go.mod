@@ -6,7 +6,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0
 	github.com/cockroachdb/pebble v1.1.5
 	github.com/golang-jwt/jwt/v5 v5.3.0
-	github.com/golang/protobuf v1.5.4
 	github.com/google/btree v1.1.3
 	github.com/google/cel-go v0.26.1
 	github.com/google/uuid v1.6.0
@@ -65,4 +64,5 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251029180050-ab9386a59fda // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251029180050-ab9386a59fda // indirect
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 )
