@@ -10,21 +10,32 @@ import (
 	"github.com/cespare/xxhash/v2"
 )
 
+// sharedState holds the shared mutable state for deduplication
+// All DedupHandler instances created via WithAttrs/WithGroup share the same state
+type sharedState struct {
+	mu         sync.Mutex
+	dedupMap   map[uint64]*dedupEntry
+	dedupOrder []uint64
+	closed     bool
+}
+
 // DedupHandler wraps a slog.Handler and deduplicates identical log entries
 // before they get timestamps added. This prevents logs with identical content
 // but different timestamps from being treated as different logs.
 type DedupHandler struct {
 	handler     slog.Handler
-	mu          *sync.Mutex // Pointer to allow sharing
-	dedupMap    map[uint64]*dedupEntry
-	dedupOrder  []uint64
+	state       *sharedState // Pointer to shared mutable state
 	flushTicker *time.Ticker
 	stopChan    chan struct{}
-	wg          *sync.WaitGroup // Pointer to allow sharing
+	wg          *sync.WaitGroup
 
-	// Config
+	// Config (immutable, can be copied)
 	batchSize    int
 	flushTimeout time.Duration
+
+	// Attributes from WithAttrs (for hash computation)
+	presetAttrs []slog.Attr
+	groups      []string
 }
 
 // dedupEntry tracks duplicate log occurrences
@@ -57,15 +68,18 @@ func NewDedupHandler(handler slog.Handler) *DedupHandler {
 // NewDedupHandlerWithConfig creates a new deduplicating handler with custom config
 func NewDedupHandlerWithConfig(handler slog.Handler, cfg DedupHandlerConfig) *DedupHandler {
 	dh := &DedupHandler{
-		handler:      handler,
-		mu:           &sync.Mutex{}, // Allocate mutex pointer
-		dedupMap:     make(map[uint64]*dedupEntry),
-		dedupOrder:   make([]uint64, 0, cfg.BatchSize),
+		handler: handler,
+		state: &sharedState{
+			dedupMap:   make(map[uint64]*dedupEntry),
+			dedupOrder: make([]uint64, 0, cfg.BatchSize),
+		},
 		flushTicker:  time.NewTicker(cfg.FlushTimeout),
 		stopChan:     make(chan struct{}),
-		wg:           &sync.WaitGroup{}, // Allocate waitgroup pointer
+		wg:           &sync.WaitGroup{},
 		batchSize:    cfg.BatchSize,
 		flushTimeout: cfg.FlushTimeout,
+		presetAttrs:  nil,
+		groups:       nil,
 	}
 
 	dh.wg.Add(1)
@@ -82,25 +96,32 @@ func (h *DedupHandler) Enabled(ctx context.Context, level slog.Level) bool {
 // Handle deduplicates and buffers log records
 func (h *DedupHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Compute hash of record content (excluding time)
+	// Include preset attrs and groups in the hash
 	key := h.hashRecord(r)
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
+	h.state.mu.Lock()
+	defer h.state.mu.Unlock()
 
-	if entry, exists := h.dedupMap[key]; exists {
+	// Check if already closed
+	if h.state.closed {
+		// Fallback: directly send to handler without dedup
+		return h.handler.Handle(ctx, r)
+	}
+
+	if entry, exists := h.state.dedupMap[key]; exists {
 		// Duplicate found, increment count
 		entry.count++
 	} else {
 		// New entry
-		h.dedupMap[key] = &dedupEntry{
+		h.state.dedupMap[key] = &dedupEntry{
 			record: r.Clone(),
 			count:  1,
 		}
-		h.dedupOrder = append(h.dedupOrder, key)
+		h.state.dedupOrder = append(h.state.dedupOrder, key)
 
 		// Flush if batch is full
-		if len(h.dedupOrder) >= h.batchSize {
-			h.flushBatch()
+		if len(h.state.dedupOrder) >= h.batchSize {
+			h.flushBatchLocked()
 		}
 	}
 
@@ -108,7 +129,7 @@ func (h *DedupHandler) Handle(ctx context.Context, r slog.Record) error {
 }
 
 // hashRecord computes a hash of the record content (level, message, attributes)
-// excluding the timestamp
+// excluding the timestamp. Includes preset attributes and groups.
 func (h *DedupHandler) hashRecord(r slog.Record) uint64 {
 	hash := xxhash.New()
 
@@ -120,7 +141,22 @@ func (h *DedupHandler) hashRecord(r slog.Record) uint64 {
 	hash.WriteString(r.Message)
 	hash.WriteString("|")
 
-	// Hash attributes
+	// Hash groups (important for distinguishing loggers with different groups)
+	for _, g := range h.groups {
+		hash.WriteString("g:")
+		hash.WriteString(g)
+		hash.WriteString("|")
+	}
+
+	// Hash preset attributes (from WithAttrs)
+	for _, a := range h.presetAttrs {
+		hash.WriteString(a.Key)
+		hash.WriteString("=")
+		hash.WriteString(a.Value.String())
+		hash.WriteString("|")
+	}
+
+	// Hash record attributes
 	r.Attrs(func(a slog.Attr) bool {
 		hash.WriteString(a.Key)
 		hash.WriteString("=")
@@ -139,42 +175,43 @@ func (h *DedupHandler) flushLoop() {
 	for {
 		select {
 		case <-h.flushTicker.C:
-			h.mu.Lock()
-			if len(h.dedupOrder) > 0 {
-				h.flushBatch()
+			h.state.mu.Lock()
+			if len(h.state.dedupOrder) > 0 && !h.state.closed {
+				h.flushBatchLocked()
 			}
-			h.mu.Unlock()
+			h.state.mu.Unlock()
 
 		case <-h.stopChan:
-			h.mu.Lock()
-			if len(h.dedupOrder) > 0 {
-				h.flushBatch()
+			// Graceful shutdown: flush remaining logs even if closed
+			h.state.mu.Lock()
+			if len(h.state.dedupOrder) > 0 {
+				h.flushBatchLocked()
 			}
-			h.mu.Unlock()
+			h.state.mu.Unlock()
 			return
 		}
 	}
 }
 
-// flushBatch writes all deduplicated entries to the underlying handler
-// Must be called with h.mu locked
-func (h *DedupHandler) flushBatch() {
-	if len(h.dedupOrder) == 0 {
+// flushBatchLocked writes all deduplicated entries to the underlying handler
+// Must be called with h.state.mu locked. Temporarily releases lock during handler calls.
+func (h *DedupHandler) flushBatchLocked() {
+	if len(h.state.dedupOrder) == 0 {
 		return
 	}
 
 	// Collect all records to flush while holding the lock
-	records := make([]slog.Record, 0, len(h.dedupOrder))
-	for _, key := range h.dedupOrder {
-		entry := h.dedupMap[key]
+	records := make([]slog.Record, 0, len(h.state.dedupOrder))
+	for _, key := range h.state.dedupOrder {
+		entry := h.state.dedupMap[key]
 
-		// Safety check: entry might be nil in rare race conditions
+		// Safety check: entry might be nil in rare conditions
 		if entry == nil {
 			continue
 		}
 
 		// Clone the record to avoid modifying the original
-		r := entry.record
+		r := entry.record.Clone()
 
 		if entry.count > 1 {
 			// Add repeat count as an attribute
@@ -185,12 +222,12 @@ func (h *DedupHandler) flushBatch() {
 	}
 
 	// Clear the batch before releasing the lock
-	h.dedupMap = make(map[uint64]*dedupEntry)
-	h.dedupOrder = h.dedupOrder[:0]
+	h.state.dedupMap = make(map[uint64]*dedupEntry)
+	h.state.dedupOrder = h.state.dedupOrder[:0]
 
 	// Release the lock before calling the underlying handler
 	// This prevents deadlock if the handler logs anything
-	h.mu.Unlock()
+	h.state.mu.Unlock()
 
 	// Send all records to underlying handler (this adds the timestamp)
 	for _, r := range records {
@@ -198,29 +235,34 @@ func (h *DedupHandler) flushBatch() {
 	}
 
 	// Re-acquire the lock before returning
-	h.mu.Lock()
+	h.state.mu.Lock()
 }
 
 // WithAttrs returns a new handler with additional attributes.
-// We wrap the underlying handler's WithAttrs, but keep using the same
-// DedupHandler to maintain shared deduplication state.
 func (h *DedupHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
-	// Wrap the underlying handler's WithAttrs result
-	// This keeps the deduplication at the top level
-	newHandler := h.handler.WithAttrs(attrs)
+	if len(attrs) == 0 {
+		return h
+	}
 
-	// Return a new DedupHandler that shares ALL state with the original
-	// including the mutex, maps, and goroutine
+	// Merge preset attrs
+	newPresetAttrs := make([]slog.Attr, len(h.presetAttrs)+len(attrs))
+	copy(newPresetAttrs, h.presetAttrs)
+	copy(newPresetAttrs[len(h.presetAttrs):], attrs)
+
+	// Copy groups
+	newGroups := make([]string, len(h.groups))
+	copy(newGroups, h.groups)
+
 	return &DedupHandler{
-		handler:      newHandler,
-		mu:           h.mu,          // Share mutex
-		dedupMap:     h.dedupMap,    // Share dedup state
-		dedupOrder:   h.dedupOrder,  // Share order
-		flushTicker:  h.flushTicker, // Share ticker
-		stopChan:     h.stopChan,    // Share stop channel
-		wg:           h.wg,          // Share wait group
+		handler:      h.handler.WithAttrs(attrs),
+		state:        h.state, // Share state pointer
+		flushTicker:  h.flushTicker,
+		stopChan:     h.stopChan,
+		wg:           h.wg,
 		batchSize:    h.batchSize,
 		flushTimeout: h.flushTimeout,
+		presetAttrs:  newPresetAttrs,
+		groups:       newGroups,
 	}
 }
 
@@ -230,27 +272,44 @@ func (h *DedupHandler) WithGroup(name string) slog.Handler {
 		return h
 	}
 
-	// Wrap the underlying handler's WithGroup result
-	newHandler := h.handler.WithGroup(name)
+	// Copy preset attrs
+	newPresetAttrs := make([]slog.Attr, len(h.presetAttrs))
+	copy(newPresetAttrs, h.presetAttrs)
 
-	// Return a new DedupHandler that shares ALL state with the original
+	// Append group
+	newGroups := make([]string, len(h.groups)+1)
+	copy(newGroups, h.groups)
+	newGroups[len(h.groups)] = name
+
 	return &DedupHandler{
-		handler:      newHandler,
-		mu:           h.mu,          // Share mutex
-		dedupMap:     h.dedupMap,    // Share dedup state
-		dedupOrder:   h.dedupOrder,  // Share order
-		flushTicker:  h.flushTicker, // Share ticker
-		stopChan:     h.stopChan,    // Share stop channel
-		wg:           h.wg,          // Share wait group
+		handler:      h.handler.WithGroup(name),
+		state:        h.state, // Share state pointer
+		flushTicker:  h.flushTicker,
+		stopChan:     h.stopChan,
+		wg:           h.wg,
 		batchSize:    h.batchSize,
 		flushTimeout: h.flushTimeout,
+		presetAttrs:  newPresetAttrs,
+		groups:       newGroups,
 	}
 }
 
 // Close gracefully shuts down the deduplicating handler
 func (h *DedupHandler) Close() error {
-	close(h.stopChan)
+	h.state.mu.Lock()
+	if h.state.closed {
+		h.state.mu.Unlock()
+		return nil // Already closed
+	}
+	h.state.closed = true
+	h.state.mu.Unlock()
+
+	// Stop the ticker
 	h.flushTicker.Stop()
+
+	// Signal stop and wait
+	close(h.stopChan)
 	h.wg.Wait()
+
 	return nil
 }
