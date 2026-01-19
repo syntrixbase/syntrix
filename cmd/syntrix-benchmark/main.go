@@ -104,7 +104,9 @@ func runBenchmark(args []string) error {
 			Duration: 10 * time.Second,
 			Workers:  5,
 			Auth: types.AuthConfig{
-				Token: "",
+				Token:          "",
+				Database:       "default",
+				PrivateKeyFile: "configs/keys/auth_private.pem", // Use full path for default config
 			},
 			Scenario: types.ScenarioConfig{
 				Type: "crud",
@@ -115,6 +117,7 @@ func runBenchmark(args []string) error {
 				SeedData:     0,
 				Cleanup:      true,
 			},
+			BaseDir: "configs", // Set base directory for default config
 		}
 	}
 
@@ -135,7 +138,8 @@ func runBenchmark(args []string) error {
 
 	// Always auto-generate token
 	fmt.Println("Generating authentication token...")
-	cfg.Auth.Token, err = utils.GenerateBenchmarkToken("keys/auth_private.pem", "benchmark", 365*24*time.Hour)
+	// Use the resolved private key path from config
+	cfg.Auth.Token, err = utils.GenerateBenchmarkToken(cfg.Auth.PrivateKeyFile, "benchmark", 365*24*time.Hour)
 	if err != nil {
 		return fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -163,15 +167,17 @@ func runBenchmark(args []string) error {
 
 	// Create runner
 	benchRunner := runner.NewBasicRunner()
-	benchRunner.SetScenario(benchScenario)
-	benchRunner.SetMetricsCollector(collector)
 
-	// Initialize runner
+	// Initialize runner first (before setting scenario and metrics)
 	ctx := context.Background()
 	if err := benchRunner.Initialize(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to initialize runner: %w", err)
 	}
 	defer benchRunner.Cleanup(ctx)
+
+	// Set scenario and metrics collector after initialization
+	benchRunner.SetScenario(benchScenario)
+	benchRunner.SetMetricsCollector(collector)
 
 	// Create reporter
 	rep := reporter.NewConsoleReporter(os.Stdout, !noColor)

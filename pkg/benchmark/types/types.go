@@ -34,12 +34,16 @@ type Config struct {
 
 	// Output configuration
 	Output OutputConfig `json:"output" yaml:"output"`
+
+	// Base directory for resolving relative paths (not serialized)
+	BaseDir string `json:"-" yaml:"-"`
 }
 
 // AuthConfig holds authentication configuration.
 type AuthConfig struct {
-	Database string `json:"database" yaml:"database"`
-	Token    string `json:"-" yaml:"-"` // Auto-generated at runtime, not configurable
+	Database       string `json:"database" yaml:"database"`
+	Token          string `json:"-" yaml:"-"`                               // Auto-generated at runtime, not configurable
+	PrivateKeyFile string `json:"private_key_file" yaml:"private_key_file"` // Path to private key for token generation
 }
 
 // ScenarioConfig defines the benchmark scenario.

@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/syntrixbase/syntrix/pkg/benchmark/types"
@@ -22,8 +23,16 @@ func Load(path string) (*types.Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Set base directory from config file path
+	// If config file is "configs/benchmark.yaml", baseDir becomes "configs"
+	configDir := filepath.Dir(path)
+	config.BaseDir = configDir
+
 	// Set defaults
 	applyDefaults(&config)
+
+	// Resolve relative paths based on config directory
+	resolvePaths(&config)
 
 	// Validate
 	if err := Validate(&config); err != nil {
@@ -53,6 +62,10 @@ func applyDefaults(config *types.Config) {
 
 	if config.Auth.Database == "" {
 		config.Auth.Database = "default"
+	}
+
+	if config.Auth.PrivateKeyFile == "" {
+		config.Auth.PrivateKeyFile = "keys/auth_private.pem"
 	}
 
 	if config.Data.CollectionPrefix == "" {
@@ -93,6 +106,23 @@ func applyDefaults(config *types.Config) {
 
 	if !config.Output.Console {
 		config.Output.Console = true
+	}
+}
+
+// resolvePaths resolves relative paths based on the config base directory.
+func resolvePaths(config *types.Config) {
+	if config.BaseDir == "" {
+		return
+	}
+
+	// Resolve private key file path
+	if config.Auth.PrivateKeyFile != "" && !filepath.IsAbs(config.Auth.PrivateKeyFile) {
+		config.Auth.PrivateKeyFile = filepath.Join(config.BaseDir, config.Auth.PrivateKeyFile)
+	}
+
+	// Resolve output file path if specified
+	if config.Output.File != "" && !filepath.IsAbs(config.Output.File) {
+		config.Output.File = filepath.Join(config.BaseDir, config.Output.File)
 	}
 }
 

@@ -23,6 +23,8 @@ workers: 10
 auth:
   # Database to use (default: "default")
   database: "default"
+  # Private key file for token generation (relative to config directory)
+  private_key_file: "keys/auth_private.pem"
   # Note: Authentication tokens are generated automatically at runtime
 
 # Scenario configuration
