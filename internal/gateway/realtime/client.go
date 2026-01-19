@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -128,22 +128,22 @@ func (c *Client) readPump() {
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
-	log.Println("[Info][WS] WebSocket connection established")
+	slog.Info("WS: WebSocket connection established")
 
 	for {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("[Warning][WS] Websocket connection closed: %v", err)
+				slog.Warn("WS: Websocket connection closed", "error", err)
 			} else {
-				log.Println("[Info][WS] WebSocket connection closed")
+				slog.Info("WS: WebSocket connection closed")
 			}
 			break
 		}
 
 		var msg BaseMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("[Warning][WS] unmarshalling message: %v", err)
+			slog.Warn("WS: unmarshalling message", "error", err)
 			continue
 		}
 
@@ -152,7 +152,7 @@ func (c *Client) readPump() {
 }
 
 func (c *Client) handleMessage(msg BaseMessage) {
-	log.Printf("[Info][WS] Received message type=%s id=%s", msg.Type, msg.ID)
+	slog.Info("WS: Received message", "type", msg.Type, "id", msg.ID)
 	switch msg.Type {
 	case TypeAuth:
 		c.handleAuth(msg)
@@ -163,14 +163,14 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		}
 		var payload SubscribePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			log.Printf("[Error][WS] unmarshalling subscribe payload: %v", err)
+			slog.Error("WS: unmarshalling subscribe payload", "error", err)
 			return
 		}
 
 		// Subscribe to Streamer
 		streamerSubID, err := c.hub.SubscribeToStream(c.database, payload.Query.Collection, payload.Query.Filters)
 		if err != nil {
-			log.Printf("[Error][WS] Failed to subscribe: %v", err)
+			slog.Error("WS: Failed to subscribe", "error", err)
 			errPayload, _ := json.Marshal(map[string]string{"message": "Subscribe failed: " + err.Error()})
 			c.send <- BaseMessage{
 				ID:      msg.ID,
@@ -189,7 +189,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		c.mu.Unlock()
 
 		c.hub.RegisterSubscription(streamerSubID, c, msg.ID)
-		log.Printf("[Info][WS] Subscribed to collection=%s id=%s includeData=%v", payload.Query.Collection, msg.ID, payload.IncludeData)
+		slog.Info("WS: Subscribed", "collection", payload.Query.Collection, "id", msg.ID, "includeData", payload.IncludeData)
 
 		// Send Ack
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeSubscribeAck}
@@ -207,7 +207,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 
 			resp, err := c.queryService.Pull(ctx, c.database, req)
 			if err != nil {
-				log.Printf("[Error][WS] Snapshot pull failed: %v", err)
+				slog.Error("WS: Snapshot pull failed", "error", err)
 				return
 			}
 
@@ -234,7 +234,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 		}
 		var payload UnsubscribePayload
 		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
-			log.Printf("[Warning][WS] unmarshalling unsubscribe payload: %v", err)
+			slog.Warn("WS: unmarshalling unsubscribe payload", "error", err)
 			return
 		}
 		c.mu.Lock()
@@ -250,7 +250,7 @@ func (c *Client) handleMessage(msg BaseMessage) {
 			c.hub.UnregisterSubscription(sid)
 		}
 
-		log.Printf("[Info][WS] Unsubscribed id=%s", payload.ID)
+		slog.Info("WS: Unsubscribed", "id", payload.ID)
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeUnsubscribeAck}
 	}
 }
@@ -293,7 +293,7 @@ func (c *Client) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			log.Printf("[Debug] Client writePump: received message type=%s id=%s", message.Type, message.ID)
+			slog.Debug("Client writePump: received message", "type", message.Type, "id", message.ID)
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if !ok {
 				// The hub closed the channel.
@@ -440,7 +440,7 @@ func ServeWs(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Rea
 
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Println(err)
+		slog.Error("Failed to upgrade WebSocket connection", "error", err)
 		return
 	}
 
@@ -546,7 +546,7 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 			client.hub.UnregisterSubscription(sid)
 		}
 		client.hub.Unregister(client)
-		log.Println("[Info][SSE] connection closed")
+		slog.Info("SSE: connection closed")
 	}()
 
 	// Send initial comment to establish connection
@@ -560,17 +560,17 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 	for {
 		select {
 		case <-ctx.Done():
-			log.Println("[Info][SSE] context cancelled, closing connection")
+			slog.Info("SSE: context cancelled, closing connection")
 			return
 		case <-ticker.C:
 			if _, err := fmt.Fprintf(w, ": heartbeat\n\n"); err != nil {
-				log.Println("[Warning][SSE] heartbeat error:", err)
+				slog.Warn("SSE: heartbeat error", "error", err)
 				return
 			}
 			flusher.Flush()
 		case message, ok := <-client.send:
 			if !ok {
-				log.Println("[Info][SSE] send channel closed")
+				slog.Info("SSE: send channel closed")
 				return
 			}
 			data, err := json.Marshal(message)
@@ -578,7 +578,7 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {
-				log.Println("[Error][SSE] write error:", err)
+				slog.Error("SSE: write error", "error", err)
 				return
 			}
 			flusher.Flush()

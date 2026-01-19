@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -15,8 +16,10 @@ import (
 
 var (
 	// Global state for cleanup
-	logFiles   []*lumberjack.Logger
-	logFilesMu sync.Mutex
+	logFiles      []*lumberjack.Logger
+	asyncWriters  []*AsyncWriter
+	dedupHandlers []*DedupHandler
+	logFilesMu    sync.Mutex
 )
 
 // Initialize sets up the global logger based on configuration
@@ -36,6 +39,7 @@ func Initialize(cfg config.LoggingConfig) error {
 		"dir", cfg.Dir,
 		"console_enabled", cfg.Console.Enabled,
 		"file_enabled", cfg.File.Enabled,
+		"async_enabled", cfg.Async.Enabled,
 	)
 
 	return nil
@@ -70,8 +74,20 @@ func NewLogger(cfg config.LoggingConfig) (*slog.Logger, error) {
 		}
 		registerLogFile(mainFile)
 
+		// Wrap with AsyncWriter if enabled
+		var mainWriter io.Writer = mainFile
+		if cfg.Async.Enabled {
+			asyncWriter := NewAsyncWriterWithConfig(mainFile, AsyncWriterConfig{
+				BufferSize:   cfg.Async.BufferSize,
+				BatchSize:    cfg.Async.BatchSize,
+				FlushTimeout: time.Duration(cfg.Async.FlushTimeout) * time.Millisecond,
+			})
+			registerAsyncWriter(asyncWriter)
+			mainWriter = asyncWriter
+		}
+
 		level := parseLevel(cfg.File.Level)
-		mainHandler := createHandler(mainFile, cfg.File.Format, level)
+		mainHandler := createHandler(mainWriter, cfg.File.Format, level)
 		handlers = append(handlers, mainHandler)
 
 		// Error log file (warn and error only)
@@ -85,7 +101,19 @@ func NewLogger(cfg config.LoggingConfig) (*slog.Logger, error) {
 		}
 		registerLogFile(errorFile)
 
-		errorHandler := createHandler(errorFile, cfg.File.Format, slog.LevelWarn)
+		// Wrap with AsyncWriter if enabled
+		var errorWriter io.Writer = errorFile
+		if cfg.Async.Enabled {
+			asyncWriter := NewAsyncWriterWithConfig(errorFile, AsyncWriterConfig{
+				BufferSize:   cfg.Async.BufferSize,
+				BatchSize:    cfg.Async.BatchSize,
+				FlushTimeout: time.Duration(cfg.Async.FlushTimeout) * time.Millisecond,
+			})
+			registerAsyncWriter(asyncWriter)
+			errorWriter = asyncWriter
+		}
+
+		errorHandler := createHandler(errorWriter, cfg.File.Format, slog.LevelWarn)
 		errorHandler = NewLevelFilter(errorHandler, slog.LevelWarn)
 		handlers = append(handlers, errorHandler)
 	}
@@ -98,6 +126,16 @@ func NewLogger(cfg config.LoggingConfig) (*slog.Logger, error) {
 		handler = NewMultiHandler(handlers...)
 	}
 
+	// Wrap with DedupHandler if enabled
+	if cfg.Dedup.Enabled {
+		dedupHandler := NewDedupHandlerWithConfig(handler, DedupHandlerConfig{
+			BatchSize:    cfg.Dedup.BatchSize,
+			FlushTimeout: time.Duration(cfg.Dedup.FlushTimeout) * time.Millisecond,
+		})
+		registerDedupHandler(dedupHandler)
+		handler = dedupHandler
+	}
+
 	return slog.New(handler), nil
 }
 
@@ -106,6 +144,20 @@ func Shutdown() error {
 	logFilesMu.Lock()
 	defer logFilesMu.Unlock()
 
+	// Close dedup handlers first to flush any pending logs
+	for _, dedupHandler := range dedupHandlers {
+		if err := dedupHandler.Close(); err != nil {
+			return fmt.Errorf("failed to close dedup handler: %w", err)
+		}
+	}
+
+	// Close async writers to ensure all logs are flushed
+	for _, asyncWriter := range asyncWriters {
+		if err := asyncWriter.Close(); err != nil {
+			return fmt.Errorf("failed to close async writer: %w", err)
+		}
+	}
+
 	for _, logFile := range logFiles {
 		if err := logFile.Close(); err != nil {
 			return fmt.Errorf("failed to close log file: %w", err)
@@ -113,6 +165,8 @@ func Shutdown() error {
 	}
 
 	logFiles = nil
+	asyncWriters = nil
+	dedupHandlers = nil
 	return nil
 }
 
@@ -122,6 +176,18 @@ func registerLogFile(logFile *lumberjack.Logger) {
 	logFilesMu.Lock()
 	defer logFilesMu.Unlock()
 	logFiles = append(logFiles, logFile)
+}
+
+func registerAsyncWriter(asyncWriter *AsyncWriter) {
+	logFilesMu.Lock()
+	defer logFilesMu.Unlock()
+	asyncWriters = append(asyncWriters, asyncWriter)
+}
+
+func registerDedupHandler(dedupHandler *DedupHandler) {
+	logFilesMu.Lock()
+	defer logFilesMu.Unlock()
+	dedupHandlers = append(dedupHandlers, dedupHandler)
 }
 
 func parseLevel(level string) slog.Level {
@@ -147,5 +213,6 @@ func createHandler(w io.Writer, format string, level slog.Level) slog.Handler {
 	if format == "json" {
 		return slog.NewJSONHandler(w, opts)
 	}
-	return slog.NewTextHandler(w, opts)
+	// Use custom text handler with format: <TIME>: [<LEVEL>] <MSG> <attributes>
+	return NewTextHandler(w, opts)
 }

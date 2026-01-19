@@ -3,7 +3,7 @@ package cel
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"path"
 	"sync"
 
@@ -186,7 +186,7 @@ func (e *celeEvaluator) getProgram(condition string) (cel.Program, error) {
 		oldest := e.cacheOrder[0]
 		delete(e.prgCache, oldest)
 		e.cacheOrder = e.cacheOrder[1:]
-		log.Printf("[Info] CEL cache full, evicted oldest entry")
+		slog.Info("CEL cache full, evicted oldest entry")
 	}
 
 	e.prgCache[condition] = prg

@@ -2,7 +2,7 @@ package evaluator
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator/watcher"
@@ -64,7 +64,7 @@ func (s *service) Start(ctx context.Context) error {
 
 			// Guard: skip events with no document data
 			if evt.Document == nil && evt.Before == nil {
-				log.Printf("[Warning] Skipping event with nil Document and Before")
+				slog.Warn("Skipping event with nil Document and Before")
 				continue
 			}
 
@@ -75,7 +75,7 @@ func (s *service) Start(ctx context.Context) error {
 			for _, t := range currentTriggers {
 				matched, err := s.evaluator.Evaluate(ctx, t, evt)
 				if err != nil {
-					log.Printf("[Error] Evaluation failed for trigger %s: %v", t.ID, err)
+					slog.Error("Evaluation failed for trigger", "trigger_id", t.ID, "error", err)
 					continue
 				}
 				if matched {
@@ -108,7 +108,7 @@ func (s *service) Start(ctx context.Context) error {
 					}
 					if s.publisher != nil {
 						if err := s.publisher.Publish(ctx, task); err != nil {
-							log.Printf("[Error] Failed to publish task for trigger %s: %v", t.ID, err)
+							slog.Error("Failed to publish task for trigger", "trigger_id", t.ID, "error", err)
 						}
 					}
 				}
@@ -116,7 +116,7 @@ func (s *service) Start(ctx context.Context) error {
 
 			if evt.Progress != "" {
 				if err := s.watcher.SaveCheckpoint(ctx, evt.Progress); err != nil {
-					log.Printf("[Error] Failed to save checkpoint: %v", err)
+					slog.Error("Failed to save checkpoint", "error", err)
 				}
 			}
 		}

@@ -28,15 +28,12 @@ func NewWorker(id int, client types.Client) *Worker {
 // Start begins worker execution.
 func (w *Worker) Start(ctx context.Context) error {
 	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.running {
-		w.mu.Unlock()
 		return fmt.Errorf("worker %d is already running", w.id)
 	}
 	w.running = true
-	w.mu.Unlock()
-
-	// Wait for context cancellation
-	<-ctx.Done()
 
 	return nil
 }

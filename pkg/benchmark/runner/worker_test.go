@@ -3,7 +3,6 @@ package runner
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -24,23 +23,11 @@ func TestWorker_Start(t *testing.T) {
 		mockCli := &mockClient{}
 		worker := NewWorker(1, mockCli)
 
-		ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
-		defer cancel()
+		ctx := context.Background()
+		err := worker.Start(ctx)
 
-		// Start in goroutine since it blocks until context is done
-		done := make(chan error, 1)
-		go func() {
-			done <- worker.Start(ctx)
-		}()
-
-		// Worker should be running
-		time.Sleep(10 * time.Millisecond)
-		assert.True(t, worker.IsRunning())
-
-		// Wait for context to finish
-		<-ctx.Done()
-		err := <-done
 		assert.NoError(t, err)
+		assert.True(t, worker.IsRunning())
 	})
 
 	t.Run("already running", func(t *testing.T) {

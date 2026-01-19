@@ -100,6 +100,7 @@ func runBenchmark(args []string) error {
 	} else {
 		// Create default config
 		cfg = &types.Config{
+			Name:     "benchmark",
 			Target:   "http://localhost:8080",
 			Duration: 10 * time.Second,
 			Workers:  5,
@@ -110,12 +111,22 @@ func runBenchmark(args []string) error {
 			},
 			Scenario: types.ScenarioConfig{
 				Type: "crud",
+				Operations: []types.OperationConfig{
+					{Type: "create", Weight: 25},
+					{Type: "read", Weight: 25},
+					{Type: "update", Weight: 25},
+					{Type: "delete", Weight: 25},
+				},
 			},
 			Data: types.DataConfig{
 				FieldsCount:  10,
 				DocumentSize: "1KB",
 				SeedData:     0,
 				Cleanup:      true,
+			},
+			Output: types.OutputConfig{
+				Format:  "json",
+				Console: true,
 			},
 			BaseDir: "configs", // Set base directory for default config
 		}

@@ -15,6 +15,8 @@ type LoggingConfig struct {
 	Rotation RotationConfig `yaml:"rotation"`
 	Console  ConsoleConfig  `yaml:"console"`
 	File     FileConfig     `yaml:"file"`
+	Async    AsyncConfig    `yaml:"async"`
+	Dedup    DedupConfig    `yaml:"dedup"`
 }
 
 // RotationConfig holds log rotation settings
@@ -39,6 +41,21 @@ type FileConfig struct {
 	Format  string `yaml:"format"` // text or json
 }
 
+// AsyncConfig holds async logging configuration
+type AsyncConfig struct {
+	Enabled      bool `yaml:"enabled"`       // enable async logging
+	BufferSize   int  `yaml:"buffer_size"`   // channel buffer size (default: 10000)
+	BatchSize    int  `yaml:"batch_size"`    // batch size before flush (default: 100)
+	FlushTimeout int  `yaml:"flush_timeout"` // flush timeout in milliseconds (default: 100)
+}
+
+// DedupConfig holds deduplication configuration
+type DedupConfig struct {
+	Enabled      bool `yaml:"enabled"`       // enable log deduplication
+	BatchSize    int  `yaml:"batch_size"`    // batch size before flush (default: 100)
+	FlushTimeout int  `yaml:"flush_timeout"` // flush timeout in milliseconds (default: 1000)
+}
+
 // DefaultLoggingConfig returns default logging configuration
 func DefaultLoggingConfig() LoggingConfig {
 	return LoggingConfig{
@@ -60,6 +77,17 @@ func DefaultLoggingConfig() LoggingConfig {
 			Enabled: true,
 			Level:   "info",
 			Format:  "text",
+		},
+		Async: AsyncConfig{
+			Enabled:      false, // Disabled by default for compatibility
+			BufferSize:   10000,
+			BatchSize:    100,
+			FlushTimeout: 100,
+		},
+		Dedup: DedupConfig{
+			Enabled:      false, // Disabled by default for simplicity
+			BatchSize:    100,
+			FlushTimeout: 1000,
 		},
 	}
 }
@@ -111,6 +139,17 @@ func (c *LoggingConfig) ApplyDefaults() {
 	}
 	if c.File.Format == "" {
 		c.File.Format = c.Format
+	}
+
+	// Async defaults
+	if c.Async.BufferSize == 0 {
+		c.Async.BufferSize = 10000
+	}
+	if c.Async.BatchSize == 0 {
+		c.Async.BatchSize = 100
+	}
+	if c.Async.FlushTimeout == 0 {
+		c.Async.FlushTimeout = 100
 	}
 }
 
@@ -182,6 +221,19 @@ func (c *LoggingConfig) Validate(mode services.DeploymentMode) error {
 		}
 		if c.File.Format != "" && !validFormats[c.File.Format] {
 			return fmt.Errorf("invalid file log format: %s", c.File.Format)
+		}
+	}
+
+	// Validate async config if enabled
+	if c.Async.Enabled {
+		if c.Async.BufferSize <= 0 {
+			return fmt.Errorf("async buffer size must be positive: %d", c.Async.BufferSize)
+		}
+		if c.Async.BatchSize <= 0 {
+			return fmt.Errorf("async batch size must be positive: %d", c.Async.BatchSize)
+		}
+		if c.Async.FlushTimeout <= 0 {
+			return fmt.Errorf("async flush timeout must be positive: %d", c.Async.FlushTimeout)
 		}
 	}
 

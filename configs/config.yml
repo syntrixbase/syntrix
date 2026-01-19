@@ -152,4 +152,36 @@ logging:
   file:
     enabled: true
     level: "info"    # Can override global level
-    format: "text"   # text or json
+    format: "json"   # text or json
+
+  # Async logging configuration (improves performance for high-throughput scenarios)
+  async:
+    # Enable async logging (default: false)
+    # When enabled, log writes are non-blocking and batched for better throughput
+    enabled: true
+
+    # Buffer size for the async channel (default: 10000)
+    # Higher values allow more logs to be buffered during traffic spikes
+    buffer_size: 10000
+
+    # Batch size for grouping writes (default: 100)
+    # Logs are flushed when batch reaches this size or timeout occurs
+    batch_size: 100
+
+    # Flush timeout in milliseconds (default: 100)
+    # Maximum time to wait before flushing a partial batch
+    flush_timeout: 100
+
+  # Log deduplication configuration (reduces repeated identical log messages)
+  dedup:
+    # Enable log deduplication (default: true)
+    # Deduplicates logs based on level, message, and attributes (excluding timestamp)
+    enabled: true
+
+    # Batch size for deduplication (default: 100)
+    # Logs are deduplicated and flushed when batch reaches this size
+    batch_size: 100
+
+    # Flush timeout in milliseconds (default: 1000)
+    # Maximum time to wait before flushing deduplicated logs
+    flush_timeout: 1000

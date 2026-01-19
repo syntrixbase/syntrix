@@ -102,7 +102,7 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 		}
 	}
 
-	// Start workers
+	// Start workers with concurrent execution
 	var wg sync.WaitGroup
 	var opsCompleted atomic.Int64
 	var opsErrors atomic.Int64
@@ -110,61 +110,67 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 	workerCtx, cancel := context.WithTimeout(ctx, config.Duration)
 	defer cancel()
 
+	// Start each worker in a goroutine that continuously executes operations
 	for _, w := range r.workers {
 		wg.Add(1)
 		go func(worker *Worker) {
 			defer wg.Done()
+
+			// Mark worker as running
 			if err := worker.Start(workerCtx); err != nil {
-				// Log error but don't fail the entire benchmark
 				return
+			}
+
+			// Continuously execute operations until context is done
+			for {
+				select {
+				case <-workerCtx.Done():
+					return
+				default:
+					// Get next operation from scenario if available
+					if r.scenario != nil {
+						op, err := r.scenario.NextOperation()
+						if err != nil {
+							// No more operations or error, continue to allow other workers to work
+							continue
+						}
+
+						// Check if operation is nil (scenario may return nil to indicate no more operations)
+						if op == nil {
+							continue
+						}
+
+						// Execute operation
+						result, err := op.Execute(workerCtx, worker.client)
+						if err != nil {
+							opsErrors.Add(1)
+						} else {
+							opsCompleted.Add(1)
+						}
+
+						// Record metrics if collector available
+						if r.metrics != nil && result != nil {
+							r.metrics.RecordOperation(result)
+						}
+					} else {
+						// No scenario available, wait for context to be done
+						<-workerCtx.Done()
+						return
+					}
+				}
 			}
 		}(w)
 	}
 
-	// Execute operations
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
+	// Wait for workers to finish
+	wg.Wait()
 
-	for {
-		select {
-		case <-workerCtx.Done():
-			goto cleanup
-		case <-ticker.C:
-			// Get next operation from scenario if available
-			if r.scenario != nil {
-				op, err := r.scenario.NextOperation()
-				if err != nil {
-					// No more operations or error
-					continue
-				}
-
-				// Execute operation with available worker
-				// For now, just execute directly (will improve with worker pool)
-				result, err := op.Execute(workerCtx, r.client)
-				if err != nil {
-					opsErrors.Add(1)
-				} else {
-					opsCompleted.Add(1)
-				}
-
-				// Record metrics if collector available
-				if r.metrics != nil && result != nil {
-					r.metrics.RecordOperation(result)
-				}
-			}
-		}
-	}
-
-cleanup:
 	// Stop all workers
 	for _, w := range r.workers {
 		if err := w.Stop(ctx); err != nil {
 			// Log error but continue cleanup
 		}
 	}
-
-	// Wait for workers to finish
-	wg.Wait()
 
 	// Teardown scenario if available
 	if r.scenario != nil {

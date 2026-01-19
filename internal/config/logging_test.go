@@ -278,3 +278,186 @@ func TestLoggingConfigApplyEnvOverrides(t *testing.T) {
 	assert.Equal(t, "text", cfg.Format)
 	assert.Equal(t, "logs", cfg.Dir)
 }
+
+func TestAsyncConfig_Validation(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     LoggingConfig
+		wantErr bool
+		errMsg  string
+	}{
+		{
+			name: "valid async config",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   1000,
+					BatchSize:    10,
+					FlushTimeout: 100,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "async disabled - no validation",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      false,
+					BufferSize:   0,
+					BatchSize:    0,
+					FlushTimeout: 0,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "invalid buffer size",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   0,
+					BatchSize:    10,
+					FlushTimeout: 100,
+				},
+			},
+			wantErr: true,
+			errMsg:  "async buffer size must be positive",
+		},
+		{
+			name: "invalid batch size",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   1000,
+					BatchSize:    0,
+					FlushTimeout: 100,
+				},
+			},
+			wantErr: true,
+			errMsg:  "async batch size must be positive",
+		},
+		{
+			name: "invalid flush timeout",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   1000,
+					BatchSize:    10,
+					FlushTimeout: 0,
+				},
+			},
+			wantErr: true,
+			errMsg:  "async flush timeout must be positive",
+		},
+		{
+			name: "negative buffer size",
+			cfg: LoggingConfig{
+				Level:  "info",
+				Format: "text",
+				Dir:    "/tmp/logs",
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   -100,
+					BatchSize:    10,
+					FlushTimeout: 100,
+				},
+			},
+			wantErr: true,
+			errMsg:  "async buffer size must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.Validate(services.ModeStandalone)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAsyncConfig_ApplyDefaults(t *testing.T) {
+	tests := []struct {
+		name     string
+		cfg      LoggingConfig
+		expected AsyncConfig
+	}{
+		{
+			name: "zero values get defaults",
+			cfg: LoggingConfig{
+				Async: AsyncConfig{
+					Enabled:      false,
+					BufferSize:   0,
+					BatchSize:    0,
+					FlushTimeout: 0,
+				},
+			},
+			expected: AsyncConfig{
+				Enabled:      false,
+				BufferSize:   10000,
+				BatchSize:    100,
+				FlushTimeout: 100,
+			},
+		},
+		{
+			name: "custom values preserved",
+			cfg: LoggingConfig{
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   5000,
+					BatchSize:    50,
+					FlushTimeout: 50,
+				},
+			},
+			expected: AsyncConfig{
+				Enabled:      true,
+				BufferSize:   5000,
+				BatchSize:    50,
+				FlushTimeout: 50,
+			},
+		},
+		{
+			name: "partial custom values",
+			cfg: LoggingConfig{
+				Async: AsyncConfig{
+					Enabled:      true,
+					BufferSize:   5000,
+					BatchSize:    0,
+					FlushTimeout: 0,
+				},
+			},
+			expected: AsyncConfig{
+				Enabled:      true,
+				BufferSize:   5000,
+				BatchSize:    100,
+				FlushTimeout: 100,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.cfg.ApplyDefaults()
+			assert.Equal(t, tt.expected, tt.cfg.Async)
+		})
+	}
+}

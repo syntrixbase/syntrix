@@ -185,3 +185,168 @@ func TestParseLevel(t *testing.T) {
 		})
 	}
 }
+
+func TestNewLogger_CustomTextFormat(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Format = "text"
+	cfg.File.Format = "text"
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+
+	// Log with different levels and attributes
+	logger.Info("test message", "key", "value")
+	logger.Warn("warning message", "code", 42)
+	logger.Error("error message", "error", "something failed", "retry", true)
+
+	// Shutdown to flush buffers
+	Shutdown()
+
+	// Read log file and verify custom format
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+
+	// Verify format: <TIME>: [<LEVEL>] <MSG> <attributes>
+	// Example: 2024-01-19T10:30:00Z: [INFO] test message key=value
+
+	// Check INFO line
+	assert.Contains(t, lines, ": [INFO] test message key=value")
+
+	// Check WARN line
+	assert.Contains(t, lines, ": [WARN] warning message code=42")
+
+	// Check ERROR line
+	assert.Contains(t, lines, `: [ERROR] error message error="something failed" retry=true`)
+}
+
+func TestNewLogger_TextFormatWithGroups(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Format = "text"
+	cfg.File.Format = "text"
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+
+	// Log with groups
+	groupLogger := logger.WithGroup("server")
+	groupLogger.Info("started", "port", 8080, "host", "localhost")
+
+	// Shutdown to flush buffers
+	Shutdown()
+
+	// Read log file and verify format with groups
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+
+	// Verify group prefix
+	assert.Contains(t, lines, ": [INFO] started server.port=8080 server.host=localhost")
+}
+
+func TestNewLogger_TextFormatWithAttrs(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Format = "text"
+	cfg.File.Format = "text"
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+
+	// Log with persistent attributes
+	attrLogger := logger.With("service", "api", "version", "1.0")
+	attrLogger.Info("request processed", "method", "GET", "path", "/users")
+
+	// Shutdown to flush buffers
+	Shutdown()
+
+	// Read log file and verify format with attributes
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+
+	// Verify persistent attributes are included
+	assert.Contains(t, lines, ": [INFO] request processed service=api version=1.0 method=GET path=/users")
+}
+
+func TestNewLogger_AsyncEnabled(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Async.Enabled = true
+	cfg.Async.BufferSize = 1000
+	cfg.Async.BatchSize = 10
+	cfg.Async.FlushTimeout = 50
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, logger)
+
+	// Write multiple messages quickly
+	for i := 0; i < 100; i++ {
+		logger.Info("async test message", "index", i)
+	}
+
+	// Shutdown to ensure all messages are flushed
+	err = Shutdown()
+	assert.NoError(t, err)
+
+	// Verify log file was created and has content
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	assert.FileExists(t, mainLogPath)
+
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	// Verify some messages were written
+	lines := string(content)
+	assert.Contains(t, lines, "async test message")
+	assert.Contains(t, lines, "index=0")
+	assert.Contains(t, lines, "index=99")
+}
+
+func TestNewLogger_AsyncDisabled(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Async.Enabled = false
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, logger)
+
+	// Write messages
+	for i := 0; i < 10; i++ {
+		logger.Info("sync test message", "index", i)
+	}
+
+	// Shutdown
+	err = Shutdown()
+	assert.NoError(t, err)
+
+	// Verify log file was created
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	assert.FileExists(t, mainLogPath)
+
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+	assert.Contains(t, lines, "sync test message")
+}
