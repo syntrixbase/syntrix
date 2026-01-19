@@ -389,7 +389,11 @@ type changeStreamEvent struct {
 	DocumentKey              struct {
 		ID string `bson:"_id"`
 	} `bson:"documentKey"`
-	ClusterTime interface{} `bson:"clusterTime"` // Timestamp
+	ClusterTime       interface{} `bson:"clusterTime"` // Timestamp
+	UpdateDescription *struct {
+		UpdatedFields map[string]interface{} `bson:"updatedFields"`
+		RemovedFields []string               `bson:"removedFields"`
+	} `bson:"updateDescription"`
 }
 
 func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, database string, collectionName string) (*types.Event, bool) {
@@ -442,14 +446,33 @@ func (m *documentStore) convertChangeEvent(changeEvent changeStreamEvent, databa
 		} else if changeEvent.OperationType == "replace" {
 			// Replace operation on a non-deleted document is treated as a Create (re-creation)
 			// This happens when overwriting a soft-deleted document
+			// But check if it was previously deleted in "FullDocumentBeforeChange" to be sure it's a "Recreate" semantically?
+			// Actually, if we just overwrite, it is a Create OR Update.
+			// Specifically for "Recreate" logic (soft-delete then create), it comes as a "replace" usually if using ReplaceOne.
 			evt.Type = types.EventCreate
 			evt.Document = changeEvent.FullDocument
 		} else if changeEvent.FullDocumentBeforeChange != nil && changeEvent.FullDocumentBeforeChange.Deleted {
 			evt.Type = types.EventCreate
 			evt.Document = changeEvent.FullDocument
 		} else {
-			evt.Type = types.EventUpdate
-			evt.Document = changeEvent.FullDocument
+			// If it's an update, check if we are "un-deleting" (setting deleted=false).
+			// If we un-delete, it should probably be treated as Create.
+			isUndelete := false
+			if changeEvent.UpdateDescription != nil {
+				if val, ok := changeEvent.UpdateDescription.UpdatedFields["deleted"]; ok {
+					if bVal, isBool := val.(bool); isBool && !bVal {
+						isUndelete = true
+					}
+				}
+			}
+
+			if isUndelete {
+				evt.Type = types.EventCreate
+				evt.Document = changeEvent.FullDocument
+			} else {
+				evt.Type = types.EventUpdate
+				evt.Document = changeEvent.FullDocument
+			}
 		}
 	case "delete":
 		evt.Type = types.EventDelete
