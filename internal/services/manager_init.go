@@ -57,6 +57,11 @@ func (m *Manager) Init(ctx context.Context) error {
 		return err
 	}
 
+	// Ensure admin user exists
+	if err := m.ensureAdminUser(ctx); err != nil {
+		return err
+	}
+
 	// Initialize Unified Server Service
 	server.InitDefault(m.cfg.Server, nil)
 
@@ -209,6 +214,46 @@ func (m *Manager) initAuthService(ctx context.Context) error {
 	}
 
 	slog.Info("Initialized Auth Service")
+	return nil
+}
+
+// ensureAdminUser creates the system admin user if it doesn't exist.
+// The admin username and initial password are read from the identity.admin config.
+func (m *Manager) ensureAdminUser(ctx context.Context) error {
+	// Skip if auth service is not initialized (no API or trigger worker)
+	if m.authService == nil {
+		return nil
+	}
+
+	adminCfg := m.cfg.Identity.Admin
+	if adminCfg.Username == "" {
+		slog.Debug("Admin user initialization skipped: no username configured")
+		return nil
+	}
+
+	if adminCfg.Password == "" {
+		slog.Warn("Admin user initialization skipped: no password configured",
+			"username", adminCfg.Username)
+		return nil
+	}
+
+	// Try to create admin user via SignUp
+	// SignUp will return error if user already exists
+	_, err := m.authService.SignUp(ctx, identity.SignupRequest{
+		Username: adminCfg.Username,
+		Password: adminCfg.Password,
+	})
+
+	if err != nil {
+		// User already exists is expected, not an error
+		if err.Error() == "user already exists" {
+			slog.Debug("Admin user already exists", "username", adminCfg.Username)
+			return nil
+		}
+		return fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	slog.Info("Created admin user", "username", adminCfg.Username)
 	return nil
 }
 

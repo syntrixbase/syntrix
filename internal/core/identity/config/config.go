@@ -11,6 +11,7 @@ import (
 type Config struct {
 	AuthN AuthNConfig `yaml:"authn"`
 	AuthZ AuthZConfig `yaml:"authz"`
+	Admin AdminConfig `yaml:"admin"`
 }
 
 type AuthNConfig struct {
@@ -24,6 +25,11 @@ type AuthZConfig struct {
 	RulesPath string `yaml:"rules_path"`
 }
 
+type AdminConfig struct {
+	Username string `yaml:"username"`
+	Password string `yaml:"password"`
+}
+
 func DefaultConfig() Config {
 	return Config{
 		AuthN: AuthNConfig{
@@ -34,6 +40,10 @@ func DefaultConfig() Config {
 		},
 		AuthZ: AuthZConfig{
 			RulesPath: "security_rules",
+		},
+		Admin: AdminConfig{
+			Username: "syntrix",
+			Password: "", // Must be set in config file
 		},
 	}
 }
@@ -55,6 +65,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.AuthZ.RulesPath == "" {
 		c.AuthZ.RulesPath = defaults.AuthZ.RulesPath
+	}
+	if c.Admin.Username == "" {
+		c.Admin.Username = defaults.Admin.Username
 	}
 }
 
