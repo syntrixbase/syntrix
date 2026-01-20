@@ -350,3 +350,30 @@ func TestNewLogger_AsyncDisabled(t *testing.T) {
 	lines := string(content)
 	assert.Contains(t, lines, "sync test message")
 }
+
+func TestNewLogger_DedupEnabled(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Dedup.Enabled = true
+	cfg.Dedup.BatchSize = 5
+	cfg.Dedup.FlushTimeout = 100
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+	assert.NotNil(t, logger)
+
+	// Write duplicate messages
+	for i := 0; i < 10; i++ {
+		logger.Info("duplicate message", "key", "value")
+	}
+
+	// Shutdown to flush
+	err = Shutdown()
+	assert.NoError(t, err)
+
+	// Verify log file was created
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	assert.FileExists(t, mainLogPath)
+}

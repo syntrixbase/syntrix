@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -242,4 +243,59 @@ func TestResponseWriter_Flush_NotSupported(t *testing.T) {
 	assert.NotPanics(t, func() {
 		rw.Flush()
 	})
+}
+
+func TestLoggingMiddleware_499Status(t *testing.T) {
+	srv := New(Config{}, nil).(*serverImpl)
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(499) // Client Closed Request
+	})
+
+	handler := srv.loggingMiddleware(nextHandler)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, 499, w.Code)
+}
+
+func TestLoggingMiddleware_ContextCanceled(t *testing.T) {
+	srv := New(Config{}, nil).(*serverImpl)
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	handler := srv.loggingMiddleware(nextHandler)
+
+	// Create a canceled context
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	req := httptest.NewRequest("GET", "/test", nil).WithContext(ctx)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestLoggingMiddleware_RealError(t *testing.T) {
+	srv := New(Config{}, nil).(*serverImpl)
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+
+	handler := srv.loggingMiddleware(nextHandler)
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusInternalServerError, w.Code)
 }
