@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -175,7 +176,14 @@ func (c *HTTPClient) doRequest(ctx context.Context, method, urlStr string, body 
 	// Parse response if result is provided
 	if result != nil && len(respBody) > 0 {
 		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w, body: %s", err, string(respBody))
+			slog.Error("failed to unmarshal response",
+				"error", err,
+				"method", method,
+				"url", urlStr,
+				"status", resp.StatusCode,
+				"body", string(respBody),
+			)
+			return fmt.Errorf("failed to unmarshal response: %w", err)
 		}
 	}
 

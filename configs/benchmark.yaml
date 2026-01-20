@@ -17,7 +17,7 @@ warmup: 10s
 rampup: 5s
 
 # Number of concurrent workers
-workers: 10
+workers: 4
 
 # Authentication configuration
 auth:
