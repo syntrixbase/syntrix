@@ -19,21 +19,27 @@ import (
 // HTTPClient implements the Client interface for HTTP communication.
 type HTTPClient struct {
 	baseURL    string
+	database   string
 	httpClient *http.Client
 	token      string
 }
 
 // NewHTTPClient creates a new HTTP client.
-func NewHTTPClient(baseURL string, token string) (*HTTPClient, error) {
+func NewHTTPClient(baseURL string, database string, token string) (*HTTPClient, error) {
 	if baseURL == "" {
 		return nil, fmt.Errorf("baseURL is required")
+	}
+
+	if database == "" {
+		database = "default"
 	}
 
 	// Ensure baseURL doesn't have trailing slash
 	baseURL = strings.TrimSuffix(baseURL, "/")
 
 	return &HTTPClient{
-		baseURL: baseURL,
+		baseURL:  baseURL,
+		database: database,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -48,7 +54,7 @@ func NewHTTPClient(baseURL string, token string) (*HTTPClient, error) {
 
 // CreateDocument creates a new document in the specified collection.
 func (c *HTTPClient) CreateDocument(ctx context.Context, collection string, doc map[string]interface{}) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/%s", c.baseURL, collection)
+	url := fmt.Sprintf("%s/api/v1/databases/%s/documents/%s", c.baseURL, c.database, collection)
 
 	body := map[string]interface{}{
 		"doc": doc,
@@ -64,7 +70,7 @@ func (c *HTTPClient) CreateDocument(ctx context.Context, collection string, doc 
 
 // GetDocument retrieves a document by ID.
 func (c *HTTPClient) GetDocument(ctx context.Context, collection, id string) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/databases/%s/documents/%s/%s", c.baseURL, c.database, collection, id)
 
 	var result types.Document
 	if err := c.doRequest(ctx, "GET", url, nil, &result); err != nil {
@@ -76,7 +82,7 @@ func (c *HTTPClient) GetDocument(ctx context.Context, collection, id string) (*t
 
 // UpdateDocument updates an existing document.
 func (c *HTTPClient) UpdateDocument(ctx context.Context, collection, id string, doc map[string]interface{}) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/databases/%s/documents/%s/%s", c.baseURL, c.database, collection, id)
 
 	body := map[string]interface{}{
 		"doc": doc,
@@ -92,14 +98,14 @@ func (c *HTTPClient) UpdateDocument(ctx context.Context, collection, id string, 
 
 // DeleteDocument deletes a document by ID.
 func (c *HTTPClient) DeleteDocument(ctx context.Context, collection, id string) error {
-	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/databases/%s/documents/%s/%s", c.baseURL, c.database, collection, id)
 
 	return c.doRequest(ctx, "DELETE", url, nil, nil)
 }
 
 // Query executes a query and returns matching documents.
 func (c *HTTPClient) Query(ctx context.Context, query types.Query) ([]*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/query", c.baseURL)
+	url := fmt.Sprintf("%s/api/v1/databases/%s/query", c.baseURL, c.database)
 
 	var results []*types.Document
 	if err := c.doRequest(ctx, "POST", url, query, &results); err != nil {
@@ -221,6 +227,11 @@ func (c *HTTPClient) SetToken(token string) {
 // GetBaseURL returns the base URL.
 func (c *HTTPClient) GetBaseURL() string {
 	return c.baseURL
+}
+
+// GetDatabase returns the database name.
+func (c *HTTPClient) GetDatabase() string {
+	return c.database
 }
 
 // ParseURL parses and validates a URL.

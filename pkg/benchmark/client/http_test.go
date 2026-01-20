@@ -18,23 +18,30 @@ func TestNewHTTPClient(t *testing.T) {
 	tests := []struct {
 		name        string
 		baseURL     string
+		database    string
 		token       string
 		expectError bool
 	}{
-		{"valid URL", "http://localhost:8080", "token123", false},
-		{"valid URL with trailing slash", "http://localhost:8080/", "token123", false},
-		{"empty URL", "", "token123", true},
+		{"valid URL", "http://localhost:8080", "default", "token123", false},
+		{"valid URL with trailing slash", "http://localhost:8080/", "testdb", "token123", false},
+		{"empty URL", "", "default", "token123", true},
+		{"empty database defaults to default", "http://localhost:8080", "", "token123", false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client, err := NewHTTPClient(tt.baseURL, tt.token)
+			client, err := NewHTTPClient(tt.baseURL, tt.database, tt.token)
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, client)
 				assert.False(t, strings.HasSuffix(client.baseURL, "/"), "baseURL should not have trailing slash")
+				if tt.database == "" {
+					assert.Equal(t, "default", client.database)
+				} else {
+					assert.Equal(t, tt.database, client.database)
+				}
 			}
 		})
 	}
@@ -43,7 +50,7 @@ func TestNewHTTPClient(t *testing.T) {
 func TestHTTPClient_CreateDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
-		assert.Equal(t, "/api/v1/test-collection", r.URL.Path)
+		assert.Equal(t, "/api/v1/databases/default/documents/test-collection", r.URL.Path)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -65,7 +72,7 @@ func TestHTTPClient_CreateDocument(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	doc := map[string]interface{}{
@@ -81,7 +88,7 @@ func TestHTTPClient_CreateDocument(t *testing.T) {
 func TestHTTPClient_GetDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
-		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
+		assert.Equal(t, "/api/v1/databases/default/documents/test-collection/doc-123", r.URL.Path)
 
 		response := map[string]interface{}{
 			"id": "doc-123",
@@ -93,7 +100,7 @@ func TestHTTPClient_GetDocument(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	result, err := client.GetDocument(context.Background(), "test-collection", "doc-123")
@@ -105,7 +112,7 @@ func TestHTTPClient_GetDocument(t *testing.T) {
 func TestHTTPClient_UpdateDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "PATCH", r.Method)
-		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
+		assert.Equal(t, "/api/v1/databases/default/documents/test-collection/doc-123", r.URL.Path)
 
 		response := map[string]interface{}{
 			"id": "doc-123",
@@ -117,7 +124,7 @@ func TestHTTPClient_UpdateDocument(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	doc := map[string]interface{}{
@@ -133,13 +140,13 @@ func TestHTTPClient_UpdateDocument(t *testing.T) {
 func TestHTTPClient_DeleteDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "DELETE", r.Method)
-		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
+		assert.Equal(t, "/api/v1/databases/default/documents/test-collection/doc-123", r.URL.Path)
 
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	err = client.DeleteDocument(context.Background(), "test-collection", "doc-123")
@@ -149,7 +156,7 @@ func TestHTTPClient_DeleteDocument(t *testing.T) {
 func TestHTTPClient_Query(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
-		assert.Contains(t, r.URL.Path, "/query")
+		assert.Equal(t, "/api/v1/databases/default/query", r.URL.Path)
 
 		response := []map[string]interface{}{
 			{
@@ -169,7 +176,7 @@ func TestHTTPClient_Query(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	query := types.Query{
@@ -190,7 +197,7 @@ func TestHTTPClient_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	_, err = client.GetDocument(context.Background(), "test-collection", "nonexistent")
@@ -209,7 +216,7 @@ func TestHTTPClient_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client, err := NewHTTPClient(server.URL, "test-token")
+	client, err := NewHTTPClient(server.URL, "default", "test-token")
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -221,7 +228,7 @@ func TestHTTPClient_ContextCancellation(t *testing.T) {
 }
 
 func TestHTTPClient_SetToken(t *testing.T) {
-	client, err := NewHTTPClient("http://localhost:8080", "old-token")
+	client, err := NewHTTPClient("http://localhost:8080", "default", "old-token")
 	require.NoError(t, err)
 
 	assert.Equal(t, "old-token", client.token)
@@ -231,14 +238,21 @@ func TestHTTPClient_SetToken(t *testing.T) {
 }
 
 func TestHTTPClient_GetBaseURL(t *testing.T) {
-	client, err := NewHTTPClient("http://localhost:8080", "token")
+	client, err := NewHTTPClient("http://localhost:8080", "default", "token")
 	require.NoError(t, err)
 
 	assert.Equal(t, "http://localhost:8080", client.GetBaseURL())
 }
 
+func TestHTTPClient_GetDatabase(t *testing.T) {
+	client, err := NewHTTPClient("http://localhost:8080", "mydb", "token")
+	require.NoError(t, err)
+
+	assert.Equal(t, "mydb", client.GetDatabase())
+}
+
 func TestHTTPClient_Close(t *testing.T) {
-	client, err := NewHTTPClient("http://localhost:8080", "token")
+	client, err := NewHTTPClient("http://localhost:8080", "default", "token")
 	require.NoError(t, err)
 
 	err = client.Close()
@@ -277,7 +291,7 @@ func TestParseURL(t *testing.T) {
 }
 
 func TestHTTPClient_Subscribe_NotImplemented(t *testing.T) {
-	client, err := NewHTTPClient("http://localhost:8080", "token")
+	client, err := NewHTTPClient("http://localhost:8080", "default", "token")
 	require.NoError(t, err)
 
 	query := types.Query{Collection: "test"}
@@ -287,7 +301,7 @@ func TestHTTPClient_Subscribe_NotImplemented(t *testing.T) {
 }
 
 func TestHTTPClient_Unsubscribe_NotImplemented(t *testing.T) {
-	client, err := NewHTTPClient("http://localhost:8080", "token")
+	client, err := NewHTTPClient("http://localhost:8080", "default", "token")
 	require.NoError(t, err)
 
 	err = client.Unsubscribe(context.Background(), "sub-123")
