@@ -48,7 +48,7 @@ func NewHTTPClient(baseURL string, token string) (*HTTPClient, error) {
 
 // CreateDocument creates a new document in the specified collection.
 func (c *HTTPClient) CreateDocument(ctx context.Context, collection string, doc map[string]interface{}) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/collections/%s/documents", c.baseURL, collection)
+	url := fmt.Sprintf("%s/api/v1/%s", c.baseURL, collection)
 
 	body := map[string]interface{}{
 		"doc": doc,
@@ -64,7 +64,7 @@ func (c *HTTPClient) CreateDocument(ctx context.Context, collection string, doc 
 
 // GetDocument retrieves a document by ID.
 func (c *HTTPClient) GetDocument(ctx context.Context, collection, id string) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/collections/%s/documents/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
 
 	var result types.Document
 	if err := c.doRequest(ctx, "GET", url, nil, &result); err != nil {
@@ -76,7 +76,7 @@ func (c *HTTPClient) GetDocument(ctx context.Context, collection, id string) (*t
 
 // UpdateDocument updates an existing document.
 func (c *HTTPClient) UpdateDocument(ctx context.Context, collection, id string, doc map[string]interface{}) (*types.Document, error) {
-	url := fmt.Sprintf("%s/api/v1/collections/%s/documents/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
 
 	body := map[string]interface{}{
 		"doc": doc,
@@ -92,7 +92,7 @@ func (c *HTTPClient) UpdateDocument(ctx context.Context, collection, id string, 
 
 // DeleteDocument deletes a document by ID.
 func (c *HTTPClient) DeleteDocument(ctx context.Context, collection, id string) error {
-	url := fmt.Sprintf("%s/api/v1/collections/%s/documents/%s", c.baseURL, collection, id)
+	url := fmt.Sprintf("%s/api/v1/%s/%s", c.baseURL, collection, id)
 
 	return c.doRequest(ctx, "DELETE", url, nil, nil)
 }

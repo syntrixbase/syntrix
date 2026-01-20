@@ -17,7 +17,7 @@ warmup: 10s
 rampup: 5s
 
 # Number of concurrent workers
-workers: 15
+workers: 10
 
 # Authentication configuration
 auth:
@@ -49,8 +49,8 @@ scenario:
 
 # Data generation configuration
 data:
-  # Collection name prefix for benchmark documents
-  collection_prefix: "benchmark_"
+  # Collection name for benchmark documents (must be odd number of segments)
+  collection_prefix: "benchmarks"
 
   # Number of fields per document
   fields_count: 10

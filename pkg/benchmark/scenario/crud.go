@@ -194,9 +194,9 @@ func (s *CRUDScenario) RegisterCreatedID(id string) {
 func (s *CRUDScenario) getCollectionName() string {
 	prefix := s.config.Data.CollectionPrefix
 	if prefix == "" {
-		prefix = "benchmark"
+		prefix = "benchmarks"
 	}
-	return prefix + "_crud"
+	return prefix
 }
 
 // selectOperationType selects the next operation type based on configuration.

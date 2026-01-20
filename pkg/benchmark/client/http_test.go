@@ -43,7 +43,7 @@ func TestNewHTTPClient(t *testing.T) {
 func TestHTTPClient_CreateDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "POST", r.Method)
-		assert.Contains(t, r.URL.Path, "/documents")
+		assert.Equal(t, "/api/v1/test-collection", r.URL.Path)
 		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
 		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 
@@ -81,7 +81,7 @@ func TestHTTPClient_CreateDocument(t *testing.T) {
 func TestHTTPClient_GetDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "GET", r.Method)
-		assert.Contains(t, r.URL.Path, "/documents/doc-123")
+		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
 
 		response := map[string]interface{}{
 			"id": "doc-123",
@@ -105,7 +105,7 @@ func TestHTTPClient_GetDocument(t *testing.T) {
 func TestHTTPClient_UpdateDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "PATCH", r.Method)
-		assert.Contains(t, r.URL.Path, "/documents/doc-123")
+		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
 
 		response := map[string]interface{}{
 			"id": "doc-123",
@@ -133,7 +133,7 @@ func TestHTTPClient_UpdateDocument(t *testing.T) {
 func TestHTTPClient_DeleteDocument(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "DELETE", r.Method)
-		assert.Contains(t, r.URL.Path, "/documents/doc-123")
+		assert.Equal(t, "/api/v1/test-collection/doc-123", r.URL.Path)
 
 		w.WriteHeader(http.StatusNoContent)
 	}))

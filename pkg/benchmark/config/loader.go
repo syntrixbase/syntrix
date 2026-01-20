@@ -69,7 +69,7 @@ func applyDefaults(config *types.Config) {
 	}
 
 	if config.Data.CollectionPrefix == "" {
-		config.Data.CollectionPrefix = "benchmark_"
+		config.Data.CollectionPrefix = "benchmarks"
 	}
 
 	if config.Data.FieldsCount == 0 {

@@ -365,7 +365,7 @@ func TestCRUDScenario_GetCollectionName(t *testing.T) {
 		require.NoError(t, err)
 
 		collection := scenario.getCollectionName()
-		assert.Equal(t, "benchmark_crud", collection)
+		assert.Equal(t, "benchmarks", collection)
 	})
 
 	t.Run("custom prefix", func(t *testing.T) {
@@ -373,7 +373,7 @@ func TestCRUDScenario_GetCollectionName(t *testing.T) {
 			Data: types.DataConfig{
 				FieldsCount:      5,
 				DocumentSize:     "512B",
-				CollectionPrefix: "test",
+				CollectionPrefix: "mytest",
 			},
 		}
 
@@ -381,7 +381,7 @@ func TestCRUDScenario_GetCollectionName(t *testing.T) {
 		require.NoError(t, err)
 
 		collection := scenario.getCollectionName()
-		assert.Equal(t, "test_crud", collection)
+		assert.Equal(t, "mytest", collection)
 	})
 }
 

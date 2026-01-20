@@ -147,7 +147,7 @@ func TestApplyDefaults(t *testing.T) {
 	assert.Equal(t, 30*time.Second, config.Warmup)
 	assert.Equal(t, 10, config.Workers)
 	assert.Equal(t, "default", config.Auth.Database)
-	assert.Equal(t, "benchmark_", config.Data.CollectionPrefix)
+	assert.Equal(t, "benchmarks", config.Data.CollectionPrefix)
 	assert.Equal(t, 10, config.Data.FieldsCount)
 	assert.Equal(t, "1KB", config.Data.DocumentSize)
 	assert.True(t, config.Data.Cleanup)
