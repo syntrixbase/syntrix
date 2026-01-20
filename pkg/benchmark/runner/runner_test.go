@@ -2,6 +2,7 @@ package runner
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -51,6 +52,7 @@ func (m *mockClient) Close() error {
 }
 
 type mockScenario struct {
+	mu             sync.Mutex
 	setupCalled    bool
 	teardownCalled bool
 	opCount        int
@@ -61,11 +63,15 @@ func (m *mockScenario) Name() string {
 }
 
 func (m *mockScenario) Setup(ctx context.Context, env *types.TestEnv) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.setupCalled = true
 	return nil
 }
 
 func (m *mockScenario) NextOperation() (types.Operation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.opCount >= 5 {
 		return nil, nil
 	}
@@ -74,6 +80,8 @@ func (m *mockScenario) NextOperation() (types.Operation, error) {
 }
 
 func (m *mockScenario) Teardown(ctx context.Context, env *types.TestEnv) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.teardownCalled = true
 	return nil
 }
@@ -95,14 +103,19 @@ func (m *mockOperation) Execute(ctx context.Context, client types.Client) (*type
 }
 
 type mockMetricsCollector struct {
+	mu          sync.Mutex
 	recordCount int
 }
 
 func (m *mockMetricsCollector) RecordOperation(result *types.OperationResult) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.recordCount++
 }
 
 func (m *mockMetricsCollector) GetMetrics() *types.AggregatedMetrics {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	return &types.AggregatedMetrics{
 		TotalOperations: int64(m.recordCount),
 		TotalErrors:     0,
@@ -115,6 +128,8 @@ func (m *mockMetricsCollector) GetSnapshot() *types.AggregatedMetrics {
 }
 
 func (m *mockMetricsCollector) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.recordCount = 0
 }
 
