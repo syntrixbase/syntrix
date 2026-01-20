@@ -100,7 +100,7 @@ func (h *Handler) handleCreateDocument(w http.ResponseWriter, r *http.Request) {
 
 	doc, err := h.engine.GetDocument(r.Context(), database, path)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to retrieve created document")
+		writeInternalError(w, err, "Failed to retrieve created document")
 		return
 	}
 

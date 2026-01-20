@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
@@ -54,6 +55,10 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
+		if model.IsCanceled(err) {
+			w.WriteHeader(499)
+			return
+		}
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Login failed")
 		return
 	}
@@ -99,7 +104,7 @@ func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.auth.Logout(r.Context(), refreshToken); err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Logout failed")
+		writeInternalError(w, err, "Logout failed")
 		return
 	}
 

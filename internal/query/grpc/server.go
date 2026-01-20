@@ -160,6 +160,9 @@ func errorToStatus(err error) error {
 	if errors.Is(err, model.ErrPermissionDenied) {
 		return status.Error(codes.PermissionDenied, err.Error())
 	}
+	if model.IsCanceled(err) {
+		return status.Error(codes.Canceled, "operation canceled")
+	}
 	if errors.Is(err, indexer.ErrNoMatchingIndex) {
 		return status.Error(codes.FailedPrecondition, err.Error())
 	}

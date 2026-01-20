@@ -59,7 +59,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.engine.Pull(r.Context(), database, req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to pull changes")
+		writeInternalError(w, err, "Failed to pull changes")
 		return
 	}
 
@@ -165,8 +165,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Push: started", "collection", collection, "changes", len(changes))
 	resp, err := h.engine.Push(r.Context(), database, pushReq)
 	if err != nil {
-		slog.Error("Push: error during push", "error", err)
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to push changes")
+		writeInternalError(w, err, "Failed to push changes")
 		return
 	}
 

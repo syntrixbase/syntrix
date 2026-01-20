@@ -180,7 +180,7 @@ func TestWriteStorageError(t *testing.T) {
 			name:         "Unknown",
 			err:          io.EOF, // arbitrary error
 			expectedCode: http.StatusInternalServerError,
-			expectedMsg:  "Internal server error",
+			expectedMsg:  "Internal storage error",
 		},
 	}
 

@@ -8,7 +8,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -92,6 +91,18 @@ func writeError(w http.ResponseWriter, status int, code string, message string) 
 	}
 }
 
+// writeInternalError writes an internal error response, but first checks if the error
+// is due to client cancellation (returns 499 instead of 500).
+// Use this for any error that would otherwise return 500 Internal Server Error.
+func writeInternalError(w http.ResponseWriter, err error, message string) {
+	if model.IsCanceled(err) {
+		w.WriteHeader(499) // Client Closed Request
+		return
+	}
+	slog.Error(message, "error", err)
+	writeError(w, http.StatusInternalServerError, ErrCodeInternalError, message)
+}
+
 // writeStorageError writes an appropriate error response for storage errors
 func writeStorageError(w http.ResponseWriter, err error) {
 	switch {
@@ -101,14 +112,8 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, ErrCodeConflict, "Document already exists")
 	case errors.Is(err, model.ErrPreconditionFailed):
 		writeError(w, http.StatusPreconditionFailed, ErrCodePreconditionFailed, "Version conflict")
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded),
-		strings.Contains(err.Error(), "context canceled"), strings.Contains(err.Error(), "context deadline exceeded"):
-		// Client closed the connection - use 499 (Nginx convention) or just return
-		// since client won't receive the response anyway
-		w.WriteHeader(499) // Client Closed Request
 	default:
-		slog.Error("Internal storage error", "error", err)
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Internal server error")
+		writeInternalError(w, err, "Internal storage error")
 	}
 }
 
@@ -270,7 +275,7 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 					ID:   doc.GetID(),
 				}
 			} else if err != model.ErrNotFound {
-				writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to check resource")
+				writeInternalError(w, err, "Failed to check resource")
 				return
 			}
 		}
