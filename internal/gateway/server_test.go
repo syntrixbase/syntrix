@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
-	"github.com/syntrixbase/syntrix/internal/core/identity/types"
 	api_config "github.com/syntrixbase/syntrix/internal/gateway/config"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/query"
@@ -36,16 +35,16 @@ type MockAuthService struct {
 }
 
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
+	// Database is now extracted from URL path, not context
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), types.ContextKeyDatabase, "default")
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
+	// Database is now extracted from URL path, not context
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), types.ContextKeyDatabase, "default")
-		next.ServeHTTP(w, r.WithContext(ctx))
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -105,11 +104,11 @@ func TestServer_RegisterRoutes(t *testing.T) {
 
 	t.Run("Routes registered - API endpoint", func(t *testing.T) {
 		// Mock GetDocument to return ErrNotFound
-		// Use valid document path format: collection/docId (even number of segments)
+		// Use new URL format: /api/v1/databases/{database}/documents/{path...}
 		mockQuery.On("GetDocument", mock.Anything, "default", "users/test").Return(nil, model.ErrNotFound)
 		mockAuthz.On("Evaluate", mock.Anything, "default", "users/test", "read", mock.Anything, mock.Anything).Return(true, nil)
 
-		req := httptest.NewRequest("GET", "/api/v1/users/test", nil)
+		req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/users/test", nil)
 		w := httptest.NewRecorder()
 
 		mux.ServeHTTP(w, req)

@@ -22,7 +22,8 @@ func TestAuthorized_NoAuthzPassThrough(t *testing.T) {
 		w.WriteHeader(http.StatusTeapot)
 	}, "read")
 
-	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
+	req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/foo", nil)
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 	w := httptest.NewRecorder()
 
@@ -39,7 +40,8 @@ func TestAuthorized_EvaluateError(t *testing.T) {
 	engine.On("GetDocument", mock.Anything, "default", "col/doc").Return(nil, model.ErrNotFound)
 	authzSvc.On("Evaluate", mock.Anything, "default", "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, errors.New("eval error"))
 
-	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
+	req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/foo", nil)
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 	ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-1")
 	ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"admin", "user"})
@@ -61,7 +63,8 @@ func TestAuthorized_Denied(t *testing.T) {
 	engine.On("GetDocument", mock.Anything, "default", "col/doc").Return(nil, model.ErrNotFound)
 	authzSvc.On("Evaluate", mock.Anything, "default", "col/doc", "read", mock.Anything, (*identity.Resource)(nil)).Return(false, nil)
 
-	req := httptest.NewRequest("GET", "/api/v1/foo", nil)
+	req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/foo", nil)
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 	w := httptest.NewRecorder()
 
@@ -95,7 +98,8 @@ func TestAuthorized_AllowedWithExistingAndNewData(t *testing.T) {
 		return res != nil && res.ID == "123" && res.Data["field"] == "old" && res.Data["version"] == nil && res.Data["collection"] == nil
 	})).Return(true, nil)
 
-	req := httptest.NewRequest("PUT", "/api/v1/col/doc", strings.NewReader(`{"field":"new"}`))
+	req := httptest.NewRequest("PUT", "/api/v1/databases/default/documents/col/doc", strings.NewReader(`{"field":"new"}`))
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 	ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-1")
 	ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"admin"})

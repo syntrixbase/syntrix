@@ -42,6 +42,7 @@ func (h *Handler) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 type UpdateUserRequest struct {
 	Roles    []string `json:"roles"`
+	DBAdmin  []string `json:"db_admin"`
 	Disabled bool     `json:"disabled"`
 }
 
@@ -58,7 +59,7 @@ func (h *Handler) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := h.auth.UpdateUser(r.Context(), id, req.Roles, req.Disabled); err != nil {
+	if err := h.auth.UpdateUser(r.Context(), id, req.Roles, req.DBAdmin, req.Disabled); err != nil {
 		writeInternalError(w, err, "Failed to update user")
 		return
 	}

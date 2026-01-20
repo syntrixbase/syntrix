@@ -63,10 +63,9 @@ func TestSignIn_ErrorPaths(t *testing.T) {
 			PasswordAlgo: "bcrypt",
 			Database:     "default",
 		}
-		mockStorage.On("GetUserByUsername", mock.Anything, "default", "user").Return(user, nil).Once()
+		mockStorage.On("GetUserByUsername", mock.Anything, "user").Return(user, nil).Once()
 
 		_, err := svc.SignIn(context.Background(), LoginRequest{
-			Database: "default",
 			Username: "user",
 			Password: "password",
 		})
@@ -87,10 +86,10 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 
 	// Helper to get a valid refresh token
 	getRefreshToken := func() string {
-		mockStorage.On("GetUserByUsername", mock.Anything, "default", "user").Return(nil, ErrUserNotFound).Once()
-		mockStorage.On("CreateUser", mock.Anything, "default", mock.Anything).Return(nil).Once()
+		mockStorage.On("GetUserByUsername", mock.Anything, "user").Return(nil, ErrUserNotFound).Once()
+		mockStorage.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 		pair, err := svc.SignUp(context.Background(), SignupRequest{
-			Database: "default", Username: "user", Password: "password123456",
+			Username: "user", Password: "password123456",
 		})
 		require.NoError(t, err)
 		return pair.RefreshToken
@@ -101,9 +100,9 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 		token := getRefreshToken()
 
 		// Mock successful checks but failed revocation
-		mockStorage.On("IsRevoked", mock.Anything, "default", mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockStorage.On("GetUserByID", mock.Anything, "default", mock.Anything).Return(&User{ID: "u1", Database: "default"}, nil).Once()
-		mockStorage.On("RevokeToken", mock.Anything, "default", mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
+		mockStorage.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
+		mockStorage.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{ID: "u1", Database: "default"}, nil).Once()
+		mockStorage.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
 
 		_, err := svc.Refresh(context.Background(), RefreshRequest{RefreshToken: token})
 		assert.Error(t, err)

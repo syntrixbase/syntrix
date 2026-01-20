@@ -28,7 +28,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	collectionName := "replication_test_col"
 
 	// 1. Setup Realtime (SSE) Connection
-	sseURL := fmt.Sprintf("%s/realtime/sse?collection=%s", env.RealtimeURL, collectionName)
+	sseURL := fmt.Sprintf("%s/realtime/sse?database=default&collection=%s", env.RealtimeURL, collectionName)
 	req, err := http.NewRequest("GET", sseURL, nil)
 	require.NoError(t, err)
 	req.Header.Set("Accept", "text/event-stream")
@@ -116,7 +116,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	}
 
 	bodyBytes, _ := json.Marshal(pushBody)
-	pushURL := fmt.Sprintf("%s/replication/v1/push?collection=%s", env.APIURL, collectionName)
+	pushURL := fmt.Sprintf("%s/replication/v1/databases/default/push?collection=%s", env.APIURL, collectionName)
 
 	pushReq, err := http.NewRequest("POST", pushURL, bytes.NewBuffer(bodyBytes))
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	}
 
 	// 5. Pull to verify storage
-	pullURL := fmt.Sprintf("%s/replication/v1/pull?collection=%s&checkpoint=0", env.APIURL, collectionName)
+	pullURL := fmt.Sprintf("%s/replication/v1/databases/default/pull?collection=%s&checkpoint=0", env.APIURL, collectionName)
 	pullReq, err := http.NewRequest("GET", pullURL, nil)
 	require.NoError(t, err)
 	pullReq.Header.Set("Authorization", "Bearer "+token)
@@ -200,7 +200,7 @@ func TestReplication_FullFlow(t *testing.T) {
 	deleteResp.Body.Close()
 
 	// 6. Pull to verify deletion
-	pullURL = fmt.Sprintf("%s/replication/v1/pull?collection=%s&checkpoint=%s", env.APIURL, collectionName, pullResult.Checkpoint)
+	pullURL = fmt.Sprintf("%s/replication/v1/databases/default/pull?collection=%s&checkpoint=%s", env.APIURL, collectionName, pullResult.Checkpoint)
 	pullReq, err = http.NewRequest("GET", pullURL, nil)
 	require.NoError(t, err)
 	pullReq.Header.Set("Authorization", "Bearer "+token)

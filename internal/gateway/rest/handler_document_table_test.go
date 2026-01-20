@@ -27,7 +27,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "GetDocument_Success",
 			method: "GET",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			setupMock: func(m *MockQueryService) {
 				doc := model.Document{"id": "msg-1", "collection": "rooms/room-1/messages", "name": "Alice", "version": 1}
 				m.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(doc, nil)
@@ -38,7 +38,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "GetDocument_NotFound",
 			method: "GET",
-			path:   "/api/v1/rooms/room-1/messages/unknown",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/unknown",
 			setupMock: func(m *MockQueryService) {
 				m.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/unknown").Return(nil, model.ErrNotFound)
 			},
@@ -47,7 +47,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "GetDocument_InternalError",
 			method: "GET",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			setupMock: func(m *MockQueryService) {
 				m.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, errors.New("boom"))
 			},
@@ -58,7 +58,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "CreateDocument_Success",
 			method: "POST",
-			path:   "/api/v1/rooms/room-1/messages",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages",
 			body:   `{"id":"msg-1","name": "Bob"}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("CreateDocument", mock.Anything, "default", mock.MatchedBy(func(doc model.Document) bool {
@@ -72,28 +72,28 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:           "CreateDocument_InvalidCollection",
 			method:         "POST",
-			path:           "/api/v1/Invalid!",
+			path:           "/api/v1/databases/default/documents/Invalid!",
 			body:           `{"id":"1"}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "CreateDocument_BadBody",
 			method:         "POST",
-			path:           "/api/v1/rooms/room-1/messages",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages",
 			body:           "{invalid",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "CreateDocument_ValidationError",
 			method:         "POST",
-			path:           "/api/v1/rooms/room-1/messages",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages",
 			body:           `{"id":""}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:   "CreateDocument_Conflict",
 			method: "POST",
-			path:   "/api/v1/rooms/room-1/messages",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages",
 			body:   `{"id":"msg-1"}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("CreateDocument", mock.Anything, "default", mock.AnythingOfType("model.Document")).Return(model.ErrExists)
@@ -103,7 +103,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "CreateDocument_GetError",
 			method: "POST",
-			path:   "/api/v1/rooms/room-1/messages",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages",
 			body:   `{"id":"msg-1"}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("CreateDocument", mock.Anything, "default", mock.AnythingOfType("model.Document")).Return(nil)
@@ -116,7 +116,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "ReplaceDocument_Success",
 			method: "PUT",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"name": "Bob"}}`,
 			setupMock: func(m *MockQueryService) {
 				returnedDoc := model.Document{"name": "Bob", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
@@ -130,7 +130,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "ReplaceDocument_IfMatch",
 			method: "PUT",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"name": "Bob"}, "ifMatch": [{"field": "version", "op": "==", "value": 1}]}`,
 			setupMock: func(m *MockQueryService) {
 				filters := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(1)}}
@@ -145,35 +145,35 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:           "ReplaceDocument_InvalidPath",
 			method:         "PUT",
-			path:           "/api/v1/rooms",
+			path:           "/api/v1/databases/default/documents/rooms",
 			body:           `{"doc":{}}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "ReplaceDocument_InvalidBody",
 			method:         "PUT",
-			path:           "/api/v1/rooms/room-1/messages/msg-1",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:           "{invalid",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "ReplaceDocument_ValidationError",
 			method:         "PUT",
-			path:           "/api/v1/rooms/room-1/messages/msg-1",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:           `{"doc":{"id":""}}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "ReplaceDocument_IDMismatch",
 			method:         "PUT",
-			path:           "/api/v1/rooms/room-1/messages/msg-1",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:           `{"doc":{"id":"msg-2"}}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:   "ReplaceDocument_VersionConflict",
 			method: "PUT",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"id":"msg-1"}}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("ReplaceDocument", mock.Anything, "default", mock.AnythingOfType("model.Document"), mock.Anything).Return(nil, model.ErrPreconditionFailed)
@@ -185,7 +185,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "PatchDocument_Success",
 			method: "PATCH",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status": "read"}}`,
 			setupMock: func(m *MockQueryService) {
 				returnedDoc := model.Document{"name": "Alice", "status": "read", "id": "msg-1", "collection": "rooms/room-1/messages", "version": 2}
@@ -199,7 +199,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "PatchDocument_IfMatch",
 			method: "PATCH",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status": "read"}, "ifMatch": [{"field": "status", "op": "==", "value": "unread"}]}`,
 			setupMock: func(m *MockQueryService) {
 				filters := model.Filters{{Field: "status", Op: model.OpEq, Value: "unread"}}
@@ -214,28 +214,28 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:           "PatchDocument_InvalidPath",
 			method:         "PATCH",
-			path:           "/api/v1/rooms",
+			path:           "/api/v1/databases/default/documents/rooms",
 			body:           `{"doc":{"status":"read"}}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "PatchDocument_InvalidBody",
 			method:         "PATCH",
-			path:           "/api/v1/rooms/room-1/messages/msg-1",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:           "{invalid",
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:           "PatchDocument_NoData",
 			method:         "PATCH",
-			path:           "/api/v1/rooms/room-1/messages/msg-1",
+			path:           "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:           `{"doc":{"id":"msg-1"}}`,
 			expectedStatus: http.StatusBadRequest,
 		},
 		{
 			name:   "PatchDocument_NotFound",
 			method: "PATCH",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status":"read"}}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("PatchDocument", mock.Anything, "default", mock.AnythingOfType("model.Document"), mock.Anything).Return(nil, model.ErrNotFound)
@@ -245,7 +245,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "PatchDocument_VersionConflict",
 			method: "PATCH",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status":"read"}}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("PatchDocument", mock.Anything, "default", mock.AnythingOfType("model.Document"), mock.Anything).Return(nil, model.ErrPreconditionFailed)
@@ -255,7 +255,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "PatchDocument_InternalError",
 			method: "PATCH",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"doc":{"status":"read"}}`,
 			setupMock: func(m *MockQueryService) {
 				m.On("PatchDocument", mock.Anything, "default", mock.AnythingOfType("model.Document"), mock.Anything).Return(nil, errors.New("boom"))
@@ -267,7 +267,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "DeleteDocument_Success",
 			method: "DELETE",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			setupMock: func(m *MockQueryService) {
 				m.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", model.Filters(nil)).Return(nil)
 			},
@@ -276,7 +276,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "DeleteDocument_IfMatch",
 			method: "DELETE",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"ifMatch": [{"field": "version", "op": "==", "value": 1}]}`,
 			setupMock: func(m *MockQueryService) {
 				pred := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(1)}}
@@ -287,7 +287,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "DeleteDocument_NotFound",
 			method: "DELETE",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			setupMock: func(m *MockQueryService) {
 				m.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", model.Filters(nil)).Return(model.ErrNotFound)
 			},
@@ -296,7 +296,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "DeleteDocument_InternalError",
 			method: "DELETE",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			setupMock: func(m *MockQueryService) {
 				m.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", model.Filters(nil)).Return(errors.New("boom"))
 			},
@@ -305,7 +305,7 @@ func TestDocumentHandlers_TableDriven(t *testing.T) {
 		{
 			name:   "DeleteDocument_PreconditionFailed",
 			method: "DELETE",
-			path:   "/api/v1/rooms/room-1/messages/msg-1",
+			path:   "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1",
 			body:   `{"ifMatch":[{"field":"version","op":"==","value":2}]}`,
 			setupMock: func(m *MockQueryService) {
 				pred := model.Filters{{Field: "version", Op: model.OpEq, Value: float64(2)}}

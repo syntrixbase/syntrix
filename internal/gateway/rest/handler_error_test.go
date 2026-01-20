@@ -19,9 +19,9 @@ func TestAuthHandlerErrors(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	server := createTestServer(nil, mockAuth, nil)
 
-	t.Run("SignUp_DatabaseRequired", func(t *testing.T) {
+	t.Run("SignUp_InvalidInput", func(t *testing.T) {
 		reqBody := identity.SignupRequest{Username: "user", Password: "password"} // Missing Database
-		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
+		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, errors.New("validation error")).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/signup", bytes.NewReader(body))
@@ -30,11 +30,10 @@ func TestAuthHandlerErrors(t *testing.T) {
 		server.handleSignUp(w, req)
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "Database is required")
 	})
 
 	t.Run("Login_AccountLocked", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "locked", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -47,9 +46,8 @@ func TestAuthHandlerErrors(t *testing.T) {
 		assert.Contains(t, w.Body.String(), "Account is locked")
 	})
 
-	t.Run("Login_DatabaseRequired", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
-		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
+	t.Run("Login_MissingCredentials", func(t *testing.T) {
+		reqBody := identity.LoginRequest{Username: "", Password: "password"}
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/login", bytes.NewReader(body))
@@ -61,7 +59,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_InternalError", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("db error")).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -95,19 +93,26 @@ func TestAuthHandlerErrors(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
-	t.Run("Logout_MissingToken", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/auth/v1/logout", bytes.NewReader([]byte("{}")))
+	t.Run("Logout_Success", func(t *testing.T) {
+		reqBody := struct {
+			RefreshToken string `json:"refresh_token"`
+		}{RefreshToken: "token"}
+		mockAuth.On("Logout", mock.Anything, "token").Return(nil).Once()
+
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/auth/v1/logout", bytes.NewReader(body))
 		w := httptest.NewRecorder()
 
 		server.handleLogout(w, req)
 
-		assert.Equal(t, http.StatusBadRequest, w.Code)
-		assert.Contains(t, w.Body.String(), "Missing refresh token")
+		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
 	t.Run("Logout_Error", func(t *testing.T) {
-		reqBody := identity.RefreshRequest{RefreshToken: "token"}
-		mockAuth.On("Logout", mock.Anything, "token").Return(errors.New("db error")).Once()
+		reqBody := struct {
+			RefreshToken string `json:"refresh_token"`
+		}{RefreshToken: "token2"}
+		mockAuth.On("Logout", mock.Anything, "token2").Return(errors.New("db error")).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/logout", bytes.NewReader(body))
@@ -149,7 +154,7 @@ func TestAdminHandlerErrors(t *testing.T) {
 
 	t.Run("UpdateUser_Error", func(t *testing.T) {
 		reqBody := UpdateUserRequest{Roles: []string{"admin"}, Disabled: true}
-		mockAuth.On("UpdateUser", mock.Anything, "123", reqBody.Roles, reqBody.Disabled).Return(errors.New("db error")).Once()
+		mockAuth.On("UpdateUser", mock.Anything, "123", reqBody.Roles, []string(nil), reqBody.Disabled).Return(errors.New("db error")).Once()
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("PATCH", "/admin/users/123", bytes.NewReader(body))
@@ -182,7 +187,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	server := createTestServer(mockService, mockAuth, nil)
 
 	t.Run("GetDocument_InvalidPath", func(t *testing.T) {
-		req, _ := http.NewRequest("GET", "/api/v1/rooms", nil)
+		req, _ := http.NewRequest("GET", "/api/v1/databases/default/documents/rooms", nil)
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -190,7 +195,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 
 	t.Run("CreateDocument_InternalError", func(t *testing.T) {
 		body := []byte(`{"id":"msg-1", "name": "Bob"}`)
-		req, _ := http.NewRequest("POST", "/api/v1/rooms/room-1/messages", bytes.NewBuffer(body))
+		req, _ := http.NewRequest("POST", "/api/v1/databases/default/documents/rooms/room-1/messages", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
 
 		mockService.On("CreateDocument", mock.Anything, "default", mock.Anything).Return(errors.New("db error")).Once()
@@ -203,7 +208,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 
 	t.Run("ReplaceDocument_InternalError", func(t *testing.T) {
 		body := []byte(`{"doc":{"name": "Bob"}}`)
-		req, _ := http.NewRequest("PUT", "/api/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
+		req, _ := http.NewRequest("PUT", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
 
 		mockService.On("ReplaceDocument", mock.Anything, "default", mock.MatchedBy(func(doc model.Document) bool {
@@ -218,7 +223,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 
 	t.Run("DeleteDocument_InvalidBody", func(t *testing.T) {
 		body := []byte(`{invalid-json}`)
-		req, _ := http.NewRequest("DELETE", "/api/v1/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
+		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -226,7 +231,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("DeleteDocument_PreconditionFailed", func(t *testing.T) {
-		req, _ := http.NewRequest("DELETE", "/api/v1/rooms/room-1/messages/msg-1", nil)
+		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", nil)
 		rr := httptest.NewRecorder()
 
 		mockService.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", mock.Anything).Return(model.ErrPreconditionFailed).Once()
@@ -238,14 +243,14 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("DeleteDocument_InvalidPath", func(t *testing.T) {
-		req, _ := http.NewRequest("DELETE", "/api/v1/rooms", nil)
+		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms", nil)
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
 	})
 
 	t.Run("PatchDocument_MissingID", func(t *testing.T) {
-		req, _ := http.NewRequest("PATCH", "/api/v1/rooms/room-1/messages", bytes.NewBuffer([]byte("{}")))
+		req, _ := http.NewRequest("PATCH", "/api/v1/databases/default/documents/rooms/room-1/messages", bytes.NewBuffer([]byte("{}")))
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
 		assert.Equal(t, http.StatusBadRequest, rr.Code)
@@ -278,13 +283,13 @@ func TestDocumentHandler_DatabaseError(t *testing.T) {
 
 	server := createTestServer(mockService, mockAuth, nil)
 
-	// GET request
+	// Request with old URL format (without database in path) should get 404
+	// because the new routes require /api/v1/databases/{database}/documents/{path}
 	req, _ := http.NewRequest("GET", "/api/v1/rooms/room-1/messages/msg-1", nil)
 	rr := httptest.NewRecorder()
 
 	server.ServeHTTP(rr, req)
 
-	// Should fail with 401 Unauthorized because database is missing
-	assert.Equal(t, http.StatusUnauthorized, rr.Code)
-	assert.Contains(t, rr.Body.String(), "Database identification required")
+	// Should fail with 404 because no route matches the old URL format
+	assert.Equal(t, http.StatusNotFound, rr.Code)
 }

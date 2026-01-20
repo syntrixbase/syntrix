@@ -30,7 +30,8 @@ type BaseMessage struct {
 
 // AuthPayload
 type AuthPayload struct {
-	Token string `json:"token"`
+	Token    string `json:"token"`
+	Database string `json:"database"` // Database to operate on
 }
 
 // SubscribePayload

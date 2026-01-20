@@ -22,7 +22,7 @@ import (
 
 func TestClientHandleMessage_AuthAck(t *testing.T) {
 	c := &Client{hub: NewTestHub(), queryService: &MockQueryService{}, send: make(chan BaseMessage, 1), subscriptions: make(map[string]Subscription), streamerSubIDs: make(map[string]string), auth: &mockAuthService{}}
-	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	payload, _ := json.Marshal(AuthPayload{Token: "good", Database: "default"})
 	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req", Payload: payload})
 
 	select {
@@ -53,13 +53,25 @@ func TestClientHandleMessage_AuthError(t *testing.T) {
 		t.Fatal("expected error")
 	}
 
-	// Case 2: Invalid Token
-	payload, _ := json.Marshal(AuthPayload{Token: "bad"})
+	// Case 2: Missing Database
+	payload, _ := json.Marshal(AuthPayload{Token: "good"})
 	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req2", Payload: payload})
 	select {
 	case msg := <-c.send:
 		assert.Equal(t, TypeError, msg.Type)
 		assert.Equal(t, "req2", msg.ID)
+		assert.Contains(t, string(msg.Payload), "database is required")
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected error")
+	}
+
+	// Case 3: Invalid Token
+	payload, _ = json.Marshal(AuthPayload{Token: "bad", Database: "default"})
+	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req3", Payload: payload})
+	select {
+	case msg := <-c.send:
+		assert.Equal(t, TypeError, msg.Type)
+		assert.Equal(t, "req3", msg.ID)
 		assert.Contains(t, string(msg.Payload), "unauthorized")
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("expected error")
@@ -74,7 +86,7 @@ func TestClientHandleMessage_AuthSuccess(t *testing.T) {
 		auth:         &mockAuthService{},
 	}
 
-	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	payload, _ := json.Marshal(AuthPayload{Token: "good", Database: "default"})
 	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req-ok", Payload: payload})
 
 	select {
@@ -95,7 +107,8 @@ type mockAuthServiceSystem struct {
 
 func (m *mockAuthServiceSystem) ValidateToken(tokenString string) (*identity.Claims, error) {
 	if tokenString == "system" {
-		return &identity.Claims{Database: "default", Roles: []string{"system"}}, nil
+		// Database is now extracted from auth payload, not token
+		return &identity.Claims{Roles: []string{"system"}}, nil
 	}
 	return m.mockAuthService.ValidateToken(tokenString)
 }
@@ -108,7 +121,7 @@ func TestClientHandleMessage_AuthSystemRole(t *testing.T) {
 		auth:         &mockAuthServiceSystem{},
 	}
 
-	payload, _ := json.Marshal(AuthPayload{Token: "system"})
+	payload, _ := json.Marshal(AuthPayload{Token: "system", Database: "default"})
 	c.handleMessage(BaseMessage{Type: TypeAuth, ID: "req", Payload: payload})
 
 	select {
@@ -185,7 +198,7 @@ func TestReadPump_InvalidJSONContinues(t *testing.T) {
 	assert.NoError(t, conn.WriteMessage(websocket.TextMessage, []byte("{invalid")))
 
 	// Follow with valid auth to ensure readPump still processes
-	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	payload, _ := json.Marshal(AuthPayload{Token: "good", Database: "default"})
 	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-2", Payload: payload}
 	assert.NoError(t, conn.WriteJSON(authMsg))
 
@@ -422,7 +435,7 @@ func TestServeWs_ReadWriteCycle(t *testing.T) {
 	defer conn.Close()
 
 	// Auth message -> expect ack
-	payload, _ := json.Marshal(AuthPayload{Token: "good"})
+	payload, _ := json.Marshal(AuthPayload{Token: "good", Database: "default"})
 	authMsg := BaseMessage{Type: TypeAuth, ID: "auth-1", Payload: payload}
 	assert.NoError(t, conn.WriteJSON(authMsg))
 

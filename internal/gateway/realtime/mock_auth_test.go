@@ -16,7 +16,7 @@ func (m *mockAuthService) Middleware(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx := withDatabaseAndRole(r.Context(), "default", []string{"user"})
+		ctx := withRoles(r.Context(), []string{"user"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -31,7 +31,7 @@ func (m *mockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		ctx := withDatabaseAndRole(r.Context(), "default", []string{"user"})
+		ctx := withRoles(r.Context(), []string{"user"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -52,11 +52,13 @@ func (m *mockAuthService) ListUsers(ctx context.Context, limit int, offset int) 
 	return nil, nil
 }
 
-func (m *mockAuthService) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (m *mockAuthService) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 
-func (m *mockAuthService) Logout(ctx context.Context, refreshToken string) error { return nil }
+func (m *mockAuthService) Logout(ctx context.Context, refreshToken string) error {
+	return nil
+}
 
 func (m *mockAuthService) GenerateSystemToken(serviceName string) (string, error) { return "", nil }
 
@@ -64,11 +66,11 @@ func (m *mockAuthService) ValidateToken(tokenString string) (*identity.Claims, e
 	if tokenString != "good" {
 		return nil, identity.ErrInvalidToken
 	}
-	return &identity.Claims{Database: "default", Roles: []string{"user"}}, nil
+	// Database is now extracted from auth payload, not from token
+	return &identity.Claims{Roles: []string{"user"}}, nil
 }
 
-func withDatabaseAndRole(ctx context.Context, database string, roles []string) context.Context {
-	ctx = context.WithValue(ctx, identity.ContextKeyDatabase, database)
+func withRoles(ctx context.Context, roles []string) context.Context {
 	ctx = context.WithValue(ctx, identity.ContextKeyRoles, roles)
 	return ctx
 }

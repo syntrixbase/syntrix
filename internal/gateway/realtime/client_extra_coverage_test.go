@@ -50,7 +50,7 @@ func (m *MockAuth) ListUsers(ctx context.Context, limit int, offset int) ([]*ide
 	return nil, nil
 }
 
-func (m *MockAuth) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (m *MockAuth) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 
@@ -188,7 +188,7 @@ func TestClient_HandleAuth_InvalidToken(t *testing.T) {
 		authenticated: false,
 	}
 
-	payload := AuthPayload{Token: "invalid-token"}
+	payload := AuthPayload{Token: "invalid-token", Database: "default"}
 	payloadBytes, _ := json.Marshal(payload)
 
 	msg := BaseMessage{
@@ -424,8 +424,8 @@ func TestServeSSE_HubClosed(t *testing.T) {
 	time.Sleep(10 * time.Millisecond)
 
 	req := httptest.NewRequest("GET", "/", nil)
-	// Add database to context since SSE requires authentication
-	reqCtx := context.WithValue(req.Context(), identity.ContextKeyDatabase, "test-database")
+	// Add database to context using internal context key since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), contextKeyDatabase, "test-database")
 	req = req.WithContext(reqCtx)
 	w := httptest.NewRecorder()
 
@@ -476,8 +476,8 @@ func TestServeSSE_WriteError_Data(t *testing.T) {
 	w := &FailWriter{ResponseWriter: rec}
 
 	req := httptest.NewRequest("GET", "/", nil)
-	// Add database to context since SSE requires authentication
-	reqCtx := context.WithValue(req.Context(), identity.ContextKeyDatabase, "test-database")
+	// Add database to context using internal context key since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), contextKeyDatabase, "test-database")
 	req = req.WithContext(reqCtx)
 
 	// We need to make Write fail ONLY when sending data, not headers.
@@ -568,8 +568,8 @@ func TestServeSSE_Heartbeat(t *testing.T) {
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest("GET", "/", nil)
 	ctx2, cancel2 := context.WithCancel(context.Background())
-	// Add database to context since SSE requires authentication
-	ctx2 = context.WithValue(ctx2, identity.ContextKeyDatabase, "test-database")
+	// Add database to context using internal context key since SSE requires authentication
+	ctx2 = context.WithValue(ctx2, contextKeyDatabase, "test-database")
 	req = req.WithContext(ctx2)
 
 	done := make(chan struct{})

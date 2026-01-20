@@ -80,7 +80,7 @@ func TestAPIIntegration(t *testing.T) {
 			{Field: "name", Op: model.OpEq, Value: "Replaced User"},
 		},
 	}
-	resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+	resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var queryResults []map[string]interface{}
@@ -115,7 +115,7 @@ func TestAPIIntegration(t *testing.T) {
 			{"field": "age", "op": "==", "value": 43},
 		},
 	}
-	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, docID), ifMatchData, token)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, docID), ifMatchData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
@@ -128,17 +128,17 @@ func TestAPIIntegration(t *testing.T) {
 			{"field": "age", "op": "==", "value": 999}, // Wrong age
 		},
 	}
-	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, docID), ifMatchFailData, token)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, docID), ifMatchFailData, token)
 	require.Equal(t, http.StatusPreconditionFailed, resp.StatusCode)
 	resp.Body.Close()
 
 	// 6. Scenario: Delete Document
-	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, token)
+	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	resp.Body.Close()
 
 	// Verify Delete
-	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, token)
+	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, docID), nil, token)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 	resp.Body.Close()
 }
@@ -178,7 +178,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 				{Field: "price", Op: model.OpLt, Value: 1.0},
 			},
 		}
-		resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var results []map[string]interface{}
@@ -201,7 +201,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 				{Field: "price", Direction: "desc"},
 			},
 		}
-		resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var results []map[string]interface{}
@@ -220,7 +220,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 			Collection: collection,
 			Limit:      2,
 		}
-		resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var results []map[string]interface{}
@@ -239,7 +239,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 				{Field: "stock", Op: model.OpGte, Value: 150},
 			},
 		}
-		resp := env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var results []map[string]interface{}
@@ -253,7 +253,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 	// Test 5: Query ShowDeleted
 	t.Run("ShowDeleted", func(t *testing.T) {
 		// Delete one document
-		resp := env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/%s/%s", collection, createdIDs[0]), nil, token)
+		resp := env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, createdIDs[0]), nil, token)
 		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 		resp.Body.Close()
 
@@ -262,7 +262,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 			Collection:  collection,
 			ShowDeleted: false,
 		}
-		resp = env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp = env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var results []map[string]interface{}
@@ -273,7 +273,7 @@ func TestAPIQueryAdvanced(t *testing.T) {
 
 		// Query with ShowDeleted - should include deleted doc
 		query.ShowDeleted = true
-		resp = env.MakeRequest(t, "POST", "/api/v1/query", query, token)
+		resp = env.MakeRequest(t, "POST", "/api/v1/databases/default/query", query, token)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		json.NewDecoder(resp.Body).Decode(&results)
@@ -294,7 +294,7 @@ func TestAPIErrorCases(t *testing.T) {
 
 	// Test 1: Get non-existent document (404)
 	t.Run("NotFound", func(t *testing.T) {
-		resp := env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/nonexistent-id", collection), nil, token)
+		resp := env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/default/documents/%s/nonexistent-id", collection), nil, token)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		resp.Body.Close()
 	})
@@ -302,7 +302,7 @@ func TestAPIErrorCases(t *testing.T) {
 	// Test 2: Invalid request body (400)
 	t.Run("BadRequest", func(t *testing.T) {
 		// Send invalid JSON
-		req, _ := http.NewRequest("POST", env.APIURL+"/api/v1/"+collection, strings.NewReader("{invalid json}"))
+		req, _ := http.NewRequest("POST", env.APIURL+"/api/v1/databases/default/documents/"+collection, strings.NewReader("{invalid json}"))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+token)
 
@@ -316,14 +316,14 @@ func TestAPIErrorCases(t *testing.T) {
 
 	// Test 3: Unauthorized request (401)
 	t.Run("Unauthorized", func(t *testing.T) {
-		resp := env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/some-id", collection), nil, "invalid-token")
+		resp := env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/default/documents/%s/some-id", collection), nil, "invalid-token")
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 		resp.Body.Close()
 	})
 
 	// Test 4: Delete non-existent document (404)
 	t.Run("DeleteNotFound", func(t *testing.T) {
-		resp := env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/%s/nonexistent-id", collection), nil, token)
+		resp := env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/databases/default/documents/%s/nonexistent-id", collection), nil, token)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		resp.Body.Close()
 	})
@@ -335,7 +335,7 @@ func TestAPIErrorCases(t *testing.T) {
 				{"field": "name", "op": "invalid_op", "value": "test"},
 			},
 		}
-		resp := env.MakeRequest(t, "POST", "/api/v1/query", invalidQuery, token)
+		resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/query", invalidQuery, token)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		resp.Body.Close()
 	})
@@ -347,7 +347,7 @@ func TestAPIErrorCases(t *testing.T) {
 				"name": "updated",
 			},
 		}
-		resp := env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/nonexistent-id", collection), patchData, token)
+		resp := env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/nonexistent-id", collection), patchData, token)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		resp.Body.Close()
 	})
@@ -361,7 +361,7 @@ func TestAPIErrorCases(t *testing.T) {
 				"status": "new",
 			},
 		}
-		resp := env.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/%s/%s", collection, newDocID), putData, token)
+		resp := env.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, newDocID), putData, token)
 		// PUT should create if not exists (upsert)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		resp.Body.Close()
@@ -389,7 +389,7 @@ func TestAPIErrorCases(t *testing.T) {
 				"status": "replaced",
 			},
 		}
-		resp := env.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/%s/%s", collection, createdID), putData, token)
+		resp := env.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, createdID), putData, token)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		resp.Body.Close()
 

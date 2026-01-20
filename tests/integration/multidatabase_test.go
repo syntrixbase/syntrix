@@ -31,7 +31,7 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 		"title": "Secret Plan A",
 		"owner": "A",
 	}
-	resp := env.MakeRequest(t, "POST", "/api/v1/"+collection, docData, tokenA)
+	resp := env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/documents/%s", databaseA, collection), docData, tokenA)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var createdDoc map[string]interface{}
@@ -41,7 +41,7 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 	docID := createdDoc["id"].(string)
 
 	// 2. Database B tries to GET the document (Should fail)
-	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenB)
+	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/%s/documents/%s/%s", databaseB, collection, docID), nil, tokenB)
 	// Should be 404 Not Found because it doesn't exist in Database B's scope
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
@@ -50,7 +50,7 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 	queryAll := model.Query{
 		Collection: collection,
 	}
-	resp = env.MakeRequest(t, "POST", "/api/v1/query", queryAll, tokenB)
+	resp = env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/query", databaseB), queryAll, tokenB)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var listRes []interface{}
 	err = json.NewDecoder(resp.Body).Decode(&listRes)
@@ -65,11 +65,11 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 			"title": "Hacked by B",
 		},
 	}
-	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, docID), updateData, tokenB)
+	resp = env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/%s/documents/%s/%s", databaseB, collection, docID), updateData, tokenB)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// 5. Database B tries to DELETE the document (Should fail)
-	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenB)
+	resp = env.MakeRequest(t, "DELETE", fmt.Sprintf("/api/v1/databases/%s/documents/%s/%s", databaseB, collection, docID), nil, tokenB)
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)
 
 	// 6. Database B tries to Query the document (Should not find it)
@@ -79,7 +79,7 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 			{Field: "title", Op: model.OpEq, Value: "Secret Plan A"},
 		},
 	}
-	resp = env.MakeRequest(t, "POST", "/api/v1/query", query, tokenB)
+	resp = env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/query", databaseB), query, tokenB)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var queryResults []interface{}
 	err = json.NewDecoder(resp.Body).Decode(&queryResults)
@@ -88,7 +88,7 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 	assert.Empty(t, queryResults, "Database B query should return empty")
 
 	// 7. Database A can see the document
-	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, docID), nil, tokenA)
+	resp = env.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/%s/documents/%s/%s", databaseA, collection, docID), nil, tokenA)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -110,7 +110,7 @@ func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 	defer wsA.Close()
 
 	// Authenticate A
-	env.AuthenticateWebSocket(t, wsA, tokenA)
+	env.AuthenticateWebSocketWithDatabase(t, wsA, tokenA, databaseA)
 
 	// Subscribe A
 	err := wsA.WriteJSON(BaseMessage{
@@ -129,7 +129,7 @@ func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 	defer wsB.Close()
 
 	// Authenticate B
-	env.AuthenticateWebSocket(t, wsB, tokenB)
+	env.AuthenticateWebSocketWithDatabase(t, wsB, tokenB, databaseB)
 
 	// Subscribe B
 	err = wsB.WriteJSON(BaseMessage{
@@ -147,7 +147,7 @@ func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 	docData := map[string]interface{}{
 		"msg": "Hello Database A",
 	}
-	resp := env.MakeRequest(t, "POST", "/api/v1/"+collection, docData, tokenA)
+	resp := env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/documents/%s", databaseA, collection), docData, tokenA)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
@@ -161,7 +161,7 @@ func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 	docDataB := map[string]interface{}{
 		"msg": "Hello Database B",
 	}
-	respB := env.MakeRequest(t, "POST", "/api/v1/"+collection, docDataB, tokenB)
+	respB := env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/documents/%s", databaseB, collection), docDataB, tokenB)
 	require.Equal(t, http.StatusCreated, respB.StatusCode)
 	respB.Body.Close()
 
@@ -199,12 +199,12 @@ func TestMultiDatabase_ReplicationIsolation(t *testing.T) {
 	docData := map[string]interface{}{
 		"title": "Repl Doc A",
 	}
-	resp := env.MakeRequest(t, "POST", "/api/v1/"+collection, docData, tokenA)
+	resp := env.MakeRequest(t, "POST", fmt.Sprintf("/api/v1/databases/%s/documents/%s", databaseA, collection), docData, tokenA)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
 	// 2. Database B PULLs (Should get nothing)
-	pullURL := fmt.Sprintf("/replication/v1/pull?collection=%s&checkpoint=0&limit=100", collection)
+	pullURL := fmt.Sprintf("/replication/v1/databases/%s/pull?collection=%s&checkpoint=0&limit=100", databaseB, collection)
 	resp = env.MakeRequest(t, "GET", pullURL, nil, tokenB)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -229,12 +229,13 @@ func TestMultiDatabase_ReplicationIsolation(t *testing.T) {
 			},
 		},
 	}
-	resp = env.MakeRequest(t, "POST", "/replication/v1/push", pushReq, tokenB)
+	resp = env.MakeRequest(t, "POST", fmt.Sprintf("/replication/v1/databases/%s/push", databaseB), pushReq, tokenB)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
 	// 4. Database A PULLs (Should see only Doc A, not Doc B)
-	resp = env.MakeRequest(t, "GET", pullURL, nil, tokenA)
+	pullURLForA := fmt.Sprintf("/replication/v1/databases/%s/pull?collection=%s&checkpoint=0&limit=100", databaseA, collection)
+	resp = env.MakeRequest(t, "GET", pullURLForA, nil, tokenA)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	err = json.NewDecoder(resp.Body).Decode(&pullRes)

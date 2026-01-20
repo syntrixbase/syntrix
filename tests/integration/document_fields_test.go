@@ -87,7 +87,7 @@ func TestDocumentSystemFields(t *testing.T) {
 			"collection": "hacked",
 		},
 	}
-	resp := env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, docID), maliciousData, token)
+	resp := env.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, docID), maliciousData, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	var protectedDoc map[string]interface{}

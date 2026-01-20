@@ -17,7 +17,7 @@ const (
 	ContextKeyUsername ContextKey = "username"
 	ContextKeyRoles    ContextKey = "roles"
 	ContextKeyClaims   ContextKey = "claims"
-	ContextKeyDatabase ContextKey = "database"
+	ContextKeyDBAdmin  ContextKey = "db_admin"
 )
 
 // Claims represents JWT claims returned by token validation.
@@ -25,8 +25,7 @@ type Claims struct {
 	Username string   `json:"username"`
 	Roles    []string `json:"roles,omitempty"`
 	Disabled bool     `json:"disabled"`
-	Database string   `json:"database"`
-	TenantID string   `json:"tid"`
+	DBAdmin  []string `json:"db_admin,omitempty"` // Databases with admin access (bypass authz)
 	UserID   string   `json:"oid"`
 	jwt.RegisteredClaims
 }
@@ -40,14 +39,12 @@ type TokenPair struct {
 
 // SignupRequest represents the signup payload.
 type SignupRequest struct {
-	Database string `json:"database,omitempty"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
 // LoginRequest represents the login payload.
 type LoginRequest struct {
-	Database string `json:"database,omitempty"`
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
@@ -83,6 +80,7 @@ type Authenticated struct {
 	UID      interface{}            `json:"userId"`
 	Username string                 `json:"username,omitempty"`
 	Roles    []string               `json:"roles"`
+	DBAdmin  []string               `json:"db_admin,omitempty"` // Databases with admin access
 	Claims   map[string]interface{} `json:"claims,omitempty"`
 }
 

@@ -32,6 +32,11 @@ const (
 	maxMessageSize = 64 * 1024
 )
 
+// Context key for database (used internally in realtime package)
+type contextKey string
+
+const contextKeyDatabase contextKey = "database"
+
 // Send pings to peer with this period. Must be less than pongWait.
 var pingPeriod = (pongWait * 9) / 10
 
@@ -262,14 +267,19 @@ func (c *Client) handleAuth(msg BaseMessage) {
 		return
 	}
 
+	if payload.Database == "" {
+		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "invalid_auth", Message: "database is required"})}
+		return
+	}
+
 	claims, err := c.auth.ValidateToken(payload.Token)
-	if err != nil || claims == nil || claims.Database == "" {
+	if err != nil || claims == nil {
 		c.send <- BaseMessage{ID: msg.ID, Type: TypeError, Payload: mustMarshal(ErrorPayload{Code: "unauthorized", Message: "invalid token"})}
 		return
 	}
 
 	c.mu.Lock()
-	c.database = claims.Database
+	c.database = payload.Database // Database from auth payload, not token
 	c.allowAllDatabases = hasSystemRoleFromClaims(claims)
 	c.authenticated = true
 	c.mu.Unlock()
@@ -327,12 +337,8 @@ func databaseFromContext(ctx context.Context) (string, bool) {
 	if ctx == nil {
 		return "", false
 	}
-	database, _ := ctx.Value(identity.ContextKeyDatabase).(string)
-	if database == "" {
-		if claims, ok := ctx.Value(identity.ContextKeyClaims).(*identity.Claims); ok && claims != nil {
-			database = claims.Database
-		}
-	}
+	// Database is no longer in token claims, must be set explicitly in context
+	database, _ := ctx.Value(contextKeyDatabase).(string)
 	allowAll := hasSystemRole(ctx)
 	return database, allowAll
 }
@@ -498,6 +504,10 @@ func ServeSSE(hub *Hub, qs query.Service, auth identity.AuthN, cfg api_config.Re
 
 	// Create client without websocket connection
 	database, allowAll := databaseFromContext(ctx)
+	// Fall back to query parameter if not in context
+	if database == "" {
+		database = r.URL.Query().Get("database")
+	}
 	if database == "" {
 		http.Error(w, "database required", http.StatusUnauthorized)
 		return

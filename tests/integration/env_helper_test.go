@@ -245,7 +245,7 @@ func (e *ServiceEnv) MakeRequest(t *testing.T, method, path string, body interfa
 }
 
 func (e *ServiceEnv) CreateDocument(t *testing.T, collection string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := e.MakeRequest(t, "POST", "/api/v1/"+collection, data, token)
+	resp := e.MakeRequest(t, "POST", "/api/v1/databases/default/documents/"+collection, data, token)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -255,7 +255,7 @@ func (e *ServiceEnv) CreateDocument(t *testing.T, collection string, data map[st
 }
 
 func (e *ServiceEnv) GetDocument(t *testing.T, collection, id, token string) map[string]interface{} {
-	resp := e.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/%s/%s", collection, id), nil, token)
+	resp := e.MakeRequest(t, "GET", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, id), nil, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -265,7 +265,7 @@ func (e *ServiceEnv) GetDocument(t *testing.T, collection, id, token string) map
 }
 
 func (e *ServiceEnv) PatchDocument(t *testing.T, collection, id string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := e.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/%s/%s", collection, id), data, token)
+	resp := e.MakeRequest(t, "PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, id), data, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -275,7 +275,7 @@ func (e *ServiceEnv) PatchDocument(t *testing.T, collection, id string, data map
 }
 
 func (e *ServiceEnv) PutDocument(t *testing.T, collection, id string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := e.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/%s/%s", collection, id), data, token)
+	resp := e.MakeRequest(t, "PUT", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", collection, id), data, token)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -335,7 +335,8 @@ type BaseMessage struct {
 }
 
 type AuthPayload struct {
-	Token string `json:"token"`
+	Token    string `json:"token"`
+	Database string `json:"database,omitempty"`
 }
 
 type SubscribePayload struct {
@@ -385,11 +386,16 @@ func (e *ServiceEnv) ConnectWebSocket(t *testing.T) *websocket.Conn {
 }
 
 func (e *ServiceEnv) AuthenticateWebSocket(t *testing.T, ws *websocket.Conn, token string) {
+	e.AuthenticateWebSocketWithDatabase(t, ws, token, "default")
+}
+
+func (e *ServiceEnv) AuthenticateWebSocketWithDatabase(t *testing.T, ws *websocket.Conn, token string, database string) {
 	authMsg := BaseMessage{
 		ID:   "auth-" + t.Name(),
 		Type: TypeAuth,
 		Payload: mustMarshal(AuthPayload{
-			Token: token,
+			Token:    token,
+			Database: database,
 		}),
 	}
 	err := ws.WriteJSON(authMsg)

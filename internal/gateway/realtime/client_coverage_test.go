@@ -99,8 +99,8 @@ func TestServeSSE_SendChannelClosed(t *testing.T) {
 	cfg := api_config.RealtimeConfig{}
 
 	req := httptest.NewRequest("GET", "/sse", nil)
-	// Add database to context since SSE requires authentication
-	reqCtx := context.WithValue(req.Context(), identity.ContextKeyDatabase, "test-database")
+	// Add database to context using internal context key since SSE requires authentication
+	reqCtx := context.WithValue(req.Context(), contextKeyDatabase, "test-database")
 	req = req.WithContext(reqCtx)
 	w := httptest.NewRecorder()
 

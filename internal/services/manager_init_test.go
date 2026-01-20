@@ -343,31 +343,31 @@ type fakeAuthStore struct {
 	ensureCalled bool
 }
 
-func (f *fakeAuthStore) CreateUser(ctx context.Context, database string, user *storage.User) error {
+func (f *fakeAuthStore) CreateUser(ctx context.Context, user *storage.User) error {
 	return nil
 }
-func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, database, username string) (*storage.User, error) {
+func (f *fakeAuthStore) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) GetUserByID(ctx context.Context, database, id string) (*storage.User, error) {
+func (f *fakeAuthStore) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
 	return nil, identity.ErrUserNotFound
 }
-func (f *fakeAuthStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*storage.User, error) {
+func (f *fakeAuthStore) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
 	return nil, nil
 }
-func (f *fakeAuthStore) UpdateUser(ctx context.Context, database string, user *storage.User) error {
+func (f *fakeAuthStore) UpdateUser(ctx context.Context, user *storage.User) error {
 	return nil
 }
-func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, database, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+func (f *fakeAuthStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeToken(ctx context.Context, database, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, database, jti string, expiresAt time.Time) error {
+func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (f *fakeAuthStore) IsRevoked(ctx context.Context, database, jti string, gracePeriod time.Duration) (bool, error) {
+func (f *fakeAuthStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
 func (f *fakeAuthStore) EnsureIndexes(ctx context.Context) error {
@@ -510,10 +510,10 @@ func (s *stubAuthN) SignUp(ctx context.Context, req identity.SignupRequest) (*id
 func (s *stubAuthN) Refresh(ctx context.Context, req identity.RefreshRequest) (*identity.TokenPair, error) {
 	return nil, nil
 }
-func (s *stubAuthN) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+func (s *stubAuthN) ListUsers(ctx context.Context, limit int, offset int) ([]*identity.User, error) {
 	return nil, nil
 }
-func (s *stubAuthN) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (s *stubAuthN) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 func (s *stubAuthN) Logout(ctx context.Context, refreshToken string) error      { return nil }

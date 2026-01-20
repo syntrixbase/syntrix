@@ -93,22 +93,22 @@ type mockUserStore struct {
 	mock.Mock
 }
 
-func (m *mockUserStore) CreateUser(ctx context.Context, database string, user *types.User) error {
+func (m *mockUserStore) CreateUser(ctx context.Context, user *types.User) error {
 	return nil
 }
-func (m *mockUserStore) GetUserByUsername(ctx context.Context, database, username string) (*types.User, error) {
+func (m *mockUserStore) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) GetUserByID(ctx context.Context, database, id string) (*types.User, error) {
+func (m *mockUserStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*types.User, error) {
+func (m *mockUserStore) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
 	return nil, nil
 }
-func (m *mockUserStore) UpdateUser(ctx context.Context, database string, user *types.User) error {
+func (m *mockUserStore) UpdateUser(ctx context.Context, user *types.User) error {
 	return nil
 }
-func (m *mockUserStore) UpdateUserLoginStats(ctx context.Context, database, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+func (m *mockUserStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
 	return nil
 }
 func (m *mockUserStore) EnsureIndexes(ctx context.Context) error {
@@ -122,13 +122,13 @@ type mockRevocationStore struct {
 	mock.Mock
 }
 
-func (m *mockRevocationStore) RevokeToken(ctx context.Context, database, jti string, expiresAt time.Time) error {
+func (m *mockRevocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (m *mockRevocationStore) RevokeTokenImmediate(ctx context.Context, database, jti string, expiresAt time.Time) error {
+func (m *mockRevocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
 	return nil
 }
-func (m *mockRevocationStore) IsRevoked(ctx context.Context, database, jti string, gracePeriod time.Duration) (bool, error) {
+func (m *mockRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
 func (m *mockRevocationStore) EnsureIndexes(ctx context.Context) error {
