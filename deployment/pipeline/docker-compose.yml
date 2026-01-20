@@ -30,7 +30,7 @@ services:
       - syntrix-pipeline-net
 
   postgres:
-    image: postgres:17-bookworm
+    image: postgres:18-bookworm
     container_name: syntrix-pipeline-postgres
     environment:
       POSTGRES_USER: syntrix
