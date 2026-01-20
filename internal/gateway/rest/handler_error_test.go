@@ -198,7 +198,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Internal server error")
+		assert.Contains(t, rr.Body.String(), "Internal storage error")
 	})
 
 	t.Run("ReplaceDocument_InternalError", func(t *testing.T) {
@@ -213,7 +213,7 @@ func TestDocumentHandlerErrors(t *testing.T) {
 		server.ServeHTTP(rr, req)
 
 		assert.Equal(t, http.StatusInternalServerError, rr.Code)
-		assert.Contains(t, rr.Body.String(), "Internal server error")
+		assert.Contains(t, rr.Body.String(), "Internal storage error")
 	})
 
 	t.Run("DeleteDocument_InvalidBody", func(t *testing.T) {

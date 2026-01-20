@@ -27,7 +27,7 @@ func (h *Handler) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 	users, err := h.auth.ListUsers(r.Context(), limit, offset)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to list users")
+		writeInternalError(w, err, "Failed to list users")
 		return
 	}
 
@@ -59,7 +59,7 @@ func (h *Handler) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.auth.UpdateUser(r.Context(), id, req.Roles, req.Disabled); err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to update user")
+		writeInternalError(w, err, "Failed to update user")
 		return
 	}
 

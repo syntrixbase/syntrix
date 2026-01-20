@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hash/fnv"
-	"log"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -114,7 +114,7 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 		go c.workerLoop(ctx, i)
 	}
 
-	log.Printf("Trigger Consumer started with %d workers, waiting for messages...", c.numWorkers)
+	slog.Info("Trigger Consumer started, waiting for messages", "num_workers", c.numWorkers)
 
 	// Message loop (replaces callback pattern)
 	for msg := range msgCh {
@@ -123,7 +123,7 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 	// Channel closed means context is cancelled, proceed to shutdown
 
 	// Phase 1: Stop accepting new messages (already done - channel closed)
-	log.Println("[Info] Stopping Trigger Consumer...")
+	slog.Info("Stopping Trigger Consumer...")
 	c.closing.Store(true)
 
 	// Phase 2: Wait for in-flight dispatches to complete
@@ -148,9 +148,9 @@ func (c *natsConsumer) Start(ctx context.Context) error {
 
 	select {
 	case <-done:
-		log.Println("[Info] All workers stopped gracefully")
+		slog.Info("All workers stopped gracefully")
 	case <-shutdownCtx.Done():
-		log.Printf("[Warn] Shutdown timeout exceeded, some workers may still be running")
+		slog.Warn("Shutdown timeout exceeded, some workers may still be running")
 	}
 
 	return nil
@@ -166,12 +166,12 @@ func (c *natsConsumer) waitForDrain(ctx context.Context) {
 		case <-ctx.Done():
 			remaining := c.inFlightCount.Load()
 			if remaining > 0 {
-				log.Printf("[Warn] Drain timeout, %d messages still in-flight", remaining)
+				slog.Warn("Drain timeout, messages still in-flight", "remaining", remaining)
 			}
 			return
 		case <-ticker.C:
 			if c.inFlightCount.Load() == 0 {
-				log.Println("[Info] All in-flight messages drained")
+				slog.Info("All in-flight messages drained")
 				return
 			}
 		}
@@ -185,14 +185,14 @@ func (c *natsConsumer) dispatch(msg pubsub.Message) {
 
 	// Check if consumer is closing - NAK message for redelivery
 	if c.closing.Load() {
-		log.Printf("[Warn] Consumer is closing, NAK message for redelivery")
+		slog.Warn("Consumer is closing, NAK message for redelivery")
 		msg.Nak()
 		return
 	}
 
 	var task types.DeliveryTask
 	if err := json.Unmarshal(msg.Data(), &task); err != nil {
-		log.Printf("[Error] Invalid payload in dispatch: %v", err)
+		slog.Error("Invalid payload in dispatch", "error", err)
 		c.metrics.IncConsumeFailure("unknown", "unknown", "unmarshal_error")
 		msg.Term()
 		return
@@ -213,22 +213,22 @@ func (c *natsConsumer) workerLoop(ctx context.Context, id int) {
 	for msg := range c.workerChans[id] {
 		if err := c.processMsg(ctx, msg); err != nil {
 			if types.IsFatal(err) {
-				log.Printf("[Error] [Worker %d] Fatal error processing message: %v. Terminating.", id, err)
+				slog.Error("Fatal error processing message. Terminating.", "worker_id", id, "error", err)
 				msg.Term()
 				continue
 			}
-			log.Printf("[Error] [Worker %d] Failed to process message: %v", id, err)
+			slog.Error("Failed to process message", "worker_id", id, "error", err)
 
 			md, metaErr := msg.Metadata()
 			if metaErr != nil {
-				log.Printf("[Error] Failed to get message metadata: %v", metaErr)
+				slog.Error("Failed to get message metadata", "error", metaErr)
 				msg.Nak()
 				continue
 			}
 
 			var task types.DeliveryTask
 			if jsonErr := json.Unmarshal(msg.Data(), &task); jsonErr != nil {
-				log.Printf("[Error] Invalid payload for retry check: %v", jsonErr)
+				slog.Error("Invalid payload for retry check", "error", jsonErr)
 				msg.Term()
 				continue
 			}
@@ -239,7 +239,7 @@ func (c *natsConsumer) workerLoop(ctx context.Context, id int) {
 			}
 
 			if int(md.NumDelivered) >= maxAttempts {
-				log.Printf("[Error] Max attempts (%d) reached for trigger %s. Terminating.", maxAttempts, task.TriggerID)
+				slog.Error("Max attempts reached. Terminating.", "max_attempts", maxAttempts, "trigger_id", task.TriggerID)
 				msg.Term()
 				continue
 			}
@@ -257,7 +257,7 @@ func (c *natsConsumer) workerLoop(ctx context.Context, id int) {
 				backoff = maxBackoff
 			}
 
-			log.Printf("[Info] Retrying trigger %s in %v (Attempt %d/%d)", task.TriggerID, backoff, attempt+1, maxAttempts)
+			slog.Info("Retrying trigger", "trigger_id", task.TriggerID, "backoff", backoff, "attempt", attempt+1, "max_attempts", maxAttempts)
 			msg.NakWithDelay(backoff)
 		} else {
 			msg.Ack()
@@ -273,7 +273,7 @@ func (c *natsConsumer) processMsg(ctx context.Context, msg pubsub.Message) error
 		return fmt.Errorf("invalid payload: %w", err)
 	}
 
-	log.Printf("[Info] Processing trigger task: %s", task.TriggerID)
+	slog.Info("Processing trigger task", "trigger_id", task.TriggerID)
 
 	timeout := time.Duration(task.Timeout)
 	if timeout == 0 {

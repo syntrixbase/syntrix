@@ -2,7 +2,7 @@ package rest
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -20,20 +20,20 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 	decoder := schema.NewDecoder()
 	decoder.IgnoreUnknownKeys(true)
 	if err := decoder.Decode(&reqBody, r.URL.Query()); err != nil {
-		log.Println("[Warning][Pull] invalid query parameters:", err)
+		slog.Warn("Pull: invalid query parameters", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid query parameters")
 		return
 	}
 
 	if reqBody.Collection == "" {
-		log.Println("[Warning][Pull] missing collection")
+		slog.Warn("Pull: missing collection")
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Collection is required")
 		return
 	}
 
 	checkpointInt, err := strconv.ParseInt(reqBody.Checkpoint, 10, 64)
 	if err != nil {
-		log.Println("[Warning][Pull] invalid checkpoint:", err)
+		slog.Warn("Pull: invalid checkpoint", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid checkpoint")
 		return
 	}
@@ -45,7 +45,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateReplicationPull(req); err != nil {
-		log.Println("[Warning][Pull] validation error:", err)
+		slog.Warn("Pull: validation error", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid replication parameters")
 		return
 	}
@@ -55,11 +55,11 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log.Printf("[Info][Pull] collection: %s, checkpoint: %d, limit: %d", req.Collection, req.Checkpoint, req.Limit)
+	slog.Info("Pull: started", "collection", req.Collection, "checkpoint", req.Checkpoint, "limit", req.Limit)
 
 	resp, err := h.engine.Pull(r.Context(), database, req)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to pull changes")
+		writeInternalError(w, err, "Failed to pull changes")
 		return
 	}
 
@@ -68,8 +68,7 @@ func (h *Handler) handlePull(w http.ResponseWriter, r *http.Request) {
 		flatDocs[i] = flattenDocument(doc)
 	}
 
-	log.Printf("[Info][Pull] completed collection: %s, returned: %d docs, new checkpoint: %d",
-		req.Collection, len(flatDocs), resp.Checkpoint)
+	slog.Info("Pull: completed", "collection", req.Collection, "returned_docs", len(flatDocs), "new_checkpoint", resp.Checkpoint)
 
 	writeJSON(w, http.StatusOK, ReplicaPullResponse{
 		Documents:  flatDocs,
@@ -81,20 +80,20 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	// Parse flattened push request
 	var reqBody ReplicaPushRequest
 	if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
-		log.Println("[Warning][Push] invalid request body")
+		slog.Warn("Push: invalid request body", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
 		return
 	}
 
 	collection := reqBody.Collection
 	if collection == "" {
-		log.Println("[Warning][Push] change missing collection")
+		slog.Warn("Push: change missing collection")
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Collection is required")
 		return
 	}
 
 	if err := helper.CheckCollectionPath(collection); err != nil {
-		log.Println("[Warning][Push] invalid collection:", err)
+		slog.Warn("Push: invalid collection", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid collection")
 		return
 	}
@@ -109,7 +108,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	for _, change := range reqBody.Changes {
 		docData := change.Doc
 		if err := docData.ValidateDocument(); err != nil {
-			log.Println("[Warning][Push] change document validation failed:", err)
+			slog.Warn("Push: change document validation failed", "error", err)
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid document in changes")
 			return
 		}
@@ -117,7 +116,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		docData.StripProtectedFields()
 
 		if docData.GetID() == "" {
-			log.Println("[Warning][Push] change document missing ID, skipping")
+			slog.Warn("Push: change document missing ID, skipping")
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Document ID is required in changes")
 			return
 		}
@@ -147,7 +146,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(changes) == 0 {
-		log.Println("[Warning][Push] no valid changes in request")
+		slog.Warn("Push: no valid changes in request")
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "No valid changes to push")
 		return
 	}
@@ -158,16 +157,15 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := validateReplicationPushFn(pushReq); err != nil {
-		log.Println("[Warning][Push] validation error:", err)
+		slog.Warn("Push: validation error", "error", err)
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid replication parameters")
 		return
 	}
 
-	log.Printf("[Info][Push] collection: %s, changes: %d", collection, len(changes))
+	slog.Info("Push: started", "collection", collection, "changes", len(changes))
 	resp, err := h.engine.Push(r.Context(), database, pushReq)
 	if err != nil {
-		log.Println("[Error][Push] error during push:", err)
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to push changes")
+		writeInternalError(w, err, "Failed to push changes")
 		return
 	}
 
@@ -177,7 +175,7 @@ func (h *Handler) handlePush(w http.ResponseWriter, r *http.Request) {
 		flatConflicts[i] = flattenDocument(doc)
 	}
 
-	log.Printf("[Info][Push] completed collection: %s, conflicts: %d", collection, len(flatConflicts))
+	slog.Info("Push: completed", "collection", collection, "conflicts", len(flatConflicts))
 
 	writeJSON(w, http.StatusOK, ReplicaPushResponse{
 		Conflicts: flatConflicts,

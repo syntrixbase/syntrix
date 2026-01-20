@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/logging"
 	"github.com/syntrixbase/syntrix/internal/services"
 	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 )
@@ -29,6 +30,12 @@ func main() {
 
 	// 1. Load Configuration early to check deployment mode from config
 	cfg := config.LoadConfig()
+
+	// Initialize logging (before any other services)
+	if err := logging.Initialize(cfg.Logging); err != nil {
+		log.Fatalf("Failed to initialize logging: %v", err)
+	}
+	defer logging.Shutdown()
 
 	// Determine deployment mode: CLI flag takes precedence over config file
 	mode := cfg.Deployment.Mode

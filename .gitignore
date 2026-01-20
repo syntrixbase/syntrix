@@ -9,10 +9,9 @@
 /syntrix-cli
 /bin/
 
-node_modules/
-
 # Test binary
 *.test
+*.pem
 
 # Output of go coverage tool
 *.out
@@ -20,6 +19,7 @@ test_coverage.html
 
 # Dependency directories
 vendor/
+node_modules/
 
 # IDE
 .idea/
@@ -32,12 +32,13 @@ vendor/
 *.swp
 *.swo
 
-# Test Keys
-*.pem
-
 # OS
 .DS_Store
 Thumbs.db
 
 # Local running cache
 .syntrix/
+
+# Temporary files
+/logs
+/docs/plans

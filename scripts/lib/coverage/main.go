@@ -651,7 +651,7 @@ func printStatistics(funcs []FuncCoverage, topLevelCounts, subTestCounts map[str
 
 // generateHTMLReport generates an HTML coverage report
 func generateHTMLReport() {
-	cmd := exec.Command("go", "tool", "cover", "-html="+cfg.CoverProfile, "-o", "test_coverage.html")
+	cmd := exec.Command("go", "tool", "cover", "-html="+cfg.CoverProfile, "-o", "./.syntrix/test_coverage.html")
 	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error generating HTML report: %v\n", err)
 	}

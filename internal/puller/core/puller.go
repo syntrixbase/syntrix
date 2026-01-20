@@ -363,11 +363,10 @@ func (p *Puller) watchChangeStream(ctx context.Context, backend *Backend, logger
 		}
 		evt.Backend = backend.name
 
-		logger.Debug("Puller: received event from mongo",
+		logger.Info("Puller: received event from mongo",
 			"eventID", evt.EventID,
 			"op", evt.OpType,
-			"backend", evt.Backend,
-			"docID", evt.MgoDocID,
+			"mgoid", evt.MgoDocID,
 		)
 
 		// Check for gaps
@@ -460,7 +459,7 @@ func (p *Puller) Replay(ctx context.Context, after map[string]string, coalesce b
 					return nil, fmt.Errorf("invalid event ID %q for backend %q: %w", eventID, name, err)
 				}
 				startID = events.FormatBufferKey(ct, eventID)
-				p.logger.Debug("[DEBUG] Replay backend", "backend", name, "eventID", eventID, "startID", startID)
+				p.logger.Debug("Replay backend", "backend", name, "eventID", eventID, "startID", startID)
 			}
 		}
 

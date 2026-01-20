@@ -7,13 +7,13 @@ database: default
 templates:
   # Benchmark collections - basic temporal sorting
   - name: benchmark-by-created
-    collectionPattern: "benchmark_*"
+    collectionPattern: "benchmarks"
     fields:
       - field: createdAt
         order: desc
 
   - name: benchmark-by-updated
-    collectionPattern: "benchmark_*"
+    collectionPattern: "benchmarks"
     fields:
       - field: updatedAt
         order: desc

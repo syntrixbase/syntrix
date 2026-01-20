@@ -25,6 +25,8 @@ build:
 	@go build -o $(CLI_BIN) ./cmd/syntrix-cli
 	@echo "Building $(APP_NAME)..."
 	@go build -o $(APP_BIN) ./cmd/syntrix
+	@echo "Building $(BENCHMARK_APP_NAME)..."
+	@go build -o $(BENCHMARK_BIN) ./cmd/syntrix-benchmark
 
 run: build
 	@echo "Running $(APP_NAME)..."

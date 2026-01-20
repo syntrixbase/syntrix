@@ -26,7 +26,7 @@ func (h *Handler) handleQuery(w http.ResponseWriter, r *http.Request) {
 
 	docs, err := h.engine.ExecuteQuery(r.Context(), database, q)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to execute query")
+		writeInternalError(w, err, "Failed to execute query")
 		return
 	}
 

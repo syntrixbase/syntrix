@@ -60,7 +60,7 @@ func (h *Handler) handleTriggerGet(w http.ResponseWriter, r *http.Request) {
 			if err == model.ErrNotFound {
 				continue // Skip not found documents
 			}
-			writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Failed to retrieve document")
+			writeInternalError(w, err, "Failed to retrieve document")
 			return
 		}
 		docs = append(docs, doc)

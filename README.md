@@ -34,6 +34,59 @@ make build
 make test
 ```
 
+## Configuration
+
+### Logging
+
+Syntrix uses Go's `log/slog` for structured logging with support for file output and automatic rotation.
+
+**Log Output:**
+- Console (stdout) - enabled by default
+- Main log file (`syntrix.log`) - all log levels
+- Error log file (`errors.log`) - warnings and errors only
+
+**File Structure:**
+```
+logs/
+├── syntrix.log                # Current main log (all levels)
+├── syntrix-20260119-001.log   # Rotated log (by size)
+├── syntrix-20260119-002.log.gz # Compressed rotated log
+├── errors.log                 # Current error log (warn + error)
+├── errors-20260119-001.log
+└── errors-20260119-002.log.gz
+```
+
+**Configuration (`configs/config.yml`):**
+```yaml
+logging:
+  level: "info"           # debug, info, warn, error
+  format: "text"          # text or json
+  dir: "logs"             # log directory (relative or absolute)
+
+  rotation:
+    max_size: 100         # MB per file before rotation
+    max_backups: 10       # number of old files to keep
+    max_age: 30           # days to retain old files
+    compress: true        # gzip rotated files
+
+  console:
+    enabled: true
+    level: "info"
+    format: "text"
+
+  file:
+    enabled: true
+    level: "info"
+    format: "text"
+```
+
+**Default Settings:**
+- Log level: `info`
+- Format: `text` (human-readable)
+- Directory: `logs/` (relative to working directory)
+- Rotation: 100MB per file, keep 10 backups, 30 days retention
+- Compression: enabled for rotated files
+
 ## License
 
 See [LICENSE](LICENSE) for details.

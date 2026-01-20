@@ -11,6 +11,7 @@ import (
 type CreateOperation struct {
 	collection string
 	document   map[string]interface{}
+	onCreated  func(id string) // Callback to register created ID
 }
 
 // NewCreateOperation creates a new create operation.
@@ -18,6 +19,15 @@ func NewCreateOperation(collection string, document map[string]interface{}) *Cre
 	return &CreateOperation{
 		collection: collection,
 		document:   document,
+	}
+}
+
+// NewCreateOperationWithCallback creates a new create operation with a callback for ID registration.
+func NewCreateOperationWithCallback(collection string, document map[string]interface{}, onCreated func(id string)) *CreateOperation {
+	return &CreateOperation{
+		collection: collection,
+		document:   document,
+		onCreated:  onCreated,
 	}
 }
 
@@ -43,6 +53,10 @@ func (o *CreateOperation) Execute(ctx context.Context, client types.Client) (*ty
 
 	if doc != nil {
 		result.StatusCode = 201
+		// Register created ID if callback is set
+		if o.onCreated != nil {
+			o.onCreated(doc.ID)
+		}
 	}
 
 	return result, err

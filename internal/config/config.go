@@ -21,6 +21,7 @@ import (
 type Config struct {
 	Deployment services.DeploymentConfig `yaml:"deployment"`
 	Server     server.Config             `yaml:"server"`
+	Logging    LoggingConfig             `yaml:"logging"`
 
 	// Services
 	Query    query.Config      `yaml:"query"`
@@ -43,6 +44,7 @@ func LoadConfig() *Config {
 		Storage:    storage.DefaultConfig(),
 		Identity:   identity.DefaultConfig(),
 		Server:     server.DefaultConfig(),
+		Logging:    DefaultLoggingConfig(),
 		Query:      query.DefaultConfig(),
 		Gateway:    api.DefaultGatewayConfig(),
 		Trigger:    trigger.DefaultConfig(),
@@ -71,6 +73,7 @@ func LoadConfig() *Config {
 	// Apply other configs with the now-known deployment mode
 	if err := ApplyServiceConfigs(configDir, cfg.Deployment.Mode,
 		&cfg.Server,
+		&cfg.Logging,
 		&cfg.Query,
 		&cfg.Indexer,
 		&cfg.Gateway,

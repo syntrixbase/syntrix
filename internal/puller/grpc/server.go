@@ -213,12 +213,12 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 			for iter.Next() {
 				evt := iter.Event()
 				replayCount++
-				s.logger.Info("[DEBUG] Replay iter.Next()", "replayCount", replayCount, "eventID", evt.EventID, "backend", evt.Backend, "clusterTime", evt.ClusterTime)
+				s.logger.Debug("Replay iter.Next()", "replayCount", replayCount, "eventID", evt.EventID, "backend", evt.Backend, "clusterTime", evt.ClusterTime)
 
 				// Deduplication: check if event is already sent
 				// This is crucial if Replay restarts or if ScanFrom is inclusive
 				if !sub.ShouldSend(evt.Backend, evt.ClusterTime) {
-					s.logger.Info("[DEBUG] Skipping event (already sent)", "eventID", evt.EventID)
+					s.logger.Debug("Skipping event (already sent)", "eventID", evt.EventID)
 					continue
 				}
 
@@ -228,7 +228,7 @@ func (s *Server) Subscribe(req *pullerv1.SubscribeRequest, stream pullerv1.Pulle
 				}
 			}
 			iter.Close()
-			s.logger.Info("[DEBUG] Replay finished", "totalReplayCount", replayCount, "iterErr", iter.Err())
+			s.logger.Debug("Replay finished", "totalReplayCount", replayCount, "iterErr", iter.Err())
 
 			if err := iter.Err(); err != nil {
 				s.logger.Error("replay error", "error", err)
