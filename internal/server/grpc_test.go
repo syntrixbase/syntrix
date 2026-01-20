@@ -75,6 +75,48 @@ func TestUnaryInterceptors(t *testing.T) {
 		_, err := srv.loggingUnaryInterceptor(context.Background(), "request", info, handler)
 		assert.Error(t, err)
 	})
+
+	t.Run("Logging Canceled", func(t *testing.T) {
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return nil, status.Error(codes.Canceled, "canceled")
+		}
+		_, err := srv.loggingUnaryInterceptor(context.Background(), "request", info, handler)
+		assert.Error(t, err)
+	})
+
+	t.Run("Logging DeadlineExceeded", func(t *testing.T) {
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return nil, status.Error(codes.DeadlineExceeded, "deadline exceeded")
+		}
+		_, err := srv.loggingUnaryInterceptor(context.Background(), "request", info, handler)
+		assert.Error(t, err)
+	})
+
+	t.Run("Logging NotFound", func(t *testing.T) {
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return nil, status.Error(codes.NotFound, "not found")
+		}
+		_, err := srv.loggingUnaryInterceptor(context.Background(), "request", info, handler)
+		assert.Error(t, err)
+	})
+
+	t.Run("Logging Internal with context error", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return nil, status.Error(codes.Internal, "internal error")
+		}
+		_, err := srv.loggingUnaryInterceptor(ctx, "request", info, handler)
+		assert.Error(t, err)
+	})
+
+	t.Run("Logging Internal without context error", func(t *testing.T) {
+		handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+			return nil, status.Error(codes.Internal, "internal error")
+		}
+		_, err := srv.loggingUnaryInterceptor(context.Background(), "request", info, handler)
+		assert.Error(t, err)
+	})
 }
 
 func TestStreamInterceptors(t *testing.T) {

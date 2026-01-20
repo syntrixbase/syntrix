@@ -23,7 +23,6 @@ func TestDedupHandler_BasicDedup(t *testing.T) {
 		FlushTimeout: 50 * time.Millisecond,
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	logger := slog.New(dh)
 
@@ -32,8 +31,9 @@ func TestDedupHandler_BasicDedup(t *testing.T) {
 		logger.Info("duplicate message", "key", "value")
 	}
 
-	// Wait for flush
-	time.Sleep(100 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
@@ -51,7 +51,6 @@ func TestDedupHandler_DifferentMessages(t *testing.T) {
 		FlushTimeout: 50 * time.Millisecond,
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	logger := slog.New(dh)
 
@@ -60,8 +59,9 @@ func TestDedupHandler_DifferentMessages(t *testing.T) {
 	logger.Info("message 2")
 	logger.Info("message 3")
 
-	// Wait for flush
-	time.Sleep(100 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
@@ -81,7 +81,6 @@ func TestDedupHandler_WithAttrsDistinguishes(t *testing.T) {
 		FlushTimeout: 50 * time.Millisecond,
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	// Create two loggers with different attrs
 	logger1 := slog.New(dh).With("component", "server")
@@ -91,8 +90,9 @@ func TestDedupHandler_WithAttrsDistinguishes(t *testing.T) {
 	logger1.Info("connection established")
 	logger2.Info("connection established")
 
-	// Wait for flush
-	time.Sleep(100 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
@@ -110,7 +110,6 @@ func TestDedupHandler_WithGroupDistinguishes(t *testing.T) {
 		FlushTimeout: 50 * time.Millisecond,
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	// Create two loggers with different groups
 	logger1 := slog.New(dh).WithGroup("http")
@@ -120,8 +119,9 @@ func TestDedupHandler_WithGroupDistinguishes(t *testing.T) {
 	logger1.Info("request received")
 	logger2.Info("request received")
 
-	// Wait for flush
-	time.Sleep(100 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
@@ -190,7 +190,6 @@ func TestDedupHandler_BatchFlush(t *testing.T) {
 		FlushTimeout: 10 * time.Second, // Long timeout, won't trigger
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	logger := slog.New(dh)
 
@@ -199,8 +198,9 @@ func TestDedupHandler_BatchFlush(t *testing.T) {
 		logger.Info("message", "num", i)
 	}
 
-	// Give a tiny bit of time for the flush to complete
-	time.Sleep(10 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
@@ -273,7 +273,6 @@ func TestDedupHandler_DifferentLevels(t *testing.T) {
 		FlushTimeout: 50 * time.Millisecond,
 	}
 	dh := NewDedupHandlerWithConfig(baseHandler, cfg)
-	defer dh.Close()
 
 	logger := slog.New(dh)
 
@@ -282,8 +281,9 @@ func TestDedupHandler_DifferentLevels(t *testing.T) {
 	logger.Warn("test message")
 	logger.Error("test message")
 
-	// Wait for flush
-	time.Sleep(100 * time.Millisecond)
+	// Close flushes pending messages and stops background goroutine
+	err := dh.Close()
+	require.NoError(t, err)
 
 	content := buf.String()
 
