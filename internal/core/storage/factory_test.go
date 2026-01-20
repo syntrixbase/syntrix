@@ -2,10 +2,12 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
 
+	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/storage/config"
@@ -32,6 +34,7 @@ func (m *mockMongoProvider) Close(ctx context.Context) error {
 
 // Mock provider creation
 var originalNewMongoProvider = newMongoProvider
+var originalNewPostgresDB = newPostgresDB
 
 func setupMockProvider() {
 	newMongoProvider = func(ctx context.Context, uri, dbName string) (Provider, error) {
@@ -41,8 +44,21 @@ func setupMockProvider() {
 	}
 }
 
+func setupMockPostgres() sqlmock.Sqlmock {
+	db, mock, _ := sqlmock.New()
+	newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+		return db, nil
+	}
+	// Mock successful ping
+	mock.ExpectPing()
+	// Mock EnsureSchema call (CREATE TABLE IF NOT EXISTS ...)
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+	return mock
+}
+
 func teardownMockProvider() {
 	newMongoProvider = originalNewMongoProvider
+	newPostgresDB = originalNewPostgresDB
 }
 
 const (
@@ -52,6 +68,7 @@ const (
 
 func TestNewFactory(t *testing.T) {
 	setupMockProvider()
+	setupMockPostgres()
 	defer teardownMockProvider()
 
 	cfg := config.Config{
@@ -61,6 +78,12 @@ func TestNewFactory(t *testing.T) {
 				Mongo: config.MongoConfig{
 					URI:          testMongoURI,
 					DatabaseName: testDBName,
+				},
+			},
+			"postgres_user": {
+				Type: "postgres",
+				Postgres: config.PostgresConfig{
+					DSN: "postgres://test",
 				},
 			},
 		},
@@ -76,7 +99,7 @@ func TestNewFactory(t *testing.T) {
 			User: config.CollectionTopology{
 				BaseTopology: config.BaseTopology{
 					Strategy: "single",
-					Primary:  "primary",
+					Primary:  "postgres_user",
 				},
 				Collection: "users",
 			},
@@ -104,16 +127,18 @@ func TestNewFactory(t *testing.T) {
 
 func TestNewFactory_DatabaseConfig(t *testing.T) {
 	setupMockProvider()
+	setupMockPostgres()
 	defer teardownMockProvider()
 
 	cfg := config.Config{
 		Backends: map[string]config.BackendConfig{
-			"primary":   {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
-			"database1": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
+			"primary":       {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+			"database1":     {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://t1", DatabaseName: "db2"}},
+			"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
 		},
 		Topology: config.TopologyConfig{
 			Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "postgres_user"}},
 			Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 		},
 		Databases: map[string]config.DatabaseConfig{
@@ -156,12 +181,23 @@ func TestNewFactory_Errors(t *testing.T) {
 func TestNewFactory_ReadWriteSplit(t *testing.T) {
 	// Mock provider creation
 	origNewMongoProvider := newMongoProvider
-	defer func() { newMongoProvider = origNewMongoProvider }()
+	origNewPostgresDB := newPostgresDB
+	defer func() {
+		newMongoProvider = origNewMongoProvider
+		newPostgresDB = origNewPostgresDB
+	}()
 
 	newMongoProvider = func(ctx context.Context, uri, dbName string) (Provider, error) {
 		client, _ := mongo.Connect(ctx, options.Client().ApplyURI(uri))
 		return &mockMongoProvider{client: client, dbName: dbName}, nil
 	}
+
+	db, mock, _ := sqlmock.New()
+	newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+		return db, nil
+	}
+	mock.ExpectPing()
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	cfg := config.Config{
 		Backends: map[string]config.BackendConfig{
@@ -172,6 +208,10 @@ func TestNewFactory_ReadWriteSplit(t *testing.T) {
 			"replica": {
 				Type:  "mongo",
 				Mongo: config.MongoConfig{URI: "mongodb://replica", DatabaseName: "db"},
+			},
+			"postgres_user": {
+				Type:     "postgres",
+				Postgres: config.PostgresConfig{DSN: "postgres://test"},
 			},
 		},
 		Topology: config.TopologyConfig{
@@ -186,9 +226,8 @@ func TestNewFactory_ReadWriteSplit(t *testing.T) {
 			},
 			User: config.CollectionTopology{
 				BaseTopology: config.BaseTopology{
-					Strategy: "read_write_split",
-					Primary:  "primary",
-					Replica:  "replica",
+					Strategy: "single",
+					Primary:  "postgres_user",
 				},
 				Collection: "users",
 			},
@@ -236,7 +275,11 @@ func TestNewFactory_ProviderInitError(t *testing.T) {
 func TestNewFactory_RouterErrors(t *testing.T) {
 	// Mock provider creation to succeed
 	origNewMongoProvider := newMongoProvider
-	defer func() { newMongoProvider = origNewMongoProvider }()
+	origNewPostgresDB := newPostgresDB
+	defer func() {
+		newMongoProvider = origNewMongoProvider
+		newPostgresDB = origNewPostgresDB
+	}()
 
 	newMongoProvider = func(ctx context.Context, uri, dbName string) (Provider, error) {
 		client, _ := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mock"))
@@ -291,7 +334,7 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 		assert.ErrorContains(t, err, "backend not found: missing")
 	})
 
-	t.Run("User Unsupported Strategy", func(t *testing.T) {
+	t.Run("User Unsupported Backend Type", func(t *testing.T) {
 		cfg := config.Config{
 			Backends: map[string]config.BackendConfig{
 				"primary": {Type: "mongo"},
@@ -299,38 +342,30 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 			Topology: config.TopologyConfig{
 				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
 				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
+					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"},
 				},
 			},
 		}
 		_, err := NewFactory(ctx, cfg)
-		assert.ErrorContains(t, err, "unsupported strategy: unknown")
-	})
-
-	t.Run("User Replica Missing", func(t *testing.T) {
-		cfg := config.Config{
-			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo"},
-			},
-			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				User: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
-				},
-			},
-		}
-		_, err := NewFactory(ctx, cfg)
-		assert.ErrorContains(t, err, "backend not found: missing")
+		assert.ErrorContains(t, err, "unsupported backend type for user store: mongo")
 	})
 
 	t.Run("Revocation Primary Missing", func(t *testing.T) {
+		db, mock, _ := sqlmock.New()
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return db, nil
+		}
+		mock.ExpectPing()
+		mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+
 		cfg := config.Config{
 			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo"},
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
 			},
 			Topology: config.TopologyConfig{
 				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
 				Revocation: config.CollectionTopology{
 					BaseTopology: config.BaseTopology{Primary: "missing"},
 				},
@@ -341,16 +376,22 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Revocation Unsupported Strategy", func(t *testing.T) {
+		db, mock, _ := sqlmock.New()
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return db, nil
+		}
+		mock.ExpectPing()
+		mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+
 		cfg := config.Config{
 			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo"},
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
 			},
 			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"},
-				},
+				Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
+				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "unknown"}},
 			},
 		}
 		_, err := NewFactory(ctx, cfg)
@@ -358,16 +399,22 @@ func TestNewFactory_RouterErrors(t *testing.T) {
 	})
 
 	t.Run("Revocation Replica Missing", func(t *testing.T) {
+		db, mock, _ := sqlmock.New()
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return db, nil
+		}
+		mock.ExpectPing()
+		mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+
 		cfg := config.Config{
 			Backends: map[string]config.BackendConfig{
-				"primary": {Type: "mongo"},
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
 			},
 			Topology: config.TopologyConfig{
-				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
-				Revocation: config.CollectionTopology{
-					BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"},
-				},
+				Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
+				Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "read_write_split", Replica: "missing"}},
 			},
 		}
 		_, err := NewFactory(ctx, cfg)
@@ -405,15 +452,17 @@ func TestNewFactory_DatabaseErrors(t *testing.T) {
 
 func TestNewFactory_DefaultDatabaseSkipped(t *testing.T) {
 	setupMockProvider()
+	setupMockPostgres()
 	defer teardownMockProvider()
 
 	cfg := config.Config{
 		Backends: map[string]config.BackendConfig{
-			"primary": {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+			"primary":       {Type: "mongo", Mongo: config.MongoConfig{URI: "mongodb://p", DatabaseName: "db1"}},
+			"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
 		},
 		Topology: config.TopologyConfig{
 			Document:   config.DocumentTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
-			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
+			User:       config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "postgres_user"}},
 			Revocation: config.CollectionTopology{BaseTopology: config.BaseTopology{Strategy: "single", Primary: "primary"}},
 		},
 		Databases: map[string]config.DatabaseConfig{
@@ -497,4 +546,135 @@ func TestFactory_GetMongoClient_Errors(t *testing.T) {
 	f.providers["noop"] = &noopProvider{}
 	_, _, err = f.GetMongoClient("noop")
 	assert.ErrorContains(t, err, "not a mongo provider")
+}
+
+// Test newPostgresDB function directly
+func TestNewPostgresDB(t *testing.T) {
+	// Capture the original function before any mocking
+	realNewPostgresDB := originalNewPostgresDB
+
+	t.Run("WithInvalidDSN", func(t *testing.T) {
+		cfg := config.PostgresConfig{
+			DSN: "invalid://not-a-valid-connection",
+		}
+		// This will succeed at opening (sql.Open is lazy) but would fail on ping
+		db, err := realNewPostgresDB(cfg)
+		if err != nil {
+			// Some drivers may fail on Open with invalid DSN
+			return
+		}
+		defer db.Close()
+		// The connection is lazy, so Open succeeds but Ping would fail
+		assert.NotNil(t, db)
+	})
+
+	t.Run("WithConnectionPoolSettings", func(t *testing.T) {
+		cfg := config.PostgresConfig{
+			DSN:             "postgres://user:pass@localhost:5432/db?sslmode=disable",
+			MaxOpenConns:    10,
+			MaxIdleConns:    5,
+			ConnMaxLifetime: 5 * time.Minute,
+		}
+		// sql.Open is lazy and won't fail even with invalid connection string
+		db, err := realNewPostgresDB(cfg)
+		if err != nil {
+			// Some implementations may validate DSN on Open
+			return
+		}
+		defer db.Close()
+		assert.NotNil(t, db)
+	})
+
+	t.Run("WithZeroPoolSettings", func(t *testing.T) {
+		cfg := config.PostgresConfig{
+			DSN:             "postgres://user:pass@localhost:5432/db?sslmode=disable",
+			MaxOpenConns:    0, // Should skip SetMaxOpenConns
+			MaxIdleConns:    0, // Should skip SetMaxIdleConns
+			ConnMaxLifetime: 0, // Should skip SetConnMaxLifetime
+		}
+		db, err := realNewPostgresDB(cfg)
+		if err != nil {
+			return
+		}
+		defer db.Close()
+		assert.NotNil(t, db)
+	})
+}
+
+func TestNewFactory_PostgresErrors(t *testing.T) {
+	origNewMongoProvider := newMongoProvider
+	origNewPostgresDB := newPostgresDB
+	defer func() {
+		newMongoProvider = origNewMongoProvider
+		newPostgresDB = origNewPostgresDB
+	}()
+
+	newMongoProvider = func(ctx context.Context, uri, dbName string) (Provider, error) {
+		client, _ := mongo.Connect(ctx, options.Client().ApplyURI("mongodb://mock"))
+		return &mockMongoProvider{client: client, dbName: dbName}, nil
+	}
+
+	ctx := context.Background()
+
+	t.Run("PostgresConnectionError", func(t *testing.T) {
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return nil, errors.New("connection failed")
+		}
+
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
+			},
+		}
+		_, err := NewFactory(ctx, cfg)
+		assert.ErrorContains(t, err, "failed to connect to postgres")
+	})
+
+	t.Run("PostgresPingError", func(t *testing.T) {
+		db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return db, nil
+		}
+		mock.ExpectPing().WillReturnError(errors.New("ping failed"))
+
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
+			},
+		}
+		_, err := NewFactory(ctx, cfg)
+		assert.ErrorContains(t, err, "failed to ping postgres")
+	})
+
+	t.Run("PostgresEnsureSchemaError", func(t *testing.T) {
+		db, mock, _ := sqlmock.New(sqlmock.MonitorPingsOption(true))
+		newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+			return db, nil
+		}
+		mock.ExpectPing()
+		mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnError(errors.New("schema error"))
+
+		cfg := config.Config{
+			Backends: map[string]config.BackendConfig{
+				"primary":       {Type: "mongo"},
+				"postgres_user": {Type: "postgres", Postgres: config.PostgresConfig{DSN: "postgres://test"}},
+			},
+			Topology: config.TopologyConfig{
+				Document: config.DocumentTopology{BaseTopology: config.BaseTopology{Primary: "primary", Strategy: "single"}},
+				User:     config.CollectionTopology{BaseTopology: config.BaseTopology{Primary: "postgres_user", Strategy: "single"}},
+			},
+		}
+		_, err := NewFactory(ctx, cfg)
+		assert.ErrorContains(t, err, "failed to ensure postgres schema")
+	})
 }

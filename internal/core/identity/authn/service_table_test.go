@@ -94,7 +94,6 @@ func TestSignIn_TableDriven(t *testing.T) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					Database:     "default",
 					Username:     "existinguser",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -126,7 +125,6 @@ func TestSignIn_TableDriven(t *testing.T) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					Database:     "default",
 					Username:     "existinguser",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -148,7 +146,6 @@ func TestSignIn_TableDriven(t *testing.T) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:            "user-id",
-					Database:      "default",
 					Username:      "existinguser",
 					PasswordHash:  hash,
 					PasswordAlgo:  algo,
@@ -172,7 +169,6 @@ func TestSignIn_TableDriven(t *testing.T) {
 			mockSetup: func(m *MockStorage) {
 				user := &User{
 					ID:           "user-id",
-					Database:     "default",
 					Username:     "locked",
 					LockoutUntil: time.Now().Add(time.Hour),
 				}
@@ -191,7 +187,6 @@ func TestSignIn_TableDriven(t *testing.T) {
 				hash, algo, _ := HashPassword("password123")
 				user := &User{
 					ID:           "user-id",
-					Database:     "default",
 					Username:     "disabled",
 					PasswordHash: hash,
 					PasswordAlgo: algo,
@@ -270,7 +265,7 @@ func TestRefresh_TableDriven(t *testing.T) {
 			mockSetup: func(m *MockStorage) {
 				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{
-					ID: "user-id", Database: "default", Username: "refreshuser", Disabled: false,
+					ID: "user-id", Username: "refreshuser", Disabled: false,
 				}, nil)
 				m.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},

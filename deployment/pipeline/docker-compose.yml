@@ -1,0 +1,75 @@
+name: syntrix-pipeline
+
+services:
+  # =============================================================================
+  # Core Infrastructure for CI/CD Pipeline
+  # Lightweight setup without monitoring stack
+  # =============================================================================
+
+  mongodb:
+    image: mongo:8.0
+    container_name: syntrix-pipeline-mongodb
+    command:
+      - "--replSet"
+      - "rs0"
+      - "--bind_ip_all"
+      - "--wiredTigerCacheSizeGB"
+      - "0.5"
+      - "--setParameter"
+      - "diagnosticDataCollectionEnabled=false"
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: |
+        mongosh --eval "try { rs.status() } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]}) }"
+      interval: 5s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+    networks:
+      - syntrix-pipeline-net
+
+  postgres:
+    image: postgres:18-bookworm
+    container_name: syntrix-pipeline-postgres
+    environment:
+      POSTGRES_USER: syntrix
+      POSTGRES_PASSWORD: syntrix
+      POSTGRES_DB: syntrix
+    ports:
+      - "5432:5432"
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=128MB"
+      - "-c"
+      - "max_connections=100"
+      - "-c"
+      - "log_statement=none"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U syntrix -d syntrix"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - syntrix-pipeline-net
+
+  nats:
+    image: nats:2.12-alpine
+    container_name: syntrix-pipeline-nats
+    command: ["--jetstream", "--store_dir=/data", "-m", "8222"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - syntrix-pipeline-net
+
+networks:
+  syntrix-pipeline-net:
+    driver: bridge

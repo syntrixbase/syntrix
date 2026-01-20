@@ -91,14 +91,13 @@ func (tc *TestContext) GetToken(uid string, role string) string {
 }
 
 // GetTokenForDatabase creates a user in a specific database and returns an access token
-func (tc *TestContext) GetTokenForDatabase(database, uid, role string) string {
+func (tc *TestContext) GetTokenForDatabase(_, uid, role string) string {
 	// Prefix the username to ensure isolation
 	prefixedUID := fmt.Sprintf("%s_%s", tc.prefix, uid)
 	tc.createdUsers = append(tc.createdUsers, prefixedUID)
 
 	// Try signup
 	signupBody := map[string]string{
-		"database": database,
 		"username": prefixedUID,
 		"password": "password123456",
 	}
@@ -116,7 +115,6 @@ func (tc *TestContext) GetTokenForDatabase(database, uid, role string) string {
 	} else {
 		// User might exist, try login
 		loginBody := map[string]string{
-			"database": database,
 			"username": prefixedUID,
 			"password": "password123456",
 		}
@@ -134,10 +132,9 @@ func (tc *TestContext) GetTokenForDatabase(database, uid, role string) string {
 
 	// Update role if needed
 	if role != "user" {
-		tc.updateUserRole(token, role, database, prefixedUID)
+		tc.updateUserRole(token, role, "", prefixedUID)
 		// Re-login to get new token with updated role
 		loginBody := map[string]string{
-			"database": database,
 			"username": prefixedUID,
 			"password": "password123456",
 		}
@@ -156,7 +153,7 @@ func (tc *TestContext) GetTokenForDatabase(database, uid, role string) string {
 	return token
 }
 
-func (tc *TestContext) updateUserRole(token, role, database, uid string) {
+func (tc *TestContext) updateUserRole(token, role, _, _ string) {
 	claims, err := parseTokenClaims(token)
 	require.NoError(tc.t, err)
 

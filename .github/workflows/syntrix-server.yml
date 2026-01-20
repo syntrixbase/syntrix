@@ -26,7 +26,7 @@ jobs:
       - name: Start Services
         run: |
           # Start services in background to run in parallel with other steps
-          nohup docker compose -f .devcontainer/docker-compose.yml up -d mongodb nats mongo-init > docker-compose.log 2>&1 &
+          nohup docker compose -f deployment/pipeline/docker-compose.yml up -d > docker-compose.log 2>&1 &
           echo "Services starting in background..."
 
       - name: Set up Go
@@ -66,24 +66,22 @@ jobs:
       - name: Wait for Services
         run: |
           echo "Waiting for services to initialize..."
-          # Wait for docker compose to finish (if it's still running) or check logs if failed
-          # We can't easily wait for the background process pid from a previous step,
-          # so we rely on the containers appearing.
 
-          # Wait for mongodb container to be running
-          timeout 60s bash -c 'until docker ps | grep syntrix_mongodb; do sleep 1; done'
+          # Wait for mongodb container to be running and healthy
+          timeout 60s bash -c 'until docker ps | grep syntrix-pipeline-mongodb; do sleep 1; done'
+          timeout 60s bash -c 'until docker exec syntrix-pipeline-mongodb mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done'
 
-          # Wait for actual readiness
-          timeout 60s bash -c 'until docker exec syntrix_mongodb mongosh --eval "db.adminCommand(\"ping\")"; do sleep 1; done'
+          # Wait for postgres to be ready
+          timeout 60s bash -c 'until docker exec syntrix-pipeline-postgres pg_isready -U syntrix -d syntrix; do sleep 1; done'
 
-          docker compose -f .devcontainer/docker-compose.yml ps
+          # Wait for nats to be ready
+          timeout 60s bash -c 'until docker exec syntrix-pipeline-nats wget -q --spider http://localhost:8222/healthz; do sleep 1; done'
+
+          docker compose -f deployment/pipeline/docker-compose.yml ps
           if [ -f docker-compose.log ]; then
             echo "--- Docker Compose Log ---"
             cat docker-compose.log
           fi
-          docker compose -f .devcontainer/docker-compose.yml logs mongo-init
-          docker compose -f .devcontainer/docker-compose.yml ps
-          docker compose -f .devcontainer/docker-compose.yml logs mongo-init
 
       - name: Test and Coverage
         run: |

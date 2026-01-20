@@ -54,6 +54,15 @@ match:
 					DatabaseName: env.DBName,
 				},
 			},
+			"postgres": {
+				Type: "postgres",
+				Postgres: storage_config.PostgresConfig{
+					DSN:             GetGlobalEnv().PostgresDSN,
+					MaxOpenConns:    10,
+					MaxIdleConns:    5,
+					ConnMaxLifetime: 5 * time.Minute,
+				},
+			},
 		},
 		Topology: storage_config.TopologyConfig{
 			Document: storage_config.DocumentTopology{
@@ -67,9 +76,9 @@ match:
 			User: storage_config.CollectionTopology{
 				BaseTopology: storage_config.BaseTopology{
 					Strategy: "single",
-					Primary:  "default",
+					Primary:  "postgres",
 				},
-				Collection: "users",
+				Collection: "auth_users",
 			},
 			Revocation: storage_config.CollectionTopology{
 				BaseTopology: storage_config.BaseTopology{

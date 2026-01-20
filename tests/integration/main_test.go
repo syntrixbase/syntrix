@@ -2,6 +2,7 @@ package integration
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log"
 	"net"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	_ "github.com/lib/pq"
 	"github.com/syntrixbase/syntrix/internal/config"
 	identity_config "github.com/syntrixbase/syntrix/internal/core/identity/config"
 	storage_config "github.com/syntrixbase/syntrix/internal/core/storage/config"
@@ -37,13 +39,14 @@ var (
 
 // GlobalTestEnv holds the shared test environment
 type GlobalTestEnv struct {
-	APIURL   string
-	QueryURL string
-	Manager  *services.Manager
-	MongoURI string
-	DBName   string
-	cancel   context.CancelFunc
-	tempDir  string
+	APIURL      string
+	QueryURL    string
+	Manager     *services.Manager
+	MongoURI    string
+	PostgresDSN string
+	DBName      string
+	cancel      context.CancelFunc
+	tempDir     string
 }
 
 // TestMain sets up the global test environment before running tests
@@ -82,10 +85,16 @@ func setupGlobalEnv() (*GlobalTestEnv, error) {
 		mongoURI = "mongodb://localhost:27017"
 	}
 
+	// PostgreSQL connection
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN == "" {
+		postgresDSN = "postgres://syntrix:syntrix@localhost:5432/syntrix?sslmode=disable"
+	}
+
 	// Use a single database for all tests, with collection-level isolation
 	dbName := fmt.Sprintf("integration_test_%d", time.Now().UnixNano())
 
-	// Connect and ensure DB is clean
+	// Connect and ensure MongoDB is clean
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -98,6 +107,17 @@ func setupGlobalEnv() (*GlobalTestEnv, error) {
 	if err := client.Database(dbName).Drop(ctx); err != nil {
 		return nil, fmt.Errorf("failed to drop database: %w", err)
 	}
+
+	// Verify PostgreSQL connection
+	pgDB, err := sql.Open("postgres", postgresDSN)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open PostgreSQL connection: %w", err)
+	}
+	if err := pgDB.PingContext(ctx); err != nil {
+		pgDB.Close()
+		return nil, fmt.Errorf("failed to ping PostgreSQL: %w", err)
+	}
+	pgDB.Close()
 
 	// Create temp directories for test files
 	tempDir, err := os.MkdirTemp("", "integration_test_")
@@ -256,6 +276,15 @@ templates:
 						DatabaseName: dbName,
 					},
 				},
+				"postgres": {
+					Type: "postgres",
+					Postgres: storage_config.PostgresConfig{
+						DSN:             postgresDSN,
+						MaxOpenConns:    10,
+						MaxIdleConns:    5,
+						ConnMaxLifetime: 5 * time.Minute,
+					},
+				},
 			},
 			Topology: storage_config.TopologyConfig{
 				Document: storage_config.DocumentTopology{
@@ -269,9 +298,9 @@ templates:
 				User: storage_config.CollectionTopology{
 					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
-						Primary:  "default",
+						Primary:  "postgres",
 					},
-					Collection: "users",
+					Collection: "auth_users",
 				},
 				Revocation: storage_config.CollectionTopology{
 					BaseTopology: storage_config.BaseTopology{
@@ -357,13 +386,14 @@ templates:
 		apiPort, grpcPort, dbName)
 
 	return &GlobalTestEnv{
-		APIURL:   fmt.Sprintf("http://localhost:%d", apiPort),
-		QueryURL: fmt.Sprintf("localhost:%d", grpcPort),
-		Manager:  manager,
-		MongoURI: mongoURI,
-		DBName:   dbName,
-		cancel:   mgrCancel,
-		tempDir:  tempDir,
+		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
+		QueryURL:    fmt.Sprintf("localhost:%d", grpcPort),
+		Manager:     manager,
+		MongoURI:    mongoURI,
+		PostgresDSN: postgresDSN,
+		DBName:      dbName,
+		cancel:      mgrCancel,
+		tempDir:     tempDir,
 	}, nil
 }
 

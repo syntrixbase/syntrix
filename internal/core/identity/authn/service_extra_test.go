@@ -65,7 +65,7 @@ func TestUpdateUser_Coverage(t *testing.T) {
 
 	t.Run("Success", func(t *testing.T) {
 		ctx := context.Background()
-		user := &User{ID: "u1", Database: "database1", Roles: []string{"user"}}
+		user := &User{ID: "u1", Roles: []string{"user"}}
 
 		mockStorage.On("GetUserByID", ctx, "u1").Return(user, nil).Once()
 		mockStorage.On("UpdateUser", ctx, mock.MatchedBy(func(u *User) bool {
@@ -79,7 +79,7 @@ func TestUpdateUser_Coverage(t *testing.T) {
 
 	t.Run("Success with DBAdmin", func(t *testing.T) {
 		ctx := context.Background()
-		user := &User{ID: "u2", Database: "database1", Roles: []string{"user"}}
+		user := &User{ID: "u2", Roles: []string{"user"}}
 
 		mockStorage.On("GetUserByID", ctx, "u2").Return(user, nil).Once()
 		mockStorage.On("UpdateUser", ctx, mock.MatchedBy(func(u *User) bool {

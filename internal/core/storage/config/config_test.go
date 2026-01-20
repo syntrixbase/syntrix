@@ -17,6 +17,10 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "mongodb://localhost:27017", cfg.Backends["default_mongo"].Mongo.URI)
 	assert.Equal(t, "syntrix", cfg.Backends["default_mongo"].Mongo.DatabaseName)
 
+	assert.Contains(t, cfg.Backends, "default_postgres")
+	assert.Equal(t, "postgres", cfg.Backends["default_postgres"].Type)
+	assert.Equal(t, "postgres://syntrix:syntrix@localhost:5432/syntrix?sslmode=disable", cfg.Backends["default_postgres"].Postgres.DSN)
+
 	// Verify topology - Document
 	assert.Equal(t, "single", cfg.Topology.Document.Strategy)
 	assert.Equal(t, "default_mongo", cfg.Topology.Document.Primary)
@@ -24,10 +28,10 @@ func TestDefaultConfig(t *testing.T) {
 	assert.Equal(t, "sys", cfg.Topology.Document.SysCollection)
 	assert.Equal(t, 5*time.Minute, cfg.Topology.Document.SoftDeleteRetention)
 
-	// Verify topology - User
+	// Verify topology - User (now uses postgres)
 	assert.Equal(t, "single", cfg.Topology.User.Strategy)
-	assert.Equal(t, "default_mongo", cfg.Topology.User.Primary)
-	assert.Equal(t, "users", cfg.Topology.User.Collection)
+	assert.Equal(t, "default_postgres", cfg.Topology.User.Primary)
+	assert.Equal(t, "auth_users", cfg.Topology.User.Collection)
 
 	// Verify topology - Revocation
 	assert.Equal(t, "single", cfg.Topology.Revocation.Strategy)
@@ -67,6 +71,7 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 			check: func(t *testing.T, cfg *Config) {
 				assert.NotNil(t, cfg.Backends)
 				assert.Contains(t, cfg.Backends, "default_mongo")
+				assert.Contains(t, cfg.Backends, "default_postgres")
 				assert.NotNil(t, cfg.Databases)
 				assert.Contains(t, cfg.Databases, "default")
 				assert.Equal(t, "single", cfg.Topology.Document.Strategy)
@@ -75,8 +80,8 @@ func TestConfig_ApplyDefaults(t *testing.T) {
 				assert.Equal(t, "sys", cfg.Topology.Document.SysCollection)
 				assert.Equal(t, 5*time.Minute, cfg.Topology.Document.SoftDeleteRetention)
 				assert.Equal(t, "single", cfg.Topology.User.Strategy)
-				assert.Equal(t, "default_mongo", cfg.Topology.User.Primary)
-				assert.Equal(t, "users", cfg.Topology.User.Collection)
+				assert.Equal(t, "default_postgres", cfg.Topology.User.Primary)
+				assert.Equal(t, "auth_users", cfg.Topology.User.Collection)
 				assert.Equal(t, "single", cfg.Topology.Revocation.Strategy)
 				assert.Equal(t, "default_mongo", cfg.Topology.Revocation.Primary)
 				assert.Equal(t, "revocations", cfg.Topology.Revocation.Collection)
