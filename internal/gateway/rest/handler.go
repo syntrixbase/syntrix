@@ -101,6 +101,7 @@ func writeStorageError(w http.ResponseWriter, err error) {
 	case errors.Is(err, model.ErrPreconditionFailed):
 		writeError(w, http.StatusPreconditionFailed, ErrCodePreconditionFailed, "Version conflict")
 	default:
+		slog.Error("Internal storage error", "error", err)
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Internal server error")
 	}
 }
