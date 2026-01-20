@@ -56,7 +56,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should initialize with default options', () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     expect(client.getState()).toBe('disconnected');
     expect(client.getLastMessageTime()).toBe(0);
@@ -69,7 +69,7 @@ describe('RealtimeClient Keepalive', () => {
       reconnectDelayMs: 2000,
       activityTimeoutMs: 60000,
     };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, options);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db', options);
 
     // Options are private, so we verify behavior indirectly
     expect(client.getState()).toBe('disconnected');
@@ -77,7 +77,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should update lastMessageTime on connect', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     const beforeConnect = Date.now();
     await client.connect();
@@ -91,7 +91,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should update lastMessageTime on message received', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     await client.connect();
     const initialTime = client.getLastMessageTime();
@@ -111,7 +111,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should send auth message with token on connect', async () => {
     const tokenProvider = { getToken: async () => 'auth-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     await client.connect();
 
@@ -122,6 +122,7 @@ describe('RealtimeClient Keepalive', () => {
     const authMsg = payloads.find((m) => m.type === 'auth');
     expect(authMsg).toBeDefined();
     expect(authMsg.payload.token).toBe('auth-token');
+    expect(authMsg.payload.database).toBe('test-db');
 
     client.disconnect();
   });
@@ -131,7 +132,7 @@ describe('RealtimeClient Keepalive', () => {
       getToken: mock(async () => 'stale-token'),
       refreshToken: mock(async () => 'fresh-token'),
     } as any;
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     await client.connect();
 
@@ -164,7 +165,7 @@ describe('RealtimeClient Keepalive', () => {
   it('should trigger reconnect on activity timeout', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
     // Very short timeout for testing
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, {
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db', {
       activityTimeoutMs: 50,
     });
 
@@ -184,7 +185,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should not timeout if messages are received', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, {
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db', {
       activityTimeoutMs: 100,
     });
 
@@ -218,7 +219,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should stop activity check on disconnect', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, {
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db', {
       activityTimeoutMs: 50,
     });
 
@@ -235,7 +236,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should update lastMessageTime when receiving heartbeat message', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     await client.connect();
     const initialTime = client.getLastMessageTime();
@@ -256,7 +257,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should keep connection alive when receiving periodic heartbeat messages', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, {
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db', {
       activityTimeoutMs: 100,
     });
 
@@ -290,7 +291,7 @@ describe('RealtimeClient Keepalive', () => {
 
   it('should not trigger any callback for heartbeat message', async () => {
     const tokenProvider = { getToken: async () => 'test-token' };
-    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any);
+    const client = new RealtimeClient('ws://localhost:8080/realtime/ws', tokenProvider as any, 'test-db');
 
     let connectCount = 0;
     let eventCount = 0;

@@ -11,8 +11,11 @@ export interface RealtimeSSEOptions {
 export class RealtimeSSEClient {
   private controller: AbortController | null = null;
   private state: ConnectionState = 'disconnected';
+  private database: string;
 
-  constructor(private baseUrl: string, private tokenProvider: TokenProvider) {}
+  constructor(private baseUrl: string, private tokenProvider: TokenProvider, database: string) {
+    this.database = database;
+  }
 
   getState(): ConnectionState {
     return this.state;
@@ -115,7 +118,7 @@ export class RealtimeSSEClient {
 
   private buildUrl(collection: string): string {
     const cleanBase = this.baseUrl.replace(/\/$/, '');
-    const path = `${cleanBase}/realtime/sse`;
+    const path = `${cleanBase}/realtime/v1/databases/${this.database}/sse`;
     if (!collection) return path;
     const encoded = encodeURIComponent(collection);
     return `${path}?collection=${encoded}`;
