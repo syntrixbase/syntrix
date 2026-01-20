@@ -107,8 +107,14 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 	var opsCompleted atomic.Int64
 	var opsErrors atomic.Int64
 
-	workerCtx, cancel := context.WithTimeout(ctx, config.Duration)
-	defer cancel()
+	// Use a stop channel for graceful shutdown instead of context cancellation
+	stopCh := make(chan struct{})
+
+	// Timer to signal workers to stop accepting new operations
+	timer := time.AfterFunc(config.Duration, func() {
+		close(stopCh)
+	})
+	defer timer.Stop()
 
 	// Start each worker in a goroutine that continuously executes operations
 	for _, w := range r.workers {
@@ -117,14 +123,17 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 			defer wg.Done()
 
 			// Mark worker as running
-			if err := worker.Start(workerCtx); err != nil {
+			if err := worker.Start(ctx); err != nil {
 				return
 			}
 
-			// Continuously execute operations until context is done
+			// Continuously execute operations until stop signal
 			for {
 				select {
-				case <-workerCtx.Done():
+				case <-stopCh:
+					// Stop accepting new operations, but let current ones complete
+					return
+				case <-ctx.Done():
 					return
 				default:
 					// Get next operation from scenario if available
@@ -140,8 +149,8 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 							continue
 						}
 
-						// Execute operation
-						result, err := op.Execute(workerCtx, worker.client)
+						// Execute operation with parent context (not cancelled on duration end)
+						result, err := op.Execute(ctx, worker.client)
 						if err != nil {
 							opsErrors.Add(1)
 						} else {
@@ -153,8 +162,8 @@ func (r *BasicRunner) Run(ctx context.Context) (*types.Result, error) {
 							r.metrics.RecordOperation(result)
 						}
 					} else {
-						// No scenario available, wait for context to be done
-						<-workerCtx.Done()
+						// No scenario available, wait for stop signal
+						<-stopCh
 						return
 					}
 				}

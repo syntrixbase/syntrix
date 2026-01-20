@@ -130,14 +130,14 @@ logging:
 
   # File rotation settings
   rotation:
-    # Maximum size in megabytes before rotation (default: 100)
-    max_size: 100
+    # Maximum size in megabytes before rotation (default: 500)
+    max_size: 500
 
     # Maximum number of old log files to retain (default: 10)
-    max_backups: 10
+    max_backups: 5
 
     # Maximum days to retain old log files (default: 30)
-    max_age: 30
+    max_age: 14
 
     # Compress rotated files with gzip (default: true)
     compress: true
@@ -166,7 +166,7 @@ logging:
 
     # Batch size for grouping writes (default: 100)
     # Logs are flushed when batch reaches this size or timeout occurs
-    batch_size: 100
+    batch_size: 200
 
     # Flush timeout in milliseconds (default: 100)
     # Maximum time to wait before flushing a partial batch

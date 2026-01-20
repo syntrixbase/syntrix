@@ -114,7 +114,12 @@ func (s *serverImpl) loggingMiddleware(next http.Handler) http.Handler {
 
 		level := slog.LevelInfo
 		if ww.statusCode >= 500 {
-			level = slog.LevelError
+			// Use WARN for client-initiated cancellations, ERROR for real errors
+			if r.Context().Err() != nil {
+				level = slog.LevelWarn
+			} else {
+				level = slog.LevelError
+			}
 		}
 
 		s.logger.Log(r.Context(), level, "HTTP Request",
@@ -235,7 +240,12 @@ func (s *serverImpl) loggingUnaryInterceptor(ctx context.Context, req interface{
 	code := status.Code(err)
 	level := slog.LevelInfo
 	if code != codes.OK {
-		level = slog.LevelError
+		// Use WARN for client-initiated cancellations, ERROR for real errors
+		if code == codes.Canceled || code == codes.DeadlineExceeded || ctx.Err() != nil {
+			level = slog.LevelWarn
+		} else {
+			level = slog.LevelError
+		}
 	}
 
 	s.logger.Log(ctx, level, "gRPC Request",
