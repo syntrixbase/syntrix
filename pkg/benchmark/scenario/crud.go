@@ -96,7 +96,7 @@ func (s *CRUDScenario) NextOperation() (types.Operation, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate document: %w", err)
 		}
-		op := NewCreateOperation(collection, doc)
+		op := NewCreateOperationWithCallback(collection, doc, s.RegisterCreatedID)
 		s.opIndex++
 		return op, nil
 
@@ -107,7 +107,7 @@ func (s *CRUDScenario) NextOperation() (types.Operation, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate document: %w", err)
 			}
-			op := NewCreateOperation(collection, doc)
+			op := NewCreateOperationWithCallback(collection, doc, s.RegisterCreatedID)
 			s.opIndex++
 			return op, nil
 		}
@@ -123,7 +123,7 @@ func (s *CRUDScenario) NextOperation() (types.Operation, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate document: %w", err)
 			}
-			op := NewCreateOperation(collection, doc)
+			op := NewCreateOperationWithCallback(collection, doc, s.RegisterCreatedID)
 			s.opIndex++
 			return op, nil
 		}
@@ -143,7 +143,7 @@ func (s *CRUDScenario) NextOperation() (types.Operation, error) {
 			if err != nil {
 				return nil, fmt.Errorf("failed to generate document: %w", err)
 			}
-			op := NewCreateOperation(collection, doc)
+			op := NewCreateOperationWithCallback(collection, doc, s.RegisterCreatedID)
 			s.opIndex++
 			return op, nil
 		}

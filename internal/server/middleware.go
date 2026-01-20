@@ -240,11 +240,23 @@ func (s *serverImpl) loggingUnaryInterceptor(ctx context.Context, req interface{
 	code := status.Code(err)
 	level := slog.LevelInfo
 	if code != codes.OK {
-		// Use WARN for client-initiated cancellations, ERROR for real errors
-		if code == codes.Canceled || code == codes.DeadlineExceeded || ctx.Err() != nil {
+		// Use WARN for client-initiated cancellations and expected client errors
+		// Use ERROR only for real server-side errors
+		switch code {
+		case codes.Canceled, codes.DeadlineExceeded:
+			// Client cancelled the request
 			level = slog.LevelWarn
-		} else {
-			level = slog.LevelError
+		case codes.NotFound, codes.AlreadyExists, codes.InvalidArgument,
+			codes.PermissionDenied, codes.Unauthenticated, codes.FailedPrecondition:
+			// Expected client/business errors - not server errors
+			level = slog.LevelInfo
+		default:
+			// Check if context was cancelled (might show up as Internal error)
+			if ctx.Err() != nil {
+				level = slog.LevelWarn
+			} else {
+				level = slog.LevelError
+			}
 		}
 	}
 
