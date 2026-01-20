@@ -100,6 +100,9 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, ErrCodeConflict, "Document already exists")
 	case errors.Is(err, model.ErrPreconditionFailed):
 		writeError(w, http.StatusPreconditionFailed, ErrCodePreconditionFailed, "Version conflict")
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		slog.Warn("Request cancelled", "error", err)
+		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Request cancelled")
 	default:
 		slog.Error("Internal storage error", "error", err)
 		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Internal server error")
