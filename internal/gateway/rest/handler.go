@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -100,7 +101,8 @@ func writeStorageError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, ErrCodeConflict, "Document already exists")
 	case errors.Is(err, model.ErrPreconditionFailed):
 		writeError(w, http.StatusPreconditionFailed, ErrCodePreconditionFailed, "Version conflict")
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded),
+		strings.Contains(err.Error(), "context canceled"), strings.Contains(err.Error(), "context deadline exceeded"):
 		// Client closed the connection - use 499 (Nginx convention) or just return
 		// since client won't receive the response anyway
 		w.WriteHeader(499) // Client Closed Request
