@@ -1246,3 +1246,193 @@ var _ evaluator.Service = (*fakeEvaluatorService)(nil)
 var _ delivery.Service = (*fakeDeliveryService)(nil)
 var _ pubsub.Publisher = pubsubtesting.NewMockPublisher()
 var _ pubsub.Consumer = pubsubtesting.NewMockConsumer()
+
+func TestManager_ensureAdminUser_Success(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeAuth := &fakeAuthStore{}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
+	cfg.Identity.Admin.Username = "syntrix"
+	cfg.Identity.Admin.Password = "testpassword123"
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	// Initialize auth service first
+	err := mgr.initAuthService(context.Background())
+	assert.NoError(t, err)
+
+	// Now test ensureAdminUser
+	err = mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureAdminUser_UserAlreadyExists(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	// Create a fake auth store that returns user exists
+	fakeAuth := &fakeAuthStoreWithUser{
+		users: map[string]*storage.User{
+			"syntrix": {ID: "existing-id", Username: "syntrix"},
+		},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
+	cfg.Identity.Admin.Username = "syntrix"
+	cfg.Identity.Admin.Password = "testpassword123"
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	err := mgr.initAuthService(context.Background())
+	assert.NoError(t, err)
+
+	// Should not error when user already exists
+	err = mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureAdminUser_NoAuthService(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+	cfg.Identity.Admin.Password = "testpassword123"
+
+	mgr := NewManager(cfg, Options{})
+	// authService is nil
+
+	// Should skip gracefully when no auth service
+	err := mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureAdminUser_NoUsername(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = ""
+	cfg.Identity.Admin.Password = "testpassword123"
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	// Should skip gracefully when no username configured
+	err := mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureAdminUser_NoPassword(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+	cfg.Identity.Admin.Password = ""
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	// Should skip gracefully when no password configured
+	err := mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+}
+
+// fakeAuthStoreWithUser is a variant of fakeAuthStore that can return existing users
+type fakeAuthStoreWithUser struct {
+	users map[string]*storage.User
+}
+
+func (f *fakeAuthStoreWithUser) CreateUser(ctx context.Context, user *storage.User) error {
+	if f.users == nil {
+		f.users = make(map[string]*storage.User)
+	}
+	f.users[user.Username] = user
+	return nil
+}
+func (f *fakeAuthStoreWithUser) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
+	if user, ok := f.users[username]; ok {
+		return user, nil
+	}
+	return nil, identity.ErrUserNotFound
+}
+func (f *fakeAuthStoreWithUser) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
+	return nil, identity.ErrUserNotFound
+}
+func (f *fakeAuthStoreWithUser) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+	return nil, nil
+}
+func (f *fakeAuthStoreWithUser) UpdateUser(ctx context.Context, user *storage.User) error {
+	return nil
+}
+func (f *fakeAuthStoreWithUser) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	return nil
+}
+func (f *fakeAuthStoreWithUser) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+	return nil
+}
+func (f *fakeAuthStoreWithUser) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+	return nil
+}
+func (f *fakeAuthStoreWithUser) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+	return false, nil
+}
+func (f *fakeAuthStoreWithUser) EnsureIndexes(ctx context.Context) error {
+	return nil
+}
+func (f *fakeAuthStoreWithUser) Close(ctx context.Context) error { return nil }
+
+func TestManager_ensureAdminUser_CreatesUserWithAdminRole(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	// Use fakeAuthStoreWithUser to track created users
+	fakeAuth := &fakeAuthStoreWithUser{
+		users: make(map[string]*storage.User),
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
+	cfg.Identity.Admin.Username = "syntrix"
+	cfg.Identity.Admin.Password = "testpassword123"
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	// Initialize auth service first
+	err := mgr.initAuthService(context.Background())
+	assert.NoError(t, err)
+
+	// Ensure admin user is created
+	err = mgr.ensureAdminUser(context.Background())
+	assert.NoError(t, err)
+
+	// Verify the user was created in the store
+	createdUser, err := fakeAuth.GetUserByUsername(context.Background(), "syntrix")
+	assert.NoError(t, err)
+	assert.NotNil(t, createdUser)
+	assert.Equal(t, "syntrix", createdUser.Username)
+
+	// Verify admin role is assigned
+	assert.Contains(t, createdUser.Roles, "admin", "syntrix user should have admin role")
+
+	// Verify user ID is set
+	assert.NotEmpty(t, createdUser.ID)
+
+	// Verify password is hashed (not stored as plain text)
+	assert.NotEqual(t, "testpassword123", createdUser.PasswordHash)
+	assert.NotEmpty(t, createdUser.PasswordHash)
+}

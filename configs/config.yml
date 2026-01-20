@@ -49,6 +49,9 @@ identity:
     private_key_file: "keys/auth_private.pem"
   authz:
     rules_path: "security_rules"
+  admin:
+    username: "syntrix"
+    password: "changeme123456"  # Change this in production
 
 gateway:
   query_service_url: "localhost:9000"
