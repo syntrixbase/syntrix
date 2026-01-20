@@ -182,6 +182,12 @@ func TestWriteStorageError(t *testing.T) {
 			expectedCode: http.StatusInternalServerError,
 			expectedMsg:  "Internal storage error",
 		},
+		{
+			name:         "ContextCanceled",
+			err:          context.Canceled,
+			expectedCode: 499,
+			expectedMsg:  "", // no body for 499
+		},
 	}
 
 	for _, tt := range tests {
@@ -190,7 +196,9 @@ func TestWriteStorageError(t *testing.T) {
 			writeStorageError(rr, tt.err)
 
 			assert.Equal(t, tt.expectedCode, rr.Code)
-			assert.Contains(t, rr.Body.String(), tt.expectedMsg)
+			if tt.expectedMsg != "" {
+				assert.Contains(t, rr.Body.String(), tt.expectedMsg)
+			}
 		})
 	}
 }
@@ -205,6 +213,57 @@ func TestAPIErrorCodes(t *testing.T) {
 	assert.Equal(t, "PRECONDITION_FAILED", ErrCodePreconditionFailed)
 	assert.Equal(t, "REQUEST_TOO_LARGE", ErrCodeRequestTooLarge)
 	assert.Equal(t, "INTERNAL_ERROR", ErrCodeInternalError)
+}
+
+func TestWriteInternalError(t *testing.T) {
+	tests := []struct {
+		name         string
+		err          error
+		message      string
+		expectedCode int
+		expectedBody string
+	}{
+		{
+			name:         "regular error returns 500",
+			err:          errors.New("database connection failed"),
+			message:      "Operation failed",
+			expectedCode: http.StatusInternalServerError,
+			expectedBody: "Operation failed",
+		},
+		{
+			name:         "context.Canceled returns 499",
+			err:          context.Canceled,
+			message:      "Should not appear",
+			expectedCode: 499,
+			expectedBody: "",
+		},
+		{
+			name:         "context.DeadlineExceeded returns 499",
+			err:          context.DeadlineExceeded,
+			message:      "Should not appear",
+			expectedCode: 499,
+			expectedBody: "",
+		},
+		{
+			name:         "wrapped context canceled returns 499",
+			err:          errors.New("mongodb: context canceled"),
+			message:      "Should not appear",
+			expectedCode: 499,
+			expectedBody: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			writeInternalError(rr, tt.err, tt.message)
+
+			assert.Equal(t, tt.expectedCode, rr.Code)
+			if tt.expectedBody != "" {
+				assert.Contains(t, rr.Body.String(), tt.expectedBody)
+			}
+		})
+	}
 }
 
 func TestBodySizeConstants(t *testing.T) {
