@@ -114,8 +114,8 @@ func (s *serverImpl) loggingMiddleware(next http.Handler) http.Handler {
 
 		level := slog.LevelInfo
 		if ww.statusCode >= 500 {
-			// Use WARN for client-initiated cancellations, ERROR for real errors
-			if r.Context().Err() != nil {
+			// Use WARN for client-initiated cancellations (499), ERROR for real errors
+			if ww.statusCode == 499 || r.Context().Err() != nil {
 				level = slog.LevelWarn
 			} else {
 				level = slog.LevelError
