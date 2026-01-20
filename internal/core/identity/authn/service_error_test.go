@@ -61,7 +61,6 @@ func TestSignIn_ErrorPaths(t *testing.T) {
 			Username:     "user",
 			PasswordHash: "invalid-hash",
 			PasswordAlgo: "bcrypt",
-			Database:     "default",
 		}
 		mockStorage.On("GetUserByUsername", mock.Anything, "user").Return(user, nil).Once()
 
@@ -101,7 +100,7 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 
 		// Mock successful checks but failed revocation
 		mockStorage.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockStorage.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{ID: "u1", Database: "default"}, nil).Once()
+		mockStorage.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{ID: "u1"}, nil).Once()
 		mockStorage.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
 
 		_, err := svc.Refresh(context.Background(), RefreshRequest{RefreshToken: token})

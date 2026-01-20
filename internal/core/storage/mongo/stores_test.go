@@ -16,15 +16,6 @@ func TestNewDocumentStore(t *testing.T) {
 	assert.NotNil(t, store)
 }
 
-func TestUserStore_Close(t *testing.T) {
-	env := setupTestEnv(t)
-	ctx := context.Background()
-
-	store := NewUserStore(env.DB, "")
-	err := store.Close(ctx)
-	assert.NoError(t, err)
-}
-
 func TestRevocationStore_Close(t *testing.T) {
 	env := setupTestEnv(t)
 	ctx := context.Background()

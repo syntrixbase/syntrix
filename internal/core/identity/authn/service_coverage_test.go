@@ -210,7 +210,7 @@ func TestRefresh_Coverage(t *testing.T) {
 			mockSetup: func(m *MockStorage) {
 				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{
-					ID: "user-id", Database: "default", Username: "disabled", Disabled: true,
+					ID: "user-id", Username: "disabled", Disabled: true,
 				}, nil)
 			},
 			expectError: true,

@@ -15,20 +15,19 @@ var (
 
 // User represents a user in the system
 type User struct {
-	ID            string                 `json:"id" bson:"_id"`
-	Database      string                 `json:"database" bson:"database"`
-	Username      string                 `json:"username" bson:"username"`
-	PasswordHash  string                 `json:"password_hash" bson:"password_hash"`
-	PasswordAlgo  string                 `json:"password_algo" bson:"password_algo"` // "argon2id" or "bcrypt"
-	CreatedAt     time.Time              `json:"createdAt" bson:"created_at"`
-	UpdatedAt     time.Time              `json:"updatedAt" bson:"updated_at"`
-	Disabled      bool                   `json:"disabled" bson:"disabled"`
-	Roles         []string               `json:"roles" bson:"roles"`
-	DBAdmin       []string               `json:"db_admin" bson:"db_admin"` // Databases with admin access
-	Profile       map[string]interface{} `json:"profile" bson:"profile"`
-	LastLoginAt   time.Time              `json:"last_login_at" bson:"last_login_at"`
-	LoginAttempts int                    `json:"login_attempts" bson:"login_attempts"`
-	LockoutUntil  time.Time              `json:"lockout_until" bson:"lockout_until"`
+	ID            string                 `json:"id"`
+	Username      string                 `json:"username"`
+	PasswordHash  string                 `json:"password_hash"`
+	PasswordAlgo  string                 `json:"password_algo"` // "argon2id" or "bcrypt"
+	CreatedAt     time.Time              `json:"createdAt"`
+	UpdatedAt     time.Time              `json:"updatedAt"`
+	Disabled      bool                   `json:"disabled"`
+	Roles         []string               `json:"roles"`
+	DBAdmin       []string               `json:"db_admin"` // Databases with admin access
+	Profile       map[string]interface{} `json:"profile"`
+	LastLoginAt   time.Time              `json:"last_login_at"`
+	LoginAttempts int                    `json:"login_attempts"`
+	LockoutUntil  time.Time              `json:"lockout_until"`
 }
 
 // RevokedToken represents a revoked JWT

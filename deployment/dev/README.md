@@ -23,6 +23,7 @@ docker compose down -v
 | Service | Port | Description |
 |---------|------|-------------|
 | MongoDB | 27017 | Primary data store (replica set) |
+| PostgreSQL | 5432 | User authentication store |
 | NATS | 4222, 8222 | Message queue for triggers |
 | Prometheus | 9090 | Metrics storage and alerting |
 | Grafana | 3000 | Dashboards and visualization |
@@ -76,6 +77,8 @@ Alert rules are defined in `prometheus/alerts.yml`:
 ```
 deployment/dev/
 ├── docker-compose.yml       # Main compose file
+├── postgres/
+│   └── postgresql.conf      # PostgreSQL configuration
 ├── prometheus/
 │   ├── prometheus.yml       # Scrape configuration
 │   └── alerts.yml           # Alert rules
@@ -85,7 +88,8 @@ deployment/dev/
 │   │   └── dashboards/      # Auto-load dashboards
 │   └── dashboards/          # Dashboard JSON files
 └── scripts/
-    └── mongo-init.js        # MongoDB replica set init
+    ├── mongo-init.js        # MongoDB replica set init
+    └── postgres-init.sql    # PostgreSQL schema init
 ```
 
 ## Troubleshooting
@@ -115,4 +119,22 @@ docker compose exec mongodb mongosh --eval "rs.initiate()"
 ```bash
 docker compose down -v
 docker compose up -d
+```
+
+### PostgreSQL connection issues
+
+Check if PostgreSQL is ready:
+```bash
+docker compose exec postgres pg_isready -U syntrix -d syntrix
+```
+
+Connect to PostgreSQL:
+```bash
+docker compose exec postgres psql -U syntrix -d syntrix
+```
+
+Check if tables are created:
+```sql
+\dt
+SELECT * FROM auth_users;
 ```

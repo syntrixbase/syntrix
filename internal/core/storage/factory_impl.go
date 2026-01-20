@@ -2,11 +2,14 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 
+	_ "github.com/lib/pq"
 	"github.com/syntrixbase/syntrix/internal/core/storage/config"
 	"github.com/syntrixbase/syntrix/internal/core/storage/mongo"
+	"github.com/syntrixbase/syntrix/internal/core/storage/postgres"
 	"github.com/syntrixbase/syntrix/internal/core/storage/router"
 	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -24,12 +27,31 @@ var newMongoProvider = func(ctx context.Context, uri, dbName string) (Provider, 
 	return mongo.NewProvider(ctx, uri, dbName)
 }
 
+// Dependency injection for postgres
+var newPostgresDB = func(cfg config.PostgresConfig) (*sql.DB, error) {
+	db, err := sql.Open("postgres", cfg.DSN)
+	if err != nil {
+		return nil, err
+	}
+	if cfg.MaxOpenConns > 0 {
+		db.SetMaxOpenConns(cfg.MaxOpenConns)
+	}
+	if cfg.MaxIdleConns > 0 {
+		db.SetMaxIdleConns(cfg.MaxIdleConns)
+	}
+	if cfg.ConnMaxLifetime > 0 {
+		db.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	}
+	return db, nil
+}
+
 type factory struct {
-	providers map[string]Provider
-	docStore  types.DocumentStore
-	usrStore  types.UserStore
-	revStore  types.TokenRevocationStore
-	mu        sync.Mutex
+	providers  map[string]Provider
+	postgresDB *sql.DB
+	docStore   types.DocumentStore
+	usrStore   types.UserStore
+	revStore   types.TokenRevocationStore
+	mu         sync.Mutex
 }
 
 func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) {
@@ -45,13 +67,20 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 
 	// 1. Initialize Providers
 	for name, backendCfg := range cfg.Backends {
-		if backendCfg.Type == "mongo" {
+		switch backendCfg.Type {
+		case "mongo":
 			p, err := newMongoProvider(ctx, backendCfg.Mongo.URI, backendCfg.Mongo.DatabaseName)
 			if err != nil {
 				return nil, fmt.Errorf("failed to initialize backend %s: %w", name, err)
 			}
 			f.providers[name] = p
-		} else {
+		case "postgres":
+			// Postgres is initialized lazily when needed for user store
+			// We just validate the config here
+			if backendCfg.Postgres.DSN == "" {
+				return nil, fmt.Errorf("postgres backend %s: DSN is required", name)
+			}
+		default:
 			return nil, fmt.Errorf("unsupported backend type: %s", backendCfg.Type)
 		}
 	}
@@ -77,24 +106,11 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 	f.docStore = router.NewRoutedDocumentStore(router.NewDatabaseDocumentRouter(defaultDocRouter, databaseDocRouters))
 
 	// 3. Initialize User Store
-	defaultUserRouter, err := f.createUserRouter(cfg.Topology.User)
+	userStore, err := f.createUserStore(cfg)
 	if err != nil {
 		return nil, err
 	}
-
-	databaseUserRouters := make(map[string]types.UserRouter)
-	for tID, tCfg := range cfg.Databases {
-		if tID == model.DefaultDatabase {
-			continue
-		}
-		p, err := f.getMongoProvider(tCfg.Backend)
-		if err != nil {
-			return nil, err
-		}
-		store := mongo.NewUserStore(p.Client().Database(p.DatabaseName()), cfg.Topology.User.Collection)
-		databaseUserRouters[tID] = router.NewSingleUserRouter(store)
-	}
-	f.usrStore = router.NewRoutedUserStore(router.NewDatabaseUserRouter(defaultUserRouter, databaseUserRouters))
+	f.usrStore = userStore
 
 	// 4. Initialize Revocation Store
 	defaultRevRouter, err := f.createRevocationRouter(cfg.Topology.Revocation)
@@ -143,27 +159,33 @@ func (f *factory) createDocumentRouter(cfg config.DocumentTopology) (types.Docum
 	return nil, fmt.Errorf("unsupported strategy: %s", cfg.Strategy)
 }
 
-func (f *factory) createUserRouter(cfg config.CollectionTopology) (types.UserRouter, error) {
-	primary, err := f.getMongoProvider(cfg.Primary)
-	if err != nil {
-		return nil, err
+func (f *factory) createUserStore(cfg config.Config) (types.UserStore, error) {
+	backendName := cfg.Topology.User.Primary
+	backendCfg, ok := cfg.Backends[backendName]
+	if !ok {
+		return nil, fmt.Errorf("backend not found: %s", backendName)
 	}
 
-	primaryStore := mongo.NewUserStore(primary.Client().Database(primary.DatabaseName()), cfg.Collection)
-
-	switch cfg.Strategy {
-	case "single":
-		return router.NewSingleUserRouter(primaryStore), nil
-	case "read_write_split":
-		replica, err := f.getMongoProvider(cfg.Replica)
+	switch backendCfg.Type {
+	case "postgres":
+		db, err := newPostgresDB(backendCfg.Postgres)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to connect to postgres: %w", err)
 		}
-		replicaStore := mongo.NewUserStore(replica.Client().Database(replica.DatabaseName()), cfg.Collection)
-		return router.NewSplitUserRouter(primaryStore, replicaStore), nil
+		if err := db.Ping(); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to ping postgres: %w", err)
+		}
+		// Ensure auth_users table exists
+		if err := postgres.EnsureSchema(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("failed to ensure postgres schema: %w", err)
+		}
+		f.postgresDB = db
+		return postgres.NewUserStore(db, cfg.Topology.User.Collection), nil
+	default:
+		return nil, fmt.Errorf("unsupported backend type for user store: %s (only postgres is supported)", backendCfg.Type)
 	}
-
-	return nil, fmt.Errorf("unsupported strategy: %s", cfg.Strategy)
 }
 
 func (f *factory) createRevocationRouter(cfg config.CollectionTopology) (types.RevocationRouter, error) {
@@ -227,6 +249,11 @@ func (f *factory) Close() error {
 	var errs []error
 	for _, p := range f.providers {
 		if err := p.Close(context.Background()); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if f.postgresDB != nil {
+		if err := f.postgresDB.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}

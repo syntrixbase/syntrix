@@ -124,7 +124,7 @@ func TestTokenService_GenerateTokenPair_ValidToken(t *testing.T) {
 	}
 	ts, _ := NewTokenService(cfg)
 
-	user := &User{ID: "u1", Username: "user", Database: "default", Roles: []string{"user"}}
+	user := &User{ID: "u1", Username: "user", Roles: []string{"user"}}
 	pair, err := ts.GenerateTokenPair(user)
 	require.NoError(t, err)
 

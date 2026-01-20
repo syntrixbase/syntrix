@@ -18,6 +18,13 @@ storage:
       mongo:
         uri: "mongodb://localhost:27017"
         database_name: "syntrix"
+    default_postgres:
+      type: postgres
+      postgres:
+        dsn: "postgres://syntrix:syntrix@localhost:5432/syntrix?sslmode=disable"
+        max_open_conns: 10
+        max_idle_conns: 5
+        conn_max_lifetime: 5m
   topology:
     document:
       strategy: single
@@ -27,8 +34,8 @@ storage:
       soft_delete_retention: 720h # 30 days
     user:
       strategy: single
-      primary: default_mongo
-      collection: users
+      primary: default_postgres
+      collection: auth_users
     revocation:
       strategy: single
       primary: default_mongo

@@ -19,8 +19,9 @@ type DatabaseConfig struct {
 }
 
 type BackendConfig struct {
-	Type  string      `yaml:"type"` // "mongo"
-	Mongo MongoConfig `yaml:"mongo"`
+	Type     string         `yaml:"type"` // "mongo" or "postgres"
+	Mongo    MongoConfig    `yaml:"mongo"`
+	Postgres PostgresConfig `yaml:"postgres"`
 }
 
 type TopologyConfig struct {
@@ -52,6 +53,13 @@ type MongoConfig struct {
 	DatabaseName string `yaml:"database_name"`
 }
 
+type PostgresConfig struct {
+	DSN             string        `yaml:"dsn"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+}
+
 func DefaultConfig() Config {
 	return Config{
 		Backends: map[string]BackendConfig{
@@ -60,6 +68,15 @@ func DefaultConfig() Config {
 				Mongo: MongoConfig{
 					URI:          "mongodb://localhost:27017",
 					DatabaseName: "syntrix",
+				},
+			},
+			"default_postgres": {
+				Type: "postgres",
+				Postgres: PostgresConfig{
+					DSN:             "postgres://syntrix:syntrix@localhost:5432/syntrix?sslmode=disable",
+					MaxOpenConns:    10,
+					MaxIdleConns:    5,
+					ConnMaxLifetime: 5 * time.Minute,
 				},
 			},
 		},
@@ -76,9 +93,9 @@ func DefaultConfig() Config {
 			User: CollectionTopology{
 				BaseTopology: BaseTopology{
 					Strategy: "single",
-					Primary:  "default_mongo",
+					Primary:  "default_postgres",
 				},
-				Collection: "users",
+				Collection: "auth_users",
 			},
 			Revocation: CollectionTopology{
 				BaseTopology: BaseTopology{

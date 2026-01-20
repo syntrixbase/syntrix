@@ -28,11 +28,12 @@ import (
 // Unlike ServiceEnv, it only exposes APIURL since standalone mode
 // doesn't have separate Query/CSP HTTP servers.
 type StandaloneEnv struct {
-	APIURL   string
-	Manager  *services.Manager
-	Cancel   context.CancelFunc
-	MongoURI string
-	DBName   string
+	APIURL      string
+	Manager     *services.Manager
+	Cancel      context.CancelFunc
+	MongoURI    string
+	PostgresDSN string
+	DBName      string
 }
 
 // setupStandaloneEnv creates a test environment in standalone mode.
@@ -45,6 +46,12 @@ func setupStandaloneEnv(t *testing.T, rulesContent string, configModifiers ...fu
 	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
 		mongoURI = "mongodb://localhost:27017"
+	}
+
+	// Setup PostgreSQL connection
+	postgresDSN := os.Getenv("POSTGRES_DSN")
+	if postgresDSN == "" {
+		postgresDSN = "postgres://syntrix:syntrix@localhost:5432/syntrix?sslmode=disable"
 	}
 
 	// Generate unique database name
@@ -127,6 +134,15 @@ templates:
 						DatabaseName: dbName,
 					},
 				},
+				"postgres": {
+					Type: "postgres",
+					Postgres: storage_config.PostgresConfig{
+						DSN:             postgresDSN,
+						MaxOpenConns:    10,
+						MaxIdleConns:    5,
+						ConnMaxLifetime: 5 * time.Minute,
+					},
+				},
 			},
 			Topology: storage_config.TopologyConfig{
 				Document: storage_config.DocumentTopology{
@@ -140,9 +156,9 @@ templates:
 				User: storage_config.CollectionTopology{
 					BaseTopology: storage_config.BaseTopology{
 						Strategy: "single",
-						Primary:  "default",
+						Primary:  "postgres",
 					},
-					Collection: "users",
+					Collection: "auth_users",
 				},
 				Revocation: storage_config.CollectionTopology{
 					BaseTopology: storage_config.BaseTopology{
@@ -218,10 +234,11 @@ templates:
 	waitForHealth(t, fmt.Sprintf("http://localhost:%d/health", apiPort))
 
 	return &StandaloneEnv{
-		APIURL:   fmt.Sprintf("http://localhost:%d", apiPort),
-		Manager:  manager,
-		MongoURI: mongoURI,
-		DBName:   dbName,
+		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
+		Manager:     manager,
+		MongoURI:    mongoURI,
+		PostgresDSN: postgresDSN,
+		DBName:      dbName,
 		Cancel: func() {
 			mgrCancel()
 			shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -244,7 +261,6 @@ templates:
 func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
 	// SignUp
 	signupBody := map[string]string{
-		"database": "default",
 		"username": uid,
 		"password": "password123456",
 	}
@@ -263,7 +279,6 @@ func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
 
 	// If signup failed (user exists), try login
 	loginBody := map[string]string{
-		"database": "default",
 		"username": uid,
 		"password": "password123456",
 	}
