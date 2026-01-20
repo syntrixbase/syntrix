@@ -45,5 +45,5 @@ type DeleteDocumentRequest struct {
 }
 
 var (
-	ContextKeyDatabase = types.ContextKeyDatabase
+	ContextKeyDBAdmin = types.ContextKeyDBAdmin
 )

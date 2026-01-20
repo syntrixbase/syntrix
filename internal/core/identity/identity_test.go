@@ -18,42 +18,42 @@ type MockUserStore struct {
 	mock.Mock
 }
 
-func (m *MockUserStore) CreateUser(ctx context.Context, database string, user *storage.User) error {
-	args := m.Called(ctx, database, user)
+func (m *MockUserStore) CreateUser(ctx context.Context, user *storage.User) error {
+	args := m.Called(ctx, user)
 	return args.Error(0)
 }
 
-func (m *MockUserStore) GetUserByUsername(ctx context.Context, database, username string) (*storage.User, error) {
-	args := m.Called(ctx, database, username)
+func (m *MockUserStore) GetUserByUsername(ctx context.Context, username string) (*storage.User, error) {
+	args := m.Called(ctx, username)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) GetUserByID(ctx context.Context, database, id string) (*storage.User, error) {
-	args := m.Called(ctx, database, id)
+func (m *MockUserStore) GetUserByID(ctx context.Context, id string) (*storage.User, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*storage.User, error) {
-	args := m.Called(ctx, database, limit, offset)
+func (m *MockUserStore) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*storage.User), args.Error(1)
 }
 
-func (m *MockUserStore) UpdateUser(ctx context.Context, database string, user *storage.User) error {
-	args := m.Called(ctx, database, user)
+func (m *MockUserStore) UpdateUser(ctx context.Context, user *storage.User) error {
+	args := m.Called(ctx, user)
 	return args.Error(0)
 }
 
-func (m *MockUserStore) UpdateUserLoginStats(ctx context.Context, database, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	args := m.Called(ctx, database, id, lastLogin, attempts, lockoutUntil)
+func (m *MockUserStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	args := m.Called(ctx, id, lastLogin, attempts, lockoutUntil)
 	return args.Error(0)
 }
 
@@ -72,18 +72,18 @@ type MockTokenRevocationStore struct {
 	mock.Mock
 }
 
-func (m *MockTokenRevocationStore) RevokeToken(ctx context.Context, database, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, database, jti, expiresAt)
+func (m *MockTokenRevocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockTokenRevocationStore) RevokeTokenImmediate(ctx context.Context, database, jti string, expiresAt time.Time) error {
-	args := m.Called(ctx, database, jti, expiresAt)
+func (m *MockTokenRevocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+	args := m.Called(ctx, jti, expiresAt)
 	return args.Error(0)
 }
 
-func (m *MockTokenRevocationStore) IsRevoked(ctx context.Context, database, jti string, gracePeriod time.Duration) (bool, error) {
-	args := m.Called(ctx, database, jti, gracePeriod)
+func (m *MockTokenRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+	args := m.Called(ctx, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
 

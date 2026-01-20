@@ -158,11 +158,12 @@ func withTimeout(next http.HandlerFunc, timeout time.Duration) http.HandlerFunc 
 }
 
 func (h *Handler) getDatabase(r *http.Request) (string, error) {
-	if database, ok := r.Context().Value(ContextKeyDatabase).(string); ok && database != "" {
+	// Extract database from URL path (e.g., /api/v1/databases/{database}/documents/...)
+	if database := r.PathValue("database"); database != "" {
 		return database, nil
 	}
 
-	return "", identity.ErrDatabaseRequired
+	return "", errors.New("database is required in URL path")
 }
 
 func (h *Handler) databaseOrError(w http.ResponseWriter, r *http.Request) (string, bool) {
@@ -177,23 +178,27 @@ func (h *Handler) databaseOrError(w http.ResponseWriter, r *http.Request) (strin
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Document Operations (with body size limit for write operations)
 	// Note: Request ID and panic recovery are handled by the unified server middleware
-	mux.HandleFunc("GET /api/v1/{path...}", withTimeout(h.maybeProtected(h.authorized(h.handleGetDocument, "read")), DefaultRequestTimeout))
-	mux.HandleFunc("POST /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleCreateDocument, "create")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("PUT /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("PATCH /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handlePatchDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("DELETE /api/v1/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete")), DefaultMaxBodySize), DefaultRequestTimeout))
+	// URL format: /api/v1/databases/{database}/documents/{path...}
+	mux.HandleFunc("GET /api/v1/databases/{database}/documents/{path...}", withTimeout(h.maybeProtected(h.authorized(h.handleGetDocument, "read")), DefaultRequestTimeout))
+	mux.HandleFunc("POST /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleCreateDocument, "create")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PUT /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PATCH /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handlePatchDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("DELETE /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete")), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Query Operations
-	mux.HandleFunc("POST /api/v1/query", withTimeout(maxBodySize(h.protected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
+	// URL format: /api/v1/databases/{database}/query
+	mux.HandleFunc("POST /api/v1/databases/{database}/query", withTimeout(maxBodySize(h.protected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Replication Operations (use longer timeout for potentially large data transfers)
-	mux.HandleFunc("GET /replication/v1/pull", withTimeout(h.protected(h.handlePull), LongRequestTimeout))
-	mux.HandleFunc("POST /replication/v1/push", withTimeout(maxBodySize(h.protected(h.handlePush), LargeMaxBodySize), LongRequestTimeout))
+	// URL format: /replication/v1/databases/{database}/pull
+	mux.HandleFunc("GET /replication/v1/databases/{database}/pull", withTimeout(h.protected(h.handlePull), LongRequestTimeout))
+	mux.HandleFunc("POST /replication/v1/databases/{database}/push", withTimeout(maxBodySize(h.protected(h.handlePush), LargeMaxBodySize), LongRequestTimeout))
 
 	// Trigger Internal Operations
-	mux.HandleFunc("POST /trigger/v1/get", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerGet), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /trigger/v1/query", withTimeout(maxBodySize(h.triggerProtected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /trigger/v1/write", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerWrite), DefaultMaxBodySize), DefaultRequestTimeout))
+	// URL format: /trigger/v1/databases/{database}/get
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/get", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerGet), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/query", withTimeout(maxBodySize(h.triggerProtected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/write", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerWrite), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Auth Operations
 	if h.auth != nil {
@@ -235,10 +240,11 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 
 		path := r.PathValue("path")
 
-		// Extract database from context (defaults to "default")
-		database := "default"
-		if db, ok := r.Context().Value(ContextKeyDatabase).(string); ok && db != "" {
-			database = db
+		// Extract database from URL path
+		database := r.PathValue("database")
+		if database == "" {
+			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
+			return
 		}
 
 		// Build Request Context
@@ -255,6 +261,9 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		}
 		if roles, ok := r.Context().Value(identity.ContextKeyRoles).([]string); ok {
 			reqCtx.Auth.Roles = append([]string{}, roles...)
+		}
+		if dbAdmin, ok := r.Context().Value(identity.ContextKeyDBAdmin).([]string); ok {
+			reqCtx.Auth.DBAdmin = append([]string{}, dbAdmin...)
 		}
 		if claims, ok := r.Context().Value(identity.ContextKeyClaims).(*identity.Claims); ok {
 			reqCtx.Auth.Claims = claimsToMap(claims)
@@ -336,8 +345,7 @@ func claimsToMap(claims *identity.Claims) map[string]interface{} {
 
 	return map[string]interface{}{
 		"sub":      claims.Subject,
-		"database": claims.Database,
-		"tid":      claims.TenantID,
+		"db_admin": claims.DBAdmin,
 		"oid":      claims.UserID,
 		"username": claims.Username,
 		"roles":    append([]string{}, claims.Roles...),

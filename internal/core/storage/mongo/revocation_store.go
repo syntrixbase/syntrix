@@ -24,11 +24,9 @@ func NewRevocationStore(db *mongo.Database, collectionName string) types.TokenRe
 	}
 }
 
-func (s *revocationStore) RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error {
-	id := database + ":" + jti
+func (s *revocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
 	doc := types.RevokedToken{
-		JTI:       id,
-		Database:  database,
+		JTI:       jti,
 		ExpiresAt: expiresAt,
 		RevokedAt: time.Now(),
 	}
@@ -39,12 +37,10 @@ func (s *revocationStore) RevokeToken(ctx context.Context, database string, jti 
 	return err
 }
 
-func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error {
+func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
 	// Set RevokedAt to the past to bypass grace period
-	id := database + ":" + jti
 	doc := types.RevokedToken{
-		JTI:       id,
-		Database:  database,
+		JTI:       jti,
 		ExpiresAt: expiresAt,
 		RevokedAt: time.Now().Add(-24 * time.Hour),
 	}
@@ -55,9 +51,8 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, database str
 	return err
 }
 
-func (s *revocationStore) IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error) {
-	id := database + ":" + jti
-	filter := bson.M{"_id": id, "database": database}
+func (s *revocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+	filter := bson.M{"_id": jti}
 	var doc types.RevokedToken
 	err := s.coll.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
@@ -85,15 +80,6 @@ func (s *revocationStore) EnsureIndexes(ctx context.Context) error {
 	_, err := s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
 		Keys:    bson.D{{Key: "expires_at", Value: 1}},
 		Options: options.Index().SetExpireAfterSeconds(0),
-	})
-	if err != nil {
-		return err
-	}
-
-	// Per-database expiration query index
-	_, err = s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "expires_at", Value: 1}},
-		Options: options.Index().SetUnique(false),
 	})
 	return err
 }

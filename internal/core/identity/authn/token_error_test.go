@@ -68,29 +68,6 @@ func TestTokenService_ErrorPaths(t *testing.T) {
 		_, err := ts.ValidateToken("not.a.token")
 		assert.Error(t, err)
 	})
-
-	t.Run("ValidateToken_MissingDatabase", func(t *testing.T) {
-		keyFile := getTestKeyPath(t)
-		cfg := config.AuthNConfig{PrivateKeyFile: keyFile}
-		ts, _ := NewTokenService(cfg)
-
-		// Manually create a token with missing Database
-		claims := Claims{
-			Username: "user",
-			UserID:   "u1",
-			RegisteredClaims: jwt.RegisteredClaims{
-				Subject: "u1",
-			},
-		}
-		// Database is empty by default
-
-		token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-		tokenString, _ := token.SignedString(ts.privateKey)
-
-		_, err := ts.ValidateToken(tokenString)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "missing database ID")
-	})
 }
 
 // Mock reader that returns error
@@ -139,7 +116,7 @@ func TestTokenService_GenerateTokenPair_SigningError(t *testing.T) {
 	assert.Equal(t, 5*time.Minute, ts.RefreshOverlap())
 }
 
-func TestTokenService_GenerateTokenPair_DefaultDatabase(t *testing.T) {
+func TestTokenService_GenerateTokenPair_ValidToken(t *testing.T) {
 	keyFile := getTestKeyPath(t)
 	cfg := config.AuthNConfig{
 		PrivateKeyFile: keyFile,
@@ -147,11 +124,13 @@ func TestTokenService_GenerateTokenPair_DefaultDatabase(t *testing.T) {
 	}
 	ts, _ := NewTokenService(cfg)
 
-	user := &User{ID: "u1", Username: "user"} // Empty Database
+	user := &User{ID: "u1", Username: "user", Database: "default", Roles: []string{"user"}}
 	pair, err := ts.GenerateTokenPair(user)
 	require.NoError(t, err)
 
 	claims, err := ts.ValidateToken(pair.AccessToken)
 	require.NoError(t, err)
-	assert.Equal(t, "default", claims.Database)
+	// Database is no longer in claims, but we can verify roles and user ID
+	assert.Equal(t, "u1", claims.Subject)
+	assert.Contains(t, claims.Roles, "user")
 }

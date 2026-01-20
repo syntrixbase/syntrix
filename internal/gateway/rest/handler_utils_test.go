@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,12 +18,12 @@ func TestNewHandler_Panic(t *testing.T) {
 func TestGetDatabase(t *testing.T) {
 	h := &Handler{}
 
-	// Case 1: Database present
-	ctx := context.WithValue(context.Background(), ContextKeyDatabase, "t1")
-	req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
+	// Case 1: Database in URL path
+	req := httptest.NewRequest("GET", "/api/v1/databases/mydb/documents/col/doc", nil)
+	req.SetPathValue("database", "mydb")
 	database, err := h.getDatabase(req)
 	assert.NoError(t, err)
-	assert.Equal(t, "t1", database)
+	assert.Equal(t, "mydb", database)
 
 	// Case 2: Database missing
 	req2 := httptest.NewRequest("GET", "/", nil)
@@ -36,9 +35,9 @@ func TestGetDatabase(t *testing.T) {
 func TestDatabaseOrError(t *testing.T) {
 	h := &Handler{}
 
-	// Case 1: Database present
-	ctx := context.WithValue(context.Background(), ContextKeyDatabase, "t1")
-	req := httptest.NewRequest("GET", "/", nil).WithContext(ctx)
+	// Case 1: Database in URL path
+	req := httptest.NewRequest("GET", "/api/v1/databases/t1/documents/col/doc", nil)
+	req.SetPathValue("database", "t1")
 	w := httptest.NewRecorder()
 	database, ok := h.databaseOrError(w, req)
 	assert.True(t, ok)
@@ -58,17 +57,13 @@ func TestClaimsToMap(t *testing.T) {
 	// Case 1: Nil claims
 	assert.Nil(t, claimsToMap(nil))
 
-	// Case 2: Valid claims
+	// Case 2: Valid claims (without Database and TenantID which are removed)
 	claims := &identity.Claims{
-		Database: "db1",
-		TenantID: "t1",
 		UserID:   "u1",
 		Username: "user1",
 		Roles:    []string{"admin"},
 	}
 	m := claimsToMap(claims)
-	assert.Equal(t, "db1", m["database"])
-	assert.Equal(t, "t1", m["tid"])
 	assert.Equal(t, "u1", m["oid"])
 	assert.Equal(t, "user1", m["username"])
 	assert.Equal(t, []string{"admin"}, m["roles"])

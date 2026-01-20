@@ -242,44 +242,44 @@ type mockUserStoreImpl struct {
 	mock.Mock
 }
 
-func (m *mockUserStoreImpl) CreateUser(ctx context.Context, database string, user *types.User) error {
-	return m.Called(ctx, database, user).Error(0)
+func (m *mockUserStoreImpl) CreateUser(ctx context.Context, user *types.User) error {
+	return m.Called(ctx, user).Error(0)
 }
-func (m *mockUserStoreImpl) GetUserByUsername(ctx context.Context, database string, username string) (*types.User, error) {
-	args := m.Called(ctx, database, username)
+func (m *mockUserStoreImpl) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
+	args := m.Called(ctx, username)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*types.User), args.Error(1)
 }
-func (m *mockUserStoreImpl) GetUserByID(ctx context.Context, database string, id string) (*types.User, error) {
-	args := m.Called(ctx, database, id)
+func (m *mockUserStoreImpl) GetUserByID(ctx context.Context, id string) (*types.User, error) {
+	args := m.Called(ctx, id)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*types.User), args.Error(1)
 }
-func (m *mockUserStoreImpl) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*types.User, error) {
-	args := m.Called(ctx, database, limit, offset)
+func (m *mockUserStoreImpl) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
+	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*types.User), args.Error(1)
 }
-func (m *mockUserStoreImpl) UpdateUser(ctx context.Context, database string, user *types.User) error {
-	return m.Called(ctx, database, user).Error(0)
+func (m *mockUserStoreImpl) UpdateUser(ctx context.Context, user *types.User) error {
+	return m.Called(ctx, user).Error(0)
 }
-func (m *mockUserStoreImpl) UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	return m.Called(ctx, database, id, lastLogin, attempts, lockoutUntil).Error(0)
+func (m *mockUserStoreImpl) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	return m.Called(ctx, id, lastLogin, attempts, lockoutUntil).Error(0)
 }
-func (m *mockUserStoreImpl) UpdateUserPassword(ctx context.Context, database string, userID string, hashedPassword string) error {
-	return m.Called(ctx, database, userID, hashedPassword).Error(0)
+func (m *mockUserStoreImpl) UpdateUserPassword(ctx context.Context, userID string, hashedPassword string) error {
+	return m.Called(ctx, userID, hashedPassword).Error(0)
 }
-func (m *mockUserStoreImpl) UpdateUserRoles(ctx context.Context, database string, userID string, roles []string) error {
-	return m.Called(ctx, database, userID, roles).Error(0)
+func (m *mockUserStoreImpl) UpdateUserRoles(ctx context.Context, userID string, roles []string) error {
+	return m.Called(ctx, userID, roles).Error(0)
 }
-func (m *mockUserStoreImpl) DeleteUser(ctx context.Context, database string, id string) error {
-	return m.Called(ctx, database, id).Error(0)
+func (m *mockUserStoreImpl) DeleteUser(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
 }
 func (m *mockUserStoreImpl) EnsureIndexes(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
@@ -296,11 +296,11 @@ func TestRoutedUserStore(t *testing.T) {
 		router := new(mockUserRouter)
 		store := new(mockUserStoreImpl)
 
-		router.On("Select", database, types.OpRead).Return(store, nil)
-		store.On("GetUserByID", ctx, database, "id").Return(&types.User{}, nil)
+		router.On("Select", "default", types.OpRead).Return(store, nil)
+		store.On("GetUserByID", ctx, "id").Return(&types.User{}, nil)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.GetUserByID(ctx, database, "id")
+		_, err := rs.GetUserByID(ctx, "id")
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -312,10 +312,10 @@ func TestRoutedUserStore(t *testing.T) {
 		store := new(mockUserStoreImpl)
 
 		router.On("Select", database, types.OpWrite).Return(store, nil)
-		store.On("CreateUser", ctx, database, mock.Anything).Return(nil)
+		store.On("CreateUser", ctx, mock.Anything).Return(nil)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.CreateUser(ctx, database, &types.User{})
+		err := rs.CreateUser(ctx, &types.User{})
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -327,10 +327,10 @@ func TestRoutedUserStore(t *testing.T) {
 		store := new(mockUserStoreImpl)
 
 		router.On("Select", database, types.OpRead).Return(store, nil)
-		store.On("GetUserByUsername", ctx, database, "user").Return(&types.User{}, nil)
+		store.On("GetUserByUsername", ctx, "user").Return(&types.User{}, nil)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.GetUserByUsername(ctx, database, "user")
+		_, err := rs.GetUserByUsername(ctx, "user")
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -341,11 +341,11 @@ func TestRoutedUserStore(t *testing.T) {
 		router := new(mockUserRouter)
 		store := new(mockUserStoreImpl)
 
-		router.On("Select", database, types.OpRead).Return(store, nil)
-		store.On("ListUsers", ctx, database, 10, 0).Return([]*types.User{}, nil)
+		router.On("Select", "default", types.OpRead).Return(store, nil)
+		store.On("ListUsers", ctx, 10, 0).Return([]*types.User{}, nil)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.ListUsers(ctx, database, 10, 0)
+		_, err := rs.ListUsers(ctx, 10, 0)
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -356,11 +356,11 @@ func TestRoutedUserStore(t *testing.T) {
 		router := new(mockUserRouter)
 		store := new(mockUserStoreImpl)
 
-		router.On("Select", database, types.OpWrite).Return(store, nil)
-		store.On("UpdateUser", ctx, database, mock.Anything).Return(nil)
+		router.On("Select", "default", types.OpWrite).Return(store, nil)
+		store.On("UpdateUser", ctx, mock.Anything).Return(nil)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.UpdateUser(ctx, database, &types.User{})
+		err := rs.UpdateUser(ctx, &types.User{})
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -372,10 +372,10 @@ func TestRoutedUserStore(t *testing.T) {
 		store := new(mockUserStoreImpl)
 
 		router.On("Select", database, types.OpWrite).Return(store, nil)
-		store.On("UpdateUserLoginStats", ctx, database, "id", mock.Anything, 1, mock.Anything).Return(nil)
+		store.On("UpdateUserLoginStats", ctx, "id", mock.Anything, 1, mock.Anything).Return(nil)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.UpdateUserLoginStats(ctx, database, "id", time.Now(), 1, time.Now())
+		err := rs.UpdateUserLoginStats(ctx, "id", time.Now(), 1, time.Now())
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -452,14 +452,14 @@ type mockRevStoreImpl struct {
 	mock.Mock
 }
 
-func (m *mockRevStoreImpl) RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error {
-	return m.Called(ctx, database, jti, expiresAt).Error(0)
+func (m *mockRevStoreImpl) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+	return m.Called(ctx, jti, expiresAt).Error(0)
 }
-func (m *mockRevStoreImpl) RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error {
-	return m.Called(ctx, database, jti, expiresAt).Error(0)
+func (m *mockRevStoreImpl) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+	return m.Called(ctx, jti, expiresAt).Error(0)
 }
-func (m *mockRevStoreImpl) IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error) {
-	args := m.Called(ctx, database, jti, gracePeriod)
+func (m *mockRevStoreImpl) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+	args := m.Called(ctx, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
 func (m *mockRevStoreImpl) EnsureIndexes(ctx context.Context) error {
@@ -478,10 +478,10 @@ func TestRoutedRevocationStore(t *testing.T) {
 		store := new(mockRevStoreImpl)
 
 		router.On("Select", database, types.OpWrite).Return(store, nil)
-		store.On("RevokeToken", ctx, database, "jti", mock.Anything).Return(nil)
+		store.On("RevokeToken", ctx, "jti", mock.Anything).Return(nil)
 
 		rs := NewRoutedRevocationStore(router)
-		err := rs.RevokeToken(ctx, database, "jti", time.Now())
+		err := rs.RevokeToken(ctx, "jti", time.Now())
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -493,10 +493,10 @@ func TestRoutedRevocationStore(t *testing.T) {
 		store := new(mockRevStoreImpl)
 
 		router.On("Select", database, types.OpWrite).Return(store, nil)
-		store.On("RevokeTokenImmediate", ctx, database, "jti", mock.Anything).Return(nil)
+		store.On("RevokeTokenImmediate", ctx, "jti", mock.Anything).Return(nil)
 
 		rs := NewRoutedRevocationStore(router)
-		err := rs.RevokeTokenImmediate(ctx, database, "jti", time.Now())
+		err := rs.RevokeTokenImmediate(ctx, "jti", time.Now())
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)
@@ -508,10 +508,10 @@ func TestRoutedRevocationStore(t *testing.T) {
 		store := new(mockRevStoreImpl)
 
 		router.On("Select", database, types.OpRead).Return(store, nil)
-		store.On("IsRevoked", ctx, database, "jti", time.Minute).Return(false, nil)
+		store.On("IsRevoked", ctx, "jti", time.Minute).Return(false, nil)
 
 		rs := NewRoutedRevocationStore(router)
-		_, err := rs.IsRevoked(ctx, database, "jti", time.Minute)
+		_, err := rs.IsRevoked(ctx, "jti", time.Minute)
 
 		assert.NoError(t, err)
 		router.AssertExpectations(t)

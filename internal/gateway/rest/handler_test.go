@@ -30,7 +30,8 @@ func TestAuthorized_GetDocumentError(t *testing.T) {
 	// Mock GetDocument to return an error
 	mockService.On("GetDocument", mock.Anything, "default", "col/doc").Return(nil, errors.New("db error"))
 
-	req, _ := http.NewRequest("PUT", "/api/v1/col/doc", nil)
+	req, _ := http.NewRequest("PUT", "/api/v1/databases/default/documents/col/doc", nil)
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 
 	// Add database to context so databaseOrError passes (though authorized doesn't call it directly,
@@ -72,7 +73,7 @@ func (m *MockAuthService_NoContext) Refresh(ctx context.Context, req identity.Re
 func (m *MockAuthService_NoContext) ListUsers(ctx context.Context, limit int, offset int) ([]*identity.User, error) {
 	return nil, nil
 }
-func (m *MockAuthService_NoContext) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (m *MockAuthService_NoContext) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 func (m *MockAuthService_NoContext) Logout(ctx context.Context, refreshToken string) error {
@@ -97,7 +98,7 @@ func TestTriggerProtected_NoRoles(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	req, _ := http.NewRequest("POST", "/trigger/v1/write", nil)
+	req, _ := http.NewRequest("POST", "/trigger/v1/databases/default/write", nil)
 	rr := httptest.NewRecorder()
 
 	target(rr, req)
@@ -161,7 +162,8 @@ func TestAuthorized_InvalidJSONBody(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}, "create")
 
-	req, _ := http.NewRequest("POST", "/api/v1/col/doc", bytes.NewBufferString("{invalid-json"))
+	req, _ := http.NewRequest("POST", "/api/v1/databases/default/documents/col/doc", bytes.NewBufferString("{invalid-json"))
+	req.SetPathValue("database", "default")
 	req.SetPathValue("path", "col/doc")
 
 	rr := httptest.NewRecorder()

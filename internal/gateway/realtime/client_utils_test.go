@@ -2,7 +2,6 @@ package realtime
 
 import (
 	"context"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -12,19 +11,19 @@ import (
 )
 
 func TestDatabaseFromContextMust(t *testing.T) {
-	// Case 1: Database present
-	ctx := context.WithValue(context.Background(), identity.ContextKeyDatabase, "t1")
+	// Case 1: Database present (using internal context key)
+	ctx := context.WithValue(context.Background(), contextKeyDatabase, "t1")
 	w := httptest.NewRecorder()
 	database := databaseFromContextMust(ctx, w)
 	assert.Equal(t, "t1", database)
-	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, 200, w.Code)
 
 	// Case 2: Database missing
 	ctx2 := context.Background()
 	w2 := httptest.NewRecorder()
 	database2 := databaseFromContextMust(ctx2, w2)
 	assert.Equal(t, "", database2)
-	assert.Equal(t, http.StatusUnauthorized, w2.Code)
+	assert.Equal(t, 401, w2.Code)
 }
 
 func TestHasSystemRoleFromClaims(t *testing.T) {
@@ -117,29 +116,17 @@ func TestDatabaseFromContext(t *testing.T) {
 	assert.Equal(t, "", database)
 	assert.False(t, allowAll)
 
-	// Case 2: Database in context
-	ctx1 := context.WithValue(context.Background(), identity.ContextKeyDatabase, "database1")
+	// Case 2: Database in context (using internal context key)
+	ctx1 := context.WithValue(context.Background(), contextKeyDatabase, "database1")
 	database, allowAll = databaseFromContext(ctx1)
 	assert.Equal(t, "database1", database)
 	assert.False(t, allowAll)
 
-	// Case 3: Database in claims
-	claims := &identity.Claims{Database: "database2"}
-	ctx2 := context.WithValue(context.Background(), identity.ContextKeyClaims, claims)
+	// Case 3: System role in claims makes allowAll true
+	claimsSystem := &identity.Claims{Roles: []string{"system"}}
+	ctx2 := context.WithValue(context.Background(), identity.ContextKeyClaims, claimsSystem)
+	ctx2 = context.WithValue(ctx2, contextKeyDatabase, "database2")
 	database, allowAll = databaseFromContext(ctx2)
 	assert.Equal(t, "database2", database)
-	assert.False(t, allowAll)
-
-	// Case 4: Database in both (ContextKeyDatabase takes precedence)
-	ctx3 := context.WithValue(ctx2, identity.ContextKeyDatabase, "database1")
-	database, allowAll = databaseFromContext(ctx3)
-	assert.Equal(t, "database1", database)
-	assert.False(t, allowAll)
-
-	// Case 5: System role
-	claimsSystem := &identity.Claims{Database: "database3", Roles: []string{"system"}}
-	ctx4 := context.WithValue(context.Background(), identity.ContextKeyClaims, claimsSystem)
-	database, allowAll = databaseFromContext(ctx4)
-	assert.Equal(t, "database3", database)
 	assert.True(t, allowAll)
 }

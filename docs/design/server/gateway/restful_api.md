@@ -1,11 +1,14 @@
 # API Protocol Design
 
-**Date:** December 13, 2025
+**Date:** December 13, 2025 (Updated: January 20, 2026)
 **Topic:** Detailed API Specification
+
+> **Note:** This document describes the original API structure. See [06.api-url-structure.md](06.api-url-structure.md) for the redesigned URL structure with explicit database paths.
 
 ## 1. REST API Specification
 
-Base URL: `/api/v1`
+Base URL: `/api/v1/databases/{database}/documents` (for document operations)
+Base URL: `/api/v1/databases/{database}` (for query operations)
 
 ### 1.1 Document Operations
 
@@ -27,7 +30,7 @@ This is the business layer Document type, visible to the API.
 
 #### Get Document
 
-`GET /api/v1/{collectionPath}/{id}`
+`GET /api/v1/databases/{database}/documents/{collectionPath}/{id}`
 
 **Response (200 OK):**
 
@@ -45,7 +48,7 @@ This is the business layer Document type, visible to the API.
 
 #### Create Document
 
-`POST /api/v1/{collectionPath}`
+`POST /api/v1/databases/{database}/documents/{collectionPath}`
 
 **Request:**
 
@@ -72,7 +75,7 @@ This is the business layer Document type, visible to the API.
 
 #### Create/Replace Document (Upsert)
 
-`PUT /api/v1/{collectionPath}/{id}`
+`PUT /api/v1/databases/{database}/documents/{collectionPath}/{id}`
 
 **Request:**
 
@@ -85,7 +88,7 @@ This is the business layer Document type, visible to the API.
 
 #### Update Document (Patch)
 
-`PATCH /api/v1/{collectionPath}/{id}`
+`PATCH /api/v1/databases/{database}/documents/{collectionPath}/{id}`
 
 **Request:**
 
@@ -97,7 +100,7 @@ This is the business layer Document type, visible to the API.
 
 #### Delete Document
 
-`DELETE /api/v1/{collectionPath}/{id}`
+`DELETE /api/v1/databases/{database}/documents/{collectionPath}/{id}`
 
 Response (204 No Content)
 
@@ -105,7 +108,7 @@ Response (204 No Content)
 
 #### Execute Query
 
-`POST /api/v1/query`
+`POST /api/v1/databases/{database}/query`
 
 **Request:**
 
@@ -134,23 +137,23 @@ Response (204 No Content)
 
 ### 1.3 Trigger API
 
-Internal API for trigger webhooks to access data.
+Internal API for trigger webhooks to access data. All endpoints require database in path.
 
 #### Batch Get Documents
 
-`POST /trigger/v1/get`
+`POST /trigger/v1/databases/{database}/get`
 
 Batch document reads by concrete paths.
 
 #### Query Documents
 
-`POST /trigger/v1/query`
+`POST /trigger/v1/databases/{database}/query`
 
 Single query (same shape as public query API).
 
 #### Write Documents
 
-`POST /trigger/v1/write`
+`POST /trigger/v1/databases/{database}/write`
 
 One or more write ops in a single request.
 
@@ -161,7 +164,7 @@ One or more write ops in a single request.
 **Create a message:**
 
 ```bash
-POST /api/v1/rooms/room-123/messages
+POST /api/v1/databases/prod/documents/rooms/room-123/messages
 {
   "senderId": "user-alice",
   "text": "Hello everyone!",
@@ -172,7 +175,7 @@ POST /api/v1/rooms/room-123/messages
 **Query recent messages:**
 
 ```bash
-POST /api/v1/query
+POST /api/v1/databases/prod/query
 {
   "collection": "rooms/room-123/messages",
   "filters": [

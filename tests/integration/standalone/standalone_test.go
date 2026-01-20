@@ -297,7 +297,7 @@ func TestStandaloneMode_BasicCRUD(t *testing.T) {
 		}
 		body, _ := json.Marshal(docData)
 
-		req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/"+collection, bytes.NewBuffer(body))
+		req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/databases/default/documents/"+collection, bytes.NewBuffer(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
 
@@ -322,7 +322,7 @@ func TestStandaloneMode_BasicCRUD(t *testing.T) {
 		}
 		body, _ := json.Marshal(queryData)
 
-		req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/query", bytes.NewBuffer(body))
+		req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/databases/default/query", bytes.NewBuffer(body))
 		req.Header.Set("Authorization", "Bearer "+token)
 		req.Header.Set("Content-Type", "application/json")
 
@@ -365,7 +365,7 @@ func TestStandaloneMode_NoExternalServices(t *testing.T) {
 	}
 	body, _ := json.Marshal(docData)
 
-	req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/standalone-test", bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/databases/default/documents/standalone-test", bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -391,7 +391,7 @@ func TestStandaloneMode_Watch(t *testing.T) {
 	}
 	body, _ := json.Marshal(docData)
 
-	req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/"+collection, bytes.NewBuffer(body))
+	req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/databases/default/documents/"+collection, bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -416,7 +416,7 @@ func TestStandaloneMode_Watch(t *testing.T) {
 	}
 	body, _ = json.Marshal(updateData)
 
-	req, _ = http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/api/v1/%s/%s", env.APIURL, collection, docID), bytes.NewBuffer(body))
+	req, _ = http.NewRequest(http.MethodPatch, fmt.Sprintf("%s/api/v1/databases/default/documents/%s/%s", env.APIURL, collection, docID), bytes.NewBuffer(body))
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 

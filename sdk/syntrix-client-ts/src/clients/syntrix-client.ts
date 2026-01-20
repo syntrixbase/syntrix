@@ -9,19 +9,30 @@ import { CollectionReferenceImpl, DocumentReferenceImpl } from '../api/reference
 import { RealtimeClient, RealtimeCallbacks, SubscribeOptions, ConnectionState } from '../replication/realtime';
 import { RealtimeSSEClient, RealtimeSSEOptions } from '../replication/realtime-sse';
 
+export interface SyntrixClientConfig {
+  database: string;
+  auth?: AuthConfig;
+}
+
 export class SyntrixClient implements AuthService {
   private storage: StorageClient;
   private tokenProvider: DefaultTokenProvider;
   private realtimeClient: RealtimeClient | null = null;
   private realtimeSseClient: RealtimeSSEClient | null = null;
   private baseUrl: string;
+  private database: string;
 
-  constructor(baseUrl: string, authConfig: AuthConfig = {}) {
+  constructor(baseUrl: string, config: SyntrixClientConfig) {
     this.baseUrl = baseUrl;
+    this.database = config.database;
     const axiosInstance = axios.create({ baseURL: baseUrl });
-    this.tokenProvider = new DefaultTokenProvider(authConfig, baseUrl);
+    this.tokenProvider = new DefaultTokenProvider(config.auth || {}, baseUrl);
     setupAuthInterceptor(axiosInstance, this.tokenProvider);
-    this.storage = new RestTransport(axiosInstance);
+    this.storage = new RestTransport(axiosInstance, config.database);
+  }
+
+  getDatabase(): string {
+    return this.database;
   }
 
   // Auth methods
@@ -56,14 +67,14 @@ export class SyntrixClient implements AuthService {
   realtime(): RealtimeClient {
     if (!this.realtimeClient) {
       const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/realtime/ws';
-      this.realtimeClient = new RealtimeClient(wsUrl, this.tokenProvider);
+      this.realtimeClient = new RealtimeClient(wsUrl, this.tokenProvider, this.database);
     }
     return this.realtimeClient;
   }
 
   realtimeSSE(): RealtimeSSEClient {
     if (!this.realtimeSseClient) {
-      this.realtimeSseClient = new RealtimeSSEClient(this.baseUrl, this.tokenProvider);
+      this.realtimeSseClient = new RealtimeSSEClient(this.baseUrl, this.tokenProvider, this.database);
     }
     return this.realtimeSseClient;
   }

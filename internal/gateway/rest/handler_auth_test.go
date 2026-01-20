@@ -19,7 +19,7 @@ func TestHandleSignUp(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		reqBody := identity.SignupRequest{Database: "default", Username: "newuser", Password: "password"}
+		reqBody := identity.SignupRequest{Username: "newuser", Password: "password"}
 		tokenPair := &identity.TokenPair{AccessToken: "access", RefreshToken: "refresh"}
 		mockAuth.On("SignUp", mock.Anything, reqBody).Return(tokenPair, nil).Once()
 
@@ -36,7 +36,7 @@ func TestHandleSignUp(t *testing.T) {
 	})
 
 	t.Run("UserExists", func(t *testing.T) {
-		reqBody := identity.SignupRequest{Database: "default", Username: "existing", Password: "password"}
+		reqBody := identity.SignupRequest{Username: "existing", Password: "password"}
 		mockAuth.On("SignUp", mock.Anything, reqBody).Return(nil, errors.New("user already exists")).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -63,7 +63,7 @@ func TestHandleLogin(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("Success", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
 		tokenPair := &identity.TokenPair{AccessToken: "access", RefreshToken: "refresh"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(tokenPair, nil).Once()
 
@@ -80,7 +80,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("InvalidCredentials", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "user", Password: "wrong"}
+		reqBody := identity.LoginRequest{Username: "user", Password: "wrong"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrInvalidCredentials).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -93,7 +93,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("AccountDisabled", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "disabled", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "disabled", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountDisabled).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -106,7 +106,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("AccountLocked", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "locked", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -118,9 +118,8 @@ func TestHandleLogin(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
-	t.Run("DatabaseRequired", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "", Username: "user", Password: "password"}
-		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrDatabaseRequired).Once()
+	t.Run("MissingUsername", func(t *testing.T) {
+		reqBody := identity.LoginRequest{Username: "", Password: "password"}
 
 		body, _ := json.Marshal(reqBody)
 		req := httptest.NewRequest("POST", "/auth/v1/login", bytes.NewReader(body))
@@ -132,7 +131,7 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("InternalError", func(t *testing.T) {
-		reqBody := identity.LoginRequest{Database: "default", Username: "user", Password: "password"}
+		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("internal error")).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -187,6 +186,17 @@ func TestHandleRefresh(t *testing.T) {
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+
+	t.Run("MissingToken", func(t *testing.T) {
+		reqBody := identity.RefreshRequest{RefreshToken: ""}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/auth/v1/refresh", bytes.NewReader(body))
+		w := httptest.NewRecorder()
+
+		server.handleRefresh(w, req)
+
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
 }
 
 func TestHandleLogout(t *testing.T) {
@@ -194,7 +204,9 @@ func TestHandleLogout(t *testing.T) {
 	server := createTestServer(nil, mockAuth, nil)
 
 	t.Run("Success_Body", func(t *testing.T) {
-		reqBody := identity.RefreshRequest{RefreshToken: "refresh_token"}
+		reqBody := struct {
+			RefreshToken string `json:"refresh_token"`
+		}{RefreshToken: "refresh_token"}
 		mockAuth.On("Logout", mock.Anything, "refresh_token").Return(nil).Once()
 
 		body, _ := json.Marshal(reqBody)
@@ -206,20 +218,12 @@ func TestHandleLogout(t *testing.T) {
 		assert.Equal(t, http.StatusOK, w.Code)
 	})
 
-	t.Run("Success_Header", func(t *testing.T) {
-		mockAuth.On("Logout", mock.Anything, "refresh_token").Return(nil).Once()
-
-		req := httptest.NewRequest("POST", "/auth/v1/logout", nil)
-		req.Header.Set("Authorization", "Bearer refresh_token")
-		w := httptest.NewRecorder()
-
-		server.handleLogout(w, req)
-
-		assert.Equal(t, http.StatusOK, w.Code)
-	})
-
 	t.Run("MissingToken", func(t *testing.T) {
-		req := httptest.NewRequest("POST", "/auth/v1/logout", nil)
+		reqBody := struct {
+			RefreshToken string `json:"refresh_token"`
+		}{RefreshToken: ""}
+		body, _ := json.Marshal(reqBody)
+		req := httptest.NewRequest("POST", "/auth/v1/logout", bytes.NewReader(body))
 		w := httptest.NewRecorder()
 
 		server.handleLogout(w, req)

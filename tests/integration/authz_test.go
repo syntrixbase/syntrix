@@ -121,13 +121,13 @@ match:
 		token := env.GetToken(t, "user-public", "user")
 		require.NotEmpty(t, token)
 
-		code := makeRequest("GET", "/api/v1/public/doc1", token, nil)
+		code := makeRequest("GET", "/api/v1/databases/default/documents/public/doc1", token, nil)
 		assert.Equal(t, http.StatusOK, code)
 	})
 
 	// Scenario 2: Private Access (No Token) -> Deny (missing database)
 	t.Run("Private Access No Token", func(t *testing.T) {
-		code := makeRequest("GET", "/api/v1/private/doc1", "", nil)
+		code := makeRequest("GET", "/api/v1/databases/default/documents/private/doc1", "", nil)
 		assert.Equal(t, http.StatusForbidden, code)
 	})
 
@@ -136,7 +136,7 @@ match:
 		token := env.GetToken(t, "user1", "user")
 		require.NotEmpty(t, token)
 
-		code := makeRequest("GET", "/api/v1/private/doc1", token, nil)
+		code := makeRequest("GET", "/api/v1/databases/default/documents/private/doc1", token, nil)
 		assert.Equal(t, http.StatusOK, code)
 	})
 
@@ -145,7 +145,7 @@ match:
 		token := env.GetToken(t, "user2", "user")
 		require.NotEmpty(t, token)
 
-		code := makeRequest("GET", "/api/v1/admin/doc1", token, nil)
+		code := makeRequest("GET", "/api/v1/databases/default/documents/admin/doc1", token, nil)
 		assert.Equal(t, http.StatusForbidden, code)
 	})
 
@@ -154,7 +154,7 @@ match:
 		token := env.GetToken(t, "syntrix", "admin")
 		require.NotEmpty(t, token)
 
-		code := makeRequest("GET", "/api/v1/admin/doc1", token, nil)
+		code := makeRequest("GET", "/api/v1/databases/default/documents/admin/doc1", token, nil)
 		assert.Equal(t, http.StatusOK, code)
 	})
 }

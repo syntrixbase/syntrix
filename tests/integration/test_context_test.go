@@ -214,7 +214,7 @@ func (tc *TestContext) MakeRequest(method, path string, body interface{}, token 
 
 // CreateDocument creates a document in an isolated collection
 func (tc *TestContext) CreateDocument(collection string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := tc.MakeRequest("POST", "/api/v1/"+tc.Collection(collection), data, token)
+	resp := tc.MakeRequest("POST", "/api/v1/databases/default/documents/"+tc.Collection(collection), data, token)
 	require.Equal(tc.t, http.StatusCreated, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -225,7 +225,7 @@ func (tc *TestContext) CreateDocument(collection string, data map[string]interfa
 
 // GetDocument retrieves a document from an isolated collection
 func (tc *TestContext) GetDocument(collection, id, token string) map[string]interface{} {
-	resp := tc.MakeRequest("GET", fmt.Sprintf("/api/v1/%s/%s", tc.Collection(collection), id), nil, token)
+	resp := tc.MakeRequest("GET", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", tc.Collection(collection), id), nil, token)
 	require.Equal(tc.t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -236,7 +236,7 @@ func (tc *TestContext) GetDocument(collection, id, token string) map[string]inte
 
 // PatchDocument patches a document in an isolated collection
 func (tc *TestContext) PatchDocument(collection, id string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := tc.MakeRequest("PATCH", fmt.Sprintf("/api/v1/%s/%s", tc.Collection(collection), id), data, token)
+	resp := tc.MakeRequest("PATCH", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", tc.Collection(collection), id), data, token)
 	require.Equal(tc.t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -247,7 +247,7 @@ func (tc *TestContext) PatchDocument(collection, id string, data map[string]inte
 
 // PutDocument replaces a document in an isolated collection
 func (tc *TestContext) PutDocument(collection, id string, data map[string]interface{}, token string) map[string]interface{} {
-	resp := tc.MakeRequest("PUT", fmt.Sprintf("/api/v1/%s/%s", tc.Collection(collection), id), data, token)
+	resp := tc.MakeRequest("PUT", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", tc.Collection(collection), id), data, token)
 	require.Equal(tc.t, http.StatusOK, resp.StatusCode)
 	var doc map[string]interface{}
 	err := json.NewDecoder(resp.Body).Decode(&doc)
@@ -258,7 +258,7 @@ func (tc *TestContext) PutDocument(collection, id string, data map[string]interf
 
 // DeleteDocument deletes a document in an isolated collection
 func (tc *TestContext) DeleteDocument(collection, id, token string) {
-	resp := tc.MakeRequest("DELETE", fmt.Sprintf("/api/v1/%s/%s", tc.Collection(collection), id), nil, token)
+	resp := tc.MakeRequest("DELETE", fmt.Sprintf("/api/v1/databases/default/documents/%s/%s", tc.Collection(collection), id), nil, token)
 	require.Equal(tc.t, http.StatusNoContent, resp.StatusCode)
 	resp.Body.Close()
 }

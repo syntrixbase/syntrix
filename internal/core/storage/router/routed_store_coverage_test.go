@@ -107,7 +107,7 @@ func TestRoutedUserStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.CreateUser(ctx, database, &types.User{})
+		err := rs.CreateUser(ctx, &types.User{})
 
 		assert.ErrorIs(t, err, errSelect)
 	})
@@ -117,37 +117,37 @@ func TestRoutedUserStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpRead).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.GetUserByUsername(ctx, database, "user")
+		_, err := rs.GetUserByUsername(ctx, "user")
 
 		assert.ErrorIs(t, err, errSelect)
 	})
 
 	t.Run("GetUserByID Select Error", func(t *testing.T) {
 		router := new(mockUserRouter)
-		router.On("Select", database, types.OpRead).Return(nil, errSelect)
+		router.On("Select", "default", types.OpRead).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.GetUserByID(ctx, database, "id")
+		_, err := rs.GetUserByID(ctx, "id")
 
 		assert.ErrorIs(t, err, errSelect)
 	})
 
 	t.Run("ListUsers Select Error", func(t *testing.T) {
 		router := new(mockUserRouter)
-		router.On("Select", database, types.OpRead).Return(nil, errSelect)
+		router.On("Select", "default", types.OpRead).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		_, err := rs.ListUsers(ctx, database, 10, 0)
+		_, err := rs.ListUsers(ctx, 10, 0)
 
 		assert.ErrorIs(t, err, errSelect)
 	})
 
 	t.Run("UpdateUser Select Error", func(t *testing.T) {
 		router := new(mockUserRouter)
-		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
+		router.On("Select", "default", types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.UpdateUser(ctx, database, &types.User{})
+		err := rs.UpdateUser(ctx, &types.User{})
 
 		assert.ErrorIs(t, err, errSelect)
 	})
@@ -157,7 +157,7 @@ func TestRoutedUserStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedUserStore(router)
-		err := rs.UpdateUserLoginStats(ctx, database, "id", time.Now(), 0, time.Time{})
+		err := rs.UpdateUserLoginStats(ctx, "id", time.Now(), 0, time.Time{})
 
 		assert.ErrorIs(t, err, errSelect)
 	})
@@ -183,7 +183,7 @@ func TestRoutedRevocationStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedRevocationStore(router)
-		err := rs.RevokeToken(ctx, database, "jti", time.Now())
+		err := rs.RevokeToken(ctx, "jti", time.Now())
 
 		assert.ErrorIs(t, err, errSelect)
 	})
@@ -193,7 +193,7 @@ func TestRoutedRevocationStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
 
 		rs := NewRoutedRevocationStore(router)
-		err := rs.RevokeTokenImmediate(ctx, database, "jti", time.Now())
+		err := rs.RevokeTokenImmediate(ctx, "jti", time.Now())
 
 		assert.ErrorIs(t, err, errSelect)
 	})
@@ -203,7 +203,7 @@ func TestRoutedRevocationStore_Coverage(t *testing.T) {
 		router.On("Select", database, types.OpRead).Return(nil, errSelect)
 
 		rs := NewRoutedRevocationStore(router)
-		_, err := rs.IsRevoked(ctx, database, "jti", time.Minute)
+		_, err := rs.IsRevoked(ctx, "jti", time.Minute)
 
 		assert.ErrorIs(t, err, errSelect)
 	})

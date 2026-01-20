@@ -1,19 +1,25 @@
 import { AxiosInstance } from 'axios';
 import { StorageClient } from '../storage-client';
 
-const API_PREFIX = '/api/v1';
-
 export class RestTransport implements StorageClient {
-  constructor(private axios: AxiosInstance) {}
+  private database: string;
+
+  constructor(private axios: AxiosInstance, database: string) {
+    this.database = database;
+  }
 
   private buildPath(path: string): string {
-    // If path already starts with /api/v1, use as-is
+    // If path already starts with /api/v1, use as-is (for query endpoint)
     if (path.startsWith('/api/v1')) {
+      // Insert database into the path if it's a query endpoint
+      if (path === '/api/v1/query') {
+        return `/api/v1/databases/${this.database}/query`;
+      }
       return path;
     }
-    // Remove leading slash if present, then add prefix
+    // Build document path: /api/v1/databases/{database}/documents/{path}
     const cleanPath = path.startsWith('/') ? path.slice(1) : path;
-    return `${API_PREFIX}/${cleanPath}`;
+    return `/api/v1/databases/${this.database}/documents/${cleanPath}`;
   }
 
   async get<T>(path: string): Promise<T | null> {

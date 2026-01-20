@@ -23,5 +23,5 @@ const (
 	ContextKeyUsername = types.ContextKeyUsername
 	ContextKeyRoles    = types.ContextKeyRoles
 	ContextKeyClaims   = types.ContextKeyClaims
-	ContextKeyDatabase = types.ContextKeyDatabase
+	ContextKeyDBAdmin  = types.ContextKeyDBAdmin
 )

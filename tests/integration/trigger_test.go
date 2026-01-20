@@ -123,7 +123,7 @@ triggers:
 		"age":  20, // Matches condition >= 18
 	}
 
-	resp := env.MakeRequest(t, "POST", "/api/v1/users", docData, token)
+	resp := env.MakeRequest(t, "POST", "/api/v1/databases/default/documents/users", docData, token)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	// 6. Wait for Webhook

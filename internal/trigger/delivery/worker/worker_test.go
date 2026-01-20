@@ -35,7 +35,7 @@ func (m *MockAuthN) Refresh(ctx context.Context, req identity.RefreshRequest) (*
 func (m *MockAuthN) ListUsers(ctx context.Context, limit int, offset int) ([]*identity.User, error) {
 	return nil, nil
 }
-func (m *MockAuthN) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (m *MockAuthN) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 func (m *MockAuthN) Logout(ctx context.Context, refreshToken string) error { return nil }

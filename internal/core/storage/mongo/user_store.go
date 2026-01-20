@@ -27,13 +27,12 @@ func NewUserStore(db *mongo.Database, collectionName string) types.UserStore {
 	}
 }
 
-func (s *userStore) CreateUser(ctx context.Context, database string, user *types.User) error {
+func (s *userStore) CreateUser(ctx context.Context, user *types.User) error {
 	// Ensure username is lowercase
 	user.Username = strings.ToLower(user.Username)
-	user.Database = database
 
 	// Check if user exists
-	filter := bson.M{"database": database, "username": user.Username}
+	filter := bson.M{"username": user.Username}
 	count, err := s.coll.CountDocuments(ctx, filter)
 	if err != nil {
 		return err
@@ -44,20 +43,18 @@ func (s *userStore) CreateUser(ctx context.Context, database string, user *types
 
 	// Generate ID if empty
 	if user.ID == "" {
-		// Use database:hash(username)
+		// Use hash(username)
 		hash := blake3.Sum256([]byte(user.Username))
-		user.ID = database + ":" + hex.EncodeToString(hash[:16])
-	} else if !strings.HasPrefix(user.ID, database+":") {
-		user.ID = database + ":" + user.ID
+		user.ID = hex.EncodeToString(hash[:16])
 	}
 
 	_, err = s.coll.InsertOne(ctx, user)
 	return err
 }
 
-func (s *userStore) GetUserByUsername(ctx context.Context, database string, username string) (*types.User, error) {
+func (s *userStore) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
 	username = strings.ToLower(username)
-	filter := bson.M{"database": database, "username": username}
+	filter := bson.M{"username": username}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -70,8 +67,8 @@ func (s *userStore) GetUserByUsername(ctx context.Context, database string, user
 	return &user, nil
 }
 
-func (s *userStore) GetUserByID(ctx context.Context, database string, id string) (*types.User, error) {
-	filter := bson.M{"_id": id, "database": database}
+func (s *userStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
+	filter := bson.M{"_id": id}
 
 	var user types.User
 	err := s.coll.FindOne(ctx, filter).Decode(&user)
@@ -84,8 +81,8 @@ func (s *userStore) GetUserByID(ctx context.Context, database string, id string)
 	return &user, nil
 }
 
-func (s *userStore) UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	filter := bson.M{"_id": id, "database": database}
+func (s *userStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	filter := bson.M{"_id": id}
 	update := bson.M{
 		"$set": bson.M{
 			"last_login_at":  lastLogin,
@@ -97,9 +94,9 @@ func (s *userStore) UpdateUserLoginStats(ctx context.Context, database string, i
 	return err
 }
 
-func (s *userStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*types.User, error) {
+func (s *userStore) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
 	opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(offset))
-	cursor, err := s.coll.Find(ctx, bson.M{"database": database}, opts)
+	cursor, err := s.coll.Find(ctx, bson.M{}, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -112,11 +109,12 @@ func (s *userStore) ListUsers(ctx context.Context, database string, limit int, o
 	return users, nil
 }
 
-func (s *userStore) UpdateUser(ctx context.Context, database string, user *types.User) error {
-	filter := bson.M{"_id": user.ID, "database": database}
+func (s *userStore) UpdateUser(ctx context.Context, user *types.User) error {
+	filter := bson.M{"_id": user.ID}
 	update := bson.M{
 		"$set": bson.M{
 			"roles":      user.Roles,
+			"db_admin":   user.DBAdmin,
 			"disabled":   user.Disabled,
 			"updated_at": time.Now(),
 		},
@@ -126,9 +124,9 @@ func (s *userStore) UpdateUser(ctx context.Context, database string, user *types
 }
 
 func (s *userStore) EnsureIndexes(ctx context.Context) error {
-	// User username unique index per database
+	// Username unique index (globally unique)
 	_, err := s.coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "username", Value: 1}},
+		Keys:    bson.D{{Key: "username", Value: 1}},
 		Options: options.Index().SetUnique(true),
 	})
 	return err

@@ -26,7 +26,7 @@ describe('RealtimeSSEClient', () => {
 
     const fetchMock = mock(async () => buildSseResponse([eventMsg, snapshotMsg]));
     const tokenProvider = { getToken: async () => 'token' } as any;
-    const client = new RealtimeSSEClient('http://example.com', tokenProvider);
+    const client = new RealtimeSSEClient('http://example.com', tokenProvider, 'test-db');
 
     let eventSeen = false;
     let snapshotSeen = false;
@@ -49,7 +49,7 @@ describe('RealtimeSSEClient', () => {
   it('should surface fetch errors', async () => {
     const fetchMock = mock(async () => new Response(null, { status: 401 }));
     const tokenProvider = { getToken: async () => 'token' } as any;
-    const client = new RealtimeSSEClient('http://example.com', tokenProvider);
+    const client = new RealtimeSSEClient('http://example.com', tokenProvider, 'test-db');
 
     try {
       await client.connect({ onError: () => {} }, { fetchImpl: fetchMock });

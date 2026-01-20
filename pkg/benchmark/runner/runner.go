@@ -50,7 +50,7 @@ func (r *BasicRunner) Initialize(ctx context.Context, config *types.Config) erro
 	}
 
 	// Initialize HTTP client
-	httpClient, err := client.NewHTTPClient(config.Target, token)
+	httpClient, err := client.NewHTTPClient(config.Target, config.Auth.Database, token)
 	if err != nil {
 		return fmt.Errorf("failed to create HTTP client: %w", err)
 	}

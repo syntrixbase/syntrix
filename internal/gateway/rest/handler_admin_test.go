@@ -47,14 +47,14 @@ func TestAdmin_ListUsers(t *testing.T) {
 	mockAuthz := new(MockAuthzService)
 	server := createTestServer(nil, mockAuth, mockAuthz)
 
-	// Mock ListUsers
+	// Mock ListUsers - no longer requires database parameter
 	users := []*identity.User{
 		{ID: "1", Username: "user1", Roles: []string{"user"}},
 		{ID: "2", Username: "user2", Roles: []string{"admin"}},
 	}
 	mockAuth.On("ListUsers", mock.Anything, 50, 0).Return(users, nil)
 
-	// Create Request
+	// Create Request - no database query param needed
 	req := httptest.NewRequest("GET", "/admin/users", nil)
 	req.Header.Set("X-Role", "admin") // Mock middleware check
 	w := httptest.NewRecorder()
@@ -94,10 +94,10 @@ func TestAdmin_UpdateUser(t *testing.T) {
 	mockAuthz := new(MockAuthzService)
 	server := createTestServer(nil, mockAuth, mockAuthz)
 
-	// Mock UpdateUser
-	mockAuth.On("UpdateUser", mock.Anything, "123", []string{"admin"}, true).Return(nil)
+	// Mock UpdateUser - no longer requires database parameter
+	mockAuth.On("UpdateUser", mock.Anything, "123", []string{"admin"}, []string(nil), true).Return(nil)
 
-	// Create Request
+	// Create Request - no database query param needed
 	body := map[string]interface{}{
 		"roles":    []string{"admin"},
 		"disabled": true,
@@ -127,7 +127,7 @@ func TestAdmin_UpdateUser_InvalidBody(t *testing.T) {
 	server.ServeHTTP(w, req)
 
 	assert.Equal(t, http.StatusBadRequest, w.Code)
-	mockAuth.AssertNotCalled(t, "UpdateUser", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+	mockAuth.AssertNotCalled(t, "UpdateUser", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 }
 
 func TestAdmin_UpdateUser_Error(t *testing.T) {
@@ -144,7 +144,7 @@ func TestAdmin_UpdateUser_Error(t *testing.T) {
 	req.Header.Set("X-Role", "admin")
 	w := httptest.NewRecorder()
 
-	mockAuth.On("UpdateUser", mock.Anything, "123", []string{"user"}, false).Return(errors.New("fail"))
+	mockAuth.On("UpdateUser", mock.Anything, "123", []string{"user"}, []string(nil), false).Return(errors.New("fail"))
 
 	server.ServeHTTP(w, req)
 

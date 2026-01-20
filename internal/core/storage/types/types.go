@@ -24,6 +24,7 @@ type User struct {
 	UpdatedAt     time.Time              `json:"updatedAt" bson:"updated_at"`
 	Disabled      bool                   `json:"disabled" bson:"disabled"`
 	Roles         []string               `json:"roles" bson:"roles"`
+	DBAdmin       []string               `json:"db_admin" bson:"db_admin"` // Databases with admin access
 	Profile       map[string]interface{} `json:"profile" bson:"profile"`
 	LastLoginAt   time.Time              `json:"last_login_at" bson:"last_login_at"`
 	LoginAttempts int                    `json:"login_attempts" bson:"login_attempts"`
@@ -33,7 +34,6 @@ type User struct {
 // RevokedToken represents a revoked JWT
 type RevokedToken struct {
 	JTI       string    `bson:"_id"`
-	Database  string    `bson:"database"`
 	ExpiresAt time.Time `bson:"expires_at"`
 	RevokedAt time.Time `bson:"revoked_at"`
 }
@@ -116,21 +116,21 @@ type DocumentStore interface {
 
 // UserStore defines the interface for user storage operations
 type UserStore interface {
-	CreateUser(ctx context.Context, database string, user *User) error
-	GetUserByUsername(ctx context.Context, database string, username string) (*User, error)
-	GetUserByID(ctx context.Context, database string, id string) (*User, error)
-	ListUsers(ctx context.Context, database string, limit int, offset int) ([]*User, error)
-	UpdateUser(ctx context.Context, database string, user *User) error
-	UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error
+	CreateUser(ctx context.Context, user *User) error
+	GetUserByUsername(ctx context.Context, username string) (*User, error)
+	GetUserByID(ctx context.Context, id string) (*User, error)
+	ListUsers(ctx context.Context, limit int, offset int) ([]*User, error)
+	UpdateUser(ctx context.Context, user *User) error
+	UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error
 	EnsureIndexes(ctx context.Context) error
 	Close(ctx context.Context) error
 }
 
 // TokenRevocationStore defines the interface for token revocation storage operations
 type TokenRevocationStore interface {
-	RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error
-	RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error
-	IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error)
+	RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error
+	RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error
+	IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error)
 	EnsureIndexes(ctx context.Context) error
 	Close(ctx context.Context) error
 }

@@ -14,7 +14,7 @@ describe('Replication Full Flow', () => {
     const checkpoint = new CheckpointManager();
     const outbox = new Outbox();
     const mockTokenProvider = { getToken: async () => 'test', setToken: () => {}, setRefreshToken: () => {}, refreshToken: async () => 'test' };
-    const realtime = new RealtimeListener('ws://test', mockTokenProvider as any);
+    const realtime = new RealtimeListener('ws://test', mockTokenProvider as any, 'test-db');
     const puller = new Puller();
     const pusher = new Pusher();
 
@@ -56,7 +56,7 @@ describe('Replication Full Flow', () => {
     const originalCreate = axios.create;
     axios.create = mock(() => mockAxios as any) as any;
 
-    const client = new SyntrixClient('http://localhost', {});
+    const client = new SyntrixClient('http://localhost', { database: 'test-db' });
     await client.collection('users').add({ name: 'New User' });
 
     expect(mockAxios.post).toHaveBeenCalled();

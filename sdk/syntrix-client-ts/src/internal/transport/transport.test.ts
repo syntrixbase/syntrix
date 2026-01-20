@@ -1,6 +1,8 @@
 import { describe, it, expect, mock } from 'bun:test';
 import { RestTransport } from './rest-transport';
 
+const TEST_DB = 'test-db';
+
 describe('RestTransport', () => {
   it('should return null on 404', async () => {
     const mockAxios = {
@@ -11,7 +13,7 @@ describe('RestTransport', () => {
       }),
     } as any;
 
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     const result = await transport.get('/foo');
     expect(result).toBeNull();
   });
@@ -25,7 +27,7 @@ describe('RestTransport', () => {
       }),
     } as any;
 
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     try {
         await transport.get('/foo');
         expect(true).toBe(false);
@@ -38,58 +40,58 @@ describe('RestTransport', () => {
     const mockAxios = {
       post: mock(async () => ({ data: { id: '123' } })),
     } as any;
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     const result = await transport.create<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/foo', { bar: 'baz' });
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/databases/test-db/documents/foo', { bar: 'baz' });
   });
 
   it('should set resource', async () => {
     const mockAxios = {
       put: mock(async () => ({ data: { id: '123' } })),
     } as any;
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     const result = await transport.set<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.put).toHaveBeenCalledWith('/api/v1/foo', { doc: { bar: 'baz' } });
+    expect(mockAxios.put).toHaveBeenCalledWith('/api/v1/databases/test-db/documents/foo', { doc: { bar: 'baz' } });
   });
 
   it('should update resource', async () => {
     const mockAxios = {
       patch: mock(async () => ({ data: { id: '123' } })),
     } as any;
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     const result = await transport.update<any>('/foo', { bar: 'baz' });
     expect(result).toEqual({ id: '123' });
-    expect(mockAxios.patch).toHaveBeenCalledWith('/api/v1/foo', { doc: { bar: 'baz' } });
+    expect(mockAxios.patch).toHaveBeenCalledWith('/api/v1/databases/test-db/documents/foo', { doc: { bar: 'baz' } });
   });
 
   it('should delete resource', async () => {
     const mockAxios = {
       delete: mock(async () => ({})),
     } as any;
-    const transport = new RestTransport(mockAxios);
+    const transport = new RestTransport(mockAxios, TEST_DB);
     await transport.delete('/foo');
-    expect(mockAxios.delete).toHaveBeenCalledWith('/api/v1/foo', {});
+    expect(mockAxios.delete).toHaveBeenCalledWith('/api/v1/databases/test-db/documents/foo', {});
   });
 
   it('should query resources', async () => {
     const mockAxios = {
       post: mock(async () => ({ data: { docs: [{ id: '1' }] } })),
     } as any;
-    const transport = new RestTransport(mockAxios);
-    const result = await transport.query('/query', {});
+    const transport = new RestTransport(mockAxios, TEST_DB);
+    const result = await transport.query('/api/v1/query', {});
     expect(result).toEqual([{ id: '1' }]);
-    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/query', {});
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/databases/test-db/query', {});
   });
 
   it('should query resources returning raw array', async () => {
     const mockAxios = {
       post: mock(async () => ({ data: [{ id: '1' }] })),
     } as any;
-    const transport = new RestTransport(mockAxios);
-    const result = await transport.query('/query', {});
+    const transport = new RestTransport(mockAxios, TEST_DB);
+    const result = await transport.query('/api/v1/query', {});
     expect(result).toEqual([{ id: '1' }]);
-    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/query', {});
+    expect(mockAxios.post).toHaveBeenCalledWith('/api/v1/databases/test-db/query', {});
   });
 });

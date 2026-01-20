@@ -437,7 +437,7 @@ func (m *MockAuthService) Refresh(ctx context.Context, req identity.RefreshReque
 func (m *MockAuthService) ListUsers(ctx context.Context, limit int, offset int) ([]*identity.User, error) {
 	return nil, nil
 }
-func (m *MockAuthService) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
+func (m *MockAuthService) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
 	return nil
 }
 func (m *MockAuthService) Logout(ctx context.Context, refreshToken string) error {

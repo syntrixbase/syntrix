@@ -60,7 +60,7 @@ func TestRealtime_FullFlow(t *testing.T) {
 		"msg": "hello realtime",
 	}
 	body, _ := json.Marshal(docData)
-	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
 	require.NoError(t, err)
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
@@ -121,7 +121,7 @@ func TestRealtime_FullFlow(t *testing.T) {
 		"msg": "should not receive",
 	}
 	body2, _ := json.Marshal(map[string]interface{}{"data": docData2})
-	req2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
+	req2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
 	require.NoError(t, err)
 	req2.Header.Set("Authorization", "Bearer "+token)
 	req2.Header.Set("Content-Type", "application/json")
@@ -145,7 +145,7 @@ func TestRealtime_SSE(t *testing.T) {
 	token := env.GetToken(t, "realtime-sse-user", "user")
 
 	collectionName := "sse_test_col"
-	sseURL := fmt.Sprintf("%s/realtime/sse?collection=%s", env.RealtimeURL, collectionName)
+	sseURL := fmt.Sprintf("%s/realtime/sse?database=default&collection=%s", env.RealtimeURL, collectionName)
 
 	req, err := http.NewRequest("GET", sseURL, nil)
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestRealtime_SSE(t *testing.T) {
 		"msg": "hello sse",
 	}
 	body, _ := json.Marshal(docData)
-	postReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	postReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
 	require.NoError(t, err)
 	postReq.Header.Set("Authorization", "Bearer "+token)
 	postReq.Header.Set("Content-Type", "application/json")
@@ -260,7 +260,7 @@ func TestRealtime_Stream(t *testing.T) {
 		"msg": "existing doc",
 	}
 	body, _ := json.Marshal(docData)
-	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
+	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(body))
 	require.NoError(t, err)
 	createReq.Header.Set("Authorization", "Bearer "+token)
 	createReq.Header.Set("Content-Type", "application/json")
@@ -278,7 +278,8 @@ func TestRealtime_Stream(t *testing.T) {
 		ID:   "auth-stream",
 		Type: TypeAuth,
 		Payload: mustMarshal(AuthPayload{
-			Token: token,
+			Token:    token,
+			Database: "default",
 		}),
 	}
 	require.NoError(t, ws.WriteJSON(authMsg))
@@ -329,7 +330,7 @@ func TestRealtime_Stream(t *testing.T) {
 		"msg": "new doc",
 	}
 	body2, _ := json.Marshal(docData2)
-	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
+	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(body2))
 	require.NoError(t, err)
 	createReq2.Header.Set("Authorization", "Bearer "+token)
 	createReq2.Header.Set("Content-Type", "application/json")
@@ -379,7 +380,7 @@ func TestRealtime_Filtering(t *testing.T) {
 	authMsg := BaseMessage{
 		ID:      "auth-1",
 		Type:    TypeAuth,
-		Payload: mustMarshal(AuthPayload{Token: token}),
+		Payload: mustMarshal(AuthPayload{Token: token, Database: "default"}),
 	}
 	err = ws.WriteJSON(authMsg)
 	require.NoError(t, err)
@@ -423,7 +424,7 @@ func TestRealtime_Filtering(t *testing.T) {
 		"age":  18,
 	}
 	bodyNoMatch, _ := json.Marshal(docNoMatch)
-	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyNoMatch))
+	createReq, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyNoMatch))
 	require.NoError(t, err)
 	createReq.Header.Set("Authorization", "Bearer "+token)
 	createReq.Header.Set("Content-Type", "application/json")
@@ -460,7 +461,7 @@ func TestRealtime_Filtering(t *testing.T) {
 	authMsg2 := BaseMessage{
 		Type:    TypeAuth,
 		ID:      "auth-2",
-		Payload: mustMarshal(map[string]string{"token": token}),
+		Payload: mustMarshal(AuthPayload{Token: token, Database: "default"}),
 	}
 	err = ws.WriteJSON(authMsg2)
 	require.NoError(t, err)
@@ -494,7 +495,7 @@ func TestRealtime_Filtering(t *testing.T) {
 		"age":  25,
 	}
 	bodyMatch, _ := json.Marshal(docMatch)
-	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyMatch))
+	createReq2, err := http.NewRequest(http.MethodPost, fmt.Sprintf("%s/api/v1/databases/default/documents/%s", env.APIURL, collectionName), bytes.NewBuffer(bodyMatch))
 	require.NoError(t, err)
 	createReq2.Header.Set("Authorization", "Bearer "+token)
 	createReq2.Header.Set("Content-Type", "application/json")

@@ -54,7 +54,7 @@ func TestAuthProvider_EnsureIndexesError(t *testing.T) {
 	// Create a conflicting index (same keys, but not unique)
 	// MongoDB throws IndexOptionsConflict if we try to create an index with same keys but different options
 	_, err = coll.Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys:    bson.D{{Key: "database", Value: 1}, {Key: "username", Value: 1}},
+		Keys:    bson.D{{Key: "username", Value: 1}},
 		Options: options.Index().SetUnique(false),
 	})
 	require.NoError(t, err)

@@ -67,6 +67,7 @@ export class RealtimeClient {
   private ws: WebSocket | null = null;
   private wsUrl: string;
   private tokenProvider: TokenProvider;
+  private database: string;
   private callbacks: RealtimeCallbacks = {};
   private subscriptions: Map<string, SubscribeOptions> = new Map();
   private messageHandlers: Map<string, (msg: BaseMessage) => void> = new Map();
@@ -80,9 +81,10 @@ export class RealtimeClient {
   private activityCheckTimer: ReturnType<typeof setInterval> | null = null;
   private authRetryAttempted = false;
 
-  constructor(wsUrl: string, tokenProvider: TokenProvider, options?: RealtimeClientOptions) {
+  constructor(wsUrl: string, tokenProvider: TokenProvider, database: string, options?: RealtimeClientOptions) {
     this.wsUrl = wsUrl;
     this.tokenProvider = tokenProvider;
+    this.database = database;
     this.maxReconnectAttempts = options?.maxReconnectAttempts ?? 5;
     this.reconnectDelay = options?.reconnectDelayMs ?? 1000;
     this.activityTimeoutMs = options?.activityTimeoutMs ?? 90000;
@@ -124,10 +126,10 @@ export class RealtimeClient {
           this.lastMessageTime = Date.now();
           this.startActivityCheck();
           this.authRetryAttempted = false;
-          // Send auth message
+          // Send auth message with database
           const token = await this.tokenProvider.getToken();
           if (token) {
-            this.sendMessage({ id: 'auth-init', type: MessageType.Auth, payload: { token } });
+            this.sendMessage({ id: 'auth-init', type: MessageType.Auth, payload: { token, database: this.database } });
           }
           // Mark connected for liveness tracking, onConnect callback will fire on auth ack
           this.setState('connected');
@@ -284,7 +286,7 @@ export class RealtimeClient {
             this.authRetryAttempted = true;
             this.tokenProvider.refreshToken()
               .then((newToken) => {
-                this.sendMessage({ id: 'auth-retry', type: MessageType.Auth, payload: { token: newToken } });
+                this.sendMessage({ id: 'auth-retry', type: MessageType.Auth, payload: { token: newToken, database: this.database } });
               })
               .catch((e) => {
                 this.setState('error');
@@ -340,8 +342,8 @@ export class RealtimeClient {
 export class RealtimeListener {
   private client: RealtimeClient;
 
-  constructor(wsUrl: string, tokenProvider: TokenProvider) {
-    this.client = new RealtimeClient(wsUrl, tokenProvider);
+  constructor(wsUrl: string, tokenProvider: TokenProvider, database: string) {
+    this.client = new RealtimeClient(wsUrl, tokenProvider, database);
   }
 
   connect() {

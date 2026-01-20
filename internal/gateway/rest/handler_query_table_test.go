@@ -63,7 +63,7 @@ func TestQueryHandler_TableDriven(t *testing.T) {
 
 			server := createTestServer(mockService, nil, nil)
 
-			req := httptest.NewRequest("POST", "/api/v1/query", bytes.NewReader([]byte(tt.body)))
+			req := httptest.NewRequest("POST", "/api/v1/databases/default/query", bytes.NewReader([]byte(tt.body)))
 			rr := httptest.NewRecorder()
 
 			server.ServeHTTP(rr, req)

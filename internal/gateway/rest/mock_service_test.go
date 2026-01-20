@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/identity/authn"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -91,8 +92,8 @@ type MockAuthService struct {
 func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 	if len(m.ExpectedCalls) == 0 {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
-			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+			// Database is now extracted from URL path, not context
+			ctx := context.WithValue(r.Context(), identity.ContextKeyRoles, []string{"system"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -103,8 +104,7 @@ func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
-		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+		ctx := context.WithValue(r.Context(), identity.ContextKeyRoles, []string{"system"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -112,8 +112,8 @@ func (m *MockAuthService) Middleware(next http.Handler) http.Handler {
 func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	if len(m.ExpectedCalls) == 0 {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
-			ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+			// Database is now extracted from URL path, not context
+			ctx := context.WithValue(r.Context(), identity.ContextKeyRoles, []string{"system"})
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -124,8 +124,7 @@ func (m *MockAuthService) MiddlewareOptional(next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), identity.ContextKeyDatabase, "default")
-		ctx = context.WithValue(ctx, identity.ContextKeyRoles, []string{"system"})
+		ctx := context.WithValue(r.Context(), identity.ContextKeyRoles, []string{"system"})
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -154,16 +153,16 @@ func (m *MockAuthService) Refresh(ctx context.Context, req identity.RefreshReque
 	return args.Get(0).(*identity.TokenPair), args.Error(1)
 }
 
-func (m *MockAuthService) ListUsers(ctx context.Context, limit int, offset int) ([]*storage.User, error) {
+func (m *MockAuthService) ListUsers(ctx context.Context, limit int, offset int) ([]*authn.User, error) {
 	args := m.Called(ctx, limit, offset)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
-	return args.Get(0).([]*storage.User), args.Error(1)
+	return args.Get(0).([]*authn.User), args.Error(1)
 }
 
-func (m *MockAuthService) UpdateUser(ctx context.Context, id string, roles []string, disabled bool) error {
-	args := m.Called(ctx, id, roles, disabled)
+func (m *MockAuthService) UpdateUser(ctx context.Context, id string, roles []string, dbAdmin []string, disabled bool) error {
+	args := m.Called(ctx, id, roles, dbAdmin, disabled)
 	return args.Error(0)
 }
 

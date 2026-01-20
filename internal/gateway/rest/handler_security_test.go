@@ -559,7 +559,7 @@ func TestSplitPath(t *testing.T) {
 // Tests for logRequest function
 
 func TestLogRequest(t *testing.T) {
-	req := httptest.NewRequest("GET", "/api/v1/users", nil)
+	req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/users", nil)
 	// logRequest uses server.GetRequestID which needs the server's context key
 	// For testing, we just verify logRequest doesn't panic without a request ID
 
@@ -569,7 +569,7 @@ func TestLogRequest(t *testing.T) {
 }
 
 func TestLogRequest_NoRequestID(t *testing.T) {
-	req := httptest.NewRequest("POST", "/api/v1/docs", nil)
+	req := httptest.NewRequest("POST", "/api/v1/databases/default/documents/docs", nil)
 	// No request ID in context
 	logRequest(req, http.StatusCreated, 50*time.Millisecond)
 }

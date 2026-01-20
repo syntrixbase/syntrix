@@ -126,6 +126,8 @@ func TestServer_HandleSSE_TableDriven(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, cancel := context.WithCancel(context.Background())
+			// SSE requires database in context
+			ctx = context.WithValue(ctx, contextKeyDatabase, "default")
 			req := httptest.NewRequest("GET", "/sse", nil).WithContext(ctx)
 			for k, v := range tt.headers {
 				req.Header.Set(k, v)

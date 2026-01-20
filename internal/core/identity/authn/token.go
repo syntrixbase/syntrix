@@ -15,7 +15,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/syntrixbase/syntrix/internal/core/identity/config"
-	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
 type TokenService struct {
@@ -108,9 +107,10 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 	now := time.Now()
 	jti := uuid.New().String()
 
-	database := user.Database
-	if database == "" {
-		database = model.DefaultDatabase
+	// Collect db_admin from user (if user is admin for certain databases)
+	var dbAdmin []string
+	if user.DBAdmin != nil {
+		dbAdmin = user.DBAdmin
 	}
 
 	// Access Token
@@ -118,7 +118,7 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 		Username: user.Username,
 		Roles:    user.Roles,
 		Disabled: user.Disabled,
-		Database: database,
+		DBAdmin:  dbAdmin,
 		UserID:   user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
@@ -140,7 +140,7 @@ func (s *TokenService) GenerateTokenPair(user *User) (*TokenPair, error) {
 	// Refresh Token
 	refreshClaims := Claims{
 		Username: user.Username,
-		Database: database,
+		DBAdmin:  dbAdmin,
 		UserID:   user.ID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   user.ID,
@@ -170,7 +170,6 @@ func (s *TokenService) GenerateSystemToken(serviceName string) (string, error) {
 
 	claims := Claims{
 		Username: "system:" + serviceName,
-		Database: model.DefaultDatabase,
 		UserID:   "system:" + serviceName,
 		Roles:    []string{"system", "service:" + serviceName},
 		RegisteredClaims: jwt.RegisteredClaims{
@@ -199,9 +198,6 @@ func (s *TokenService) ValidateToken(tokenString string) (*Claims, error) {
 	}
 
 	if claims, ok := token.Claims.(*Claims); ok && token.Valid {
-		if claims.Database == "" {
-			return nil, errors.New("missing database ID in token claims")
-		}
 		return claims, nil
 	}
 

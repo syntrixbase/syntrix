@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -19,10 +18,6 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignUp(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, identity.ErrDatabaseRequired) {
-			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
-			return
-		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Signup failed")
 		return
 	}
@@ -34,6 +29,11 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req identity.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.Username == "" || req.Password == "" {
+		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Username and password are required")
 		return
 	}
 
@@ -49,10 +49,6 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 		}
 		if errors.Is(err, identity.ErrAccountLocked) {
 			writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Account is locked")
-			return
-		}
-		if errors.Is(err, identity.ErrDatabaseRequired) {
-			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
 		if model.IsCanceled(err) {
@@ -73,6 +69,11 @@ func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if req.RefreshToken == "" {
+		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing refresh token")
+		return
+	}
+
 	tokenPair, err := h.auth.Refresh(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Invalid or expired refresh token")
@@ -83,27 +84,21 @@ func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
-	// Can accept refresh token in body or Authorization header
-	var refreshToken string
-
-	// Try body first
-	var req identity.RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err == nil && req.RefreshToken != "" {
-		refreshToken = req.RefreshToken
-	} else {
-		// Try Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			refreshToken = strings.TrimPrefix(authHeader, "Bearer ")
-		}
+	var req struct {
+		RefreshToken string `json:"refresh_token"`
 	}
 
-	if refreshToken == "" {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.RefreshToken == "" {
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing refresh token")
 		return
 	}
 
-	if err := h.auth.Logout(r.Context(), refreshToken); err != nil {
+	if err := h.auth.Logout(r.Context(), req.RefreshToken); err != nil {
 		writeInternalError(w, err, "Logout failed")
 		return
 	}

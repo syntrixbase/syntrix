@@ -96,52 +96,58 @@ func NewRoutedUserStore(router types.UserRouter) types.UserStore {
 	return &RoutedUserStore{router: router}
 }
 
-func (s *RoutedUserStore) CreateUser(ctx context.Context, database string, user *types.User) error {
-	store, err := s.router.Select(database, types.OpWrite)
+func (s *RoutedUserStore) CreateUser(ctx context.Context, user *types.User) error {
+	// Global user creation - use default database for routing
+	store, err := s.router.Select("default", types.OpWrite)
 	if err != nil {
 		return err
 	}
-	return store.CreateUser(ctx, database, user)
+	return store.CreateUser(ctx, user)
 }
 
-func (s *RoutedUserStore) GetUserByUsername(ctx context.Context, database string, username string) (*types.User, error) {
-	store, err := s.router.Select(database, types.OpRead)
+func (s *RoutedUserStore) GetUserByUsername(ctx context.Context, username string) (*types.User, error) {
+	// Global user lookup - use default database for routing
+	store, err := s.router.Select("default", types.OpRead)
 	if err != nil {
 		return nil, err
 	}
-	return store.GetUserByUsername(ctx, database, username)
+	return store.GetUserByUsername(ctx, username)
 }
 
-func (s *RoutedUserStore) GetUserByID(ctx context.Context, database string, id string) (*types.User, error) {
-	store, err := s.router.Select(database, types.OpRead)
+func (s *RoutedUserStore) GetUserByID(ctx context.Context, id string) (*types.User, error) {
+	// For global user lookup by ID, we use default database routing
+	store, err := s.router.Select("default", types.OpRead)
 	if err != nil {
 		return nil, err
 	}
-	return store.GetUserByID(ctx, database, id)
+	return store.GetUserByID(ctx, id)
 }
 
-func (s *RoutedUserStore) ListUsers(ctx context.Context, database string, limit int, offset int) ([]*types.User, error) {
-	store, err := s.router.Select(database, types.OpRead)
+func (s *RoutedUserStore) ListUsers(ctx context.Context, limit int, offset int) ([]*types.User, error) {
+	// Global user list operation
+	store, err := s.router.Select("default", types.OpRead)
 	if err != nil {
 		return nil, err
 	}
-	return store.ListUsers(ctx, database, limit, offset)
+	return store.ListUsers(ctx, limit, offset)
 }
 
-func (s *RoutedUserStore) UpdateUser(ctx context.Context, database string, user *types.User) error {
-	store, err := s.router.Select(database, types.OpWrite)
+func (s *RoutedUserStore) UpdateUser(ctx context.Context, user *types.User) error {
+	// Global user update operation
+	store, err := s.router.Select("default", types.OpWrite)
 	if err != nil {
 		return err
 	}
-	return store.UpdateUser(ctx, database, user)
+	return store.UpdateUser(ctx, user)
 }
 
-func (s *RoutedUserStore) UpdateUserLoginStats(ctx context.Context, database string, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
-	store, err := s.router.Select(database, types.OpWrite)
+func (s *RoutedUserStore) UpdateUserLoginStats(ctx context.Context, id string, lastLogin time.Time, attempts int, lockoutUntil time.Time) error {
+	// Global user update - use default database for routing
+	store, err := s.router.Select("default", types.OpWrite)
 	if err != nil {
 		return err
 	}
-	return store.UpdateUserLoginStats(ctx, database, id, lastLogin, attempts, lockoutUntil)
+	return store.UpdateUserLoginStats(ctx, id, lastLogin, attempts, lockoutUntil)
 }
 
 func (s *RoutedUserStore) EnsureIndexes(ctx context.Context) error {
@@ -195,28 +201,31 @@ func NewRoutedRevocationStore(router types.RevocationRouter) types.TokenRevocati
 	return &RoutedRevocationStore{router: router}
 }
 
-func (s *RoutedRevocationStore) RevokeToken(ctx context.Context, database string, jti string, expiresAt time.Time) error {
-	store, err := s.router.Select(database, types.OpWrite)
+func (s *RoutedRevocationStore) RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error {
+	// Global revocation - use default database for routing
+	store, err := s.router.Select("default", types.OpWrite)
 	if err != nil {
 		return err
 	}
-	return store.RevokeToken(ctx, database, jti, expiresAt)
+	return store.RevokeToken(ctx, jti, expiresAt)
 }
 
-func (s *RoutedRevocationStore) RevokeTokenImmediate(ctx context.Context, database string, jti string, expiresAt time.Time) error {
-	store, err := s.router.Select(database, types.OpWrite)
+func (s *RoutedRevocationStore) RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error {
+	// Global revocation - use default database for routing
+	store, err := s.router.Select("default", types.OpWrite)
 	if err != nil {
 		return err
 	}
-	return store.RevokeTokenImmediate(ctx, database, jti, expiresAt)
+	return store.RevokeTokenImmediate(ctx, jti, expiresAt)
 }
 
-func (s *RoutedRevocationStore) IsRevoked(ctx context.Context, database string, jti string, gracePeriod time.Duration) (bool, error) {
-	store, err := s.router.Select(database, types.OpRead)
+func (s *RoutedRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
+	// Global revocation check - use default database for routing
+	store, err := s.router.Select("default", types.OpRead)
 	if err != nil {
 		return false, err
 	}
-	return store.IsRevoked(ctx, database, jti, gracePeriod)
+	return store.IsRevoked(ctx, jti, gracePeriod)
 }
 
 func (s *RoutedRevocationStore) EnsureIndexes(ctx context.Context) error {
