@@ -2,10 +2,36 @@
 package types
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
+
+// UnixMilliTime wraps time.Time to support JSON unmarshaling from Unix millisecond timestamps.
+type UnixMilliTime struct {
+	time.Time
+}
+
+// UnmarshalJSON implements json.Unmarshaler for UnixMilliTime.
+// It accepts both Unix millisecond timestamps (numbers) and RFC3339 strings.
+func (t *UnixMilliTime) UnmarshalJSON(data []byte) error {
+	// Try to unmarshal as a number (Unix milliseconds)
+	var millis int64
+	if err := json.Unmarshal(data, &millis); err == nil {
+		t.Time = time.UnixMilli(millis)
+		return nil
+	}
+
+	// Fall back to standard time.Time unmarshaling (RFC3339 string)
+	return json.Unmarshal(data, &t.Time)
+}
+
+// MarshalJSON implements json.Marshaler for UnixMilliTime.
+// It outputs the time as Unix milliseconds.
+func (t UnixMilliTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.UnixMilli())
+}
 
 // Config holds the complete benchmark configuration.
 type Config struct {
@@ -192,8 +218,8 @@ type Document struct {
 	Collection string                 `json:"collection,omitempty"`
 	Data       map[string]interface{} `json:"data,omitempty"`
 	Version    int64                  `json:"version,omitempty"`
-	CreatedAt  time.Time              `json:"created_at,omitempty"`
-	UpdatedAt  time.Time              `json:"updated_at,omitempty"`
+	CreatedAt  UnixMilliTime          `json:"createdAt,omitempty"`
+	UpdatedAt  UnixMilliTime          `json:"updatedAt,omitempty"`
 }
 
 // Query represents a Syntrix query.
