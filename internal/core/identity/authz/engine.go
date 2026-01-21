@@ -205,6 +205,13 @@ func processMatchPaths(blocks map[string]MatchBlock, database string) error {
 }
 
 func (e *ruleEngine) Evaluate(ctx context.Context, database string, path string, action string, req Request, existingRes *Resource) (bool, error) {
+	// Check if user is a db_admin for this database - bypass all rules
+	for _, db := range req.Auth.DBAdmin {
+		if db == database {
+			return true, nil
+		}
+	}
+
 	e.mu.RLock()
 	rules := e.dbRules[database]
 	e.mu.RUnlock()

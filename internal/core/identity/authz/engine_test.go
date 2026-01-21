@@ -497,3 +497,132 @@ match:
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrDatabaseMismatch)
 }
+
+func TestEngine_Evaluate_DBAdminBypass(t *testing.T) {
+	// Create rules that deny all access
+	rules := `
+rules_version: '1'
+service: syntrix
+match:
+  /databases/{database}/documents:
+    match:
+      /{doc=**}:
+        allow:
+          read: "false"
+          write: "false"
+`
+	tmpDir := createTestRulesDir(t, "default", rules)
+
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	t.Run("db_admin bypasses rules for matching database", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{"default"},
+			},
+		}
+
+		// Should allow even though rules say "false"
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "db_admin should bypass rules for matching database")
+
+		allowed, err = engine.Evaluate(context.Background(), "default", "/test/doc", "write", req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "db_admin should bypass write rules too")
+	})
+
+	t.Run("db_admin does not bypass rules for non-matching database", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{"other_database"},
+			},
+		}
+
+		// Should deny because user is only db_admin for "other_database", not "default"
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.False(t, allowed, "db_admin for other database should not bypass rules")
+	})
+
+	t.Run("db_admin with multiple databases", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{"db1", "default", "db2"},
+			},
+		}
+
+		// Should allow because "default" is in the list
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "db_admin with multiple databases should match")
+	})
+
+	t.Run("empty db_admin does not bypass", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{},
+			},
+		}
+
+		// Should deny because db_admin is empty
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.False(t, allowed, "empty db_admin should not bypass rules")
+	})
+
+	t.Run("nil db_admin does not bypass", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: nil,
+			},
+		}
+
+		// Should deny because db_admin is nil
+		allowed, err := engine.Evaluate(context.Background(), "default", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.False(t, allowed, "nil db_admin should not bypass rules")
+	})
+}
+
+func TestEngine_Evaluate_DBAdminBypassNoRules(t *testing.T) {
+	// Create engine with no rules
+	tmpDir := t.TempDir()
+	engine, err := NewEngine(config.AuthZConfig{RulesPath: tmpDir}, new(MockQueryService))
+	require.NoError(t, err)
+
+	t.Run("db_admin allows access even when no rules exist", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{"unknown_db"},
+			},
+		}
+
+		// Should allow because user is db_admin for this database
+		// even though there are no rules for it
+		allowed, err := engine.Evaluate(context.Background(), "unknown_db", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.True(t, allowed, "db_admin should allow access even without rules")
+	})
+
+	t.Run("non db_admin denied when no rules exist", func(t *testing.T) {
+		req := Request{
+			Auth: Auth{
+				UID:     "user1",
+				DBAdmin: []string{},
+			},
+		}
+
+		// Should deny because no rules and not db_admin
+		allowed, err := engine.Evaluate(context.Background(), "unknown_db", "/test/doc", "read", req, nil)
+		assert.NoError(t, err)
+		assert.False(t, allowed, "non db_admin should be denied when no rules exist")
+	})
+}
