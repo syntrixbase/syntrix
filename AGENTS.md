@@ -46,5 +46,5 @@ Before ANY change:
 
 - Use `github.com/stretchr/testify` for Golang tests.
 - Uses `bun` for frontend package scripts.
-- Tasks are located in `tasks` folder
-- Design docs are located in `docs\design` folder
+- Tasks/plans are located in `docs/plans` folder
+- Design docs are located in `docs/design` folder
