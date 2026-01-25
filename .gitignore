@@ -42,3 +42,6 @@ Thumbs.db
 # Temporary files
 /logs
 /docs/plans
+
+# Claude.md
+/CLAUDE.md
