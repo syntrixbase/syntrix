@@ -117,8 +117,13 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		return err
 	}
 
-	// Initialize database service and deletion worker
+	// Initialize database service (for Gateway/API)
 	if err := m.initDatabaseService(ctx); err != nil {
+		return err
+	}
+
+	// Initialize deletion worker (for Query - has access to Indexer)
+	if err := m.initDeletionWorker(ctx); err != nil {
 		return err
 	}
 
@@ -173,6 +178,20 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
 		if err := m.initTriggerServices(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Initialize database service for API nodes
+	if m.opts.RunAPI {
+		if err := m.initDatabaseService(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Initialize deletion worker for Query nodes (which have local Indexer)
+	if m.opts.RunQuery {
+		if err := m.initDeletionWorker(ctx); err != nil {
 			return err
 		}
 	}
@@ -574,7 +593,8 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 	return nil
 }
 
-// initDatabaseService initializes the database service and deletion worker.
+// initDatabaseService initializes the database service (CRUD operations).
+// Used by Gateway/API nodes.
 func (m *Manager) initDatabaseService(ctx context.Context) error {
 	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
@@ -595,18 +615,37 @@ func (m *Manager) initDatabaseService(ctx context.Context) error {
 	m.databaseService = database.NewService(dbStore, svcCfg, slog.Default())
 	slog.Info("Initialized Database Service")
 
-	// Initialize deletion worker if enabled
-	if m.cfg.Database.Deletion.Enabled && m.opts.RunDeletionWorker {
-		workerCfg := m.cfg.Database.Deletion.ToDeletionWorkerConfig()
-		m.deletionWorker = database.NewDeletionWorker(
-			dbStore,
-			sf.Document(),
-			m.indexerService,
-			workerCfg,
-			slog.Default(),
-		)
-		slog.Info("Initialized Deletion Worker")
+	return nil
+}
+
+// initDeletionWorker initializes the deletion worker for background cleanup.
+// Used by Query nodes (which have access to Indexer).
+func (m *Manager) initDeletionWorker(ctx context.Context) error {
+	if !m.cfg.Database.Deletion.Enabled {
+		slog.Debug("Deletion worker disabled in config")
+		return nil
 	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Database store not available, skipping deletion worker initialization")
+		return nil
+	}
+
+	workerCfg := m.cfg.Database.Deletion.ToDeletionWorkerConfig()
+	m.deletionWorker = database.NewDeletionWorker(
+		dbStore,
+		sf.Document(),
+		m.indexerService,
+		workerCfg,
+		slog.Default(),
+	)
+	slog.Info("Initialized Deletion Worker")
 
 	return nil
 }

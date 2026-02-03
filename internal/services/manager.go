@@ -24,7 +24,6 @@ type Options struct {
 	RunTriggerWorker    bool
 	RunPuller           bool
 	RunIndexer          bool
-	RunDeletionWorker   bool
 
 	// Mode specifies the deployment mode (distributed or standalone).
 	Mode services_config.DeploymentMode
