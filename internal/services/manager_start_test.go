@@ -256,10 +256,6 @@ func waitForServer(addr string, timeout time.Duration) error {
 }
 
 func TestManager_Start_AllServices(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
-
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
@@ -451,10 +447,6 @@ func (m *MockAuthService) ValidateToken(tokenString string) (*identity.Claims, e
 }
 
 func TestManager_Start_RealtimeRetry(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
-	}
-
 	// Shorter timeout for retry test
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	// We don't defer cancel here immediately because we want to wait for timeout in the test logic naturally?

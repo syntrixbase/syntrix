@@ -21,6 +21,10 @@ func TestMultiDatabase_DataIsolation(t *testing.T) {
 	databaseA := "database-a"
 	databaseB := "database-b"
 
+	// Ensure databases exist
+	env.EnsureDatabase(t, databaseA)
+	env.EnsureDatabase(t, databaseB)
+
 	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
 	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")
 
@@ -99,6 +103,10 @@ func TestMultiDatabase_RealtimeIsolation(t *testing.T) {
 
 	databaseA := "database-a"
 	databaseB := "database-b"
+
+	// Ensure databases exist
+	env.EnsureDatabase(t, databaseA)
+	env.EnsureDatabase(t, databaseB)
 
 	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
 	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")
@@ -189,6 +197,10 @@ func TestMultiDatabase_ReplicationIsolation(t *testing.T) {
 
 	databaseA := "database-a"
 	databaseB := "database-b"
+
+	// Ensure databases exist
+	env.EnsureDatabase(t, databaseA)
+	env.EnsureDatabase(t, databaseB)
 
 	tokenA := env.GetTokenForDatabase(t, databaseA, "user-a", "user")
 	tokenB := env.GetTokenForDatabase(t, databaseB, "user-b", "user")

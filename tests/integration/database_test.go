@@ -224,46 +224,42 @@ func TestDatabaseOwnerImplicitAdmin(t *testing.T) {
 }
 
 // TestSuspendedDatabaseRejectsWrites tests that suspended databases reject write operations
-// TODO: This test requires multi-database document routing to be fully implemented
+// This test uses the default database which always exists
 func TestSuspendedDatabaseRejectsWrites(t *testing.T) {
-	t.Skip("Skipping: requires multi-database document routing feature")
 	t.Parallel()
 	tc := NewTestContext(t)
 	adminToken := tc.GenerateSystemToken()
 
-	// Create a database with a slug
-	slug := tc.Slug("suspended-test")
-	createReq := map[string]interface{}{
-		"display_name": "Suspended Test DB",
-		"slug":         slug,
+	// Use default database - it always exists
+	// First, ensure it's active
+	updateReq := map[string]interface{}{
+		"status": "active",
 	}
-	resp := tc.MakeRequest("POST", "/api/v1/databases", createReq, adminToken)
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
-
-	var createdDB map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&createdDB)
+	resp := tc.MakeRequest("PATCH", "/admin/databases/default", updateReq, adminToken)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
-	dbID := createdDB["id"].(string)
+	// Create a unique collection name for this test
+	collName := tc.Collection("suspended-test")
 
 	// Write a document while active
 	docData := map[string]interface{}{
 		"name": "test doc",
 	}
-	resp = tc.MakeRequest("POST", "/api/v1/databases/"+slug+"/documents/testcol", docData, adminToken)
+	resp = tc.MakeRequest("POST", "/api/v1/databases/default/documents/"+collName, docData, adminToken)
 	require.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 
-	// Suspend the database
-	updateReq := map[string]interface{}{
+	// Suspend the database (admin API required)
+	updateReq = map[string]interface{}{
 		"status": "suspended",
 	}
-	resp = tc.MakeRequest("PATCH", "/api/v1/databases/id:"+dbID, updateReq, adminToken)
+	resp = tc.MakeRequest("PATCH", "/admin/databases/default", updateReq, adminToken)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
 	// Try to write while suspended - should fail
-	resp = tc.MakeRequest("POST", "/api/v1/databases/"+slug+"/documents/testcol", docData, adminToken)
+	resp = tc.MakeRequest("POST", "/api/v1/databases/default/documents/"+collName, docData, adminToken)
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	resp.Body.Close()
 
@@ -271,12 +267,12 @@ func TestSuspendedDatabaseRejectsWrites(t *testing.T) {
 	updateReq = map[string]interface{}{
 		"status": "active",
 	}
-	resp = tc.MakeRequest("PATCH", "/api/v1/databases/id:"+dbID, updateReq, adminToken)
+	resp = tc.MakeRequest("PATCH", "/admin/databases/default", updateReq, adminToken)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 	resp.Body.Close()
 
 	// Write should work again
-	resp = tc.MakeRequest("POST", "/api/v1/databases/"+slug+"/documents/testcol", docData, adminToken)
+	resp = tc.MakeRequest("POST", "/api/v1/databases/default/documents/"+collName, docData, adminToken)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode)
 	resp.Body.Close()
 }

@@ -66,12 +66,17 @@ func (h *Handler) SetDatabaseService(svc database.Service) {
 
 // withDatabaseValidation wraps a handler with database validation middleware.
 // This validates that the database exists and is active before proceeding.
+// Note: The validator check is done at request time, not at registration time,
+// to allow SetDatabaseService to be called after RegisterRoutes.
 func (h *Handler) withDatabaseValidation(next http.HandlerFunc) http.HandlerFunc {
-	if h.dbValidator == nil {
-		// No validator configured, pass through
-		return next
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.dbValidator == nil {
+			// No validator configured, pass through
+			next(w, r)
+			return
+		}
+		h.dbValidator.MiddlewareFunc(next)(w, r)
 	}
-	return h.dbValidator.MiddlewareFunc(next)
 }
 
 // Default body size limits

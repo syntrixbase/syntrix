@@ -281,6 +281,32 @@ func (e *ServiceEnv) PutDocument(t *testing.T, collection, id string, data map[s
 	return doc
 }
 
+// EnsureDatabase creates a database with the given slug if it doesn't exist.
+// Uses admin API to create the database.
+func (e *ServiceEnv) EnsureDatabase(t *testing.T, slug string) {
+	adminToken := e.GenerateSystemToken(t)
+
+	// Try to get the database first
+	resp := e.MakeRequest(t, "GET", "/admin/databases/"+slug, nil, adminToken)
+	if resp.StatusCode == http.StatusOK {
+		resp.Body.Close()
+		return // Database already exists
+	}
+	resp.Body.Close()
+
+	// Create the database
+	createReq := map[string]interface{}{
+		"display_name": "Test Database: " + slug,
+		"slug":         slug,
+	}
+	resp = e.MakeRequest(t, "POST", "/admin/databases", createReq, adminToken)
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(resp.Body)
+		t.Logf("Warning: failed to create database %s: %d %s", slug, resp.StatusCode, string(body))
+	}
+	resp.Body.Close()
+}
+
 func waitForHealth(t *testing.T, url string) {
 	timeout := 10 * time.Second
 	deadline := time.Now().Add(timeout)
