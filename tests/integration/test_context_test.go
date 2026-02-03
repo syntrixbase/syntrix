@@ -64,6 +64,20 @@ func (tc *TestContext) Collection(name string) string {
 	return fmt.Sprintf("%s_%s", tc.prefix, name)
 }
 
+// Slug returns a valid database slug with test prefix
+// Slugs must match: ^[a-z][a-z0-9-]{2,62}$
+func (tc *TestContext) Slug(name string) string {
+	// Use only the timestamp part for uniqueness, keep it short
+	ts := time.Now().UnixNano() % 1000000
+	// Ensure slug starts with letter and contains only valid chars
+	slug := fmt.Sprintf("db%d%s", ts, name)
+	// Truncate to max 63 chars
+	if len(slug) > 63 {
+		slug = slug[:63]
+	}
+	return strings.ToLower(slug)
+}
+
 // APIURL returns the API URL
 func (tc *TestContext) APIURL() string {
 	return tc.globalEnv.APIURL

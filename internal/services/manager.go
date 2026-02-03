@@ -5,8 +5,10 @@ import (
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
@@ -42,6 +44,12 @@ type triggerConsumer interface {
 	Start(ctx context.Context) error
 }
 
+// deletionWorkerService defines the interface for the deletion worker
+type deletionWorkerService interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
 type Manager struct {
 	cfg  *config.Config
 	opts Options
@@ -51,6 +59,7 @@ type Manager struct {
 	storageFactoryErr  error
 
 	authService     identity.AuthN
+	gatewayServer   *gateway.Server
 	rtServer        *realtime.Server
 	streamerService streamer.StreamerServer // local Streamer service (when RunStreamer=true)
 	streamerClient  streamer.Service        // remote Streamer client (for Gateway in distributed mode)
@@ -60,6 +69,10 @@ type Manager struct {
 	pullerService   puller.LocalService
 	pullerGRPC      *puller.GRPCServer
 	indexerService  indexer.LocalService
+
+	// Database management
+	databaseService database.Service
+	deletionWorker  deletionWorkerService
 
 	wg sync.WaitGroup
 }
@@ -73,4 +86,8 @@ func NewManager(cfg *config.Config, opts Options) *Manager {
 
 func (m *Manager) AuthService() identity.AuthN {
 	return m.authService
+}
+
+func (m *Manager) DatabaseService() database.Service {
+	return m.databaseService
 }

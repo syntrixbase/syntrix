@@ -12,6 +12,7 @@ import (
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
@@ -59,6 +60,11 @@ func (m *Manager) Init(ctx context.Context) error {
 
 	// Ensure admin user exists
 	if err := m.ensureAdminUser(ctx); err != nil {
+		return err
+	}
+
+	// Ensure default database exists (after admin user is created)
+	if err := m.ensureDefaultDatabase(ctx); err != nil {
 		return err
 	}
 
@@ -116,6 +122,16 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		return err
 	}
 
+	// Initialize database service (for Gateway/API)
+	if err := m.initDatabaseService(ctx); err != nil {
+		return err
+	}
+
+	// Initialize deletion worker (for Query - has access to Indexer)
+	if err := m.initDeletionWorker(ctx); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -167,6 +183,20 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 	// Initialize trigger services with remote NATS
 	if m.opts.RunTriggerEvaluator || m.opts.RunTriggerWorker {
 		if err := m.initTriggerServices(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Initialize database service for API nodes
+	if m.opts.RunAPI {
+		if err := m.initDatabaseService(ctx); err != nil {
+			return err
+		}
+	}
+
+	// Initialize deletion worker for Query nodes (which have local Indexer)
+	if m.opts.RunQuery {
+		if err := m.initDeletionWorker(ctx); err != nil {
 			return err
 		}
 	}
@@ -257,6 +287,37 @@ func (m *Manager) ensureAdminUser(ctx context.Context) error {
 	return nil
 }
 
+// ensureDefaultDatabase creates the default database if it doesn't exist.
+// The default database is owned by the system admin user.
+func (m *Manager) ensureDefaultDatabase(ctx context.Context) error {
+	// Skip if auth service is not initialized
+	if m.authService == nil {
+		return nil
+	}
+
+	// Skip if admin username is not configured
+	adminCfg := m.cfg.Identity.Admin
+	if adminCfg.Username == "" {
+		slog.Debug("Default database bootstrap skipped: no admin username configured")
+		return nil
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Default database bootstrap skipped: database store not available")
+		return nil
+	}
+
+	return database.EnsureDefaultDatabase(ctx, dbStore, sf.User(), database.BootstrapConfig{
+		AdminUsername: adminCfg.Username,
+	})
+}
+
 // initQueryService creates and returns a query engine service for distributed mode.
 // Uses gRPC client to connect to remote Indexer service.
 func (m *Manager) initQueryService(ctx context.Context) (query.Service, error) {
@@ -310,8 +371,8 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 		m.authService, m.cfg.Gateway.Realtime)
 
 	// Register API routes to the unified server
-	gateway := gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
-	gateway.RegisterRoutes(server.Default().HTTPMux())
+	m.gatewayServer = gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
+	m.gatewayServer.RegisterRoutes(server.Default().HTTPMux())
 
 	return nil
 }
@@ -564,6 +625,69 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 		m.triggerConsumer = deliverySvc
 		slog.Info("Initialized Trigger Delivery Service (distributed)")
 	}
+
+	return nil
+}
+
+// initDatabaseService initializes the database service (CRUD operations).
+// Used by Gateway/API nodes.
+func (m *Manager) initDatabaseService(ctx context.Context) error {
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Get or create database store
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Database store not available, skipping database service initialization")
+		return nil
+	}
+
+	// Create database service
+	svcCfg := database.ServiceConfig{
+		MaxDatabasesPerUser: m.cfg.Database.MaxDatabasesPerUser,
+	}
+	m.databaseService = database.NewService(dbStore, svcCfg, slog.Default())
+
+	// Inject database service into gateway server if available
+	if m.gatewayServer != nil {
+		m.gatewayServer.SetDatabaseService(m.databaseService)
+	}
+
+	slog.Info("Initialized Database Service")
+
+	return nil
+}
+
+// initDeletionWorker initializes the deletion worker for background cleanup.
+// Used by Query nodes (which have access to Indexer).
+func (m *Manager) initDeletionWorker(ctx context.Context) error {
+	if !m.cfg.Database.Deletion.Enabled {
+		slog.Debug("Deletion worker disabled in config")
+		return nil
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Database store not available, skipping deletion worker initialization")
+		return nil
+	}
+
+	workerCfg := m.cfg.Database.Deletion.ToDeletionWorkerConfig()
+	m.deletionWorker = database.NewDeletionWorker(
+		dbStore,
+		sf.Document(),
+		m.indexerService,
+		workerCfg,
+		slog.Default(),
+	)
+	slog.Info("Initialized Deletion Worker")
 
 	return nil
 }

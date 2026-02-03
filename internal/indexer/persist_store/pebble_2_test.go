@@ -1361,3 +1361,52 @@ func TestApplyOpDeleteExistingDocFlush(t *testing.T) {
 		t.Errorf("expected 0 results, got %d", len(results))
 	}
 }
+
+// TestDeleteDatabase tests the DeleteDatabase function
+func TestDeleteDatabase(t *testing.T) {
+	t.Parallel()
+	ps, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	db := "testdb"
+
+	// Create some indexes for the database
+	if err := ps.Upsert(db, "users/*", "tmpl1", "user1", []byte{0x01}, ""); err != nil {
+		t.Fatalf("Upsert failed: %v", err)
+	}
+	if err := ps.Upsert(db, "posts/*", "tmpl2", "post1", []byte{0x02}, ""); err != nil {
+		t.Fatalf("Upsert failed: %v", err)
+	}
+	if err := ps.Flush(); err != nil {
+		t.Fatalf("Flush failed: %v", err)
+	}
+
+	// Verify indexes exist
+	indexes, _ := ps.ListIndexes(db)
+	if len(indexes) != 2 {
+		t.Errorf("expected 2 indexes, got %d", len(indexes))
+	}
+
+	// Delete the database
+	if err := ps.DeleteDatabase(db); err != nil {
+		t.Fatalf("DeleteDatabase failed: %v", err)
+	}
+
+	// Verify indexes are deleted
+	indexes, _ = ps.ListIndexes(db)
+	if len(indexes) != 0 {
+		t.Errorf("expected 0 indexes after delete, got %d", len(indexes))
+	}
+}
+
+// TestDeleteDatabase_Empty tests deleting a database that doesn't exist
+func TestDeleteDatabase_Empty(t *testing.T) {
+	t.Parallel()
+	ps, cleanup := setupTestStore(t)
+	defer cleanup()
+
+	// Delete a non-existent database should not error
+	if err := ps.DeleteDatabase("nonexistent"); err != nil {
+		t.Fatalf("DeleteDatabase failed: %v", err)
+	}
+}

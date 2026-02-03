@@ -250,6 +250,82 @@ func (m *documentStore) Delete(ctx context.Context, database string, path string
 	return nil
 }
 
+func (m *documentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	// Delete from data collection
+	dataCollection := m.db.Collection(m.dataCollection)
+	dataDeleted, err := m.deleteByDatabaseFromCollection(ctx, dataCollection, database, limit)
+	if err != nil {
+		return dataDeleted, err
+	}
+
+	// If we hit the limit in data collection, return early
+	if limit > 0 && dataDeleted >= limit {
+		return dataDeleted, nil
+	}
+
+	// Calculate remaining limit for sys collection
+	remainingLimit := 0
+	if limit > 0 {
+		remainingLimit = limit - dataDeleted
+	}
+
+	// Delete from sys collection
+	sysCollection := m.db.Collection(m.sysCollection)
+	sysDeleted, err := m.deleteByDatabaseFromCollection(ctx, sysCollection, database, remainingLimit)
+	if err != nil {
+		return dataDeleted + sysDeleted, err
+	}
+
+	return dataDeleted + sysDeleted, nil
+}
+
+func (m *documentStore) deleteByDatabaseFromCollection(ctx context.Context, collection *mongo.Collection, database string, limit int) (int, error) {
+	filter := bson.M{"database": database}
+
+	if limit > 0 {
+		// When limiting, we need to find documents first, then delete by IDs
+		findOpts := options.Find().SetLimit(int64(limit)).SetProjection(bson.M{"_id": 1})
+		cursor, err := collection.Find(ctx, filter, findOpts)
+		if err != nil {
+			return 0, err
+		}
+		defer cursor.Close(ctx)
+
+		var ids []string
+		for cursor.Next(ctx) {
+			var doc struct {
+				ID string `bson:"_id"`
+			}
+			if err := cursor.Decode(&doc); err != nil {
+				return 0, err
+			}
+			ids = append(ids, doc.ID)
+		}
+
+		if err := cursor.Err(); err != nil {
+			return 0, err
+		}
+
+		if len(ids) == 0 {
+			return 0, nil
+		}
+
+		// Hard delete the documents by IDs
+		result, err := collection.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": ids}})
+		if err != nil {
+			return 0, err
+		}
+		return int(result.DeletedCount), nil
+	}
+
+	// No limit - delete all documents for this database
+	result, err := collection.DeleteMany(ctx, filter)
+	if err != nil {
+		return 0, err
+	}
+	return int(result.DeletedCount), nil
+}
+
 func (m *documentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
 	collection := m.getCollection(q.Collection)
 

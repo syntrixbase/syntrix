@@ -110,4 +110,15 @@ func (m *Manager) Start(bgCtx context.Context) {
 			slog.Error("Failed to start Indexer Service", "error", err)
 		}
 	}
+
+	// Start Deletion Worker
+	if m.deletionWorker != nil {
+		m.wg.Add(1)
+		go func() {
+			defer m.wg.Done()
+			if err := m.deletionWorker.Start(bgCtx); err != nil {
+				slog.Error("Failed to start Deletion Worker", "error", err)
+			}
+		}()
+	}
 }

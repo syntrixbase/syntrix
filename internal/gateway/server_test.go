@@ -153,3 +153,20 @@ func TestServer_RegisterRoutes_WithRealtime(t *testing.T) {
 		assert.Equal(t, http.StatusMethodNotAllowed, w.Code)
 	})
 }
+
+func TestServer_SetDatabaseService(t *testing.T) {
+	mockQuery := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzEngine)
+
+	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NotNil(t, server)
+
+	// SetDatabaseService should not panic and should set the service
+	// We can't easily mock database.Service without implementing all methods,
+	// so we test that nil is accepted (which it is, as a no-op)
+	server.SetDatabaseService(nil)
+
+	// The function should have completed without panic
+	// This is a smoke test to ensure the method works
+}

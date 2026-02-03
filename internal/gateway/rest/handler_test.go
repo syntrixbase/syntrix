@@ -11,6 +11,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 )
 
@@ -177,4 +178,170 @@ func TestClaimsToMap_NilClaims(t *testing.T) {
 	var claims *identity.Claims
 	m := claimsToMap(claims)
 	assert.Nil(t, m)
+}
+
+// TestAuthorized_OwnerImplicitDBAdmin_SlugMatch tests the case where the owner's DBAdmin list
+// already contains the database slug (not ID), and we verify that no duplicate is added.
+func TestAuthorized_OwnerImplicitDBAdmin_SlugMatch(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler := NewHandler(mockService, mockAuth, mockAuthz)
+
+	// Set up authz to allow the request
+	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
+		// Verify that my-slug is in DBAdmin list (not duplicated)
+		count := 0
+		for _, admin := range req.Auth.DBAdmin {
+			if admin == "my-slug" || admin == "db-123" {
+				count++
+			}
+		}
+		// Should have exactly one entry (my-slug - the original one)
+		// The slug match should prevent adding db-123
+		return count == 1
+	}), mock.Anything).Return(true, nil)
+
+	target := handler.authorized(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, "create")
+
+	req, _ := http.NewRequest("POST", "/api/v1/databases/db-123/documents/col/doc", bytes.NewBufferString(`{"name":"test"}`))
+	req.SetPathValue("database", "db-123")
+	req.SetPathValue("path", "col/doc")
+
+	// Create a database with slug
+	slug := "my-slug"
+	db := &database.Database{
+		ID:      "db-123",
+		Slug:    &slug,
+		OwnerID: "user-123",
+	}
+
+	// Add database to context
+	ctx := database.WithDatabase(req.Context(), db)
+
+	// Add user ID (matches owner)
+	ctx = context.WithValue(ctx, identity.ContextKeyUserID, "user-123")
+
+	// Add DBAdmin list that already contains the slug
+	ctx = context.WithValue(ctx, identity.ContextKeyDBAdmin, []string{"my-slug"})
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	target(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	mockAuthz.AssertExpectations(t)
+}
+
+// TestAuthorized_OwnerImplicitDBAdmin_IDMatch tests the case where the owner's DBAdmin list
+// already contains the database ID, and we verify that no duplicate is added.
+func TestAuthorized_OwnerImplicitDBAdmin_IDMatch(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler := NewHandler(mockService, mockAuth, mockAuthz)
+
+	// Set up authz to allow the request
+	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
+		// Verify that db-123 is in DBAdmin list exactly once
+		count := 0
+		for _, admin := range req.Auth.DBAdmin {
+			if admin == "db-123" {
+				count++
+			}
+		}
+		return count == 1
+	}), mock.Anything).Return(true, nil)
+
+	target := handler.authorized(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, "create")
+
+	req, _ := http.NewRequest("POST", "/api/v1/databases/db-123/documents/col/doc", bytes.NewBufferString(`{"name":"test"}`))
+	req.SetPathValue("database", "db-123")
+	req.SetPathValue("path", "col/doc")
+
+	// Create a database with slug
+	slug := "my-slug"
+	db := &database.Database{
+		ID:      "db-123",
+		Slug:    &slug,
+		OwnerID: "user-123",
+	}
+
+	// Add database to context
+	ctx := database.WithDatabase(req.Context(), db)
+
+	// Add user ID (matches owner)
+	ctx = context.WithValue(ctx, identity.ContextKeyUserID, "user-123")
+
+	// Add DBAdmin list that already contains the ID
+	ctx = context.WithValue(ctx, identity.ContextKeyDBAdmin, []string{"db-123"})
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	target(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	mockAuthz.AssertExpectations(t)
+}
+
+// TestAuthorized_OwnerImplicitDBAdmin_NotInList tests the case where the owner's DBAdmin list
+// does not contain the database, and we verify that the database ID is added.
+func TestAuthorized_OwnerImplicitDBAdmin_NotInList(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler := NewHandler(mockService, mockAuth, mockAuthz)
+
+	// Set up authz to allow the request
+	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
+		// Verify that db-123 is in DBAdmin list (should have been added)
+		for _, admin := range req.Auth.DBAdmin {
+			if admin == "db-123" {
+				return true
+			}
+		}
+		return false
+	}), mock.Anything).Return(true, nil)
+
+	target := handler.authorized(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}, "create")
+
+	req, _ := http.NewRequest("POST", "/api/v1/databases/db-123/documents/col/doc", bytes.NewBufferString(`{"name":"test"}`))
+	req.SetPathValue("database", "db-123")
+	req.SetPathValue("path", "col/doc")
+
+	// Create a database with slug
+	slug := "my-slug"
+	db := &database.Database{
+		ID:      "db-123",
+		Slug:    &slug,
+		OwnerID: "user-123",
+	}
+
+	// Add database to context
+	ctx := database.WithDatabase(req.Context(), db)
+
+	// Add user ID (matches owner)
+	ctx = context.WithValue(ctx, identity.ContextKeyUserID, "user-123")
+
+	// Add DBAdmin list that does NOT contain the database
+	ctx = context.WithValue(ctx, identity.ContextKeyDBAdmin, []string{"other-db"})
+
+	req = req.WithContext(ctx)
+
+	rr := httptest.NewRecorder()
+	target(rr, req)
+
+	assert.Equal(t, http.StatusOK, rr.Code)
+	mockAuthz.AssertExpectations(t)
 }

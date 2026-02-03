@@ -9,6 +9,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"github.com/syntrixbase/syntrix/internal/indexer"
@@ -53,6 +54,9 @@ func (m *MockStorageFactory) User() types.UserStore {
 	return nil
 }
 func (m *MockStorageFactory) Revocation() types.TokenRevocationStore {
+	return nil
+}
+func (m *MockStorageFactory) Database() database.DatabaseStore {
 	return nil
 }
 func (m *MockStorageFactory) GetMongoClient(name string) (*mongo.Client, string, error) {

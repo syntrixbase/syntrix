@@ -144,6 +144,15 @@ func (s *Store) DeleteIndex(db, pattern, tmplID string) error {
 	return nil
 }
 
+// DeleteDatabase removes all indexes for a database.
+func (s *Store) DeleteDatabase(db string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	delete(s.databases, db)
+	return nil
+}
+
 // SetState sets the state of an index.
 func (s *Store) SetState(db, pattern, tmplID string, state store.IndexState) error {
 	s.mu.Lock()

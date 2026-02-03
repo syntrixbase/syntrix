@@ -3,6 +3,7 @@ package gateway
 import (
 	"net/http"
 
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/gateway/rest"
@@ -38,4 +39,9 @@ func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 
 	// Console
 	mux.Handle("GET /console/", http.StripPrefix("/console/", http.FileServer(http.Dir("console"))))
+}
+
+// SetDatabaseService injects the database service for database management operations.
+func (s *Server) SetDatabaseService(svc database.Service) {
+	s.rest.SetDatabaseService(svc)
 }

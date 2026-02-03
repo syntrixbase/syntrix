@@ -616,3 +616,37 @@ func TestStore_ConcurrentReadsAndWrites(t *testing.T) {
 		<-done
 	}
 }
+
+func TestStore_DeleteDatabase(t *testing.T) {
+	s := New()
+
+	// Create some data in multiple databases
+	err := s.Upsert("db1", "users/*", "tmpl1", "doc1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = s.Upsert("db2", "posts/*", "tmpl2", "doc2", []byte{0x02}, "")
+	require.NoError(t, err)
+
+	// Verify both databases exist
+	assert.Len(t, s.databases, 2)
+
+	// Delete one database
+	err = s.DeleteDatabase("db1")
+	require.NoError(t, err)
+
+	// Verify only db2 remains
+	assert.Len(t, s.databases, 1)
+	assert.Nil(t, s.databases["db1"])
+	assert.NotNil(t, s.databases["db2"])
+
+	// Delete non-existent database (should not error)
+	err = s.DeleteDatabase("nonexistent")
+	require.NoError(t, err)
+}
+
+func TestStore_DeleteDatabase_Empty(t *testing.T) {
+	s := New()
+
+	// Delete from empty store should not error
+	err := s.DeleteDatabase("anydb")
+	require.NoError(t, err)
+}

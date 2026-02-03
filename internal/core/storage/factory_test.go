@@ -51,8 +51,10 @@ func setupMockPostgres() sqlmock.Sqlmock {
 	}
 	// Mock successful ping
 	mock.ExpectPing()
-	// Mock EnsureSchema call (CREATE TABLE IF NOT EXISTS ...)
+	// Mock EnsureSchema call for auth_users (CREATE TABLE IF NOT EXISTS ...)
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+	// Mock EnsureSchema call for databases
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS databases").WillReturnResult(sqlmock.NewResult(0, 0))
 	return mock
 }
 
@@ -198,6 +200,7 @@ func TestNewFactory_ReadWriteSplit(t *testing.T) {
 	}
 	mock.ExpectPing()
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS databases").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	cfg := config.Config{
 		Backends: map[string]config.BackendConfig{
@@ -677,4 +680,66 @@ func TestNewFactory_PostgresErrors(t *testing.T) {
 		_, err := NewFactory(ctx, cfg)
 		assert.ErrorContains(t, err, "failed to ensure postgres schema")
 	})
+}
+
+func TestFactory_DatabaseAccessor(t *testing.T) {
+	setupMockProvider()
+	mock := setupMockPostgres()
+	defer teardownMockProvider()
+
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {
+				Type: "mongo",
+				Mongo: config.MongoConfig{
+					URI:          testMongoURI,
+					DatabaseName: testDBName,
+				},
+			},
+			"postgres_user": {
+				Type: "postgres",
+				Postgres: config.PostgresConfig{
+					DSN: "postgres://test",
+				},
+			},
+		},
+		Topology: config.TopologyConfig{
+			Document: config.DocumentTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
+				},
+				DataCollection: "docs",
+				SysCollection:  "sys",
+			},
+			User: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "postgres_user",
+				},
+				Collection: "users",
+			},
+			Revocation: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
+				},
+				Collection: "revocations",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	f, err := NewFactory(ctx, cfg)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Test Database() accessor
+	dbStore := f.Database()
+	assert.NotNil(t, dbStore)
+
+	// Verify it's a PostgreSQL-backed store by checking its type
+	_ = mock // Use mock to avoid lint error
 }

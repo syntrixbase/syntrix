@@ -15,6 +15,7 @@ type Store interface {
 
 	// Index management
 	DeleteIndex(db, pattern, tmplID string) error
+	DeleteDatabase(db string) error // Delete all indexes for a database
 	SetState(db, pattern, tmplID string, state IndexState) error
 	GetState(db, pattern, tmplID string) (IndexState, error)
 

@@ -27,6 +27,9 @@ func (f *fakeDocumentStore) Patch(ctx context.Context, database string, path str
 func (f *fakeDocumentStore) Delete(ctx context.Context, database string, path string, pred model.Filters) error {
 	return nil
 }
+func (f *fakeDocumentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	return 0, nil
+}
 func (f *fakeDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
 	return nil, nil
 }

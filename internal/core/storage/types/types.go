@@ -102,6 +102,11 @@ type DocumentStore interface {
 	// Delete removes a document by its path
 	Delete(ctx context.Context, database string, path string, pred model.Filters) error
 
+	// DeleteByDatabase deletes all documents belonging to a database.
+	// Returns the number of documents deleted and any error.
+	// If limit > 0, only deletes up to that many documents (for batching).
+	DeleteByDatabase(ctx context.Context, database string, limit int) (int, error)
+
 	// Query executes a complex query
 	Query(ctx context.Context, database string, q model.Query) ([]*StoredDoc, error)
 

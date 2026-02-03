@@ -1055,6 +1055,29 @@ func (s *PebbleStore) ListIndexes(db string) ([]store.IndexInfo, error) {
 	return results, nil
 }
 
+// DeleteDatabase removes all indexes for a database.
+func (s *PebbleStore) DeleteDatabase(db string) error {
+	// 1. List all indexes for this database
+	indexes, err := s.ListIndexes(db)
+	if err != nil {
+		return fmt.Errorf("failed to list indexes: %w", err)
+	}
+
+	// 2. Delete each index
+	for _, idx := range indexes {
+		if err := s.DeleteIndex(db, idx.Pattern, idx.TemplateID); err != nil {
+			s.logger.Error("failed to delete index during database deletion",
+				"db", db,
+				"pattern", idx.Pattern,
+				"tmplID", idx.TemplateID,
+				"error", err)
+			// Continue with other indexes
+		}
+	}
+
+	return nil
+}
+
 // countDocs counts the number of documents in an index.
 func (s *PebbleStore) countDocs(db, pattern, tmplID string) int {
 	hash := indexHash(pattern, tmplID)

@@ -88,6 +88,10 @@ func (m *mockDocumentStore) Watch(ctx context.Context, database, collection stri
 func (m *mockDocumentStore) Close(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
+func (m *mockDocumentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	args := m.Called(ctx, database, limit)
+	return args.Int(0), args.Error(1)
+}
 
 type mockUserStore struct {
 	mock.Mock

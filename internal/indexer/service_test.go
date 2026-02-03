@@ -2,6 +2,7 @@ package indexer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -13,7 +14,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/indexer/config"
+	"github.com/syntrixbase/syntrix/internal/indexer/manager"
 	"github.com/syntrixbase/syntrix/internal/indexer/mem_store"
+	"github.com/syntrixbase/syntrix/internal/indexer/store"
 	"github.com/syntrixbase/syntrix/internal/puller"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 )
@@ -1249,4 +1252,99 @@ templates:
 		s.mu.RUnlock()
 		assert.Equal(t, "persist-test-progress", progress)
 	}
+}
+
+func TestService_InvalidateDatabase(t *testing.T) {
+	cfg := config.Config{
+		StorageMode: config.StorageModeMemory,
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+
+	// Insert some data
+	s := svc.(*service)
+	store := s.manager.Store().(*mem_store.Store)
+
+	// Add entries for two databases
+	err = store.Upsert("db1", "users/*", "tmpl1", "user1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = store.Upsert("db2", "posts/*", "tmpl2", "post1", []byte{0x02}, "")
+	require.NoError(t, err)
+
+	// Verify both databases have indexes
+	indexes, err := store.ListIndexes("db1")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+
+	indexes, err = store.ListIndexes("db2")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+
+	// Invalidate db1
+	err = svc.InvalidateDatabase(context.Background(), "db1")
+	require.NoError(t, err)
+
+	// Verify db1 indexes are gone (returns error for non-existent db)
+	_, err = store.ListIndexes("db1")
+	assert.Error(t, err) // db1 no longer exists
+
+	// Verify db2 indexes remain
+	indexes, err = store.ListIndexes("db2")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+}
+
+func TestService_InvalidateDatabase_NonExistent(t *testing.T) {
+	cfg := config.Config{
+		StorageMode: config.StorageModeMemory,
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+
+	// Invalidating a non-existent database should not error
+	err = svc.InvalidateDatabase(context.Background(), "nonexistent")
+	require.NoError(t, err)
+}
+
+// mockStoreWithDeleteDatabaseError is a mock store that returns an error on DeleteDatabase.
+type mockStoreWithDeleteDatabaseError struct {
+	store.Store
+	deleteDatabaseErr error
+}
+
+func (m *mockStoreWithDeleteDatabaseError) DeleteDatabase(db string) error {
+	if m.deleteDatabaseErr != nil {
+		return m.deleteDatabaseErr
+	}
+	return m.Store.DeleteDatabase(db)
+}
+
+func TestService_InvalidateDatabase_StoreError(t *testing.T) {
+	// Create a regular service first
+	cfg := config.Config{
+		StorageMode: config.StorageModeMemory,
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+
+	s := svc.(*service)
+
+	// Wrap the manager's store with our error-returning mock
+	originalStore := s.manager.Store()
+	mockStore := &mockStoreWithDeleteDatabaseError{
+		Store:             originalStore,
+		deleteDatabaseErr: errors.New("mock delete database error"),
+	}
+
+	// Create a new manager with the mock store
+	s.manager = manager.New(mockStore)
+
+	// InvalidateDatabase should return error
+	err = svc.InvalidateDatabase(context.Background(), "testdb")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to delete database indexes")
+	assert.Contains(t, err.Error(), "mock delete database error")
 }
