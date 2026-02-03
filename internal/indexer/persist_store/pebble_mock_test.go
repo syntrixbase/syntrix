@@ -635,3 +635,141 @@ func (m *mockDBWithCallCounter) NewBatch() Batch {
 func (m *mockDBWithCallCounter) Close() error {
 	return m.mockDB.Close()
 }
+
+// ============ DeleteDatabase Error Path Tests ============
+
+// TestDeleteDatabaseListIndexesError tests DeleteDatabase when ListIndexes returns an error.
+func TestDeleteDatabaseListIndexesError(t *testing.T) {
+	db := newMockDB()
+	ps := newMockPebbleStore(db)
+
+	// Inject error for NewIter to make ListIndexes fail
+	db.newIterErr = errors.New("mock list indexes iterator error")
+
+	err := ps.DeleteDatabase("testdb")
+
+	if err == nil {
+		t.Error("expected error from DeleteDatabase, got nil")
+	}
+	if err != nil && !contains(err.Error(), "failed to list indexes") {
+		t.Errorf("expected error to contain 'failed to list indexes', got: %v", err)
+	}
+}
+
+// TestDeleteDatabaseDeleteIndexError tests DeleteDatabase when DeleteIndex fails but continues.
+func TestDeleteDatabaseDeleteIndexError(t *testing.T) {
+	db := newMockDB()
+	ps := newMockPebbleStore(db)
+
+	// First, add some index entries so ListIndexes returns results
+	// Add a map entry: key = "m|{db}|{hash}", value = "{pattern}|{tmplID}"
+	pattern := "users/*"
+	tmplID := "tmpl1"
+	mapK := mapKey("testdb", pattern, tmplID)
+	db.data[string(mapK)] = []byte(pattern + "|" + tmplID)
+
+	// Also add an index entry so DeleteIndex has something to delete
+	orderKey := []byte{0x01, 0x02}
+	idxK := indexKey("testdb", pattern, tmplID, orderKey)
+	db.data[string(idxK)] = []byte("doc1")
+
+	// Add reverse entry
+	revK := reverseKey("testdb", pattern, tmplID, "doc1")
+	db.data[string(revK)] = orderKey
+
+	// Add state entry
+	stateK := stateKey("testdb", pattern, tmplID)
+	db.data[string(stateK)] = []byte("healthy")
+
+	// Now make DeleteIndex fail by injecting error on first NewIter after listing
+	// Use mockDBWithCallCounter to fail on second NewIter call (first is for ListIndexes)
+	dbWithCounter := &mockDBWithCallCounter{
+		mockDB:            db,
+		failNewIterOnCall: 2, // Fail on second call (DeleteIndex's deleteByPrefix)
+	}
+	ps.db = dbWithCounter
+
+	// DeleteDatabase should not return error even if DeleteIndex fails
+	err := ps.DeleteDatabase("testdb")
+
+	// Should not return error because DeleteIndex errors are logged but not propagated
+	if err != nil {
+		t.Errorf("expected no error from DeleteDatabase (errors should be logged), got: %v", err)
+	}
+}
+
+// TestDeleteDatabaseEmptyDatabase tests DeleteDatabase on a database with no indexes.
+func TestDeleteDatabaseEmptyDatabase(t *testing.T) {
+	db := newMockDB()
+	ps := newMockPebbleStore(db)
+
+	// Delete database with no indexes - should succeed with no error
+	err := ps.DeleteDatabase("nonexistent")
+
+	if err != nil {
+		t.Errorf("expected no error for empty database, got: %v", err)
+	}
+}
+
+// TestDeleteDatabaseMultipleIndexes tests DeleteDatabase with multiple indexes.
+func TestDeleteDatabaseMultipleIndexes(t *testing.T) {
+	db := newMockDB()
+	ps := newMockPebbleStore(db)
+
+	// Add multiple index entries
+	indexes := []struct {
+		pattern string
+		tmplID  string
+	}{
+		{"users/*", "tmpl1"},
+		{"posts/*", "tmpl2"},
+		{"comments/*", "tmpl3"},
+	}
+
+	for _, idx := range indexes {
+		mapK := mapKey("testdb", idx.pattern, idx.tmplID)
+		db.data[string(mapK)] = []byte(idx.pattern + "|" + idx.tmplID)
+
+		// Add state entry
+		stateK := stateKey("testdb", idx.pattern, idx.tmplID)
+		db.data[string(stateK)] = []byte("healthy")
+	}
+
+	// DeleteDatabase should succeed
+	err := ps.DeleteDatabase("testdb")
+
+	if err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+// TestDeleteDatabaseWithDeleteIndexMultipleErrors tests that DeleteDatabase continues
+// even when multiple DeleteIndex calls fail.
+func TestDeleteDatabaseWithDeleteIndexMultipleErrors(t *testing.T) {
+	db := newMockDB()
+	ps := newMockPebbleStore(db)
+
+	// Add multiple index entries
+	indexes := []struct {
+		pattern string
+		tmplID  string
+	}{
+		{"users/*", "tmpl1"},
+		{"posts/*", "tmpl2"},
+	}
+
+	for _, idx := range indexes {
+		mapK := mapKey("testdb", idx.pattern, idx.tmplID)
+		db.data[string(mapK)] = []byte(idx.pattern + "|" + idx.tmplID)
+	}
+
+	// Inject delete error to make DeleteIndex fail
+	db.deleteErr = errors.New("mock delete error")
+
+	// DeleteDatabase should not return error, just log the failures
+	err := ps.DeleteDatabase("testdb")
+
+	if err != nil {
+		t.Errorf("expected no error (errors should be logged), got: %v", err)
+	}
+}

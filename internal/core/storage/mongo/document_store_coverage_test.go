@@ -451,4 +451,127 @@ func TestDocumentStore_DeleteByDatabase(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, deleted)
 	})
+
+	t.Run("DeleteByDatabase with canceled context", func(t *testing.T) {
+		// Add documents to test error path
+		for i := 0; i < 3; i++ {
+			doc := types.NewStoredDoc("db_cancel", "items", "item"+string(rune('a'+i)), map[string]interface{}{
+				"name": "Item " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db_cancel", doc)
+			require.NoError(t, err)
+		}
+
+		// Cancel context before delete
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		// Delete with canceled context should return error
+		_, err := store.DeleteByDatabase(cancelCtx, "db_cancel", 0)
+		assert.Error(t, err)
+	})
+
+	t.Run("DeleteByDatabase with limit and canceled context", func(t *testing.T) {
+		// Add documents
+		for i := 0; i < 3; i++ {
+			doc := types.NewStoredDoc("db_cancel2", "items", "item"+string(rune('a'+i)), map[string]interface{}{
+				"name": "Item " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db_cancel2", doc)
+			require.NoError(t, err)
+		}
+
+		// Cancel context before delete with limit
+		cancelCtx, cancel := context.WithCancel(context.Background())
+		cancel()
+
+		// Delete with canceled context and limit should return error
+		_, err := store.DeleteByDatabase(cancelCtx, "db_cancel2", 2)
+		assert.Error(t, err)
+	})
+
+	t.Run("DeleteByDatabase deletes from both data and sys collections", func(t *testing.T) {
+		// Add documents to data collection
+		for i := 0; i < 2; i++ {
+			doc := types.NewStoredDoc("db_both", "users", "user"+string(rune('a'+i)), map[string]interface{}{
+				"name": "User " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db_both", doc)
+			require.NoError(t, err)
+		}
+
+		// Add documents to sys collection
+		for i := 0; i < 2; i++ {
+			doc := types.NewStoredDoc("db_both", "sys", "config"+string(rune('a'+i)), map[string]interface{}{
+				"value": i,
+			})
+			err := store.Create(ctx, "db_both", doc)
+			require.NoError(t, err)
+		}
+
+		// Delete all - should delete from both collections
+		deleted, err := store.DeleteByDatabase(ctx, "db_both", 0)
+		require.NoError(t, err)
+		assert.Equal(t, 4, deleted)
+	})
+
+	t.Run("DeleteByDatabase with limit hits data collection only", func(t *testing.T) {
+		// Add documents to data collection
+		for i := 0; i < 5; i++ {
+			doc := types.NewStoredDoc("db_limit_test", "users", "user"+string(rune('a'+i)), map[string]interface{}{
+				"name": "User " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db_limit_test", doc)
+			require.NoError(t, err)
+		}
+
+		// Add documents to sys collection
+		for i := 0; i < 3; i++ {
+			doc := types.NewStoredDoc("db_limit_test", "sys", "config"+string(rune('a'+i)), map[string]interface{}{
+				"value": i,
+			})
+			err := store.Create(ctx, "db_limit_test", doc)
+			require.NoError(t, err)
+		}
+
+		// Delete with limit 5 - should only delete from data collection
+		deleted, err := store.DeleteByDatabase(ctx, "db_limit_test", 5)
+		require.NoError(t, err)
+		assert.Equal(t, 5, deleted)
+
+		// Delete remaining - should be 3 from sys collection
+		deleted, err = store.DeleteByDatabase(ctx, "db_limit_test", 0)
+		require.NoError(t, err)
+		assert.Equal(t, 3, deleted)
+	})
+
+	t.Run("DeleteByDatabase with limit spans both collections", func(t *testing.T) {
+		// Add documents to data collection
+		for i := 0; i < 2; i++ {
+			doc := types.NewStoredDoc("db_span", "users", "user"+string(rune('a'+i)), map[string]interface{}{
+				"name": "User " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db_span", doc)
+			require.NoError(t, err)
+		}
+
+		// Add documents to sys collection
+		for i := 0; i < 3; i++ {
+			doc := types.NewStoredDoc("db_span", "sys", "config"+string(rune('a'+i)), map[string]interface{}{
+				"value": i,
+			})
+			err := store.Create(ctx, "db_span", doc)
+			require.NoError(t, err)
+		}
+
+		// Delete with limit 4 - should delete 2 from data and 2 from sys
+		deleted, err := store.DeleteByDatabase(ctx, "db_span", 4)
+		require.NoError(t, err)
+		assert.Equal(t, 4, deleted)
+
+		// Delete remaining - should be 1 from sys collection
+		deleted, err = store.DeleteByDatabase(ctx, "db_span", 0)
+		require.NoError(t, err)
+		assert.Equal(t, 1, deleted)
+	})
 }

@@ -405,3 +405,51 @@ func TestCache_Eviction(t *testing.T) {
 	// Cache size should be limited
 	assert.LessOrEqual(t, cache.Size(), 5)
 }
+
+func TestNewCache_DefaultsOnZeroConfig(t *testing.T) {
+	store := newMockStore()
+
+	// Zero config - should use defaults
+	cache := NewCache(store, CacheConfig{
+		Size:        0,
+		TTL:         0,
+		NegativeTTL: 0,
+	})
+
+	assert.NotNil(t, cache)
+	assert.Equal(t, 1000, cache.config.Size)
+	assert.Equal(t, 5*time.Minute, cache.config.TTL)
+	assert.Equal(t, 30*time.Second, cache.config.NegativeTTL)
+}
+
+func TestNewCache_DefaultsOnNegativeConfig(t *testing.T) {
+	store := newMockStore()
+
+	// Negative values - should use defaults
+	cache := NewCache(store, CacheConfig{
+		Size:        -1,
+		TTL:         -1,
+		NegativeTTL: -1,
+	})
+
+	assert.NotNil(t, cache)
+	assert.Equal(t, 1000, cache.config.Size)
+	assert.Equal(t, 5*time.Minute, cache.config.TTL)
+	assert.Equal(t, 30*time.Second, cache.config.NegativeTTL)
+}
+
+func TestNewCache_CustomConfig(t *testing.T) {
+	store := newMockStore()
+
+	// Custom valid config should be preserved
+	cache := NewCache(store, CacheConfig{
+		Size:        500,
+		TTL:         10 * time.Minute,
+		NegativeTTL: 1 * time.Minute,
+	})
+
+	assert.NotNil(t, cache)
+	assert.Equal(t, 500, cache.config.Size)
+	assert.Equal(t, 10*time.Minute, cache.config.TTL)
+	assert.Equal(t, 1*time.Minute, cache.config.NegativeTTL)
+}

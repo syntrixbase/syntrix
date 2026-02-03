@@ -265,6 +265,16 @@ func TestHandler_handleListDatabases(t *testing.T) {
 			},
 			expectedStatus: http.StatusOK,
 		},
+		{
+			name:  "service error",
+			query: "",
+			setupMock: func(m *fullMockDatabaseService) {
+				m.listFunc = func(ctx context.Context, userID string, isAdmin bool, opts database.ListOptions) (*database.ListResult, error) {
+					return nil, database.ErrDatabaseNotFound
+				}
+			},
+			expectedStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
@@ -287,6 +297,32 @@ func TestHandler_handleListDatabases(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("database service not available", func(t *testing.T) {
+		h := newTestHandlerWithDB(nil)
+
+		req := httptest.NewRequest("GET", "/api/v1/databases", nil)
+		ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-123")
+		req = req.WithContext(ctx)
+
+		rec := httptest.NewRecorder()
+		h.handleListDatabases(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	})
+
+	t.Run("unauthenticated", func(t *testing.T) {
+		mockService := &fullMockDatabaseService{}
+		h := newTestHandlerWithDB(mockService)
+
+		req := httptest.NewRequest("GET", "/api/v1/databases", nil)
+		// No user ID in context
+
+		rec := httptest.NewRecorder()
+		h.handleListDatabases(rec, req)
+
+		assert.Equal(t, http.StatusUnauthorized, rec.Code)
+	})
 }
 
 func TestHandler_handleGetDatabase(t *testing.T) {
@@ -373,6 +409,20 @@ func TestHandler_handleGetDatabase(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 		})
 	}
+
+	t.Run("database service not available", func(t *testing.T) {
+		h := newTestHandlerWithDB(nil)
+
+		req := httptest.NewRequest("GET", "/api/v1/databases/test-db", nil)
+		req.SetPathValue("identifier", "test-db")
+		ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-123")
+		req = req.WithContext(ctx)
+
+		rec := httptest.NewRecorder()
+		h.handleGetDatabase(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	})
 }
 
 func TestHandler_handleUpdateDatabase(t *testing.T) {
@@ -434,6 +484,13 @@ func TestHandler_handleUpdateDatabase(t *testing.T) {
 			setupMock:      func(m *fullMockDatabaseService) {},
 			expectedStatus: http.StatusBadRequest,
 		},
+		{
+			name:           "missing identifier",
+			identifier:     "",
+			body:           UpdateDatabaseRequest{DisplayName: ptr("Test")},
+			setupMock:      func(m *fullMockDatabaseService) {},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
@@ -456,6 +513,22 @@ func TestHandler_handleUpdateDatabase(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 		})
 	}
+
+	t.Run("database service not available", func(t *testing.T) {
+		h := newTestHandlerWithDB(nil)
+
+		body, _ := json.Marshal(UpdateDatabaseRequest{DisplayName: ptr("Test")})
+		req := httptest.NewRequest("PATCH", "/api/v1/databases/test-db", bytes.NewReader(body))
+		req.SetPathValue("identifier", "test-db")
+		req.Header.Set("Content-Type", "application/json")
+		ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-123")
+		req = req.WithContext(ctx)
+
+		rec := httptest.NewRecorder()
+		h.handleUpdateDatabase(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	})
 }
 
 func TestHandler_handleDeleteDatabase(t *testing.T) {
@@ -530,6 +603,12 @@ func TestHandler_handleDeleteDatabase(t *testing.T) {
 			},
 			expectedStatus: http.StatusGone,
 		},
+		{
+			name:           "missing identifier",
+			identifier:     "",
+			setupMock:      func(m *fullMockDatabaseService) {},
+			expectedStatus: http.StatusBadRequest,
+		},
 	}
 
 	for _, tt := range tests {
@@ -550,6 +629,20 @@ func TestHandler_handleDeleteDatabase(t *testing.T) {
 			assert.Equal(t, tt.expectedStatus, rec.Code)
 		})
 	}
+
+	t.Run("database service not available", func(t *testing.T) {
+		h := newTestHandlerWithDB(nil)
+
+		req := httptest.NewRequest("DELETE", "/api/v1/databases/test-db", nil)
+		req.SetPathValue("identifier", "test-db")
+		ctx := context.WithValue(req.Context(), identity.ContextKeyUserID, "user-123")
+		req = req.WithContext(ctx)
+
+		rec := httptest.NewRecorder()
+		h.handleDeleteDatabase(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+	})
 }
 
 func TestHandler_writeDatabaseError(t *testing.T) {

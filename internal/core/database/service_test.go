@@ -359,3 +359,293 @@ func TestService_ValidateDatabase(t *testing.T) {
 	err = svc.ValidateDatabase(context.Background(), "nonexistent")
 	assert.ErrorIs(t, err, ErrDatabaseNotFound)
 }
+
+func TestService_UpdateDatabase_AdminSetSlug_InvalidSlugLength(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// Create a database without slug
+	created, err := svc.CreateDatabase(context.Background(), "admin", true, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, created.Slug)
+
+	// Admin tries to set an invalid slug (too short)
+	slug := "ab" // Only 2 characters, minimum is 3
+	_, err = svc.UpdateDatabase(context.Background(), "admin", true, "id:"+created.ID, UpdateRequest{
+		Slug: &slug,
+	})
+	assert.ErrorIs(t, err, ErrInvalidSlugLength)
+}
+
+func TestService_UpdateDatabase_AdminSetSlug_InvalidSlugFormat(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// Create a database without slug
+	created, err := svc.CreateDatabase(context.Background(), "admin", true, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, created.Slug)
+
+	// Admin tries to set an invalid slug (invalid format)
+	slug := "Invalid_Slug!" // Contains uppercase, underscore, and special char
+	_, err = svc.UpdateDatabase(context.Background(), "admin", true, "id:"+created.ID, UpdateRequest{
+		Slug: &slug,
+	})
+	assert.ErrorIs(t, err, ErrInvalidSlugFormat)
+}
+
+func TestService_UpdateDatabase_AdminSetSlug_Valid(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// Create a database without slug
+	created, err := svc.CreateDatabase(context.Background(), "admin", true, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, created.Slug)
+
+	// Admin sets a valid slug (including reserved ones)
+	slug := "admin" // Reserved slug, but admin can use it
+	updated, err := svc.UpdateDatabase(context.Background(), "admin", true, "id:"+created.ID, UpdateRequest{
+		Slug: &slug,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, &slug, updated.Slug)
+}
+
+func TestService_UpdateDatabase_NotFound(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	newName := "Updated Name"
+	_, err := svc.UpdateDatabase(context.Background(), "user-123", false, "nonexistent", UpdateRequest{
+		DisplayName: &newName,
+	})
+	assert.ErrorIs(t, err, ErrDatabaseNotFound)
+}
+
+func TestService_UpdateDatabase_NotOwner(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// User-1 creates database
+	slug := "my-app"
+	created, err := svc.CreateDatabase(context.Background(), "user-1", false, CreateRequest{
+		Slug:        &slug,
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+
+	// User-2 tries to update
+	newName := "Hacked Name"
+	_, err = svc.UpdateDatabase(context.Background(), "user-2", false, "id:"+created.ID, UpdateRequest{
+		DisplayName: &newName,
+	})
+	assert.ErrorIs(t, err, ErrNotOwner)
+}
+
+func TestService_UpdateDatabase_NonAdminInvalidSlug(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// Create a database without slug
+	created, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, created.Slug)
+
+	// Non-admin tries to set an invalid slug (too short)
+	slug := "ab"
+	_, err = svc.UpdateDatabase(context.Background(), "user-123", false, "id:"+created.ID, UpdateRequest{
+		Slug: &slug,
+	})
+	assert.ErrorIs(t, err, ErrInvalidSlugLength)
+}
+
+func TestService_UpdateDatabase_NonAdminReservedSlug(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// Create a database without slug
+	created, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+
+	// Non-admin tries to set a reserved slug
+	slug := "admin"
+	_, err = svc.UpdateDatabase(context.Background(), "user-123", false, "id:"+created.ID, UpdateRequest{
+		Slug: &slug,
+	})
+	assert.ErrorIs(t, err, ErrReservedSlug)
+}
+
+func TestService_UpdateDatabase_AdminInvalidStatus(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	created, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+
+	// Admin tries to set an invalid status
+	invalidStatus := DatabaseStatus("invalid")
+	_, err = svc.UpdateDatabase(context.Background(), "admin", true, "id:"+created.ID, UpdateRequest{
+		Status: &invalidStatus,
+	})
+	assert.ErrorIs(t, err, ErrInvalidStatus)
+}
+
+func TestService_UpdateDatabase_AdminSetSettings(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	created, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+
+	// Admin updates settings
+	settings := &DatabaseSettings{
+		MaxDocuments:    1000,
+		MaxStorageBytes: 1024 * 1024 * 100, // 100MB
+	}
+	updated, err := svc.UpdateDatabase(context.Background(), "admin", true, "id:"+created.ID, UpdateRequest{
+		Settings: settings,
+	})
+	assert.NoError(t, err)
+	assert.Equal(t, int64(1000), updated.MaxDocuments)
+	assert.Equal(t, int64(1024*1024*100), updated.MaxStorageBytes)
+}
+
+func TestService_UpdateDatabase_UpdateDescription(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	created, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+	assert.Nil(t, created.Description)
+
+	// Update description
+	desc := "This is my application database"
+	updated, err := svc.UpdateDatabase(context.Background(), "user-123", false, "id:"+created.ID, UpdateRequest{
+		Description: &desc,
+	})
+	assert.NoError(t, err)
+	assert.NotNil(t, updated.Description)
+	assert.Equal(t, desc, *updated.Description)
+}
+
+func TestService_DeleteDatabase_NotFound(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	err := svc.DeleteDatabase(context.Background(), "user-123", false, "nonexistent")
+	assert.ErrorIs(t, err, ErrDatabaseNotFound)
+}
+
+func TestService_DeleteDatabase_NotOwner(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// User-1 creates database
+	slug := "my-app"
+	_, err := svc.CreateDatabase(context.Background(), "user-1", false, CreateRequest{
+		Slug:        &slug,
+		DisplayName: "My App",
+	})
+	require.NoError(t, err)
+
+	// User-2 tries to delete
+	err = svc.DeleteDatabase(context.Background(), "user-2", false, "my-app")
+	assert.ErrorIs(t, err, ErrNotOwner)
+}
+
+func TestService_DeleteDatabase_AdminCanDeleteOthersDatabase(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	// User creates database
+	slug := "user-app"
+	created, err := svc.CreateDatabase(context.Background(), "user-1", false, CreateRequest{
+		Slug:        &slug,
+		DisplayName: "User App",
+	})
+	require.NoError(t, err)
+
+	// Admin can delete it
+	err = svc.DeleteDatabase(context.Background(), "admin", true, "user-app")
+	assert.NoError(t, err)
+
+	// Verify status is deleting
+	db, _ := store.Get(context.Background(), created.ID)
+	assert.Equal(t, StatusDeleting, db.Status)
+}
+
+func TestService_CreateDatabase_InvalidSlugFormat(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	slug := "InvalidSlug!" // Contains uppercase and special char
+	_, err := svc.CreateDatabase(context.Background(), "user-123", false, CreateRequest{
+		Slug:        &slug,
+		DisplayName: "My App",
+	})
+	assert.ErrorIs(t, err, ErrInvalidSlugFormat)
+}
+
+func TestService_CreateDatabase_AdminInvalidSlugFormat(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	slug := "Invalid_Slug!" // Contains uppercase, underscore, and special char
+	_, err := svc.CreateDatabase(context.Background(), "admin", true, CreateRequest{
+		Slug:        &slug,
+		DisplayName: "My App",
+	})
+	assert.ErrorIs(t, err, ErrInvalidSlugFormat)
+}
+
+func TestService_CreateDatabase_AdminWithSettings(t *testing.T) {
+	store := newMockStore()
+	svc := NewService(store, DefaultServiceConfig(), nil)
+
+	settings := &DatabaseSettings{
+		MaxDocuments:    5000,
+		MaxStorageBytes: 1024 * 1024 * 500, // 500MB
+	}
+	db, err := svc.CreateDatabase(context.Background(), "admin", true, CreateRequest{
+		DisplayName: "Admin DB",
+		Settings:    settings,
+	})
+
+	assert.NoError(t, err)
+	assert.Equal(t, int64(5000), db.MaxDocuments)
+	assert.Equal(t, int64(1024*1024*500), db.MaxStorageBytes)
+}
+
+func TestService_ListDatabases_AdminNoQuota(t *testing.T) {
+	store := newMockStore()
+	config := DefaultServiceConfig()
+	config.MaxDatabasesPerUser = 0 // Unlimited
+	svc := NewService(store, config, nil)
+
+	_, err := svc.CreateDatabase(context.Background(), "user-1", false, CreateRequest{
+		DisplayName: "User 1 DB",
+	})
+	require.NoError(t, err)
+
+	// Non-admin with unlimited quota should not have quota info
+	result, err := svc.ListDatabases(context.Background(), "user-1", false, ListOptions{})
+	assert.NoError(t, err)
+	assert.Nil(t, result.Quota)
+}

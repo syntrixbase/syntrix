@@ -17,6 +17,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	indexer_config "github.com/syntrixbase/syntrix/internal/indexer/config"
 	"github.com/syntrixbase/syntrix/internal/puller"
@@ -476,6 +477,10 @@ func (s *stubIndexerService) Manager() *indexer.IndexManager {
 	return nil
 }
 
+func (s *stubIndexerService) InvalidateDatabase(ctx context.Context, database string) error {
+	return nil
+}
+
 type stubStorageFactory struct {
 	dbByName  map[string]string
 	errByName map[string]error
@@ -503,12 +508,13 @@ type fakeStorageFactory struct {
 	docStore storage.DocumentStore
 	usrStore storage.UserStore
 	revStore storage.TokenRevocationStore
+	dbStore  database.DatabaseStore
 }
 
 func (f *fakeStorageFactory) Document() storage.DocumentStore          { return f.docStore }
 func (f *fakeStorageFactory) User() storage.UserStore                  { return f.usrStore }
 func (f *fakeStorageFactory) Revocation() storage.TokenRevocationStore { return f.revStore }
-func (f *fakeStorageFactory) Database() database.DatabaseStore         { return nil }
+func (f *fakeStorageFactory) Database() database.DatabaseStore         { return f.dbStore }
 func (f *fakeStorageFactory) GetMongoClient(name string) (*mongo.Client, string, error) {
 	return nil, "", nil
 }
@@ -1452,4 +1458,387 @@ func TestManager_ensureAdminUser_CreatesUserWithAdminRole(t *testing.T) {
 	// Verify password is hashed (not stored as plain text)
 	assert.NotEqual(t, "testpassword123", createdUser.PasswordHash)
 	assert.NotEmpty(t, createdUser.PasswordHash)
+}
+
+// fakeDatabaseStore is a mock implementation of database.DatabaseStore for testing
+type fakeDatabaseStore struct {
+	databases map[string]*database.Database
+}
+
+func newFakeDatabaseStore() *fakeDatabaseStore {
+	return &fakeDatabaseStore{
+		databases: make(map[string]*database.Database),
+	}
+}
+
+func (f *fakeDatabaseStore) Create(ctx context.Context, db *database.Database) error {
+	f.databases[db.ID] = db
+	return nil
+}
+
+func (f *fakeDatabaseStore) Get(ctx context.Context, id string) (*database.Database, error) {
+	if db, ok := f.databases[id]; ok {
+		return db, nil
+	}
+	return nil, database.ErrDatabaseNotFound
+}
+
+func (f *fakeDatabaseStore) GetBySlug(ctx context.Context, slug string) (*database.Database, error) {
+	for _, db := range f.databases {
+		if db.Slug != nil && *db.Slug == slug {
+			return db, nil
+		}
+	}
+	return nil, database.ErrDatabaseNotFound
+}
+
+func (f *fakeDatabaseStore) List(ctx context.Context, opts database.ListOptions) ([]*database.Database, int, error) {
+	var result []*database.Database
+	for _, db := range f.databases {
+		result = append(result, db)
+	}
+	return result, len(result), nil
+}
+
+func (f *fakeDatabaseStore) Update(ctx context.Context, db *database.Database) error {
+	if _, ok := f.databases[db.ID]; !ok {
+		return database.ErrDatabaseNotFound
+	}
+	f.databases[db.ID] = db
+	return nil
+}
+
+func (f *fakeDatabaseStore) Delete(ctx context.Context, id string) error {
+	if _, ok := f.databases[id]; !ok {
+		return database.ErrDatabaseNotFound
+	}
+	delete(f.databases, id)
+	return nil
+}
+
+func (f *fakeDatabaseStore) CountByOwner(ctx context.Context, ownerID string) (int, error) {
+	count := 0
+	for _, db := range f.databases {
+		if db.OwnerID == ownerID {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (f *fakeDatabaseStore) Exists(ctx context.Context, id string) (bool, error) {
+	_, ok := f.databases[id]
+	return ok, nil
+}
+
+func (f *fakeDatabaseStore) Close(ctx context.Context) error {
+	return nil
+}
+
+func TestManager_initDatabaseService_WithDatabaseStore(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	fakeDbStore := newFakeDatabaseStore()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+			dbStore:  fakeDbStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.MaxDatabasesPerUser = 10
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	// Initialize storage factory first
+	_, err := mgr.getStorageFactory(context.Background())
+	assert.NoError(t, err)
+
+	// Call initDatabaseService
+	err = mgr.initDatabaseService(context.Background())
+	assert.NoError(t, err)
+
+	// Verify database service was initialized
+	assert.NotNil(t, mgr.databaseService)
+}
+
+func TestManager_initDatabaseService_WithGatewayServer(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDocStore := &fakeDocumentStore{}
+	fakeAuth := &fakeAuthStore{}
+	fakeDbStore := newFakeDatabaseStore()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: fakeDocStore,
+			usrStore: fakeAuth,
+			revStore: fakeAuth,
+			dbStore:  fakeDbStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.MaxDatabasesPerUser = 5
+	cfg.Identity.AuthZ.RulesPath = ""
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	// Initialize storage factory first
+	_, err := mgr.getStorageFactory(context.Background())
+	assert.NoError(t, err)
+
+	// Create a mock gateway server - simulate having gateway already initialized
+	// We'll use the real gateway.NewServer but with mocks
+	mockQuery := &stubQueryService{}
+	mockAuth := &stubAuthN{}
+	mgr.gatewayServer = gateway.NewServer(mockQuery, mockAuth, nil, nil)
+
+	// Call initDatabaseService
+	err = mgr.initDatabaseService(context.Background())
+	assert.NoError(t, err)
+
+	// Verify database service was initialized
+	assert.NotNil(t, mgr.databaseService)
+	// The SetDatabaseService should have been called on the gateway server
+	// (we can't easily verify this without more complex mocking, but the coverage shows it was called)
+}
+
+func TestManager_ensureDefaultDatabase_NoAuthService(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+
+	mgr := NewManager(cfg, Options{})
+	// authService is nil
+
+	// Should skip gracefully when no auth service
+	err := mgr.ensureDefaultDatabase(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureDefaultDatabase_NoAdminUsername(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = ""
+
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	// Should skip gracefully when no admin username configured
+	err := mgr.ensureDefaultDatabase(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureDefaultDatabase_StorageFactoryError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return nil, errors.New("storage connection failed")
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	err := mgr.ensureDefaultDatabase(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "storage connection failed")
+}
+
+func TestManager_ensureDefaultDatabase_NoDatabaseStore(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	// Return a storage factory with nil database store
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: &fakeAuthStore{},
+			revStore: &fakeAuthStore{},
+			dbStore:  nil, // No database store
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	// Should skip gracefully when database store not available
+	err := mgr.ensureDefaultDatabase(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestManager_ensureDefaultDatabase_Success(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDbStore := newFakeDatabaseStore()
+	fakeUserStore := &fakeAuthStoreWithUser{
+		users: map[string]*storage.User{
+			"syntrix": {ID: "admin-user-id", Username: "syntrix"},
+		},
+	}
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: fakeUserStore,
+			revStore: fakeUserStore,
+			dbStore:  fakeDbStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Identity.Admin.Username = "syntrix"
+	mgr := NewManager(cfg, Options{RunAPI: true})
+	mgr.authService = &stubAuthN{}
+
+	err := mgr.ensureDefaultDatabase(context.Background())
+	assert.NoError(t, err)
+
+	// Verify that a default database was created
+	db, err := fakeDbStore.GetBySlug(context.Background(), "default")
+	assert.NoError(t, err)
+	assert.NotNil(t, db)
+	assert.Equal(t, "admin-user-id", db.OwnerID)
+}
+
+func TestManager_initDeletionWorker_Disabled(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Database.Deletion.Enabled = false
+
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	// Should skip gracefully when deletion worker is disabled
+	err := mgr.initDeletionWorker(context.Background())
+	assert.NoError(t, err)
+	assert.Nil(t, mgr.deletionWorker)
+}
+
+func TestManager_initDeletionWorker_StorageFactoryError(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return nil, errors.New("storage connection failed")
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.Deletion.Enabled = true
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	err := mgr.initDeletionWorker(context.Background())
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "storage connection failed")
+}
+
+func TestManager_initDeletionWorker_NoDatabaseStore(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	// Return a storage factory with nil database store
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: &fakeAuthStore{},
+			revStore: &fakeAuthStore{},
+			dbStore:  nil, // No database store
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.Deletion.Enabled = true
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	// Should skip gracefully when database store not available
+	err := mgr.initDeletionWorker(context.Background())
+	assert.NoError(t, err)
+	assert.Nil(t, mgr.deletionWorker)
+}
+
+func TestManager_initDeletionWorker_Success(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDbStore := newFakeDatabaseStore()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: &fakeAuthStore{},
+			revStore: &fakeAuthStore{},
+			dbStore:  fakeDbStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.Deletion.Enabled = true
+	cfg.Database.Deletion.Interval = 5 * time.Minute
+	cfg.Database.Deletion.BatchSize = 100
+	cfg.Database.Deletion.MaxBatchesPerCycle = 10
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	// Set up a mock indexer service (optional for deletion worker)
+	mgr.indexerService = &stubIndexerService{}
+
+	err := mgr.initDeletionWorker(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.deletionWorker)
+}
+
+func TestManager_initDeletionWorker_WithoutIndexer(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	fakeDbStore := newFakeDatabaseStore()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: &fakeAuthStore{},
+			revStore: &fakeAuthStore{},
+			dbStore:  fakeDbStore,
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	cfg.Database.Deletion.Enabled = true
+	mgr := NewManager(cfg, Options{RunQuery: true})
+
+	// No indexer service - deletion worker should still work
+	mgr.indexerService = nil
+
+	err := mgr.initDeletionWorker(context.Background())
+	assert.NoError(t, err)
+	assert.NotNil(t, mgr.deletionWorker)
+}
+
+func TestManager_initDatabaseService_NoDatabaseStore(t *testing.T) {
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+
+	// Return a storage factory with nil database store
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{
+			docStore: &fakeDocumentStore{},
+			usrStore: &fakeAuthStore{},
+			revStore: &fakeAuthStore{},
+			dbStore:  nil, // No database store
+		}, nil
+	}
+
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{RunAPI: true})
+
+	// Initialize storage factory first
+	_, err := mgr.getStorageFactory(context.Background())
+	assert.NoError(t, err)
+
+	// Should skip gracefully when database store not available
+	err = mgr.initDatabaseService(context.Background())
+	assert.NoError(t, err)
+	assert.Nil(t, mgr.databaseService)
 }
