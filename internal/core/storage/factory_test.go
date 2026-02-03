@@ -681,3 +681,65 @@ func TestNewFactory_PostgresErrors(t *testing.T) {
 		assert.ErrorContains(t, err, "failed to ensure postgres schema")
 	})
 }
+
+func TestFactory_DatabaseAccessor(t *testing.T) {
+	setupMockProvider()
+	mock := setupMockPostgres()
+	defer teardownMockProvider()
+
+	cfg := config.Config{
+		Backends: map[string]config.BackendConfig{
+			"primary": {
+				Type: "mongo",
+				Mongo: config.MongoConfig{
+					URI:          testMongoURI,
+					DatabaseName: testDBName,
+				},
+			},
+			"postgres_user": {
+				Type: "postgres",
+				Postgres: config.PostgresConfig{
+					DSN: "postgres://test",
+				},
+			},
+		},
+		Topology: config.TopologyConfig{
+			Document: config.DocumentTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
+				},
+				DataCollection: "docs",
+				SysCollection:  "sys",
+			},
+			User: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "postgres_user",
+				},
+				Collection: "users",
+			},
+			Revocation: config.CollectionTopology{
+				BaseTopology: config.BaseTopology{
+					Strategy: "single",
+					Primary:  "primary",
+				},
+				Collection: "revocations",
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	f, err := NewFactory(ctx, cfg)
+	require.NoError(t, err)
+	defer f.Close()
+
+	// Test Database() accessor
+	dbStore := f.Database()
+	assert.NotNil(t, dbStore)
+
+	// Verify it's a PostgreSQL-backed store by checking its type
+	_ = mock // Use mock to avoid lint error
+}

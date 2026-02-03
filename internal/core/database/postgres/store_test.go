@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -343,5 +344,305 @@ func TestStore_Exists_NotFound(t *testing.T) {
 	exists, err := store.Exists(context.Background(), "nonexistent")
 	assert.NoError(t, err)
 	assert.False(t, exists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStore_Close(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+	err = store.Close(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestNewStore_DefaultTableName(t *testing.T) {
+	db, _, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "")
+	assert.NotNil(t, store)
+
+	// Verify it uses "databases" as the default table name
+	s := store.(*Store)
+	assert.Equal(t, "databases", s.tableName)
+}
+
+func TestStore_Create_UniqueViolation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+
+	testDB := &database.Database{
+		ID:          "a1b2c3d4e5f67890",
+		DisplayName: "My App",
+		OwnerID:     "user-123",
+		Status:      database.StatusActive,
+	}
+
+	mock.ExpectExec(`INSERT INTO databases`).
+		WithArgs(
+			testDB.ID, nil, testDB.DisplayName, nil, testDB.OwnerID,
+			sqlmock.AnyArg(), sqlmock.AnyArg(), int64(0), int64(0), database.StatusActive,
+		).
+		WillReturnError(&uniqueViolationError{column: "id"})
+
+	err = store.Create(context.Background(), testDB)
+	assert.ErrorIs(t, err, database.ErrDatabaseExists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStore_Create_SlugViolation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+
+	slug := "my-app"
+	testDB := &database.Database{
+		ID:          "a1b2c3d4e5f67890",
+		Slug:        &slug,
+		DisplayName: "My App",
+		OwnerID:     "user-123",
+		Status:      database.StatusActive,
+	}
+
+	mock.ExpectExec(`INSERT INTO databases`).
+		WithArgs(
+			testDB.ID, testDB.Slug, testDB.DisplayName, nil, testDB.OwnerID,
+			sqlmock.AnyArg(), sqlmock.AnyArg(), int64(0), int64(0), database.StatusActive,
+		).
+		WillReturnError(&uniqueViolationError{column: "slug"})
+
+	err = store.Create(context.Background(), testDB)
+	assert.ErrorIs(t, err, database.ErrSlugExists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStore_Update_SlugViolation(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+
+	slug := "existing-slug"
+	testDB := &database.Database{
+		ID:          "a1b2c3d4e5f67890",
+		Slug:        &slug,
+		DisplayName: "My App",
+		OwnerID:     "user-123",
+		Status:      database.StatusActive,
+	}
+
+	mock.ExpectExec(`UPDATE databases SET`).
+		WithArgs(
+			testDB.ID, testDB.Slug, testDB.DisplayName, nil,
+			testDB.Status, int64(0), int64(0), sqlmock.AnyArg(),
+		).
+		WillReturnError(&uniqueViolationError{column: "slug"})
+
+	err = store.Update(context.Background(), testDB)
+	assert.ErrorIs(t, err, database.ErrSlugExists)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// uniqueViolationError simulates a PostgreSQL unique constraint violation error
+type uniqueViolationError struct {
+	column string
+}
+
+func (e *uniqueViolationError) Error() string {
+	if e.column == "slug" {
+		return "pq: duplicate key value violates unique constraint \"databases_slug_key\""
+	}
+	return "pq: duplicate key value violates unique constraint"
+}
+
+func TestContains(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		substr   string
+		expected bool
+	}{
+		{"exact match", "hello", "hello", true},
+		{"contains at start", "hello world", "hello", true},
+		{"contains at end", "hello world", "world", true},
+		{"contains in middle", "hello world here", "world", true},
+		{"not contains", "hello world", "foo", false},
+		{"empty substr", "hello", "", true},
+		{"empty string", "", "hello", false},
+		{"both empty", "", "", true},
+		{"substr longer than s", "hi", "hello", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := contains(tt.s, tt.substr)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFindSubstring(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		substr   string
+		expected bool
+	}{
+		{"exact match", "hello", "hello", true},
+		{"contains at start", "hello world", "hello", true},
+		{"contains at end", "hello world", "world", true},
+		{"contains in middle", "hello world here", "world", true},
+		{"not contains", "hello world", "foo", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := findSubstring(tt.s, tt.substr)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsUniqueViolation(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"unique constraint error", &uniqueViolationError{column: "id"}, true},
+		{"23505 error code", &pgError{code: "23505"}, true},
+		{"other error", &pgError{code: "12345"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isUniqueViolation(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestIsSlugViolation(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected bool
+	}{
+		{"nil error", nil, false},
+		{"slug violation", &uniqueViolationError{column: "slug"}, true},
+		{"id violation", &uniqueViolationError{column: "id"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isSlugViolation(tt.err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// pgError simulates a PostgreSQL error with error code
+type pgError struct {
+	code string
+}
+
+func (e *pgError) Error() string {
+	return "pq: error code " + e.code
+}
+
+func TestStore_List_LimitCapping(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+
+	// Count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery(`SELECT COUNT\(\*\)`).
+		WithArgs(nil, nil).
+		WillReturnRows(countRows)
+
+	// List query - limit should be capped to 100
+	listRows := sqlmock.NewRows([]string{
+		"id", "slug", "display_name", "description", "owner_id",
+		"created_at", "updated_at", "max_documents", "max_storage_bytes", "status",
+	})
+
+	mock.ExpectQuery(`SELECT .+ FROM databases`).
+		WithArgs(nil, nil, 100, 0). // limit capped to 100
+		WillReturnRows(listRows)
+
+	_, _, err = store.List(context.Background(), database.ListOptions{
+		Limit: 500, // exceeds max, should be capped to 100
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStore_List_DefaultLimit(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := NewStore(db, "databases")
+
+	// Count query
+	countRows := sqlmock.NewRows([]string{"count"}).AddRow(0)
+	mock.ExpectQuery(`SELECT COUNT\(\*\)`).
+		WithArgs(nil, nil).
+		WillReturnRows(countRows)
+
+	// List query - limit should default to 20
+	listRows := sqlmock.NewRows([]string{
+		"id", "slug", "display_name", "description", "owner_id",
+		"created_at", "updated_at", "max_documents", "max_storage_bytes", "status",
+	})
+
+	mock.ExpectQuery(`SELECT .+ FROM databases`).
+		WithArgs(nil, nil, 20, 0). // default limit
+		WillReturnRows(listRows)
+
+	_, _, err = store.List(context.Background(), database.ListOptions{
+		Limit: 0, // should default to 20
+	})
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestEnsureSchema(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS databases`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	err = EnsureSchema(db)
+	assert.NoError(t, err)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestEnsureSchema_Error(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	mock.ExpectExec(`CREATE TABLE IF NOT EXISTS databases`).
+		WillReturnError(errors.New("schema creation failed"))
+
+	err = EnsureSchema(db)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "schema creation failed")
 	assert.NoError(t, mock.ExpectationsWereMet())
 }

@@ -1250,3 +1250,57 @@ templates:
 		assert.Equal(t, "persist-test-progress", progress)
 	}
 }
+
+func TestService_InvalidateDatabase(t *testing.T) {
+	cfg := config.Config{
+		StorageMode: config.StorageModeMemory,
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+
+	// Insert some data
+	s := svc.(*service)
+	store := s.manager.Store().(*mem_store.Store)
+
+	// Add entries for two databases
+	err = store.Upsert("db1", "users/*", "tmpl1", "user1", []byte{0x01}, "")
+	require.NoError(t, err)
+	err = store.Upsert("db2", "posts/*", "tmpl2", "post1", []byte{0x02}, "")
+	require.NoError(t, err)
+
+	// Verify both databases have indexes
+	indexes, err := store.ListIndexes("db1")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+
+	indexes, err = store.ListIndexes("db2")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+
+	// Invalidate db1
+	err = svc.InvalidateDatabase(context.Background(), "db1")
+	require.NoError(t, err)
+
+	// Verify db1 indexes are gone (returns error for non-existent db)
+	_, err = store.ListIndexes("db1")
+	assert.Error(t, err) // db1 no longer exists
+
+	// Verify db2 indexes remain
+	indexes, err = store.ListIndexes("db2")
+	require.NoError(t, err)
+	assert.Len(t, indexes, 1)
+}
+
+func TestService_InvalidateDatabase_NonExistent(t *testing.T) {
+	cfg := config.Config{
+		StorageMode: config.StorageModeMemory,
+	}
+
+	svc, err := NewService(cfg, nil, testLogger())
+	require.NoError(t, err)
+
+	// Invalidating a non-existent database should not error
+	err = svc.InvalidateDatabase(context.Background(), "nonexistent")
+	require.NoError(t, err)
+}

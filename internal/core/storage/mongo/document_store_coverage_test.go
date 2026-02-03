@@ -396,3 +396,59 @@ func (s *stubChangeStream) Decode(v any) error {
 func (s *stubChangeStream) Err() error { return nil }
 
 func (s *stubChangeStream) Close(context.Context) error { return nil }
+
+func TestDocumentStore_DeleteByDatabase(t *testing.T) {
+	env := setupTestEnv(t)
+	store := NewDocumentStore(env.Client, env.DB, "docs", "sys", 0)
+	ctx := context.Background()
+
+	// Create documents in two different databases
+	for i := 0; i < 5; i++ {
+		doc := types.NewStoredDoc("db1", "users", "user"+string(rune('a'+i)), map[string]interface{}{
+			"name": "User " + string(rune('A'+i)),
+		})
+		err := store.Create(ctx, "db1", doc)
+		require.NoError(t, err)
+	}
+
+	for i := 0; i < 3; i++ {
+		doc := types.NewStoredDoc("db2", "posts", "post"+string(rune('a'+i)), map[string]interface{}{
+			"title": "Post " + string(rune('A'+i)),
+		})
+		err := store.Create(ctx, "db2", doc)
+		require.NoError(t, err)
+	}
+
+	t.Run("DeleteByDatabase with no limit", func(t *testing.T) {
+		deleted, err := store.DeleteByDatabase(ctx, "db1", 0)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, deleted, 5) // At least 5 docs deleted
+	})
+
+	t.Run("DeleteByDatabase with limit", func(t *testing.T) {
+		// First add more documents
+		for i := 0; i < 5; i++ {
+			doc := types.NewStoredDoc("db3", "items", "item"+string(rune('a'+i)), map[string]interface{}{
+				"name": "Item " + string(rune('A'+i)),
+			})
+			err := store.Create(ctx, "db3", doc)
+			require.NoError(t, err)
+		}
+
+		// Delete with limit
+		deleted, err := store.DeleteByDatabase(ctx, "db3", 2)
+		require.NoError(t, err)
+		assert.Equal(t, 2, deleted)
+
+		// Delete remaining
+		deleted, err = store.DeleteByDatabase(ctx, "db3", 0)
+		require.NoError(t, err)
+		assert.GreaterOrEqual(t, deleted, 3)
+	})
+
+	t.Run("DeleteByDatabase non-existent database", func(t *testing.T) {
+		deleted, err := store.DeleteByDatabase(ctx, "nonexistent", 0)
+		require.NoError(t, err)
+		assert.Equal(t, 0, deleted)
+	})
+}

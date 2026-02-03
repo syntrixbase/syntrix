@@ -511,3 +511,11 @@ func TestManager_Start_IndexerService(t *testing.T) {
 
 	// Just verify it doesn't panic - the indexer was started
 }
+
+func TestManager_DatabaseService(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	// Initially nil
+	assert.Nil(t, mgr.DatabaseService())
+}

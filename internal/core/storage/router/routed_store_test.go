@@ -228,6 +228,34 @@ func TestRoutedDocumentStore(t *testing.T) {
 		router.AssertExpectations(t)
 		store.AssertExpectations(t)
 	})
+
+	t.Run("DeleteByDatabase uses Write op", func(t *testing.T) {
+		router := new(mockDocRouter)
+		store := new(mockDocumentStore)
+
+		router.On("Select", database, types.OpWrite).Return(store, nil)
+		store.On("DeleteByDatabase", ctx, database, 100).Return(50, nil)
+
+		rs := NewRoutedDocumentStore(router)
+		deleted, err := rs.DeleteByDatabase(ctx, database, 100)
+
+		assert.NoError(t, err)
+		assert.Equal(t, 50, deleted)
+		router.AssertExpectations(t)
+		store.AssertExpectations(t)
+	})
+
+	t.Run("DeleteByDatabase router error", func(t *testing.T) {
+		router := new(mockDocRouter)
+
+		router.On("Select", database, types.OpWrite).Return(nil, assert.AnError)
+
+		rs := NewRoutedDocumentStore(router)
+		_, err := rs.DeleteByDatabase(ctx, database, 100)
+
+		assert.Error(t, err)
+		router.AssertExpectations(t)
+	})
 }
 
 // Mock User Router & Store
