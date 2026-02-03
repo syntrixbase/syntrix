@@ -12,6 +12,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
@@ -35,9 +36,10 @@ func getParsedBody(ctx context.Context) map[string]interface{} {
 }
 
 type Handler struct {
-	engine query.Service
-	auth   identity.AuthN
-	authz  identity.AuthZ
+	engine   query.Service
+	auth     identity.AuthN
+	authz    identity.AuthZ
+	database database.Service
 }
 
 func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *Handler {
@@ -50,6 +52,11 @@ func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ)
 		auth:   auth,
 		authz:  authz,
 	}
+}
+
+// SetDatabaseService sets the database service for database management operations
+func (h *Handler) SetDatabaseService(svc database.Service) {
+	h.database = svc
 }
 
 // Default body size limits
@@ -213,7 +220,22 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 		mux.HandleFunc("GET /admin/rules", withTimeout(h.adminOnly(h.handleAdminGetRules), DefaultRequestTimeout))
 		mux.HandleFunc("POST /admin/rules/push", withTimeout(maxBodySize(h.adminOnly(h.handleAdminPushRules), LargeMaxBodySize), LongRequestTimeout))
 		mux.HandleFunc("GET /admin/health", withTimeout(h.adminOnly(h.handleAdminHealth), DefaultRequestTimeout))
+
+		// Database Management - Admin API
+		mux.HandleFunc("POST /admin/databases", withTimeout(maxBodySize(h.adminOnly(h.handleAdminCreateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("GET /admin/databases", withTimeout(h.adminOnly(h.handleAdminListDatabases), LongRequestTimeout))
+		mux.HandleFunc("GET /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminGetDatabase), DefaultRequestTimeout))
+		mux.HandleFunc("PATCH /admin/databases/{identifier}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+		mux.HandleFunc("DELETE /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminDeleteDatabase), DefaultRequestTimeout))
 	}
+
+	// Database Management - User API
+	// URL format: /api/v1/databases
+	mux.HandleFunc("POST /api/v1/databases", withTimeout(maxBodySize(h.protected(h.handleCreateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("GET /api/v1/databases", withTimeout(h.protected(h.handleListDatabases), DefaultRequestTimeout))
+	mux.HandleFunc("GET /api/v1/databases/{identifier}", withTimeout(h.protected(h.handleGetDatabase), DefaultRequestTimeout))
+	mux.HandleFunc("PATCH /api/v1/databases/{identifier}", withTimeout(maxBodySize(h.protected(h.handleUpdateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("DELETE /api/v1/databases/{identifier}", withTimeout(h.protected(h.handleDeleteDatabase), DefaultRequestTimeout))
 
 	// Health Check (no auth, minimal timeout)
 	mux.HandleFunc("GET /health", withTimeout(h.handleHealth, 5*time.Second))
