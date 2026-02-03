@@ -44,6 +44,12 @@ type triggerConsumer interface {
 	Start(ctx context.Context) error
 }
 
+// deletionWorkerService defines the interface for the deletion worker
+type deletionWorkerService interface {
+	Start(ctx context.Context) error
+	Stop(ctx context.Context) error
+}
+
 type Manager struct {
 	cfg  *config.Config
 	opts Options
@@ -66,7 +72,7 @@ type Manager struct {
 
 	// Database management
 	databaseService database.Service
-	deletionWorker  *database.DeletionWorker
+	deletionWorker  deletionWorkerService
 
 	wg sync.WaitGroup
 }

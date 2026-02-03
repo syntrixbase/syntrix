@@ -519,3 +519,57 @@ func TestManager_DatabaseService(t *testing.T) {
 	// Initially nil
 	assert.Nil(t, mgr.DatabaseService())
 }
+
+// mockDeletionWorker implements deletionWorkerService for testing
+type mockDeletionWorker struct {
+	startCalled atomic.Int32
+	stopCalled  atomic.Int32
+	startErr    error
+}
+
+func (m *mockDeletionWorker) Start(ctx context.Context) error {
+	m.startCalled.Add(1)
+	return m.startErr
+}
+
+func (m *mockDeletionWorker) Stop(ctx context.Context) error {
+	m.stopCalled.Add(1)
+	return nil
+}
+
+func TestManager_Start_DeletionWorker(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	worker := &mockDeletionWorker{}
+	mgr.deletionWorker = worker
+
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.Start(bgCtx)
+
+	// Wait for deletion worker to start
+	assert.Eventually(t, func() bool {
+		return worker.startCalled.Load() >= 1
+	}, 1*time.Second, 10*time.Millisecond, "Deletion worker should be started")
+}
+
+func TestManager_Start_DeletionWorker_Error(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{})
+
+	worker := &mockDeletionWorker{startErr: errors.New("start failed")}
+	mgr.deletionWorker = worker
+
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Should not panic even if deletion worker fails
+	mgr.Start(bgCtx)
+
+	// Wait for attempt
+	assert.Eventually(t, func() bool {
+		return worker.startCalled.Load() >= 1
+	}, 1*time.Second, 10*time.Millisecond, "Deletion worker start should be attempted")
+}
