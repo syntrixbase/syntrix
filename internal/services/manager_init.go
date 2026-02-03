@@ -177,6 +177,14 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		}
 	}
 
+	// Initialize database service and deletion worker
+	// In distributed mode, deletion worker typically runs on API nodes
+	if m.opts.RunAPI || m.opts.RunDeletionWorker {
+		if err := m.initDatabaseService(ctx); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
