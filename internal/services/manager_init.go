@@ -371,8 +371,8 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 		m.authService, m.cfg.Gateway.Realtime)
 
 	// Register API routes to the unified server
-	gateway := gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
-	gateway.RegisterRoutes(server.Default().HTTPMux())
+	m.gatewayServer = gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
+	m.gatewayServer.RegisterRoutes(server.Default().HTTPMux())
 
 	return nil
 }
@@ -649,6 +649,12 @@ func (m *Manager) initDatabaseService(ctx context.Context) error {
 		MaxDatabasesPerUser: m.cfg.Database.MaxDatabasesPerUser,
 	}
 	m.databaseService = database.NewService(dbStore, svcCfg, slog.Default())
+
+	// Inject database service into gateway server if available
+	if m.gatewayServer != nil {
+		m.gatewayServer.SetDatabaseService(m.databaseService)
+	}
+
 	slog.Info("Initialized Database Service")
 
 	return nil

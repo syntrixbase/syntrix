@@ -137,6 +137,10 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 
 	// 5. Initialize Database Store (uses same postgres as user store)
 	if f.postgresDB != nil {
+		// Ensure databases table exists
+		if err := dbpostgres.EnsureSchema(f.postgresDB); err != nil {
+			return nil, fmt.Errorf("failed to ensure databases schema: %w", err)
+		}
 		f.dbStore = dbpostgres.NewStore(f.postgresDB, "databases")
 	}
 

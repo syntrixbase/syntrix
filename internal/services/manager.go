@@ -8,6 +8,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
 	"github.com/syntrixbase/syntrix/internal/indexer"
 	"github.com/syntrixbase/syntrix/internal/puller"
@@ -52,6 +53,7 @@ type Manager struct {
 	storageFactoryErr  error
 
 	authService     identity.AuthN
+	gatewayServer   *gateway.Server
 	rtServer        *realtime.Server
 	streamerService streamer.StreamerServer // local Streamer service (when RunStreamer=true)
 	streamerClient  streamer.Service        // remote Streamer client (for Gateway in distributed mode)

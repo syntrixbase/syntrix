@@ -51,8 +51,10 @@ func setupMockPostgres() sqlmock.Sqlmock {
 	}
 	// Mock successful ping
 	mock.ExpectPing()
-	// Mock EnsureSchema call (CREATE TABLE IF NOT EXISTS ...)
+	// Mock EnsureSchema call for auth_users (CREATE TABLE IF NOT EXISTS ...)
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+	// Mock EnsureSchema call for databases
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS databases").WillReturnResult(sqlmock.NewResult(0, 0))
 	return mock
 }
 
@@ -198,6 +200,7 @@ func TestNewFactory_ReadWriteSplit(t *testing.T) {
 	}
 	mock.ExpectPing()
 	mock.ExpectExec("CREATE TABLE IF NOT EXISTS auth_users").WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec("CREATE TABLE IF NOT EXISTS databases").WillReturnResult(sqlmock.NewResult(0, 0))
 
 	cfg := config.Config{
 		Backends: map[string]config.BackendConfig{
