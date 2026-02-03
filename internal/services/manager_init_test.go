@@ -246,6 +246,17 @@ func TestManager_Init_RunRealtimePath(t *testing.T) {
 	// Initialize a fresh server instance to avoid route conflicts with other tests
 	server.InitDefault(server.DefaultConfig(), nil)
 
+	// Mock storage factory to avoid real database connection
+	fakeSF := &stubStorageFactory{
+		dbByName: map[string]string{"primary": "db_primary"},
+		client:   &mongo.Client{},
+	}
+	origFactory := storageFactoryFactory
+	defer func() { storageFactoryFactory = origFactory }()
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return fakeSF, nil
+	}
+
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 

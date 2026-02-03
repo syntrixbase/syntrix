@@ -63,6 +63,11 @@ func (m *Manager) Init(ctx context.Context) error {
 		return err
 	}
 
+	// Ensure default database exists (after admin user is created)
+	if err := m.ensureDefaultDatabase(ctx); err != nil {
+		return err
+	}
+
 	// Initialize Unified Server Service
 	server.InitDefault(m.cfg.Server, nil)
 
@@ -280,6 +285,37 @@ func (m *Manager) ensureAdminUser(ctx context.Context) error {
 
 	slog.Info("Created admin user", "username", adminCfg.Username)
 	return nil
+}
+
+// ensureDefaultDatabase creates the default database if it doesn't exist.
+// The default database is owned by the system admin user.
+func (m *Manager) ensureDefaultDatabase(ctx context.Context) error {
+	// Skip if auth service is not initialized
+	if m.authService == nil {
+		return nil
+	}
+
+	// Skip if admin username is not configured
+	adminCfg := m.cfg.Identity.Admin
+	if adminCfg.Username == "" {
+		slog.Debug("Default database bootstrap skipped: no admin username configured")
+		return nil
+	}
+
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Default database bootstrap skipped: database store not available")
+		return nil
+	}
+
+	return database.EnsureDefaultDatabase(ctx, dbStore, sf.User(), database.BootstrapConfig{
+		AdminUsername: adminCfg.Username,
+	})
 }
 
 // initQueryService creates and returns a query engine service for distributed mode.
