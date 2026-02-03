@@ -65,6 +65,14 @@ func (s *RoutedDocumentStore) Delete(ctx context.Context, database string, path 
 	return store.Delete(ctx, database, path, pred)
 }
 
+func (s *RoutedDocumentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	store, err := s.router.Select(database, types.OpWrite)
+	if err != nil {
+		return 0, err
+	}
+	return store.DeleteByDatabase(ctx, database, limit)
+}
+
 func (s *RoutedDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
 	store, err := s.router.Select(database, types.OpRead)
 	if err != nil {

@@ -45,6 +45,10 @@ func (m *mockLocalService) Manager() *manager.Manager {
 	return m.mgr
 }
 
+func (m *mockLocalService) InvalidateDatabase(ctx context.Context, database string) error {
+	return nil
+}
+
 func TestNewGRPCServer(t *testing.T) {
 	mock := &mockLocalService{
 		mgr: manager.New(mem_store.New()),

@@ -391,3 +391,16 @@ func (s *service) Stats(ctx context.Context) (Stats, error) {
 func (s *service) Manager() *manager.Manager {
 	return s.manager
 }
+
+// InvalidateDatabase removes all index entries for a database.
+func (s *service) InvalidateDatabase(ctx context.Context, database string) error {
+	st := s.manager.Store()
+	if err := st.DeleteDatabase(database); err != nil {
+		s.logger.Error("failed to invalidate database indexes",
+			"database", database,
+			"error", err)
+		return fmt.Errorf("failed to delete database indexes: %w", err)
+	}
+	s.logger.Info("invalidated database indexes", "database", database)
+	return nil
+}

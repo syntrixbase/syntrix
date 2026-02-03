@@ -57,6 +57,11 @@ func (m *mockDocumentStore) Delete(ctx context.Context, database string, path st
 	return args.Error(0)
 }
 
+func (m *mockDocumentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	args := m.Called(ctx, database, limit)
+	return args.Int(0), args.Error(1)
+}
+
 func (m *mockDocumentStore) Query(ctx context.Context, database string, q model.Query) ([]*types.StoredDoc, error) {
 	args := m.Called(ctx, database, q)
 	if args.Get(0) == nil {

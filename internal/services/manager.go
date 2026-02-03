@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -23,6 +24,7 @@ type Options struct {
 	RunTriggerWorker    bool
 	RunPuller           bool
 	RunIndexer          bool
+	RunDeletionWorker   bool
 
 	// Mode specifies the deployment mode (distributed or standalone).
 	Mode services_config.DeploymentMode
@@ -61,6 +63,10 @@ type Manager struct {
 	pullerGRPC      *puller.GRPCServer
 	indexerService  indexer.LocalService
 
+	// Database management
+	databaseService database.Service
+	deletionWorker  *database.DeletionWorker
+
 	wg sync.WaitGroup
 }
 
@@ -73,4 +79,8 @@ func NewManager(cfg *config.Config, opts Options) *Manager {
 
 func (m *Manager) AuthService() identity.AuthN {
 	return m.authService
+}
+
+func (m *Manager) DatabaseService() database.Service {
+	return m.databaseService
 }

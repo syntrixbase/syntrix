@@ -54,6 +54,10 @@ type LocalService interface {
 	// This is called by the Puller subscription handler.
 	ApplyEvent(ctx context.Context, evt *ChangeEvent, progress string) error
 
+	// InvalidateDatabase removes all index entries for a database.
+	// Used when a database is being deleted to clean up index state.
+	InvalidateDatabase(ctx context.Context, database string) error
+
 	// Manager returns the underlying index manager for advanced operations.
 	Manager() *manager.Manager
 }

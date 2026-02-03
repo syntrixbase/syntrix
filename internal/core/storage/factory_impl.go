@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	_ "github.com/lib/pq"
+	"github.com/syntrixbase/syntrix/internal/core/database"
+	dbpostgres "github.com/syntrixbase/syntrix/internal/core/database/postgres"
 	"github.com/syntrixbase/syntrix/internal/core/storage/config"
 	"github.com/syntrixbase/syntrix/internal/core/storage/mongo"
 	"github.com/syntrixbase/syntrix/internal/core/storage/postgres"
@@ -51,6 +53,7 @@ type factory struct {
 	docStore   types.DocumentStore
 	usrStore   types.UserStore
 	revStore   types.TokenRevocationStore
+	dbStore    database.DatabaseStore
 	mu         sync.Mutex
 }
 
@@ -131,6 +134,12 @@ func NewFactory(ctx context.Context, cfg config.Config) (StorageFactory, error) 
 		databaseRevRouters[tID] = router.NewSingleRevocationRouter(store)
 	}
 	f.revStore = router.NewRoutedRevocationStore(router.NewDatabaseRevocationRouter(defaultRevRouter, databaseRevRouters))
+
+	// 5. Initialize Database Store (uses same postgres as user store)
+	if f.postgresDB != nil {
+		f.dbStore = dbpostgres.NewStore(f.postgresDB, "databases")
+	}
+
 	success = true
 
 	return f, nil
@@ -241,6 +250,10 @@ func (f *factory) User() types.UserStore {
 
 func (f *factory) Revocation() types.TokenRevocationStore {
 	return f.revStore
+}
+
+func (f *factory) Database() database.DatabaseStore {
+	return f.dbStore
 }
 
 func (f *factory) Close() error {

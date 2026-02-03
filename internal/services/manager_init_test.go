@@ -12,6 +12,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
@@ -337,6 +338,9 @@ func (f *fakeDocumentStore) Watch(ctx context.Context, database, collection stri
 	return nil, nil
 }
 func (f *fakeDocumentStore) Close(ctx context.Context) error { return nil }
+func (f *fakeDocumentStore) DeleteByDatabase(ctx context.Context, database string, limit int) (int, error) {
+	return 0, nil
+}
 
 type fakeAuthStore struct {
 	db           *mongo.Database
@@ -470,6 +474,7 @@ type stubStorageFactory struct {
 func (s *stubStorageFactory) Document() storage.DocumentStore          { return nil }
 func (s *stubStorageFactory) User() storage.UserStore                  { return nil }
 func (s *stubStorageFactory) Revocation() storage.TokenRevocationStore { return nil }
+func (s *stubStorageFactory) Database() database.DatabaseStore         { return nil }
 func (s *stubStorageFactory) GetMongoClient(name string) (*mongo.Client, string, error) {
 	if err := s.errByName[name]; err != nil {
 		return nil, "", err
@@ -492,6 +497,7 @@ type fakeStorageFactory struct {
 func (f *fakeStorageFactory) Document() storage.DocumentStore          { return f.docStore }
 func (f *fakeStorageFactory) User() storage.UserStore                  { return f.usrStore }
 func (f *fakeStorageFactory) Revocation() storage.TokenRevocationStore { return f.revStore }
+func (f *fakeStorageFactory) Database() database.DatabaseStore         { return nil }
 func (f *fakeStorageFactory) GetMongoClient(name string) (*mongo.Client, string, error) {
 	return nil, "", nil
 }

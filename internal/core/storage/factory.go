@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -16,6 +17,9 @@ type StorageFactory interface {
 
 	// Revocation returns the token revocation store.
 	Revocation() types.TokenRevocationStore
+
+	// Database returns the database metadata store.
+	Database() database.DatabaseStore
 
 	// GetMongoClient returns the raw MongoDB client for a given backend name.
 	// This is used by services that need direct access to the database (e.g. Puller).

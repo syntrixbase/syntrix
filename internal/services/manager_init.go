@@ -12,6 +12,7 @@ import (
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
 	streamerv1 "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/config"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
@@ -113,6 +114,11 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 
 	// Initialize trigger services with embedded NATS if configured
 	if err := m.initTriggerServicesStandalone(ctx); err != nil {
+		return err
+	}
+
+	// Initialize database service and deletion worker
+	if err := m.initDatabaseService(ctx); err != nil {
 		return err
 	}
 
@@ -563,6 +569,43 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 		}
 		m.triggerConsumer = deliverySvc
 		slog.Info("Initialized Trigger Delivery Service (distributed)")
+	}
+
+	return nil
+}
+
+// initDatabaseService initializes the database service and deletion worker.
+func (m *Manager) initDatabaseService(ctx context.Context) error {
+	sf, err := m.getStorageFactory(ctx)
+	if err != nil {
+		return err
+	}
+
+	// Get or create database store
+	dbStore := sf.Database()
+	if dbStore == nil {
+		slog.Debug("Database store not available, skipping database service initialization")
+		return nil
+	}
+
+	// Create database service
+	svcCfg := database.ServiceConfig{
+		MaxDatabasesPerUser: m.cfg.Database.MaxDatabasesPerUser,
+	}
+	m.databaseService = database.NewService(dbStore, svcCfg, slog.Default())
+	slog.Info("Initialized Database Service")
+
+	// Initialize deletion worker if enabled
+	if m.cfg.Database.Deletion.Enabled && m.opts.RunDeletionWorker {
+		workerCfg := m.cfg.Database.Deletion.ToDeletionWorkerConfig()
+		m.deletionWorker = database.NewDeletionWorker(
+			dbStore,
+			sf.Document(),
+			m.indexerService,
+			workerCfg,
+			slog.Default(),
+		)
+		slog.Info("Initialized Deletion Worker")
 	}
 
 	return nil

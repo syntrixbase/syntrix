@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	identity "github.com/syntrixbase/syntrix/internal/core/identity/config"
 	storage "github.com/syntrixbase/syntrix/internal/core/storage/config"
 	api "github.com/syntrixbase/syntrix/internal/gateway/config"
@@ -34,6 +35,7 @@ type Config struct {
 	// Components
 	Storage  storage.Config  `yaml:"storage"`
 	Identity identity.Config `yaml:"identity"`
+	Database database.Config `yaml:"database"`
 }
 
 // LoadConfig loads configuration from files and environment variables
@@ -52,6 +54,7 @@ func LoadConfig() *Config {
 		Puller:     puller.DefaultConfig(),
 		Streamer:   streamer.DefaultConfig(),
 		Indexer:    indexer.DefaultConfig(),
+		Database:   database.DefaultConfig(),
 	}
 
 	// 2. Load config.yml (overrides defaults)
