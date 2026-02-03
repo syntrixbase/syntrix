@@ -36,10 +36,11 @@ func getParsedBody(ctx context.Context) map[string]interface{} {
 }
 
 type Handler struct {
-	engine   query.Service
-	auth     identity.AuthN
-	authz    identity.AuthZ
-	database database.Service
+	engine      query.Service
+	auth        identity.AuthN
+	authz       identity.AuthZ
+	database    database.Service
+	dbValidator *DatabaseValidator
 }
 
 func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *Handler {
@@ -57,6 +58,20 @@ func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ)
 // SetDatabaseService sets the database service for database management operations
 func (h *Handler) SetDatabaseService(svc database.Service) {
 	h.database = svc
+	// Initialize database validator middleware
+	if svc != nil {
+		h.dbValidator = NewDatabaseValidator(svc)
+	}
+}
+
+// withDatabaseValidation wraps a handler with database validation middleware.
+// This validates that the database exists and is active before proceeding.
+func (h *Handler) withDatabaseValidation(next http.HandlerFunc) http.HandlerFunc {
+	if h.dbValidator == nil {
+		// No validator configured, pass through
+		return next
+	}
+	return h.dbValidator.MiddlewareFunc(next)
 }
 
 // Default body size limits
@@ -186,26 +201,27 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Document Operations (with body size limit for write operations)
 	// Note: Request ID and panic recovery are handled by the unified server middleware
 	// URL format: /api/v1/databases/{database}/documents/{path...}
-	mux.HandleFunc("GET /api/v1/databases/{database}/documents/{path...}", withTimeout(h.maybeProtected(h.authorized(h.handleGetDocument, "read")), DefaultRequestTimeout))
-	mux.HandleFunc("POST /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleCreateDocument, "create")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("PUT /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("PATCH /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handlePatchDocument, "update")), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("DELETE /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete")), DefaultMaxBodySize), DefaultRequestTimeout))
+	// Database validation middleware ensures database exists and is active
+	mux.HandleFunc("GET /api/v1/databases/{database}/documents/{path...}", withTimeout(h.withDatabaseValidation(h.maybeProtected(h.authorized(h.handleGetDocument, "read"))), DefaultRequestTimeout))
+	mux.HandleFunc("POST /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.withDatabaseValidation(h.maybeProtected(h.authorized(h.handleCreateDocument, "create"))), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PUT /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.withDatabaseValidation(h.maybeProtected(h.authorized(h.handleReplaceDocument, "update"))), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("PATCH /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.withDatabaseValidation(h.maybeProtected(h.authorized(h.handlePatchDocument, "update"))), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("DELETE /api/v1/databases/{database}/documents/{path...}", withTimeout(maxBodySize(h.withDatabaseValidation(h.maybeProtected(h.authorized(h.handleDeleteDocument, "delete"))), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Query Operations
 	// URL format: /api/v1/databases/{database}/query
-	mux.HandleFunc("POST /api/v1/databases/{database}/query", withTimeout(maxBodySize(h.protected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /api/v1/databases/{database}/query", withTimeout(maxBodySize(h.withDatabaseValidation(h.protected(h.handleQuery)), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Replication Operations (use longer timeout for potentially large data transfers)
 	// URL format: /replication/v1/databases/{database}/pull
-	mux.HandleFunc("GET /replication/v1/databases/{database}/pull", withTimeout(h.protected(h.handlePull), LongRequestTimeout))
-	mux.HandleFunc("POST /replication/v1/databases/{database}/push", withTimeout(maxBodySize(h.protected(h.handlePush), LargeMaxBodySize), LongRequestTimeout))
+	mux.HandleFunc("GET /replication/v1/databases/{database}/pull", withTimeout(h.withDatabaseValidation(h.protected(h.handlePull)), LongRequestTimeout))
+	mux.HandleFunc("POST /replication/v1/databases/{database}/push", withTimeout(maxBodySize(h.withDatabaseValidation(h.protected(h.handlePush)), LargeMaxBodySize), LongRequestTimeout))
 
 	// Trigger Internal Operations
 	// URL format: /trigger/v1/databases/{database}/get
-	mux.HandleFunc("POST /trigger/v1/databases/{database}/get", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerGet), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /trigger/v1/databases/{database}/query", withTimeout(maxBodySize(h.triggerProtected(h.handleQuery), DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /trigger/v1/databases/{database}/write", withTimeout(maxBodySize(h.triggerProtected(h.handleTriggerWrite), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/get", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleTriggerGet)), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/query", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleQuery)), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /trigger/v1/databases/{database}/write", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleTriggerWrite)), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Auth Operations
 	if h.auth != nil {
@@ -263,8 +279,8 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 		path := r.PathValue("path")
 
 		// Extract database from URL path
-		database := r.PathValue("database")
-		if database == "" {
+		databaseID := r.PathValue("database")
+		if databaseID == "" {
 			writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Database is required")
 			return
 		}
@@ -291,10 +307,28 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 			reqCtx.Auth.Claims = claimsToMap(claims)
 		}
 
+		// Owner implicit db_admin: if database owner matches user ID, add to DBAdmin list
+		if db, ok := database.FromContext(r.Context()); ok {
+			if db.OwnerID == reqCtx.Auth.UID && reqCtx.Auth.UID != "" {
+				// Check if database ID/slug is already in DBAdmin list
+				found := false
+				for _, admin := range reqCtx.Auth.DBAdmin {
+					if admin == db.ID || (db.Slug != nil && admin == *db.Slug) {
+						found = true
+						break
+					}
+				}
+				if !found {
+					// Add database ID to DBAdmin list (use ID for consistency)
+					reqCtx.Auth.DBAdmin = append(reqCtx.Auth.DBAdmin, db.ID)
+				}
+			}
+		}
+
 		// Fetch Existing Resource if needed
 		var existingRes *identity.Resource
 		if action != "create" {
-			doc, err := h.engine.GetDocument(r.Context(), database, path)
+			doc, err := h.engine.GetDocument(r.Context(), databaseID, path)
 			if err == nil {
 				data := model.Document{}
 				for k, v := range doc {
@@ -331,10 +365,10 @@ func (h *Handler) authorized(handler http.HandlerFunc, action string) http.Handl
 			// report the error with more specific context
 		}
 
-		allowed, err := h.authz.Evaluate(r.Context(), database, path, action, reqCtx, existingRes)
+		allowed, err := h.authz.Evaluate(r.Context(), databaseID, path, action, reqCtx, existingRes)
 		if err != nil {
 			slog.Warn("Authorization rule evaluation error",
-				"database", database,
+				"database", databaseID,
 				"path", path,
 				"action", action,
 				"error", err,
