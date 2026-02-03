@@ -159,6 +159,9 @@ func (s *service) CreateDatabase(ctx context.Context, userID string, isAdmin boo
 		return nil, err
 	}
 
+	// Add to cache (also clears any negative cache entries for this slug/id)
+	s.cache.addToCache(db)
+
 	s.logger.Info("Database created",
 		"id", db.ID,
 		"slug", db.Slug,
