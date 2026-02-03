@@ -228,8 +228,6 @@ func (w *DeletionWorker) processDatabase(ctx context.Context, db *Database) {
 			logger.Error("failed to invalidate indexes", "error", err)
 			// Continue with hard delete anyway - indexes will be orphaned but harmless
 		}
-	} else {
-		logger.Debug("skipping index invalidation - indexer not available")
 	}
 
 	// Phase 3: Hard delete the database metadata
