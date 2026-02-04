@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/database"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/core/storage/types"
 	"github.com/syntrixbase/syntrix/internal/indexer"
@@ -107,29 +107,34 @@ func TestManager_Shutdown_Timeout(t *testing.T) {
 	mgr.Shutdown(ctx)
 }
 
-type stubNATSProvider struct {
+type stubPubSubProvider struct {
 	closed bool
 }
 
-func (s *stubNATSProvider) Connect(ctx context.Context) (*nats.Conn, error) { return nil, nil }
-func (s *stubNATSProvider) Close() error {
+func (s *stubPubSubProvider) NewPublisher(opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	return nil, nil
+}
+func (s *stubPubSubProvider) NewConsumer(opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	return nil, nil
+}
+func (s *stubPubSubProvider) Close() error {
 	s.closed = true
 	return nil
 }
 
-func TestManager_Shutdown_PullerAndNATS(t *testing.T) {
+func TestManager_Shutdown_PullerAndPubSub(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{})
 
-	np := &stubNATSProvider{}
+	provider := &stubPubSubProvider{}
 	pullerSvc := &stubPullerService{}
-	mgr.natsProvider = np
+	mgr.pubsubProvider = provider
 	mgr.pullerService = pullerSvc
 	mgr.pullerGRPC = puller.NewGRPCServerWithInit(puller_config.GRPCConfig{MaxConnections: 10}, pullerSvc, nil)
 
 	mgr.Shutdown(context.Background())
 
-	assert.True(t, np.closed)
+	assert.True(t, provider.closed)
 	assert.Equal(t, int32(1), pullerSvc.stopCount.Load())
 }
 

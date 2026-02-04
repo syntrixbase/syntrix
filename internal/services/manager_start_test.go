@@ -573,3 +573,56 @@ func TestManager_Start_DeletionWorker_Error(t *testing.T) {
 		return worker.startCalled.Load() >= 1
 	}, 1*time.Second, 10*time.Millisecond, "Deletion worker start should be attempted")
 }
+
+// TestManager_Start_NilServices verifies that Start does not panic
+// when services are nil. This is the expected behavior after refactoring
+// to use nil checks instead of opts.RunXXX flags.
+func TestManager_Start_NilServices(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{
+		// Even with all RunXXX flags set, if services are nil, Start should not panic
+		RunTriggerEvaluator: true,
+		RunTriggerWorker:    true,
+		RunPuller:           true,
+		RunIndexer:          true,
+		RunStreamer:         true,
+		Mode:                ModeDistributed,
+	})
+
+	// All services are nil - this should not panic
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Start should complete without panic
+	assert.NotPanics(t, func() {
+		mgr.Start(bgCtx)
+	}, "Start should not panic when services are nil")
+
+	// Allow goroutines to settle
+	time.Sleep(50 * time.Millisecond)
+}
+
+// TestManager_Start_OnlyInitializedServicesStarted verifies that only
+// services that were initialized during Init are started.
+func TestManager_Start_OnlyInitializedServicesStarted(t *testing.T) {
+	cfg := config.LoadConfig()
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed})
+
+	// Only set triggerService, leave others nil
+	mockTrigger := new(MockTriggerService)
+	mockTrigger.On("Start", mock.Anything).Return(nil)
+	mgr.triggerService = mockTrigger
+
+	bgCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mgr.Start(bgCtx)
+
+	// Wait for Start to be called
+	time.Sleep(100 * time.Millisecond)
+
+	// Only triggerService should have been started
+	mockTrigger.AssertCalled(t, "Start", mock.Anything)
+
+	// Other services are nil and should not cause panic
+}

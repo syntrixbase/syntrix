@@ -10,8 +10,16 @@ import (
 )
 
 func TestNewHandler_Panic(t *testing.T) {
+	mockAuthz := new(AllowAllAuthzService)
+
+	// Test panic when auth is nil
 	assert.Panics(t, func() {
-		NewHandler(&MockQueryService{}, nil, nil)
+		NewHandler(&MockQueryService{}, nil, mockAuthz)
+	})
+
+	// Test panic when authz is nil
+	assert.Panics(t, func() {
+		NewHandler(&MockQueryService{}, new(MockAuthService), nil)
 	})
 }
 

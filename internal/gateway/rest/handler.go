@@ -47,6 +47,9 @@ func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ)
 	if auth == nil {
 		panic("AuthN service cannot be nil")
 	}
+	if authz == nil {
+		panic("AuthZ service cannot be nil")
+	}
 
 	return &Handler{
 		engine: engine,
@@ -229,26 +232,25 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /trigger/v1/databases/{database}/write", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleTriggerWrite)), DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Auth Operations
-	if h.auth != nil {
-		mux.HandleFunc("POST /auth/v1/signup", withTimeout(maxBodySize(h.handleSignUp, DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("POST /auth/v1/login", withTimeout(maxBodySize(h.handleLogin, DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("POST /auth/v1/refresh", withTimeout(maxBodySize(h.handleRefresh, DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("POST /auth/v1/logout", withTimeout(maxBodySize(h.handleLogout, DefaultMaxBodySize), DefaultRequestTimeout))
+	// Auth is guaranteed to be non-nil (panic in NewHandler if nil)
+	mux.HandleFunc("POST /auth/v1/signup", withTimeout(maxBodySize(h.handleSignUp, DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /auth/v1/login", withTimeout(maxBodySize(h.handleLogin, DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /auth/v1/refresh", withTimeout(maxBodySize(h.handleRefresh, DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /auth/v1/logout", withTimeout(maxBodySize(h.handleLogout, DefaultMaxBodySize), DefaultRequestTimeout))
 
-		// Admin Operations (use longer timeout)
-		mux.HandleFunc("GET /admin/users", withTimeout(h.adminOnly(h.handleAdminListUsers), LongRequestTimeout))
-		mux.HandleFunc("PATCH /admin/users/{id}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateUser), DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("GET /admin/rules", withTimeout(h.adminOnly(h.handleAdminGetRules), DefaultRequestTimeout))
-		mux.HandleFunc("POST /admin/rules/push", withTimeout(maxBodySize(h.adminOnly(h.handleAdminPushRules), LargeMaxBodySize), LongRequestTimeout))
-		mux.HandleFunc("GET /admin/health", withTimeout(h.adminOnly(h.handleAdminHealth), DefaultRequestTimeout))
+	// Admin Operations (use longer timeout)
+	mux.HandleFunc("GET /admin/users", withTimeout(h.adminOnly(h.handleAdminListUsers), LongRequestTimeout))
+	mux.HandleFunc("PATCH /admin/users/{id}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateUser), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("GET /admin/rules", withTimeout(h.adminOnly(h.handleAdminGetRules), DefaultRequestTimeout))
+	mux.HandleFunc("POST /admin/rules/push", withTimeout(maxBodySize(h.adminOnly(h.handleAdminPushRules), LargeMaxBodySize), LongRequestTimeout))
+	mux.HandleFunc("GET /admin/health", withTimeout(h.adminOnly(h.handleAdminHealth), DefaultRequestTimeout))
 
-		// Database Management - Admin API
-		mux.HandleFunc("POST /admin/databases", withTimeout(maxBodySize(h.adminOnly(h.handleAdminCreateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("GET /admin/databases", withTimeout(h.adminOnly(h.handleAdminListDatabases), LongRequestTimeout))
-		mux.HandleFunc("GET /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminGetDatabase), DefaultRequestTimeout))
-		mux.HandleFunc("PATCH /admin/databases/{identifier}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
-		mux.HandleFunc("DELETE /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminDeleteDatabase), DefaultRequestTimeout))
-	}
+	// Database Management - Admin API
+	mux.HandleFunc("POST /admin/databases", withTimeout(maxBodySize(h.adminOnly(h.handleAdminCreateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("GET /admin/databases", withTimeout(h.adminOnly(h.handleAdminListDatabases), LongRequestTimeout))
+	mux.HandleFunc("GET /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminGetDatabase), DefaultRequestTimeout))
+	mux.HandleFunc("PATCH /admin/databases/{identifier}", withTimeout(maxBodySize(h.adminOnly(h.handleAdminUpdateDatabase), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("DELETE /admin/databases/{identifier}", withTimeout(h.adminOnly(h.handleAdminDeleteDatabase), DefaultRequestTimeout))
 
 	// Database Management - User API
 	// URL format: /api/v1/databases
@@ -275,12 +277,8 @@ func (h *Handler) maybeProtected(handler http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *Handler) authorized(handler http.HandlerFunc, action string) http.HandlerFunc {
+	// AuthZ is guaranteed to be non-nil (panic in NewHandler if nil)
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.authz == nil {
-			handler(w, r)
-			return
-		}
-
 		path := r.PathValue("path")
 
 		// Extract database from URL path
@@ -421,9 +419,7 @@ func claimsToMap(claims *identity.Claims) map[string]interface{} {
 }
 
 func (h *Handler) triggerProtected(handler http.HandlerFunc) http.HandlerFunc {
-	if h.auth == nil {
-		return handler
-	}
+	// Auth is guaranteed to be non-nil (panic in NewHandler if nil)
 	return func(w http.ResponseWriter, r *http.Request) {
 		// First, run standard auth middleware to validate token
 		h.auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

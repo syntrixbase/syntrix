@@ -214,3 +214,106 @@ func TestMockConsumer_ChannelClosedOnCancel(t *testing.T) {
 		t.Fatal("Channel did not close in time")
 	}
 }
+
+func TestMockProvider_NewPublisher(t *testing.T) {
+	provider := NewMockProvider()
+
+	opts := pubsub.PublisherOptions{
+		StreamName:    "test-stream",
+		SubjectPrefix: "test.prefix",
+	}
+
+	pub, err := provider.NewPublisher(opts)
+	require.NoError(t, err)
+	assert.NotNil(t, pub)
+
+	// Verify opts were recorded
+	recordedOpts := provider.PublisherOpts()
+	require.Len(t, recordedOpts, 1)
+	assert.Equal(t, "test-stream", recordedOpts[0].StreamName)
+	assert.Equal(t, "test.prefix", recordedOpts[0].SubjectPrefix)
+}
+
+func TestMockProvider_NewConsumer(t *testing.T) {
+	provider := NewMockProvider()
+
+	opts := pubsub.ConsumerOptions{
+		StreamName:    "test-stream",
+		FilterSubject: "test.>",
+	}
+
+	cons, err := provider.NewConsumer(opts)
+	require.NoError(t, err)
+	assert.NotNil(t, cons)
+
+	// Verify opts were recorded
+	recordedOpts := provider.ConsumerOpts()
+	require.Len(t, recordedOpts, 1)
+	assert.Equal(t, "test-stream", recordedOpts[0].StreamName)
+	assert.Equal(t, "test.>", recordedOpts[0].FilterSubject)
+}
+
+func TestMockProvider_PublisherError(t *testing.T) {
+	provider := NewMockProvider()
+	expectedErr := errors.New("publisher creation failed")
+	provider.SetPublisherError(expectedErr)
+
+	_, err := provider.NewPublisher(pubsub.PublisherOptions{})
+	assert.Equal(t, expectedErr, err)
+}
+
+func TestMockProvider_ConsumerError(t *testing.T) {
+	provider := NewMockProvider()
+	expectedErr := errors.New("consumer creation failed")
+	provider.SetConsumerError(expectedErr)
+
+	_, err := provider.NewConsumer(pubsub.ConsumerOptions{})
+	assert.Equal(t, expectedErr, err)
+}
+
+func TestMockProvider_Close(t *testing.T) {
+	provider := NewMockProvider()
+	assert.False(t, provider.IsClosed())
+
+	err := provider.Close()
+	require.NoError(t, err)
+	assert.True(t, provider.IsClosed())
+}
+
+func TestMockProvider_CloseError(t *testing.T) {
+	provider := NewMockProvider()
+	expectedErr := errors.New("close failed")
+	provider.SetCloseError(expectedErr)
+
+	err := provider.Close()
+	assert.Equal(t, expectedErr, err)
+	assert.True(t, provider.IsClosed())
+}
+
+func TestMockProvider_SetPublisher(t *testing.T) {
+	provider := NewMockProvider()
+	customPub := NewMockPublisher()
+	customPub.Publish(context.Background(), "preset", []byte("data"))
+
+	provider.SetPublisher(customPub)
+
+	pub, err := provider.NewPublisher(pubsub.PublisherOptions{})
+	require.NoError(t, err)
+
+	// Verify it's the custom publisher
+	mockPub := pub.(*MockPublisher)
+	msgs := mockPub.Messages()
+	require.Len(t, msgs, 1)
+	assert.Equal(t, "preset", msgs[0].Subject)
+}
+
+func TestMockProvider_SetConsumer(t *testing.T) {
+	provider := NewMockProvider()
+	customCons := NewMockConsumer()
+
+	provider.SetConsumer(customCons)
+
+	cons, err := provider.NewConsumer(pubsub.ConsumerOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, customCons, cons)
+}

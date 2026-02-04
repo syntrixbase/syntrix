@@ -284,3 +284,110 @@ func (c *MockConsumer) SetError(err error) {
 	defer c.mu.Unlock()
 	c.err = err
 }
+
+// MockProvider is a mock implementation of pubsub.Provider.
+type MockProvider struct {
+	mu            sync.Mutex
+	publisher     pubsub.Publisher
+	consumer      pubsub.Consumer
+	publisherErr  error
+	consumerErr   error
+	closeErr      error
+	closed        bool
+	publisherOpts []pubsub.PublisherOptions
+	consumerOpts  []pubsub.ConsumerOptions
+}
+
+// NewMockProvider creates a new MockProvider with default mock publisher and consumer.
+func NewMockProvider() *MockProvider {
+	return &MockProvider{
+		publisher: NewMockPublisher(),
+		consumer:  NewMockConsumer(),
+	}
+}
+
+// NewPublisher returns the configured publisher or error.
+func (p *MockProvider) NewPublisher(opts pubsub.PublisherOptions) (pubsub.Publisher, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.publisherOpts = append(p.publisherOpts, opts)
+	if p.publisherErr != nil {
+		return nil, p.publisherErr
+	}
+	return p.publisher, nil
+}
+
+// NewConsumer returns the configured consumer or error.
+func (p *MockProvider) NewConsumer(opts pubsub.ConsumerOptions) (pubsub.Consumer, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.consumerOpts = append(p.consumerOpts, opts)
+	if p.consumerErr != nil {
+		return nil, p.consumerErr
+	}
+	return p.consumer, nil
+}
+
+// Close marks the provider as closed.
+func (p *MockProvider) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closed = true
+	return p.closeErr
+}
+
+// SetPublisher sets the publisher to return.
+func (p *MockProvider) SetPublisher(pub pubsub.Publisher) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.publisher = pub
+}
+
+// SetConsumer sets the consumer to return.
+func (p *MockProvider) SetConsumer(cons pubsub.Consumer) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.consumer = cons
+}
+
+// SetPublisherError sets an error to return from NewPublisher.
+func (p *MockProvider) SetPublisherError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.publisherErr = err
+}
+
+// SetConsumerError sets an error to return from NewConsumer.
+func (p *MockProvider) SetConsumerError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.consumerErr = err
+}
+
+// SetCloseError sets an error to return from Close.
+func (p *MockProvider) SetCloseError(err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closeErr = err
+}
+
+// IsClosed returns whether Close was called.
+func (p *MockProvider) IsClosed() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.closed
+}
+
+// PublisherOpts returns all options passed to NewPublisher.
+func (p *MockProvider) PublisherOpts() []pubsub.PublisherOptions {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]pubsub.PublisherOptions(nil), p.publisherOpts...)
+}
+
+// ConsumerOpts returns all options passed to NewConsumer.
+func (p *MockProvider) ConsumerOpts() []pubsub.ConsumerOptions {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]pubsub.ConsumerOptions(nil), p.consumerOpts...)
+}
