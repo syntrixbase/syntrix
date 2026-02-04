@@ -168,3 +168,38 @@ func TestServer_Stop_ContextTimeout(t *testing.T) {
 	_ = srv.Stop(stopCtx)
 	cancel()
 }
+
+func TestServer_AuthRateLimiter(t *testing.T) {
+	t.Run("Returns nil when no auth rate limiter configured", func(t *testing.T) {
+		cfg := Config{
+			Host:     "localhost",
+			HTTPPort: 0,
+			GRPCPort: 0,
+		}
+		srv := New(cfg, nil).(*serverImpl)
+		require.NotNil(t, srv)
+
+		limiter := srv.AuthRateLimiter()
+		assert.Nil(t, limiter)
+	})
+
+	t.Run("Returns auth rate limiter when rate limiting is enabled", func(t *testing.T) {
+		cfg := Config{
+			Host:     "localhost",
+			HTTPPort: 0,
+			GRPCPort: 0,
+			RateLimit: RateLimitConfig{
+				Enabled:      true,
+				Requests:     100,
+				Window:       time.Minute,
+				AuthRequests: 5,
+				AuthWindow:   time.Minute,
+			},
+		}
+		srv := New(cfg, nil).(*serverImpl)
+		require.NotNil(t, srv)
+
+		limiter := srv.AuthRateLimiter()
+		assert.NotNil(t, limiter)
+	})
+}

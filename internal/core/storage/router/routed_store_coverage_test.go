@@ -217,4 +217,14 @@ func TestRoutedRevocationStore_Coverage(t *testing.T) {
 
 		assert.ErrorIs(t, err, errSelect)
 	})
+
+	t.Run("RevokeTokenIfNotRevoked Select Error", func(t *testing.T) {
+		router := new(mockRevRouter)
+		router.On("Select", database, types.OpWrite).Return(nil, errSelect)
+
+		rs := NewRoutedRevocationStore(router)
+		err := rs.RevokeTokenIfNotRevoked(ctx, "jti", time.Now(), time.Minute)
+
+		assert.ErrorIs(t, err, errSelect)
+	})
 }

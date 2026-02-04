@@ -2,9 +2,11 @@ package rest
 
 import (
 	"bytes"
+	"errors"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -336,34 +338,73 @@ func TestTranslateValidationError(t *testing.T) {
 		MaxLen      string `validate:"max=5"`
 		AlphaNum    string `validate:"alphanum"`
 		Email       string `validate:"email"`
-		GreaterThan int    `validate:"gt=5"`
-		LessThan    int    `validate:"lt=10"`
+		URL         string `validate:"url"`
+		GreaterThan int    `validate:"gte=5"`
+		LessThan    int    `validate:"lte=10"`
+		GT          int    `validate:"gt=5"`
+		LT          int    `validate:"lt=10"`
 		OneOf       string `validate:"oneof=a b c"`
 	}
 
 	tests := []struct {
 		name        string
 		input       testStruct
-		fieldName   string
 		wantContain string
 	}{
 		{
 			name:        "required field",
 			input:       testStruct{},
-			fieldName:   "required",
 			wantContain: "required",
 		},
 		{
 			name:        "min length",
 			input:       testStruct{Required: "x", MinLen: "ab"},
-			fieldName:   "minlen",
 			wantContain: "at least 3",
 		},
 		{
 			name:        "max length",
 			input:       testStruct{Required: "x", MaxLen: "toolong"},
-			fieldName:   "maxlen",
 			wantContain: "at most 5",
+		},
+		{
+			name:        "alphanum",
+			input:       testStruct{Required: "x", AlphaNum: "abc@!#"},
+			wantContain: "letters and numbers",
+		},
+		{
+			name:        "email",
+			input:       testStruct{Required: "x", Email: "notanemail"},
+			wantContain: "valid email",
+		},
+		{
+			name:        "url",
+			input:       testStruct{Required: "x", URL: "notaurl"},
+			wantContain: "valid URL",
+		},
+		{
+			name:        "gte",
+			input:       testStruct{Required: "x", GreaterThan: 3},
+			wantContain: "greater than or equal to",
+		},
+		{
+			name:        "lte",
+			input:       testStruct{Required: "x", LessThan: 15},
+			wantContain: "less than or equal to",
+		},
+		{
+			name:        "gt",
+			input:       testStruct{Required: "x", GT: 3},
+			wantContain: "greater than",
+		},
+		{
+			name:        "lt",
+			input:       testStruct{Required: "x", LT: 15},
+			wantContain: "less than",
+		},
+		{
+			name:        "oneof",
+			input:       testStruct{Required: "x", OneOf: "invalid"},
+			wantContain: "one of",
 		},
 	}
 
@@ -376,5 +417,28 @@ func TestTranslateValidationError(t *testing.T) {
 			}
 			assert.Contains(t, err.Error(), tt.wantContain)
 		})
+	}
+}
+
+func TestTranslateValidationError_UnknownTag(t *testing.T) {
+	// Test the default case - use a custom validator with unknown tag
+	v := validator.New()
+	_ = v.RegisterValidation("customtag", func(fl validator.FieldLevel) bool {
+		return false
+	})
+
+	type customStruct struct {
+		Field string `validate:"customtag"`
+	}
+
+	err := v.Struct(&customStruct{Field: "test"})
+	require.Error(t, err)
+
+	var ve validator.ValidationErrors
+	require.True(t, errors.As(err, &ve))
+
+	for _, fe := range ve {
+		msg := translateValidationError(fe)
+		assert.Contains(t, msg, "Failed validation")
 	}
 }

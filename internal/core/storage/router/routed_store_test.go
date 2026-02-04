@@ -569,6 +569,21 @@ func TestRoutedRevocationStore(t *testing.T) {
 		// store.AssertExpectations(t)
 	})
 
+	t.Run("RevokeTokenIfNotRevoked uses Write op", func(t *testing.T) {
+		router := new(mockRevRouter)
+		store := new(mockRevStoreImpl)
+
+		router.On("Select", database, types.OpWrite).Return(store, nil)
+		store.On("RevokeTokenIfNotRevoked", ctx, "jti", mock.Anything, time.Minute).Return(nil)
+
+		rs := NewRoutedRevocationStore(router)
+		err := rs.RevokeTokenIfNotRevoked(ctx, "jti", time.Now(), time.Minute)
+
+		assert.NoError(t, err)
+		router.AssertExpectations(t)
+		store.AssertExpectations(t)
+	})
+
 	t.Run("Close does nothing", func(t *testing.T) {
 		router := new(mockRevRouter)
 		rs := NewRoutedRevocationStore(router)
