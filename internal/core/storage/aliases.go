@@ -39,6 +39,7 @@ const (
 )
 
 var (
-	ErrUserNotFound = types.ErrUserNotFound
-	ErrUserExists   = types.ErrUserExists
+	ErrUserNotFound        = types.ErrUserNotFound
+	ErrUserExists          = types.ErrUserExists
+	ErrTokenAlreadyRevoked = types.ErrTokenAlreadyRevoked
 )

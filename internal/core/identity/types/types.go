@@ -5,19 +5,22 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/ctxkeys"
 )
 
 // ContextKey is used for storing identity data in the request context.
-type ContextKey string
+// Deprecated: Use ctxkeys.Key directly for new code.
+type ContextKey = ctxkeys.Key
 
 // Context keys shared with authentication middleware.
+// These are aliases to the unified ctxkeys package for backward compatibility.
 const (
 	ContextKeyUser     ContextKey = "user"
-	ContextKeyUserID   ContextKey = "user_id"
-	ContextKeyUsername ContextKey = "username"
-	ContextKeyRoles    ContextKey = "roles"
-	ContextKeyClaims   ContextKey = "claims"
-	ContextKeyDBAdmin  ContextKey = "db_admin"
+	ContextKeyUserID   ContextKey = ctxkeys.KeyUserID
+	ContextKeyUsername ContextKey = ctxkeys.KeyUsername
+	ContextKeyRoles    ContextKey = ctxkeys.KeyRoles
+	ContextKeyClaims   ContextKey = ctxkeys.KeyClaims
+	ContextKeyDBAdmin  ContextKey = ctxkeys.KeyDBAdmin
 )
 
 // Claims represents JWT claims returned by token validation.
@@ -39,19 +42,19 @@ type TokenPair struct {
 
 // SignupRequest represents the signup payload.
 type SignupRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" validate:"required,min=3,max=128"`
+	Password string `json:"password" validate:"required,min=8"`
 }
 
 // LoginRequest represents the login payload.
 type LoginRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Username string `json:"username" validate:"required,min=1,max=128"`
+	Password string `json:"password" validate:"required,min=1"`
 }
 
 // RefreshRequest represents the refresh payload.
 type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token" validate:"required"`
 }
 
 // RuleSet defines authorization rules.

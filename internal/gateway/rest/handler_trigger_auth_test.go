@@ -70,6 +70,9 @@ func (m *MockAuthStorage) EnsureIndexes(ctx context.Context) error {
 func (m *MockAuthStorage) Close(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
+func (m *MockAuthStorage) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return m.Called(ctx, jti, expiresAt, gracePeriod).Error(0)
+}
 func TestTriggerAuth(t *testing.T) {
 	// Setup Auth Service
 	mockStorage := new(MockAuthStorage)

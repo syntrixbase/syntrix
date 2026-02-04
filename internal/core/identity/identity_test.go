@@ -97,6 +97,11 @@ func (m *MockTokenRevocationStore) Close(ctx context.Context) error {
 	return args.Error(0)
 }
 
+func (m *MockTokenRevocationStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	args := m.Called(ctx, jti, expiresAt, gracePeriod)
+	return args.Error(0)
+}
+
 // MockQueryService
 type MockQueryService struct {
 	mock.Mock

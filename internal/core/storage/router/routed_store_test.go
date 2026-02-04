@@ -495,6 +495,9 @@ func (m *mockRevStoreImpl) IsRevoked(ctx context.Context, jti string, gracePerio
 	args := m.Called(ctx, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
+func (m *mockRevStoreImpl) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return m.Called(ctx, jti, expiresAt, gracePeriod).Error(0)
+}
 func (m *mockRevStoreImpl) EnsureIndexes(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }
@@ -564,6 +567,21 @@ func TestRoutedRevocationStore(t *testing.T) {
 		assert.NoError(t, err)
 		// router.AssertExpectations(t)
 		// store.AssertExpectations(t)
+	})
+
+	t.Run("RevokeTokenIfNotRevoked uses Write op", func(t *testing.T) {
+		router := new(mockRevRouter)
+		store := new(mockRevStoreImpl)
+
+		router.On("Select", database, types.OpWrite).Return(store, nil)
+		store.On("RevokeTokenIfNotRevoked", ctx, "jti", mock.Anything, time.Minute).Return(nil)
+
+		rs := NewRoutedRevocationStore(router)
+		err := rs.RevokeTokenIfNotRevoked(ctx, "jti", time.Now(), time.Minute)
+
+		assert.NoError(t, err)
+		router.AssertExpectations(t)
+		store.AssertExpectations(t)
 	})
 
 	t.Run("Close does nothing", func(t *testing.T) {

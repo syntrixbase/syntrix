@@ -22,7 +22,8 @@ type serverImpl struct {
 	httpServer *http.Server
 
 	// Rate Limiting
-	rateLimiter ratelimit.Limiter
+	rateLimiter     ratelimit.Limiter // General rate limiter
+	authRateLimiter ratelimit.Limiter // Stricter auth-specific rate limiter
 
 	// gRPC State
 	grpcServer *grpc.Server
@@ -45,12 +46,23 @@ func New(cfg Config, logger *slog.Logger) Service {
 		httpMux: http.NewServeMux(),
 	}
 
-	// Initialize rate limiter if enabled
+	// Initialize rate limiters if enabled
 	if cfg.RateLimit.Enabled {
+		// General rate limiter for all endpoints
 		s.rateLimiter = ratelimit.NewMemoryLimiter(ratelimit.Config{
 			Enabled:  cfg.RateLimit.Enabled,
 			Requests: cfg.RateLimit.Requests,
 			Window:   cfg.RateLimit.Window,
+		})
+		// Stricter rate limiter for auth endpoints
+		authWindow := cfg.RateLimit.AuthWindow
+		if authWindow == 0 {
+			authWindow = cfg.RateLimit.Window
+		}
+		s.authRateLimiter = ratelimit.NewMemoryLimiter(ratelimit.Config{
+			Enabled:  cfg.RateLimit.Enabled,
+			Requests: cfg.RateLimit.AuthRequests,
+			Window:   authWindow,
 		})
 	}
 
@@ -143,9 +155,14 @@ func (s *serverImpl) Stop(ctx context.Context) error {
 	wg.Wait()
 	close(errChan)
 
-	// Stop rate limiter cleanup goroutine
+	// Stop rate limiter cleanup goroutines
 	if s.rateLimiter != nil {
 		if stoppable, ok := s.rateLimiter.(ratelimit.Stoppable); ok {
+			stoppable.Stop()
+		}
+	}
+	if s.authRateLimiter != nil {
+		if stoppable, ok := s.authRateLimiter.(ratelimit.Stoppable); ok {
 			stoppable.Stop()
 		}
 	}
@@ -171,4 +188,8 @@ func (s *serverImpl) RegisterGRPCService(desc *grpc.ServiceDesc, impl interface{
 
 func (s *serverImpl) HTTPMux() *http.ServeMux {
 	return s.httpMux
+}
+
+func (s *serverImpl) AuthRateLimiter() ratelimit.Limiter {
+	return s.authRateLimiter
 }

@@ -263,11 +263,10 @@ func TestRefresh_TableDriven(t *testing.T) {
 				return resp.RefreshToken
 			},
 			mockSetup: func(m *MockStorage) {
-				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
+				m.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{
 					ID: "user-id", Username: "refreshuser", Disabled: false,
 				}, nil)
-				m.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything).Return(nil)
 			},
 			expectError: false,
 		},

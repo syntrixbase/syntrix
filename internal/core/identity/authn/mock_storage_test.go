@@ -74,3 +74,8 @@ func (m *MockStorage) Close(ctx context.Context) error {
 	args := m.Called(ctx)
 	return args.Error(0)
 }
+
+func (m *MockStorage) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	args := m.Called(ctx, jti, expiresAt, gracePeriod)
+	return args.Error(0)
+}

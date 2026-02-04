@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"google.golang.org/grpc"
 )
 
@@ -28,4 +29,8 @@ type Service interface {
 	// HTTPMux returns the underlying HTTP ServeMux for direct route registration.
 	// This must be called BEFORE Start().
 	HTTPMux() *http.ServeMux
+
+	// AuthRateLimiter returns the stricter rate limiter for auth endpoints.
+	// Returns nil if rate limiting is disabled.
+	AuthRateLimiter() ratelimit.Limiter
 }

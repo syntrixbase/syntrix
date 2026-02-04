@@ -1,14 +1,13 @@
 package database
 
-import "context"
+import (
+	"context"
 
-// contextKey is the type for context keys used by this package
-type contextKey string
-
-const (
-	// contextKeyDatabase is the key for storing the resolved database in context
-	contextKeyDatabase contextKey = "database"
+	"github.com/syntrixbase/syntrix/internal/ctxkeys"
 )
+
+// contextKeyDatabase uses the unified context key for database
+var contextKeyDatabase = ctxkeys.KeyDatabase
 
 // WithDatabase returns a new context with the database attached
 func WithDatabase(ctx context.Context, db *Database) context.Context {
@@ -22,12 +21,14 @@ func FromContext(ctx context.Context) (*Database, bool) {
 	return db, ok
 }
 
-// MustFromContext retrieves the database from the context
-// Panics if the database is not found
+// MustFromContext retrieves the database from the context.
+// IMPORTANT: Only call this after DatabaseValidationMiddleware has run.
+// If called without middleware, the request handler should have checked FromContext first.
+// Panics if the database is not found - this indicates a programming error.
 func MustFromContext(ctx context.Context) *Database {
 	db, ok := FromContext(ctx)
 	if !ok {
-		panic("database not found in context")
+		panic("database not found in context: middleware not applied or programming error")
 	}
 	return db
 }

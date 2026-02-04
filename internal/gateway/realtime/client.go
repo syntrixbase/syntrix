@@ -14,6 +14,7 @@ import (
 
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
+	"github.com/syntrixbase/syntrix/internal/ctxkeys"
 	api_config "github.com/syntrixbase/syntrix/internal/gateway/config"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -32,10 +33,8 @@ const (
 	maxMessageSize = 64 * 1024
 )
 
-// Context key for database (used internally in realtime package)
-type contextKey string
-
-const contextKeyDatabase contextKey = "database"
+// contextKeyDatabase uses the unified context key for database
+var contextKeyDatabase = ctxkeys.KeyDatabase
 
 // Send pings to peer with this period. Must be less than pongWait.
 var pingPeriod = (pongWait * 9) / 10

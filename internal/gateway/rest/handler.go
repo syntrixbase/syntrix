@@ -8,23 +8,22 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/ctxkeys"
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
 
-// Context keys for request-scoped values
-type contextKey string
-
-const (
-	contextKeyParsedBody contextKey = "parsed_body"
-)
+// contextKeyParsedBody uses the unified context key for parsed body
+var contextKeyParsedBody = ctxkeys.KeyParsedBody
 
 // getParsedBody retrieves the cached parsed body from the context.
 // Returns nil if no cached body exists.
@@ -36,34 +35,93 @@ func getParsedBody(ctx context.Context) map[string]interface{} {
 }
 
 type Handler struct {
-	engine      query.Service
-	auth        identity.AuthN
-	authz       identity.AuthZ
-	database    database.Service
-	dbValidator *DatabaseValidator
+	engine          query.Service
+	auth            identity.AuthN
+	authz           identity.AuthZ
+	database        database.Service
+	dbValidator     *DatabaseValidator
+	authRateLimiter ratelimit.Limiter // Stricter rate limiter for auth endpoints
+	authRLWindow    time.Duration     // Window for auth rate limiter (for Retry-After header)
 }
 
-func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ) *Handler {
+// HandlerOption is a function that configures a Handler.
+type HandlerOption func(*Handler)
+
+// WithDatabaseService configures the handler with a database service.
+func WithDatabaseService(svc database.Service) HandlerOption {
+	return func(h *Handler) {
+		h.database = svc
+		if svc != nil {
+			h.dbValidator = NewDatabaseValidator(svc)
+		}
+	}
+}
+
+// WithAuthRateLimiter configures the handler with a stricter rate limiter for auth endpoints.
+func WithAuthRateLimiter(limiter ratelimit.Limiter, window time.Duration) HandlerOption {
+	return func(h *Handler) {
+		h.authRateLimiter = limiter
+		h.authRLWindow = window
+	}
+}
+
+// NewHandler creates a new Handler with required dependencies and optional configurations.
+func NewHandler(engine query.Service, auth identity.AuthN, authz identity.AuthZ, opts ...HandlerOption) (*Handler, error) {
 	if auth == nil {
-		panic("AuthN service cannot be nil")
+		return nil, errors.New("authn service cannot be nil")
 	}
 	if authz == nil {
-		panic("AuthZ service cannot be nil")
+		return nil, errors.New("authz service cannot be nil")
 	}
 
-	return &Handler{
+	h := &Handler{
 		engine: engine,
 		auth:   auth,
 		authz:  authz,
 	}
+
+	for _, opt := range opts {
+		opt(h)
+	}
+
+	return h, nil
 }
 
-// SetDatabaseService sets the database service for database management operations
+// SetDatabaseService sets the database service for database management operations.
+// Deprecated: Use WithDatabaseService option in NewHandler instead.
+// This method is kept for backward compatibility.
 func (h *Handler) SetDatabaseService(svc database.Service) {
 	h.database = svc
 	// Initialize database validator middleware
 	if svc != nil {
 		h.dbValidator = NewDatabaseValidator(svc)
+	}
+}
+
+// SetAuthRateLimiter sets the stricter rate limiter for auth endpoints.
+// Deprecated: Use WithAuthRateLimiter option in NewHandler instead.
+// This method is kept for backward compatibility.
+func (h *Handler) SetAuthRateLimiter(limiter ratelimit.Limiter, window time.Duration) {
+	h.authRateLimiter = limiter
+	h.authRLWindow = window
+}
+
+// withAuthRateLimit wraps a handler with auth-specific rate limiting.
+// Uses stricter rate limits than general endpoints (e.g., 5/min vs 100/min).
+func (h *Handler) withAuthRateLimit(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if h.authRateLimiter == nil {
+			// No auth rate limiter configured, pass through
+			next(w, r)
+			return
+		}
+		key := ratelimit.GetClientIP(r)
+		if !h.authRateLimiter.Allow(key) {
+			w.Header().Set("Retry-After", strconv.FormatInt(int64(h.authRLWindow.Seconds()), 10))
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many authentication attempts")
+			return
+		}
+		next(w, r)
 	}
 }
 
@@ -231,11 +289,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /trigger/v1/databases/{database}/query", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleQuery)), DefaultMaxBodySize), DefaultRequestTimeout))
 	mux.HandleFunc("POST /trigger/v1/databases/{database}/write", withTimeout(maxBodySize(h.withDatabaseValidation(h.triggerProtected(h.handleTriggerWrite)), DefaultMaxBodySize), DefaultRequestTimeout))
 
-	// Auth Operations
-	// Auth is guaranteed to be non-nil (panic in NewHandler if nil)
-	mux.HandleFunc("POST /auth/v1/signup", withTimeout(maxBodySize(h.handleSignUp, DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /auth/v1/login", withTimeout(maxBodySize(h.handleLogin, DefaultMaxBodySize), DefaultRequestTimeout))
-	mux.HandleFunc("POST /auth/v1/refresh", withTimeout(maxBodySize(h.handleRefresh, DefaultMaxBodySize), DefaultRequestTimeout))
+	// Auth Operations (with stricter rate limiting)
+	// Auth rate limiting is applied in addition to general rate limiting
+	mux.HandleFunc("POST /auth/v1/signup", withTimeout(maxBodySize(h.withAuthRateLimit(h.handleSignUp), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /auth/v1/login", withTimeout(maxBodySize(h.withAuthRateLimit(h.handleLogin), DefaultMaxBodySize), DefaultRequestTimeout))
+	mux.HandleFunc("POST /auth/v1/refresh", withTimeout(maxBodySize(h.withAuthRateLimit(h.handleRefresh), DefaultMaxBodySize), DefaultRequestTimeout))
 	mux.HandleFunc("POST /auth/v1/logout", withTimeout(maxBodySize(h.handleLogout, DefaultMaxBodySize), DefaultRequestTimeout))
 
 	// Admin Operations (use longer timeout)

@@ -20,6 +20,7 @@ type AuthNConfig struct {
 	AuthCodeTTL     time.Duration        `yaml:"auth_code_ttl"`
 	PrivateKeyFile  string               `yaml:"private_key_file"`
 	PasswordPolicy  PasswordPolicyConfig `yaml:"password_policy"`
+	AdminUsername   string               `yaml:"admin_username"` // Username that receives admin role on signup
 }
 
 // PasswordPolicyConfig defines password complexity requirements.
@@ -47,6 +48,7 @@ func DefaultConfig() Config {
 			RefreshTokenTTL: 7 * 24 * time.Hour,
 			AuthCodeTTL:     2 * time.Minute,
 			PrivateKeyFile:  "keys/auth_private.pem",
+			AdminUsername:   "syntrix", // Default admin username, configurable
 			PasswordPolicy: PasswordPolicyConfig{
 				MinLength:        12,
 				RequireUppercase: true,
@@ -82,6 +84,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.AuthN.PasswordPolicy.MinLength == 0 {
 		c.AuthN.PasswordPolicy.MinLength = defaults.AuthN.PasswordPolicy.MinLength
+	}
+	if c.AuthN.AdminUsername == "" {
+		c.AuthN.AdminUsername = defaults.AuthN.AdminUsername
 	}
 	if c.AuthZ.RulesPath == "" {
 		c.AuthZ.RulesPath = defaults.AuthZ.RulesPath

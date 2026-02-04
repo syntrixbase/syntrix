@@ -167,7 +167,9 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		if err := m.initStreamerService(); err != nil {
 			return err
 		}
-		m.initStreamerGRPCServer()
+		if err := m.initStreamerGRPCServer(); err != nil {
+			return err
+		}
 	}
 
 	// Initialize API Gateway - uses gRPC clients to connect to remote services
@@ -378,8 +380,18 @@ func (m *Manager) initAPIServer(queryService query.Service) error {
 	m.rtServer = realtime.NewServer(queryService, streamerSvc, m.cfg.Storage.Topology.Document.DataCollection,
 		m.authService, m.cfg.Gateway.Realtime)
 
+	// Build gateway server options
+	var gatewayOpts []gateway.ServerOption
+	if authRateLimiter := server.Default().AuthRateLimiter(); authRateLimiter != nil {
+		gatewayOpts = append(gatewayOpts, gateway.WithServerAuthRateLimiter(authRateLimiter, m.cfg.Server.RateLimit.AuthWindow))
+	}
+
 	// Register API routes to the unified server
-	m.gatewayServer = gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer)
+	m.gatewayServer, err = gateway.NewServer(queryService, m.authService, authzEngine, m.rtServer, gatewayOpts...)
+	if err != nil {
+		return fmt.Errorf("failed to create gateway server: %w", err)
+	}
+
 	m.gatewayServer.RegisterRoutes(server.Default().HTTPMux())
 
 	return nil
@@ -409,10 +421,14 @@ func (m *Manager) initStreamerService() error {
 }
 
 // initStreamerGRPCServer registers the Streamer service with the unified gRPC server.
-func (m *Manager) initStreamerGRPCServer() {
-	grpcServer := streamer.NewGRPCServer(m.streamerService)
+func (m *Manager) initStreamerGRPCServer() error {
+	grpcServer, err := streamer.NewGRPCServer(m.streamerService)
+	if err != nil {
+		return fmt.Errorf("failed to create streamer gRPC server: %w", err)
+	}
 	server.Default().RegisterGRPCService(&streamerv1.StreamerService_ServiceDesc, grpcServer)
 	slog.Info("Registered Streamer Service (gRPC)")
+	return nil
 }
 
 // initGateway initializes the API Gateway with gRPC clients for remote services.

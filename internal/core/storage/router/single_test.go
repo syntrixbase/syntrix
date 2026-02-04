@@ -88,6 +88,9 @@ func (f *fakeRevocationStore) RevokeTokenImmediate(ctx context.Context, jti stri
 func (f *fakeRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
+func (f *fakeRevocationStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return nil
+}
 func (f *fakeRevocationStore) EnsureIndexes(ctx context.Context) error { return nil }
 func (f *fakeRevocationStore) Close(ctx context.Context) error         { return nil }
 

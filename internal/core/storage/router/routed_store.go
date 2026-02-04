@@ -227,6 +227,15 @@ func (s *RoutedRevocationStore) RevokeTokenImmediate(ctx context.Context, jti st
 	return store.RevokeTokenImmediate(ctx, jti, expiresAt)
 }
 
+func (s *RoutedRevocationStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	// Global revocation - use default database for routing
+	store, err := s.router.Select("default", types.OpWrite)
+	if err != nil {
+		return err
+	}
+	return store.RevokeTokenIfNotRevoked(ctx, jti, expiresAt, gracePeriod)
+}
+
 func (s *RoutedRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	// Global revocation check - use default database for routing
 	store, err := s.router.Select("default", types.OpRead)
