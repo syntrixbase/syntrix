@@ -191,6 +191,10 @@ templates:
 			AuthZ: identity_config.AuthZConfig{
 				RulesPath: rulesDir,
 			},
+			Admin: identity_config.AdminConfig{
+				Username: "admin", // Required for default database bootstrap
+				Password: "testpassword123",
+			},
 		},
 		Indexer: indexer_config.Config{
 			TemplatePath: templatesDir,
