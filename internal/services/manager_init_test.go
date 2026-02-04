@@ -1290,7 +1290,7 @@ func TestManager_ensureAdminUser_Success(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
 	cfg.Identity.Admin.Username = "syntrix"
-	cfg.Identity.Admin.Password = "testpassword123"
+	cfg.Identity.Admin.Password = "TestPassword123!"
 
 	mgr := NewManager(cfg, Options{RunAPI: true})
 
@@ -1323,7 +1323,7 @@ func TestManager_ensureAdminUser_UserAlreadyExists(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
 	cfg.Identity.Admin.Username = "syntrix"
-	cfg.Identity.Admin.Password = "testpassword123"
+	cfg.Identity.Admin.Password = "TestPassword123!"
 
 	mgr := NewManager(cfg, Options{RunAPI: true})
 
@@ -1338,7 +1338,7 @@ func TestManager_ensureAdminUser_UserAlreadyExists(t *testing.T) {
 func TestManager_ensureAdminUser_NoAuthService(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Identity.Admin.Username = "syntrix"
-	cfg.Identity.Admin.Password = "testpassword123"
+	cfg.Identity.Admin.Password = "TestPassword123!"
 
 	mgr := NewManager(cfg, Options{})
 	// authService is nil
@@ -1351,7 +1351,7 @@ func TestManager_ensureAdminUser_NoAuthService(t *testing.T) {
 func TestManager_ensureAdminUser_NoUsername(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Identity.Admin.Username = ""
-	cfg.Identity.Admin.Password = "testpassword123"
+	cfg.Identity.Admin.Password = "TestPassword123!"
 
 	mgr := NewManager(cfg, Options{RunAPI: true})
 	mgr.authService = &stubAuthN{}
@@ -1436,7 +1436,7 @@ func TestManager_ensureAdminUser_CreatesUserWithAdminRole(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Identity.AuthN.PrivateKeyFile = filepath.Join(t.TempDir(), "auth.pem")
 	cfg.Identity.Admin.Username = "syntrix"
-	cfg.Identity.Admin.Password = "testpassword123"
+	cfg.Identity.Admin.Password = "TestPassword123!"
 
 	mgr := NewManager(cfg, Options{RunAPI: true})
 
@@ -1461,7 +1461,7 @@ func TestManager_ensureAdminUser_CreatesUserWithAdminRole(t *testing.T) {
 	assert.NotEmpty(t, createdUser.ID)
 
 	// Verify password is hashed (not stored as plain text)
-	assert.NotEqual(t, "testpassword123", createdUser.PasswordHash)
+	assert.NotEqual(t, "TestPassword123!", createdUser.PasswordHash)
 	assert.NotEmpty(t, createdUser.PasswordHash)
 }
 

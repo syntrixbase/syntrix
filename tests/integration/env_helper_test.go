@@ -101,15 +101,18 @@ func (e *ServiceEnv) GetToken(t *testing.T, uid string, role string) string {
 
 func (e *ServiceEnv) GetTokenForDatabase(t *testing.T, _, uid, role string) string {
 	// Prefix the username with testPrefix to ensure uniqueness across parallel tests
+	// Also add a timestamp suffix to handle password changes across test runs
 	prefixedUID := uid
 	if e.testPrefix != "" {
-		prefixedUID = fmt.Sprintf("%s_%s", e.testPrefix, uid)
+		prefixedUID = fmt.Sprintf("%s_%s_%d", e.testPrefix, uid, time.Now().UnixNano()%1000000)
+	} else {
+		prefixedUID = fmt.Sprintf("%s_%d", uid, time.Now().UnixNano()%1000000)
 	}
 
 	// 1. Try SignUp
 	signupBody := map[string]string{
 		"username": prefixedUID,
-		"password": "password123456",
+		"password": "TestPassword123!",
 	}
 	bodyBytes, _ := json.Marshal(signupBody)
 	resp, err := http.Post(e.APIURL+"/auth/v1/signup", "application/json", bytes.NewBuffer(bodyBytes))
@@ -130,7 +133,7 @@ func (e *ServiceEnv) GetTokenForDatabase(t *testing.T, _, uid, role string) stri
 		// Assume user exists, try Login
 		loginBody := map[string]string{
 			"username": prefixedUID,
-			"password": "password123456",
+			"password": "TestPassword123!",
 		}
 		bodyBytes, _ := json.Marshal(loginBody)
 		respLogin, err := http.Post(e.APIURL+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))
@@ -188,7 +191,7 @@ func (e *ServiceEnv) GetTokenForDatabase(t *testing.T, _, uid, role string) stri
 	// 4. Re-Login to get new token
 	loginBody := map[string]string{
 		"username": prefixedUID,
-		"password": "password123456",
+		"password": "TestPassword123!",
 	}
 	bodyBytes, _ = json.Marshal(loginBody)
 	respLogin, err := http.Post(e.APIURL+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))

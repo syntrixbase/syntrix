@@ -80,6 +80,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 
 func TestCORSMiddleware(t *testing.T) {
 	cfg := Config{EnableCORS: true}
+	cfg.ApplyDefaults() // Apply defaults to get AllowedMethods and AllowedHeaders
 	srv := New(cfg, nil).(*serverImpl)
 
 	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -88,18 +89,31 @@ func TestCORSMiddleware(t *testing.T) {
 
 	handler := srv.corsMiddleware(nextHandler)
 
-	// Test Preflight
+	// Test Preflight with Origin header
 	req := httptest.NewRequest("OPTIONS", "/", nil)
+	req.Header.Set("Origin", "https://example.com")
 	w := httptest.NewRecorder()
 
 	handler.ServeHTTP(w, req)
 
 	resp := w.Result()
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	assert.Equal(t, "https://example.com", resp.Header.Get("Access-Control-Allow-Origin"))
 	assert.Contains(t, resp.Header.Get("Access-Control-Allow-Methods"), "GET")
+	assert.Equal(t, "true", resp.Header.Get("Access-Control-Allow-Credentials"))
 
-	// Test Normal Request
+	// Test Normal Request with Origin header
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "https://example.com")
+	w = httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	resp = w.Result()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "https://example.com", resp.Header.Get("Access-Control-Allow-Origin"))
+
+	// Test Request without Origin header - should not set CORS headers
 	req = httptest.NewRequest("GET", "/", nil)
 	w = httptest.NewRecorder()
 
@@ -107,7 +121,64 @@ func TestCORSMiddleware(t *testing.T) {
 
 	resp = w.Result()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "*", resp.Header.Get("Access-Control-Allow-Origin"))
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+}
+
+func TestCORSMiddleware_AllowedOrigins(t *testing.T) {
+	cfg := Config{
+		EnableCORS:     true,
+		AllowedOrigins: []string{"https://allowed.com", "https://also-allowed.com"},
+	}
+	srv := New(cfg, nil).(*serverImpl)
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := srv.corsMiddleware(nextHandler)
+
+	// Test allowed origin
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "https://allowed.com")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	resp := w.Result()
+	assert.Equal(t, "https://allowed.com", resp.Header.Get("Access-Control-Allow-Origin"))
+
+	// Test disallowed origin - should not set CORS headers
+	req = httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Origin", "https://evil.com")
+	w = httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	resp = w.Result()
+	assert.Empty(t, resp.Header.Get("Access-Control-Allow-Origin"))
+}
+
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	srv := New(Config{}, nil).(*serverImpl)
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := srv.securityHeadersMiddleware(nextHandler)
+
+	req := httptest.NewRequest("GET", "/", nil)
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	resp := w.Result()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
+	assert.Equal(t, "DENY", resp.Header.Get("X-Frame-Options"))
+	assert.Equal(t, "1; mode=block", resp.Header.Get("X-XSS-Protection"))
+	assert.Equal(t, "strict-origin-when-cross-origin", resp.Header.Get("Referrer-Policy"))
+	assert.Equal(t, "default-src 'self'", resp.Header.Get("Content-Security-Policy"))
 }
 
 func TestWrapMiddleware(t *testing.T) {

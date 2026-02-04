@@ -8,9 +8,12 @@ import (
 	"net"
 	"net/http"
 	"runtime/debug"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -64,9 +67,14 @@ func (s *serverImpl) wrapMiddleware(h http.Handler) http.Handler {
 		s.recoveryMiddleware,
 		s.requestIDMiddleware,
 		s.loggingMiddleware,
+		s.securityHeadersMiddleware,
 	}
 	if s.cfg.EnableCORS {
 		mws = append(mws, s.corsMiddleware)
+	}
+	// Add rate limiting if enabled
+	if s.rateLimiter != nil {
+		mws = append(mws, s.rateLimitMiddleware)
 	}
 	return Chain(h, mws...)
 }
@@ -146,12 +154,71 @@ func TimeoutMiddleware(timeout time.Duration) Middleware {
 
 func (s *serverImpl) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Request-ID")
+		origin := r.Header.Get("Origin")
+
+		// Check if origin is allowed
+		allowedOrigin := ""
+		if len(s.cfg.AllowedOrigins) == 0 {
+			// No origins configured - allow all (development mode)
+			allowedOrigin = origin
+		} else {
+			for _, o := range s.cfg.AllowedOrigins {
+				if o == "*" {
+					allowedOrigin = origin
+					break
+				}
+				if o == origin {
+					allowedOrigin = origin
+					break
+				}
+			}
+		}
+
+		if allowedOrigin != "" && origin != "" {
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			if s.cfg.AllowCredentials {
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+			}
+			w.Header().Set("Access-Control-Allow-Methods", strings.Join(s.cfg.AllowedMethods, ", "))
+			w.Header().Set("Access-Control-Allow-Headers", strings.Join(s.cfg.AllowedHeaders, ", "))
+			w.Header().Set("Access-Control-Max-Age", strconv.Itoa(s.cfg.CORSMaxAge))
+		}
 
 		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// securityHeadersMiddleware adds security-related HTTP headers to all responses.
+func (s *serverImpl) securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Prevent MIME type sniffing
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// Prevent clickjacking
+		w.Header().Set("X-Frame-Options", "DENY")
+		// XSS protection (legacy browsers)
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		// Referrer policy
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		// Content Security Policy - restrict to same origin
+		w.Header().Set("Content-Security-Policy", "default-src 'self'")
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+// rateLimitMiddleware applies rate limiting based on client IP.
+func (s *serverImpl) rateLimitMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		key := ratelimit.GetClientIP(r)
+
+		if !s.rateLimiter.Allow(key) {
+			w.Header().Set("Retry-After", strconv.FormatInt(int64(s.cfg.RateLimit.Window.Seconds()), 10))
+			writeError(w, http.StatusTooManyRequests, "RATE_LIMITED", "Too many requests")
 			return
 		}
 

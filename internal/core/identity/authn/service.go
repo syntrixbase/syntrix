@@ -36,9 +36,10 @@ type Service interface {
 }
 
 type AuthService struct {
-	users        UserStore
-	revocations  TokenRevocationStore
-	tokenService *TokenService
+	users             UserStore
+	revocations       TokenRevocationStore
+	tokenService      *TokenService
+	passwordValidator *PasswordValidator
 }
 
 func NewAuthService(cfg config.AuthNConfig, users UserStore, revocations TokenRevocationStore) (Service, error) {
@@ -47,9 +48,10 @@ func NewAuthService(cfg config.AuthNConfig, users UserStore, revocations TokenRe
 		return nil, err
 	}
 	return &AuthService{
-		users:        users,
-		revocations:  revocations,
-		tokenService: tokenService,
+		users:             users,
+		revocations:       revocations,
+		tokenService:      tokenService,
+		passwordValidator: NewPasswordValidator(cfg.PasswordPolicy),
 	}, nil
 }
 
@@ -106,11 +108,10 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 		return nil, err
 	}
 
-	// Validate password strength
-	if len(req.Password) < 12 {
-		return nil, errors.New("password too short (min 12 chars)")
+	// Validate password strength using configured policy
+	if err := s.passwordValidator.Validate(req.Password); err != nil {
+		return nil, err
 	}
-	// TODO: Add complexity check and breached password check
 
 	hash, algo, err := HashPassword(req.Password)
 	if err != nil {

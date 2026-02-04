@@ -15,10 +15,20 @@ type Config struct {
 }
 
 type AuthNConfig struct {
-	AccessTokenTTL  time.Duration `yaml:"access_token_ttl"`
-	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl"`
-	AuthCodeTTL     time.Duration `yaml:"auth_code_ttl"`
-	PrivateKeyFile  string        `yaml:"private_key_file"`
+	AccessTokenTTL  time.Duration        `yaml:"access_token_ttl"`
+	RefreshTokenTTL time.Duration        `yaml:"refresh_token_ttl"`
+	AuthCodeTTL     time.Duration        `yaml:"auth_code_ttl"`
+	PrivateKeyFile  string               `yaml:"private_key_file"`
+	PasswordPolicy  PasswordPolicyConfig `yaml:"password_policy"`
+}
+
+// PasswordPolicyConfig defines password complexity requirements.
+type PasswordPolicyConfig struct {
+	MinLength        int  `yaml:"min_length"`
+	RequireUppercase bool `yaml:"require_uppercase"`
+	RequireLowercase bool `yaml:"require_lowercase"`
+	RequireDigit     bool `yaml:"require_digit"`
+	RequireSpecial   bool `yaml:"require_special"`
 }
 
 type AuthZConfig struct {
@@ -37,6 +47,13 @@ func DefaultConfig() Config {
 			RefreshTokenTTL: 7 * 24 * time.Hour,
 			AuthCodeTTL:     2 * time.Minute,
 			PrivateKeyFile:  "keys/auth_private.pem",
+			PasswordPolicy: PasswordPolicyConfig{
+				MinLength:        12,
+				RequireUppercase: true,
+				RequireLowercase: true,
+				RequireDigit:     true,
+				RequireSpecial:   true,
+			},
 		},
 		AuthZ: AuthZConfig{
 			RulesPath: "security_rules",
@@ -62,6 +79,9 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.AuthN.PrivateKeyFile == "" {
 		c.AuthN.PrivateKeyFile = defaults.AuthN.PrivateKeyFile
+	}
+	if c.AuthN.PasswordPolicy.MinLength == 0 {
+		c.AuthN.PasswordPolicy.MinLength = defaults.AuthN.PasswordPolicy.MinLength
 	}
 	if c.AuthZ.RulesPath == "" {
 		c.AuthZ.RulesPath = defaults.AuthZ.RulesPath

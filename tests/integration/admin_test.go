@@ -32,10 +32,10 @@ func TestAdminAPIIntegration(t *testing.T) {
 
 		assert.GreaterOrEqual(t, len(users), 2) // admin-user and regular-user
 
-		// Look for regular-user - username might have a test prefix
+		// Look for regular-user - username has format {testPrefix}_{uid}_{timestamp}
 		for _, u := range users {
 			username := u["username"].(string)
-			if strings.HasSuffix(username, "_regular-user") || username == "regular-user" {
+			if strings.Contains(username, "_regular-user_") || strings.Contains(username, "regular-user") {
 				regularUserID = u["id"].(string)
 				break
 			}

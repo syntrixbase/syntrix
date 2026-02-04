@@ -33,6 +33,8 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_AccountLocked", func(t *testing.T) {
+		// Security: Account locked should return generic error message
+		// to prevent account enumeration attacks
 		reqBody := identity.LoginRequest{Username: "locked", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, identity.ErrAccountLocked).Once()
 
@@ -43,7 +45,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 		server.handleLogin(w, req)
 
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
-		assert.Contains(t, w.Body.String(), "Account is locked")
+		assert.Contains(t, w.Body.String(), "Invalid credentials")
 	})
 
 	t.Run("Login_MissingCredentials", func(t *testing.T) {
@@ -59,6 +61,8 @@ func TestAuthHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("Login_InternalError", func(t *testing.T) {
+		// Security: Internal errors should return 401 with generic message
+		// to prevent information leakage about system state
 		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("db error")).Once()
 
@@ -68,7 +72,7 @@ func TestAuthHandlerErrors(t *testing.T) {
 
 		server.handleLogin(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("Refresh_InvalidBody", func(t *testing.T) {

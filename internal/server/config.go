@@ -17,6 +17,16 @@ type Config struct {
 	HTTPIdleTimeout  time.Duration `yaml:"http_idle_timeout"`
 	EnableCORS       bool          `yaml:"enable_cors"`
 
+	// CORS Configuration
+	AllowedOrigins   []string `yaml:"allowed_origins"`   // Allowed origins for CORS (empty allows all when EnableCORS is true)
+	AllowedMethods   []string `yaml:"allowed_methods"`   // Allowed HTTP methods for CORS
+	AllowedHeaders   []string `yaml:"allowed_headers"`   // Allowed headers for CORS
+	AllowCredentials bool     `yaml:"allow_credentials"` // Allow credentials in CORS requests
+	CORSMaxAge       int      `yaml:"cors_max_age"`      // Max age for CORS preflight cache in seconds
+
+	// Rate Limiting Configuration
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+
 	// gRPC Configuration
 	GRPCPort          int  `yaml:"grpc_port"`
 	GRPCMaxConcurrent uint `yaml:"grpc_max_concurrent"`
@@ -24,6 +34,15 @@ type Config struct {
 
 	// Lifecycle Configuration
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+}
+
+// RateLimitConfig holds rate limiting configuration.
+type RateLimitConfig struct {
+	Enabled      bool          `yaml:"enabled"`       // Enable rate limiting
+	Requests     int           `yaml:"requests"`      // Max requests per window (general endpoints)
+	Window       time.Duration `yaml:"window"`        // Time window for rate limiting
+	AuthRequests int           `yaml:"auth_requests"` // Max requests per window (auth endpoints)
+	AuthWindow   time.Duration `yaml:"auth_window"`   // Time window for auth rate limiting
 }
 
 // DefaultConfig returns safe defaults for development.
@@ -36,6 +55,17 @@ func DefaultConfig() Config {
 		HTTPIdleTimeout:  60 * time.Second,
 		GRPCPort:         9000,
 		ShutdownTimeout:  10 * time.Second,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type", "Authorization", "X-Request-ID"},
+		AllowCredentials: true,
+		CORSMaxAge:       86400, // 24 hours
+		RateLimit: RateLimitConfig{
+			Enabled:      true,
+			Requests:     100,
+			Window:       time.Minute,
+			AuthRequests: 5,
+			AuthWindow:   time.Minute,
+		},
 	}
 }
 
@@ -62,6 +92,30 @@ func (c *Config) ApplyDefaults() {
 	}
 	if c.ShutdownTimeout == 0 {
 		c.ShutdownTimeout = defaults.ShutdownTimeout
+	}
+	if len(c.AllowedMethods) == 0 {
+		c.AllowedMethods = defaults.AllowedMethods
+	}
+	if len(c.AllowedHeaders) == 0 {
+		c.AllowedHeaders = defaults.AllowedHeaders
+	}
+	// Note: AllowCredentials defaults to false (zero value), which is secure
+	// Only set default if explicitly configured to true in DefaultConfig
+	if c.CORSMaxAge == 0 {
+		c.CORSMaxAge = defaults.CORSMaxAge
+	}
+	// Apply rate limit defaults
+	if c.RateLimit.Requests == 0 {
+		c.RateLimit.Requests = defaults.RateLimit.Requests
+	}
+	if c.RateLimit.Window == 0 {
+		c.RateLimit.Window = defaults.RateLimit.Window
+	}
+	if c.RateLimit.AuthRequests == 0 {
+		c.RateLimit.AuthRequests = defaults.RateLimit.AuthRequests
+	}
+	if c.RateLimit.AuthWindow == 0 {
+		c.RateLimit.AuthWindow = defaults.RateLimit.AuthWindow
 	}
 }
 

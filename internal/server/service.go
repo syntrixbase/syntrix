@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sync"
 
+	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 )
@@ -19,6 +20,9 @@ type serverImpl struct {
 	// HTTP State
 	httpMux    *http.ServeMux
 	httpServer *http.Server
+
+	// Rate Limiting
+	rateLimiter ratelimit.Limiter
 
 	// gRPC State
 	grpcServer *grpc.Server
@@ -39,6 +43,15 @@ func New(cfg Config, logger *slog.Logger) Service {
 		cfg:     cfg,
 		logger:  logger,
 		httpMux: http.NewServeMux(),
+	}
+
+	// Initialize rate limiter if enabled
+	if cfg.RateLimit.Enabled {
+		s.rateLimiter = ratelimit.NewMemoryLimiter(ratelimit.Config{
+			Enabled:  cfg.RateLimit.Enabled,
+			Requests: cfg.RateLimit.Requests,
+			Window:   cfg.RateLimit.Window,
+		})
 	}
 
 	// Initialize gRPC server immediately to allow registration
@@ -129,6 +142,13 @@ func (s *serverImpl) Stop(ctx context.Context) error {
 
 	wg.Wait()
 	close(errChan)
+
+	// Stop rate limiter cleanup goroutine
+	if s.rateLimiter != nil {
+		if stoppable, ok := s.rateLimiter.(ratelimit.Stoppable); ok {
+			stoppable.Stop()
+		}
+	}
 
 	var errs []error
 	for err := range errChan {

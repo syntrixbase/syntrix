@@ -35,3 +35,68 @@ func TestValidateToken(t *testing.T) {
 	_, err = authService.ValidateToken("invalid-token")
 	assert.Error(t, err)
 }
+
+func TestValidatePasswordComplexity(t *testing.T) {
+	tests := []struct {
+		name     string
+		password string
+		wantErr  error
+	}{
+		{
+			name:     "valid password",
+			password: "SecurePass123!",
+			wantErr:  nil,
+		},
+		{
+			name:     "too short",
+			password: "Short1!",
+			wantErr:  ErrPasswordTooShort,
+		},
+		{
+			name:     "no uppercase",
+			password: "securepass123!",
+			wantErr:  ErrPasswordNoUppercase,
+		},
+		{
+			name:     "no lowercase",
+			password: "SECUREPASS123!",
+			wantErr:  ErrPasswordNoLowercase,
+		},
+		{
+			name:     "no digit",
+			password: "SecurePassword!",
+			wantErr:  ErrPasswordNoDigit,
+		},
+		{
+			name:     "no special char",
+			password: "SecurePass1234",
+			wantErr:  ErrPasswordNoSpecial,
+		},
+		{
+			name:     "only lowercase",
+			password: "onlylowercasepassword",
+			wantErr:  ErrPasswordNoUppercase,
+		},
+		{
+			name:     "complex valid password",
+			password: "MyP@ssw0rd!123",
+			wantErr:  nil,
+		},
+		{
+			name:     "password with spaces",
+			password: "My Password 1!",
+			wantErr:  nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidatePasswordComplexity(tt.password)
+			if tt.wantErr != nil {
+				assert.ErrorIs(t, err, tt.wantErr)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}

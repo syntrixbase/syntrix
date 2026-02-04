@@ -113,7 +113,7 @@ func (tc *TestContext) GetTokenForDatabase(_, uid, role string) string {
 	// Try signup
 	signupBody := map[string]string{
 		"username": prefixedUID,
-		"password": "password123456",
+		"password": "TestPassword123!",
 	}
 	bodyBytes, _ := json.Marshal(signupBody)
 	resp, err := http.Post(tc.APIURL()+"/auth/v1/signup", "application/json", bytes.NewBuffer(bodyBytes))
@@ -130,7 +130,7 @@ func (tc *TestContext) GetTokenForDatabase(_, uid, role string) string {
 		// User might exist, try login
 		loginBody := map[string]string{
 			"username": prefixedUID,
-			"password": "password123456",
+			"password": "TestPassword123!",
 		}
 		bodyBytes, _ := json.Marshal(loginBody)
 		respLogin, err := http.Post(tc.APIURL()+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))
@@ -150,7 +150,7 @@ func (tc *TestContext) GetTokenForDatabase(_, uid, role string) string {
 		// Re-login to get new token with updated role
 		loginBody := map[string]string{
 			"username": prefixedUID,
-			"password": "password123456",
+			"password": "TestPassword123!",
 		}
 		bodyBytes, _ := json.Marshal(loginBody)
 		respLogin, err := http.Post(tc.APIURL()+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))

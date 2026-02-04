@@ -88,7 +88,7 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 		mockStorage.On("GetUserByUsername", mock.Anything, "user").Return(nil, ErrUserNotFound).Once()
 		mockStorage.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 		pair, err := svc.SignUp(context.Background(), SignupRequest{
-			Username: "user", Password: "password123456",
+			Username: "user", Password: "Password123456!",
 		})
 		require.NoError(t, err)
 		return pair.RefreshToken
