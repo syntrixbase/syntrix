@@ -191,6 +191,10 @@ templates:
 			AuthZ: identity_config.AuthZConfig{
 				RulesPath: rulesDir,
 			},
+			Admin: identity_config.AdminConfig{
+				Username: "admin", // Required for default database bootstrap
+				Password: "testpassword123",
+			},
 		},
 		Indexer: indexer_config.Config{
 			TemplatePath: templatesDir,
@@ -212,15 +216,16 @@ templates:
 	server.InitDefault(cfg.Server, nil)
 
 	// Create manager in standalone mode
-	// Note: RunQuery is not needed as it's handled internally
+	// In standalone mode, RunXXX options are ignored - all services are always started.
+	// We set them to false to verify that standalone mode correctly ignores these flags.
 	opts := services.Options{
-		RunAPI:              true,
-		RunQuery:            false, // No separate Query HTTP server
-		RunTriggerEvaluator: false, // Not testing triggers
-		RunTriggerWorker:    false,
-		RunIndexer:          true,                    // Indexer must run to load templates
-		RunPuller:           true,                    // Puller must run to feed Indexer
-		Mode:                services.ModeStandalone, // Standalone mode
+		RunAPI:              false, // Ignored in standalone mode
+		RunQuery:            false, // Ignored in standalone mode
+		RunTriggerEvaluator: false, // Ignored in standalone mode
+		RunTriggerWorker:    false, // Ignored in standalone mode
+		RunIndexer:          false, // Ignored in standalone mode
+		RunPuller:           false, // Ignored in standalone mode
+		Mode:                services.ModeStandalone,
 	}
 
 	manager := services.NewManager(cfg, opts)
@@ -440,4 +445,67 @@ func TestStandaloneMode_Watch(t *testing.T) {
 	defer resp.Body.Close()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "Document update should work in standalone mode")
+}
+
+// TestStandaloneMode_TriggerServices tests that trigger services work in standalone mode
+// using in-memory pubsub instead of NATS.
+func TestStandaloneMode_TriggerServices(t *testing.T) {
+	// Create a temp directory for trigger rules
+	triggersDir := t.TempDir() + "/triggers"
+	err := os.MkdirAll(triggersDir, 0755)
+	require.NoError(t, err)
+
+	// Create a simple trigger rule
+	triggerContent := `
+database: default
+triggers:
+  test-trigger:
+    collection: trigger-test
+    events:
+      - create
+    url: http://localhost:9999/webhook
+`
+	err = os.WriteFile(triggersDir+"/default.yml", []byte(triggerContent), 0644)
+	require.NoError(t, err)
+
+	// Setup standalone env with trigger services enabled
+	env := setupStandaloneEnv(t, "", func(cfg *config.Config) {
+		cfg.Trigger.Evaluator.RulesPath = triggersDir
+		cfg.Trigger.Evaluator.StreamName = "TRIGGERS"
+		cfg.Trigger.Delivery.StreamName = "TRIGGERS"
+	})
+	defer env.Cancel()
+
+	token := env.GetToken(t, "trigger_user", "user")
+	collection := "trigger-test"
+
+	// Create a document - this should flow through evaluator via memory pubsub
+	docData := map[string]interface{}{
+		"name":   "Trigger Test Document",
+		"action": "test",
+	}
+	body, _ := json.Marshal(docData)
+
+	req, _ := http.NewRequest(http.MethodPost, env.APIURL+"/api/v1/databases/default/documents/"+collection, bytes.NewBuffer(body))
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusCreated, resp.StatusCode, "Document creation should work with triggers enabled")
+
+	var result map[string]interface{}
+	err = json.NewDecoder(resp.Body).Decode(&result)
+	require.NoError(t, err)
+	assert.Contains(t, result, "id", "Response should contain document ID")
+
+	// Give some time for trigger evaluation to process via memory pubsub
+	time.Sleep(100 * time.Millisecond)
+
+	// The test passes if:
+	// 1. Document creation succeeded (trigger evaluator didn't block)
+	// 2. No panics occurred (memory pubsub is working correctly)
+	// 3. The service started successfully with memory pubsub (verified by reaching this point)
 }

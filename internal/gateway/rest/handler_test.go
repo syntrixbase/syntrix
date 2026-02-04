@@ -91,8 +91,9 @@ func (m *MockAuthService_NoContext) ValidateToken(tokenString string) (*identity
 func TestTriggerProtected_NoRoles(t *testing.T) {
 	mockService := new(MockQueryService)
 	mockAuth := new(MockAuthService_NoContext) // Use the no-context mock
+	mockAuthz := new(AllowAllAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, nil)
+	handler := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Wrap a dummy handler
 	target := handler.triggerProtected(func(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +113,9 @@ func TestTriggerProtected_NoRoles(t *testing.T) {
 func TestAdminOnly_NoRoles(t *testing.T) {
 	mockService := new(MockQueryService)
 	mockAuth := new(MockAuthService_NoContext) // Use the no-context mock
+	mockAuthz := new(AllowAllAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, nil)
+	handler := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Wrap a dummy handler
 	target := handler.adminOnly(func(w http.ResponseWriter, r *http.Request) {

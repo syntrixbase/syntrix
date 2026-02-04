@@ -51,10 +51,12 @@ func (m *Manager) Shutdown(ctx context.Context) {
 		slog.Warn("Timeout waiting for background tasks")
 	}
 
-	// Close NATS provider (handles both connection and any embedded server)
-	if m.natsProvider != nil {
-		slog.Info("Closing NATS provider...")
-		m.natsProvider.Close()
+	// Close pubsub provider (handles both NATS and memory implementations)
+	if m.pubsubProvider != nil {
+		slog.Info("Closing pubsub provider...")
+		if err := m.pubsubProvider.Close(); err != nil {
+			slog.Error("Error closing pubsub provider", "error", err)
+		}
 	}
 
 	// Shutdown Puller gRPC Service

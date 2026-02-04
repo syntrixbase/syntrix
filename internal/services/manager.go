@@ -7,6 +7,7 @@ import (
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -14,7 +15,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/puller"
 	services_config "github.com/syntrixbase/syntrix/internal/services/config"
 	"github.com/syntrixbase/syntrix/internal/streamer"
-	"github.com/syntrixbase/syntrix/internal/trigger"
 )
 
 type Options struct {
@@ -65,7 +65,7 @@ type Manager struct {
 	streamerClient  streamer.Service        // remote Streamer client (for Gateway in distributed mode)
 	triggerConsumer triggerConsumer
 	triggerService  triggerService
-	natsProvider    trigger.NATSProvider
+	pubsubProvider  pubsub.Provider // Unified pubsub provider (NATS or memory)
 	pullerService   puller.LocalService
 	pullerGRPC      *puller.GRPCServer
 	indexerService  indexer.LocalService

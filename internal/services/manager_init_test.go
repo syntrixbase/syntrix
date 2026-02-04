@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -10,7 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nats-io/nats.go"
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
@@ -543,6 +543,17 @@ func (s *stubAuthN) Logout(ctx context.Context, refreshToken string) error      
 func (s *stubAuthN) GenerateSystemToken(serviceName string) (string, error)     { return "", nil }
 func (s *stubAuthN) ValidateToken(tokenString string) (*identity.Claims, error) { return nil, nil }
 
+// stubAuthZ is a minimal AuthZ implementation for testing
+type stubAuthZ struct{}
+
+func (s *stubAuthZ) Evaluate(ctx context.Context, database string, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
+	return true, nil
+}
+func (s *stubAuthZ) GetRules() *identity.RuleSet                           { return nil }
+func (s *stubAuthZ) GetRulesForDatabase(database string) *identity.RuleSet { return nil }
+func (s *stubAuthZ) UpdateRules(database string, content []byte) error     { return nil }
+func (s *stubAuthZ) LoadRulesFromDir(dirPath string) error                 { return nil }
+
 func TestManager_Init_StandaloneMode(t *testing.T) {
 	origFactory := storageFactoryFactory
 	defer func() { storageFactoryFactory = origFactory }()
@@ -953,7 +964,11 @@ func TestManager_initDistributed_AllServices(t *testing.T) {
 
 func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 	origFactory := storageFactoryFactory
-	defer func() { storageFactoryFactory = origFactory }()
+	origEvaluatorFactory := evaluatorServiceFactory
+	defer func() {
+		storageFactoryFactory = origFactory
+		evaluatorServiceFactory = origEvaluatorFactory
+	}()
 
 	fakeDocStore := &fakeDocumentStore{}
 	fakeAuth := &fakeAuthStore{}
@@ -965,12 +980,16 @@ func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 		}, nil
 	}
 
+	// Mock evaluator factory to return error
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		return nil, fmt.Errorf("evaluator service error")
+	}
+
 	cfg := config.LoadConfig()
 	cfg.Server.HTTPPort = 0
 	cfg.Identity.AuthZ.RulesPath = ""
-	cfg.Puller.Backends = nil // Clear puller backends for unit tests
-	// Configure NATS to fail connection
-	cfg.Trigger.NatsURL = "nats://127.0.0.1:1"
+	cfg.Puller.Backends = nil            // Clear puller backends for unit tests
+	cfg.Trigger.Evaluator.RulesPath = "" // No rules path to avoid file system dependency
 
 	mgr := NewManager(cfg, Options{
 		Mode:                ModeStandalone,
@@ -987,7 +1006,7 @@ func TestManager_initStandalone_TriggerServicesError(t *testing.T) {
 
 	err := mgr.Init(ctx)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to connect to NATS")
+	assert.Contains(t, err.Error(), "evaluator service error")
 }
 
 func TestManager_initStandalone_WithPuller(t *testing.T) {
@@ -1118,16 +1137,10 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 	origFactory := storageFactoryFactory
 	origEvalFactory := evaluatorServiceFactory
 	origDeliveryFactory := deliveryServiceFactory
-	origPubsubPublisher := pubsubPublisherFactory
-	origPubsubConsumer := pubsubConsumerFactory
-	origConnector := trigger.GetNatsConnectFunc()
 	defer func() {
 		storageFactoryFactory = origFactory
 		evaluatorServiceFactory = origEvalFactory
 		deliveryServiceFactory = origDeliveryFactory
-		pubsubPublisherFactory = origPubsubPublisher
-		pubsubConsumerFactory = origPubsubConsumer
-		trigger.SetNatsConnectFunc(origConnector)
 	}()
 
 	fakeSF := &stubStorageFactory{
@@ -1138,15 +1151,7 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 		return fakeSF, nil
 	}
 
-	// Mock trigger services (standalone initializes all services)
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
-	}
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
-	}
+	// Mock trigger services (standalone uses memory pubsub, so we just mock the evaluator/delivery services)
 	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
 		return &fakeEvaluatorService{}, nil
 	}
@@ -1169,8 +1174,8 @@ func TestManager_initStandalone_WithIndexer(t *testing.T) {
 		RunIndexer: true,
 	})
 	defer func() {
-		// Clear NATS provider before shutdown to avoid panic on fake conn close
-		mgr.natsProvider = nil
+		// Clear pubsub provider before shutdown to avoid panic on fake conn close
+		mgr.pubsubProvider = nil
 		mgr.Shutdown(context.Background())
 	}()
 
@@ -1596,7 +1601,8 @@ func TestManager_initDatabaseService_WithGatewayServer(t *testing.T) {
 	// We'll use the real gateway.NewServer but with mocks
 	mockQuery := &stubQueryService{}
 	mockAuth := &stubAuthN{}
-	mgr.gatewayServer = gateway.NewServer(mockQuery, mockAuth, nil, nil)
+	mockAuthz := &stubAuthZ{}
+	mgr.gatewayServer = gateway.NewServer(mockQuery, mockAuth, mockAuthz, nil)
 
 	// Call initDatabaseService
 	err = mgr.initDatabaseService(context.Background())

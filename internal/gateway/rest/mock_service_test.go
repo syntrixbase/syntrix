@@ -220,6 +220,30 @@ func (m *MockAuthzService) LoadRulesFromDir(dirPath string) error {
 	return args.Error(0)
 }
 
+// AllowAllAuthzService is a simple authz service that allows all requests.
+// Use this in tests that don't need to test authorization logic.
+type AllowAllAuthzService struct{}
+
+func (a *AllowAllAuthzService) Evaluate(ctx context.Context, database string, path string, action string, req identity.AuthzRequest, existingRes *identity.Resource) (bool, error) {
+	return true, nil
+}
+
+func (a *AllowAllAuthzService) GetRules() *identity.RuleSet {
+	return nil
+}
+
+func (a *AllowAllAuthzService) GetRulesForDatabase(database string) *identity.RuleSet {
+	return nil
+}
+
+func (a *AllowAllAuthzService) UpdateRules(database string, content []byte) error {
+	return nil
+}
+
+func (a *AllowAllAuthzService) LoadRulesFromDir(dirPath string) error {
+	return nil
+}
+
 type TestServer struct {
 	*Handler
 	mux *http.ServeMux
@@ -243,6 +267,10 @@ func createTestServer(engine query.Service, auth identity.AuthN, authz identity.
 	if auth == nil {
 		auth = new(MockAuthService)
 	}
+	if authz == nil {
+		authz = new(AllowAllAuthzService)
+	}
+
 	h := NewHandler(engine, auth, authz)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)

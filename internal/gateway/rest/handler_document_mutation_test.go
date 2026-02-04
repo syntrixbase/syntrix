@@ -8,13 +8,22 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/pkg/model"
 )
+
+// setupMockServiceForAuthz sets up the default GetDocument mock for authorization checks.
+// This is needed because the authorized() middleware calls GetDocument to fetch existing resources.
+func setupMockServiceForAuthz(mockService *MockQueryService) {
+	mockService.On("GetDocument", mock.Anything, mock.Anything, mock.Anything).Maybe().Return(nil, model.ErrNotFound)
+}
 
 func TestHandleReplaceDocument_IdMutation(t *testing.T) {
 	mockService := new(MockQueryService)
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	// Mock GetDocument for authorization check (replace is not create, so existing resource is fetched)
+	mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, model.ErrNotFound)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Try to replace document msg-1 with body containing id: msg-2
@@ -33,6 +42,8 @@ func TestHandleUpdateDocument_IdMutation(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	// Mock GetDocument for authorization check (update is not create, so existing resource is fetched)
+	mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, model.ErrNotFound)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Try to update document msg-1 with body containing id: msg-2
@@ -51,6 +62,7 @@ func TestHandleReplaceDocument_InvalidPath(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	body := []byte(`{"doc":{"name": "Bob"}}`)
@@ -70,6 +82,7 @@ func TestHandleReplaceDocument_InvalidBody(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid JSON body
@@ -88,6 +101,7 @@ func TestHandleReplaceDocument_InvalidDocId(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid doc data - empty id field
@@ -106,6 +120,7 @@ func TestHandlePatchDocument_InvalidPath(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	body := []byte(`{"doc":{"name": "Bob"}}`)
@@ -124,6 +139,7 @@ func TestHandlePatchDocument_InvalidBody(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid JSON body
@@ -142,6 +158,7 @@ func TestHandlePatchDocument_InvalidDocId(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid doc data - empty id field
@@ -160,6 +177,7 @@ func TestHandleDeleteDocument_InvalidBody(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	setupMockServiceForAuthz(mockService)
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid JSON body
@@ -178,6 +196,7 @@ func TestHandleCreateDocument_InvalidBody(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	// Note: create action doesn't fetch existing document for authz
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid JSON body
@@ -196,6 +215,7 @@ func TestHandleCreateDocument_InvalidDocId(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuth.On("MiddlewareOptional", mock.Anything).Return(nil)
 	mockAuth.On("Middleware", mock.Anything).Return(nil)
+	// Note: create action doesn't fetch existing document for authz
 	server := createTestServer(mockService, mockAuth, nil)
 
 	// Invalid doc data - empty id field

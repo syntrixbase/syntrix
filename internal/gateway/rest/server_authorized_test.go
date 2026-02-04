@@ -16,22 +16,6 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func TestAuthorized_NoAuthzPassThrough(t *testing.T) {
-	s := &Handler{}
-	handler := s.authorized(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusTeapot)
-	}, "read")
-
-	req := httptest.NewRequest("GET", "/api/v1/databases/default/documents/foo", nil)
-	req.SetPathValue("database", "default")
-	req.SetPathValue("path", "col/doc")
-	w := httptest.NewRecorder()
-
-	handler(w, req)
-
-	assert.Equal(t, http.StatusTeapot, w.Code)
-}
-
 func TestAuthorized_EvaluateError(t *testing.T) {
 	engine := new(MockQueryService)
 	authzSvc := new(MockAuthzService)

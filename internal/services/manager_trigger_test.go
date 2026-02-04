@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"go.mongodb.org/mongo-driver/mongo"
 
 	"github.com/syntrixbase/syntrix/internal/config"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub/memory"
 	pubsubtesting "github.com/syntrixbase/syntrix/internal/core/pubsub/testing"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/puller"
@@ -45,17 +45,13 @@ func setupTriggerTestFactories(t *testing.T) func() {
 	origStorageFactory := storageFactoryFactory
 	origEvalFactory := evaluatorServiceFactory
 	origDeliveryFactory := deliveryServiceFactory
-	origPubsubPublisher := pubsubPublisherFactory
-	origPubsubConsumer := pubsubConsumerFactory
-	origConnector := trigger.GetNatsConnectFunc()
+	origProviderFactory := pubsubProviderFactory
 
 	return func() {
 		storageFactoryFactory = origStorageFactory
 		evaluatorServiceFactory = origEvalFactory
 		deliveryServiceFactory = origDeliveryFactory
-		pubsubPublisherFactory = origPubsubPublisher
-		pubsubConsumerFactory = origPubsubConsumer
-		trigger.SetNatsConnectFunc(origConnector)
+		pubsubProviderFactory = origProviderFactory
 	}
 }
 
@@ -69,20 +65,6 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 
 	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 		return &fakeStorageFactory{}, nil
-	}
-
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
-	}
-
-	// Mock pubsub consumer factory (standalone initializes both services)
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
 	}
 
 	// Set up fake puller service
@@ -102,6 +84,8 @@ func TestManager_InitTriggerServices_EvaluatorSuccess(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, mgr.triggerService)
 	assert.NotNil(t, mgr.triggerConsumer)
+	// Verify memory pubsub was created
+	assert.NotNil(t, mgr.pubsubProvider)
 }
 
 func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
@@ -115,13 +99,10 @@ func TestManager_InitTriggerServices_DeliverySuccess(t *testing.T) {
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub consumer factory
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
+	// Mock pubsub provider factory for distributed mode
+	mockProvider := pubsubtesting.NewMockProvider()
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	// Mock delivery factory
@@ -144,18 +125,6 @@ func TestManager_InitTriggerServices_BothServices(t *testing.T) {
 
 	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 		return &fakeStorageFactory{}, nil
-	}
-
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub factories
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
-	}
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
 	}
 
 	// Set up fake puller service
@@ -182,7 +151,7 @@ func TestManager_InitTriggerServices_EvaluatorNoPuller_Standalone(t *testing.T) 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
 
-	// No puller service set - should fail in standalone mode (checked before NATS connect)
+	// No puller service set - should fail in standalone mode (checked before pubsub init)
 	err := mgr.initTriggerServicesStandalone(context.Background())
 	assert.ErrorContains(t, err, "puller service is required for trigger evaluator in standalone mode")
 }
@@ -196,15 +165,6 @@ func TestManager_InitTriggerServices_EvaluatorError(t *testing.T) {
 
 	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
 		return &fakeStorageFactory{}, nil
-	}
-
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
 	}
 
 	// Set up fake puller service
@@ -231,13 +191,10 @@ func TestManager_InitTriggerServices_DeliveryError(t *testing.T) {
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub consumer factory
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
+	// Mock pubsub provider factory for distributed mode
+	mockProvider := pubsubtesting.NewMockProvider()
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	// Mock delivery factory to return error
@@ -249,19 +206,20 @@ func TestManager_InitTriggerServices_DeliveryError(t *testing.T) {
 	assert.ErrorContains(t, err, "delivery error")
 }
 
-func TestManager_InitTriggerServices_NatsError(t *testing.T) {
+func TestManager_InitTriggerServices_ProviderError(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunTriggerEvaluator: true, Mode: ModeDistributed})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
 
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) {
-		return nil, fmt.Errorf("nats error")
-	})
+	// Mock pubsub provider factory to return error
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return nil, fmt.Errorf("provider error")
+	}
 
 	err := mgr.initTriggerServices(context.Background())
-	assert.ErrorContains(t, err, "nats error")
+	assert.ErrorContains(t, err, "provider error")
 }
 
 func TestManager_InitTriggerServices_WithRulesPath(t *testing.T) {
@@ -287,20 +245,6 @@ triggers:
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
-	}
-
-	// Mock pubsub consumer factory (standalone initializes both services)
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return pubsubtesting.NewMockConsumer(), nil
-	}
-
 	// Set up fake puller service
 	mgr.pullerService = &mockTriggerPuller{}
 
@@ -319,10 +263,11 @@ triggers:
 	assert.NoError(t, err)
 }
 
-func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
+func TestManager_InitTriggerServices_PublisherError(t *testing.T) {
 	cfg := config.LoadConfig()
 	cfg.Trigger.Evaluator.RulesPath = ""
-	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
+	// Use distributed mode with RunTriggerEvaluator to test publisher factory
+	mgr := NewManager(cfg, Options{Mode: ModeDistributed, RunTriggerEvaluator: true})
 
 	restore := setupTriggerTestFactories(t)
 	defer restore()
@@ -331,23 +276,18 @@ func TestManager_InitTriggerServices_PublisherFactoryError(t *testing.T) {
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory to return error
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return nil, fmt.Errorf("publisher factory error")
+	// Mock pubsub provider to return error on NewPublisher
+	mockProvider := pubsubtesting.NewMockProvider()
+	mockProvider.SetPublisherError(fmt.Errorf("publisher factory error"))
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
-	// Set up fake puller service
-	mgr.pullerService = &mockTriggerPuller{}
-
-	err := mgr.initTriggerServicesStandalone(context.Background())
+	err := mgr.initTriggerServices(context.Background())
 	assert.ErrorContains(t, err, "publisher factory error")
 }
 
-func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
+func TestManager_InitTriggerServices_ConsumerError(t *testing.T) {
 	cfg := config.LoadConfig()
 	mgr := NewManager(cfg, Options{RunTriggerWorker: true, Mode: ModeDistributed})
 
@@ -358,13 +298,11 @@ func TestManager_InitTriggerServices_ConsumerFactoryError(t *testing.T) {
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub consumer factory to return error
-	pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-		return nil, fmt.Errorf("consumer factory error")
+	// Mock pubsub provider to return error on NewConsumer
+	mockProvider := pubsubtesting.NewMockProvider()
+	mockProvider.SetConsumerError(fmt.Errorf("consumer factory error"))
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	err := mgr.initTriggerServices(context.Background())
@@ -384,13 +322,10 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorSuccess(t *testing.T) 
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
+	// Mock pubsub provider factory for distributed mode
+	mockProvider := pubsubtesting.NewMockProvider()
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	// Mock evaluator factory
@@ -416,13 +351,11 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorPublisherError(t *test
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory to return error
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return nil, fmt.Errorf("publisher error in distributed mode")
+	// Mock pubsub provider to return error on NewPublisher
+	mockProvider := pubsubtesting.NewMockProvider()
+	mockProvider.SetPublisherError(fmt.Errorf("publisher error in distributed mode"))
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	err := mgr.initTriggerServices(context.Background())
@@ -442,13 +375,10 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorServiceError(t *testin
 		return &fakeStorageFactory{}, nil
 	}
 
-	// Set up fake NATS connection
-	fakeConn := &nats.Conn{}
-	trigger.SetNatsConnectFunc(func(string, ...nats.Option) (*nats.Conn, error) { return fakeConn, nil })
-
-	// Mock pubsub publisher factory
-	pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-		return pubsubtesting.NewMockPublisher(), nil
+	// Mock pubsub provider factory for distributed mode
+	mockProvider := pubsubtesting.NewMockProvider()
+	pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+		return mockProvider, nil
 	}
 
 	// Mock evaluator factory to return error
@@ -458,6 +388,37 @@ func TestManager_InitTriggerServices_Distributed_EvaluatorServiceError(t *testin
 
 	err := mgr.initTriggerServices(context.Background())
 	assert.ErrorContains(t, err, "evaluator service error in distributed mode")
+}
+
+func TestManager_InitTriggerServices_Standalone_UsesMemoryPubsub(t *testing.T) {
+	cfg := config.LoadConfig()
+	cfg.Trigger.Evaluator.RulesPath = ""
+	mgr := NewManager(cfg, Options{Mode: ModeStandalone})
+
+	restore := setupTriggerTestFactories(t)
+	defer restore()
+
+	storageFactoryFactory = func(ctx context.Context, cfg *config.Config) (storage.StorageFactory, error) {
+		return &fakeStorageFactory{}, nil
+	}
+
+	// Set up fake puller service
+	mgr.pullerService = &mockTriggerPuller{}
+
+	// Mock evaluator and delivery factories
+	evaluatorServiceFactory = func(deps evaluator.Dependencies, cfg evaluator.Config) (evaluator.Service, error) {
+		return &fakeEvaluator{}, nil
+	}
+	deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Config) (delivery.Service, error) {
+		return &fakeConsumer{}, nil
+	}
+
+	err := mgr.initTriggerServicesStandalone(context.Background())
+	assert.NoError(t, err)
+
+	// Verify that memory pubsub was used
+	_, ok := mgr.pubsubProvider.(*memory.Engine)
+	assert.True(t, ok, "expected memory.Engine pubsub provider in standalone mode")
 }
 
 // Fakes

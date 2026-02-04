@@ -66,19 +66,20 @@ func (m *Manager) Start(bgCtx context.Context) {
 		}()
 	}
 
-	// Start Trigger Evaluator (Change Stream Watcher)
-	if m.opts.RunTriggerEvaluator {
+	// Start Trigger Evaluator Service
+	if m.triggerService != nil {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
+			slog.Info("Starting Trigger Evaluator Service...")
 			if err := m.triggerService.Start(bgCtx); err != nil {
 				slog.Error("Failed to start trigger watcher", "error", err)
 			}
 		}()
 	}
 
-	// Start Trigger Consumer
-	if m.opts.RunTriggerWorker {
+	// Start Trigger Consumer (Delivery Worker)
+	if m.triggerConsumer != nil {
 		m.wg.Add(1)
 		go func() {
 			defer m.wg.Done()
@@ -90,7 +91,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 	}
 
 	// Start Change Stream Puller
-	if m.opts.RunPuller {
+	if m.pullerService != nil {
 		slog.Info("Starting Change Stream Puller...")
 		if err := m.pullerService.Start(bgCtx); err != nil {
 			slog.Error("Failed to start Change Stream Puller", "error", err)
@@ -104,7 +105,7 @@ func (m *Manager) Start(bgCtx context.Context) {
 	}
 
 	// Start Indexer Service
-	if m.opts.RunIndexer && m.indexerService != nil {
+	if m.indexerService != nil {
 		slog.Info("Starting Indexer Service...")
 		if err := m.indexerService.Start(bgCtx); err != nil {
 			slog.Error("Failed to start Indexer Service", "error", err)

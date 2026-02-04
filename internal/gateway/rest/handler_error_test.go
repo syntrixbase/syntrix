@@ -182,11 +182,13 @@ func TestAdminHandlerErrors(t *testing.T) {
 
 // TestDocumentHandlerErrors covers error paths in handler_document.go
 func TestDocumentHandlerErrors(t *testing.T) {
-	mockService := new(MockQueryService)
-	mockAuth := new(MockAuthService)
-	server := createTestServer(mockService, mockAuth, nil)
-
 	t.Run("GetDocument_InvalidPath", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms").Return(nil, model.ErrNotFound).Maybe()
+
 		req, _ := http.NewRequest("GET", "/api/v1/databases/default/documents/rooms", nil)
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
@@ -194,6 +196,10 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("CreateDocument_InternalError", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+
 		body := []byte(`{"id":"msg-1", "name": "Bob"}`)
 		req, _ := http.NewRequest("POST", "/api/v1/databases/default/documents/rooms/room-1/messages", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
@@ -207,10 +213,16 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("ReplaceDocument_InternalError", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+
 		body := []byte(`{"doc":{"name": "Bob"}}`)
 		req, _ := http.NewRequest("PUT", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
 
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, model.ErrNotFound).Once()
 		mockService.On("ReplaceDocument", mock.Anything, "default", mock.MatchedBy(func(doc model.Document) bool {
 			return doc.GetID() == "msg-1"
 		}), mock.Anything).Return(nil, errors.New("db error")).Once()
@@ -222,6 +234,12 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("DeleteDocument_InvalidBody", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, model.ErrNotFound).Maybe()
+
 		body := []byte(`{invalid-json}`)
 		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", bytes.NewBuffer(body))
 		rr := httptest.NewRecorder()
@@ -231,9 +249,15 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("DeleteDocument_PreconditionFailed", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+
 		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms/room-1/messages/msg-1", nil)
 		rr := httptest.NewRecorder()
 
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1").Return(nil, model.ErrNotFound).Once()
 		mockService.On("DeleteDocument", mock.Anything, "default", "rooms/room-1/messages/msg-1", mock.Anything).Return(model.ErrPreconditionFailed).Once()
 
 		server.ServeHTTP(rr, req)
@@ -243,6 +267,12 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("DeleteDocument_InvalidPath", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms").Return(nil, model.ErrNotFound).Maybe()
+
 		req, _ := http.NewRequest("DELETE", "/api/v1/databases/default/documents/rooms", nil)
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)
@@ -250,6 +280,12 @@ func TestDocumentHandlerErrors(t *testing.T) {
 	})
 
 	t.Run("PatchDocument_MissingID", func(t *testing.T) {
+		mockService := new(MockQueryService)
+		mockAuth := new(MockAuthService)
+		server := createTestServer(mockService, mockAuth, nil)
+		// Mock GetDocument for authorization check
+		mockService.On("GetDocument", mock.Anything, "default", "rooms/room-1/messages").Return(nil, model.ErrNotFound).Maybe()
+
 		req, _ := http.NewRequest("PATCH", "/api/v1/databases/default/documents/rooms/room-1/messages", bytes.NewBuffer([]byte("{}")))
 		rr := httptest.NewRecorder()
 		server.ServeHTTP(rr, req)

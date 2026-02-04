@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/nats-io/nats.go"
-
 	indexerv1 "github.com/syntrixbase/syntrix/api/gen/indexer/v1"
 	pullerv1 "github.com/syntrixbase/syntrix/api/gen/puller/v1"
 	pb "github.com/syntrixbase/syntrix/api/gen/query/v1"
@@ -15,6 +13,8 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/pubsub"
+	"github.com/syntrixbase/syntrix/internal/core/pubsub/memory"
+	pubsubnats "github.com/syntrixbase/syntrix/internal/core/pubsub/nats"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/gateway"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -23,7 +23,6 @@ import (
 	"github.com/syntrixbase/syntrix/internal/query"
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/streamer"
-	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
 	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 )
@@ -42,17 +41,14 @@ var deliveryServiceFactory = func(deps delivery.Dependencies, cfg delivery.Confi
 	return delivery.NewService(deps, cfg)
 }
 
-// pubsubPublisherFactory creates a pubsub.Publisher - injectable for testing
-var pubsubPublisherFactory = func(nc *nats.Conn, cfg evaluator.Config) (pubsub.Publisher, error) {
-	return evaluator.NewPublisher(nc, cfg)
-}
-
-// pubsubConsumerFactory creates a pubsub.Consumer - injectable for testing
-var pubsubConsumerFactory = func(nc *nats.Conn, cfg delivery.Config) (pubsub.Consumer, error) {
-	return delivery.NewConsumer(nc, cfg)
+// pubsubProviderFactory creates pubsub providers for distributed mode - injectable for testing
+var pubsubProviderFactory = func(url string) (pubsub.Provider, error) {
+	return pubsubnats.NewProvider(url)
 }
 
 func (m *Manager) Init(ctx context.Context) error {
+	slog.Info("Initializing Service Manager", "mode", m.opts.Mode)
+
 	// Common infrastructure initialization
 	if err := m.initAuthService(ctx); err != nil {
 		return err
@@ -132,6 +128,7 @@ func (m *Manager) initStandalone(ctx context.Context) error {
 		return err
 	}
 
+	slog.Info("Service Manager initialization complete (standalone)")
 	return nil
 }
 
@@ -201,6 +198,15 @@ func (m *Manager) initDistributed(ctx context.Context) error {
 		}
 	}
 
+	slog.Info("Service Manager initialization complete (distributed)",
+		"runAPI", m.opts.RunAPI,
+		"runQuery", m.opts.RunQuery,
+		"runStreamer", m.opts.RunStreamer,
+		"runPuller", m.opts.RunPuller,
+		"runIndexer", m.opts.RunIndexer,
+		"runTriggerEvaluator", m.opts.RunTriggerEvaluator,
+		"runTriggerWorker", m.opts.RunTriggerWorker,
+	)
 	return nil
 }
 
@@ -228,7 +234,11 @@ func (m *Manager) getStorageFactory(ctx context.Context) (storage.StorageFactory
 }
 
 func (m *Manager) initAuthService(ctx context.Context) error {
-	if !m.opts.RunAPI && !m.opts.RunTriggerWorker {
+	// Determine if auth service is needed
+	// - Standalone mode: always needed
+	// - Distributed mode: only for API or TriggerWorker nodes
+	needsAuth := m.opts.Mode.IsStandalone() || m.opts.RunAPI || m.opts.RunTriggerWorker
+	if !needsAuth {
 		return nil
 	}
 
@@ -345,15 +355,13 @@ func (m *Manager) initQueryGRPCServer(service query.Service) {
 }
 
 func (m *Manager) initAPIServer(queryService query.Service) error {
-	var authzEngine identity.AuthZ
+	// Always create authz engine (required for API server)
+	authzEngine, err := identity.NewAuthZ(m.cfg.Identity.AuthZ, queryService)
+	if err != nil {
+		return fmt.Errorf("failed to create authz engine: %w", err)
+	}
 
 	if m.cfg.Identity.AuthZ.RulesPath != "" {
-		var err error
-		authzEngine, err = identity.NewAuthZ(m.cfg.Identity.AuthZ, queryService)
-		if err != nil {
-			return fmt.Errorf("failed to create authz engine: %w", err)
-		}
-
 		slog.Info("Loaded authorization rules", "path", m.cfg.Identity.AuthZ.RulesPath)
 	}
 
@@ -504,7 +512,7 @@ func (m *Manager) initIndexerGRPCServer() {
 }
 
 // initTriggerServicesStandalone initializes trigger services for standalone mode.
-// Uses local Puller service and optionally embedded NATS.
+// Uses local Puller service and in-memory pubsub (no NATS required).
 // In standalone mode, all trigger services are always initialized (no RunXXX checks).
 func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
 	// Standalone mode requires Puller service
@@ -512,21 +520,20 @@ func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
 		return fmt.Errorf("puller service is required for trigger evaluator in standalone mode")
 	}
 
-	// Initialize NATS provider based on configuration
-	m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
-
-	nc, err := m.natsProvider.Connect(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
-	}
-
 	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
 		return err
 	}
 
-	// Initialize Evaluator Service
-	publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
+	// Use in-memory pubsub for standalone mode (no NATS dependency)
+	m.pubsubProvider = memory.New()
+	slog.Info("Initialized in-memory pubsub engine (standalone)")
+
+	// Initialize Evaluator Service with memory publisher
+	publisher, err := m.pubsubProvider.NewPublisher(pubsub.PublisherOptions{
+		StreamName:    m.cfg.Trigger.Evaluator.StreamName,
+		SubjectPrefix: m.cfg.Trigger.Evaluator.StreamName,
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create trigger publisher: %w", err)
 	}
@@ -541,10 +548,13 @@ func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
 		return fmt.Errorf("failed to create trigger evaluator service: %w", err)
 	}
 	m.triggerService = evalSvc
-	slog.Info("Initialized Trigger Evaluator Service (standalone)")
+	slog.Info("Initialized Trigger Evaluator Service (standalone, memory pubsub)")
 
-	// Initialize Delivery Service
-	consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
+	// Initialize Delivery Service with memory consumer
+	consumer, err := m.pubsubProvider.NewConsumer(pubsub.ConsumerOptions{
+		StreamName:    m.cfg.Trigger.Delivery.StreamName,
+		FilterSubject: m.cfg.Trigger.Delivery.StreamName + ".>",
+	})
 	if err != nil {
 		return fmt.Errorf("failed to create trigger consumer: %w", err)
 	}
@@ -559,7 +569,7 @@ func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
 		return fmt.Errorf("failed to create trigger delivery service: %w", err)
 	}
 	m.triggerConsumer = deliverySvc
-	slog.Info("Initialized Trigger Delivery Service (standalone)")
+	slog.Info("Initialized Trigger Delivery Service (standalone, memory pubsub)")
 
 	return nil
 }
@@ -567,13 +577,19 @@ func (m *Manager) initTriggerServicesStandalone(ctx context.Context) error {
 // initTriggerServices initializes trigger services for distributed mode.
 // Uses gRPC client to connect to remote Puller and remote NATS.
 func (m *Manager) initTriggerServices(ctx context.Context) error {
-	// Distributed mode always uses remote NATS
-	m.natsProvider = trigger.NewRemoteNATSProvider(m.cfg.Trigger.NatsURL)
-
-	nc, err := m.natsProvider.Connect(context.Background())
+	// Distributed mode uses NATS provider (or mock for testing)
+	provider, err := pubsubProviderFactory(m.cfg.Trigger.NatsURL)
 	if err != nil {
-		return fmt.Errorf("failed to connect to NATS: %w", err)
+		return fmt.Errorf("failed to create pubsub provider: %w", err)
 	}
+
+	// Connect if provider requires it (NATS does, mock doesn't)
+	if connectable, ok := provider.(pubsub.Connectable); ok {
+		if err := connectable.Connect(ctx); err != nil {
+			return fmt.Errorf("failed to connect to pubsub provider: %w", err)
+		}
+	}
+	m.pubsubProvider = provider
 
 	sf, err := m.getStorageFactory(ctx)
 	if err != nil {
@@ -588,7 +604,10 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 		}
 		slog.Info("Trigger Evaluator using remote Puller service", "url", m.cfg.Trigger.Evaluator.PullerAddr)
 
-		publisher, err := pubsubPublisherFactory(nc, m.cfg.Trigger.Evaluator)
+		publisher, err := m.pubsubProvider.NewPublisher(pubsub.PublisherOptions{
+			StreamName:    m.cfg.Trigger.Evaluator.StreamName,
+			SubjectPrefix: m.cfg.Trigger.Evaluator.StreamName,
+		})
 		if err != nil {
 			return fmt.Errorf("failed to create trigger publisher: %w", err)
 		}
@@ -608,7 +627,10 @@ func (m *Manager) initTriggerServices(ctx context.Context) error {
 
 	// Initialize Delivery Service
 	if m.opts.RunTriggerWorker {
-		consumer, err := pubsubConsumerFactory(nc, m.cfg.Trigger.Delivery)
+		consumer, err := m.pubsubProvider.NewConsumer(pubsub.ConsumerOptions{
+			StreamName:    m.cfg.Trigger.Delivery.StreamName,
+			FilterSubject: m.cfg.Trigger.Delivery.StreamName + ".>",
+		})
 		if err != nil {
 			return fmt.Errorf("failed to create trigger consumer: %w", err)
 		}
