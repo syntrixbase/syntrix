@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -45,6 +47,22 @@ func NewTokenService(cfg config.AuthNConfig) (*TokenService, error) {
 }
 
 func LoadPrivateKey(path string) (*rsa.PrivateKey, error) {
+	// Check file permissions on Unix systems
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(path)
+		if err == nil {
+			mode := info.Mode().Perm()
+			// Check if group or others have any permissions
+			if mode&0077 != 0 {
+				slog.Warn("Private key file has insecure permissions",
+					"path", path,
+					"mode", fmt.Sprintf("%04o", mode),
+					"recommended", "0600",
+				)
+			}
+		}
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -84,7 +102,8 @@ func EnsurePrivateKey(path string) (*rsa.PrivateKey, error) {
 }
 
 func SavePrivateKey(path string, key *rsa.PrivateKey) error {
-	file, err := os.Create(path)
+	// Create file with secure permissions (0600 = owner read/write only)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return err
 	}
@@ -187,8 +206,9 @@ func (s *TokenService) GenerateSystemToken(serviceName string) (string, error) {
 
 func (s *TokenService) ValidateToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, errors.New("unexpected signing method")
+		// Explicitly validate RS256 algorithm to prevent algorithm confusion attacks
+		if token.Method.Alg() != jwt.SigningMethodRS256.Alg() {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return s.publicKey, nil
 	})

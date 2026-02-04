@@ -323,7 +323,7 @@ templates:
 			},
 			Admin: identity_config.AdminConfig{
 				Username: "admin", // Required for default database bootstrap
-				Password: "testpassword123",
+				Password: "TestPassword123!",
 			},
 		},
 		Puller: puller_config.Config{

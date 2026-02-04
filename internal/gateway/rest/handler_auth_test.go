@@ -131,6 +131,8 @@ func TestHandleLogin(t *testing.T) {
 	})
 
 	t.Run("InternalError", func(t *testing.T) {
+		// Security: Internal errors should return 401 with generic message
+		// to prevent information leakage about system state
 		reqBody := identity.LoginRequest{Username: "user", Password: "password"}
 		mockAuth.On("SignIn", mock.Anything, reqBody).Return(nil, errors.New("internal error")).Once()
 
@@ -140,7 +142,7 @@ func TestHandleLogin(t *testing.T) {
 
 		server.handleLogin(w, req)
 
-		assert.Equal(t, http.StatusInternalServerError, w.Code)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 
 	t.Run("InvalidBody", func(t *testing.T) {

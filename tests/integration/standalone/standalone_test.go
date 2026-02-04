@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -193,7 +194,7 @@ templates:
 			},
 			Admin: identity_config.AdminConfig{
 				Username: "admin", // Required for default database bootstrap
-				Password: "testpassword123",
+				Password: "TestPassword123!",
 			},
 		},
 		Indexer: indexer_config.Config{
@@ -264,10 +265,13 @@ templates:
 }
 
 func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
+	// Add timestamp suffix to ensure unique username across test runs
+	uniqueUID := fmt.Sprintf("%s_%d", uid, time.Now().UnixNano()%1000000)
+
 	// SignUp
 	signupBody := map[string]string{
-		"username": uid,
-		"password": "password123456",
+		"username": uniqueUID,
+		"password": "TestPassword123!",
 	}
 	bodyBytes, _ := json.Marshal(signupBody)
 	resp, err := http.Post(e.APIURL+"/auth/v1/signup", "application/json", bytes.NewBuffer(bodyBytes))
@@ -282,15 +286,24 @@ func (e *StandaloneEnv) GetToken(t *testing.T, uid string, role string) string {
 		return res["access_token"].(string)
 	}
 
+	// Log the signup error for debugging
+	signupRespBody, _ := io.ReadAll(resp.Body)
+	t.Logf("SignUp failed: status=%d body=%s", resp.StatusCode, string(signupRespBody))
+
 	// If signup failed (user exists), try login
 	loginBody := map[string]string{
 		"username": uid,
-		"password": "password123456",
+		"password": "TestPassword123!",
 	}
 	bodyBytes, _ = json.Marshal(loginBody)
 	resp2, err := http.Post(e.APIURL+"/auth/v1/login", "application/json", bytes.NewBuffer(bodyBytes))
 	require.NoError(t, err)
 	defer resp2.Body.Close()
+
+	if resp2.StatusCode != http.StatusOK {
+		loginRespBody, _ := io.ReadAll(resp2.Body)
+		t.Logf("Login failed: status=%d body=%s", resp2.StatusCode, string(loginRespBody))
+	}
 	require.Equal(t, http.StatusOK, resp2.StatusCode)
 
 	var tokenResp map[string]interface{}

@@ -27,7 +27,7 @@ func TestSignUp_TableDriven(t *testing.T) {
 			name: "Success",
 			req: SignupRequest{
 				Username: "newuser",
-				Password: "password12345",
+				Password: "Password12345!",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "newuser").Return(nil, ErrUserNotFound)
@@ -88,10 +88,10 @@ func TestSignIn_TableDriven(t *testing.T) {
 			name: "Success",
 			req: LoginRequest{
 				Username: "existinguser",
-				Password: "password123",
+				Password: "Password123!",
 			},
 			mockSetup: func(m *MockStorage) {
-				hash, algo, _ := HashPassword("password123")
+				hash, algo, _ := HashPassword("Password123!")
 				user := &User{
 					ID:           "user-id",
 					Username:     "existinguser",
@@ -107,7 +107,7 @@ func TestSignIn_TableDriven(t *testing.T) {
 			name: "User Not Found",
 			req: LoginRequest{
 				Username: "nonexistent",
-				Password: "password12345",
+				Password: "Password12345!",
 			},
 			mockSetup: func(m *MockStorage) {
 				m.On("GetUserByUsername", mock.Anything, "nonexistent").Return(nil, ErrUserNotFound)
@@ -122,7 +122,7 @@ func TestSignIn_TableDriven(t *testing.T) {
 				Password: "wrongpassword",
 			},
 			mockSetup: func(m *MockStorage) {
-				hash, algo, _ := HashPassword("password123")
+				hash, algo, _ := HashPassword("Password123!")
 				user := &User{
 					ID:           "user-id",
 					Username:     "existinguser",
@@ -143,7 +143,7 @@ func TestSignIn_TableDriven(t *testing.T) {
 				Password: "wrongpassword",
 			},
 			mockSetup: func(m *MockStorage) {
-				hash, algo, _ := HashPassword("password123")
+				hash, algo, _ := HashPassword("Password123!")
 				user := &User{
 					ID:            "user-id",
 					Username:      "existinguser",
@@ -164,7 +164,7 @@ func TestSignIn_TableDriven(t *testing.T) {
 			name: "Locked Out",
 			req: LoginRequest{
 				Username: "locked",
-				Password: "password123",
+				Password: "Password123!",
 			},
 			mockSetup: func(m *MockStorage) {
 				user := &User{
@@ -181,10 +181,10 @@ func TestSignIn_TableDriven(t *testing.T) {
 			name: "Disabled",
 			req: LoginRequest{
 				Username: "disabled",
-				Password: "password123",
+				Password: "Password123!",
 			},
 			mockSetup: func(m *MockStorage) {
-				hash, algo, _ := HashPassword("password123")
+				hash, algo, _ := HashPassword("Password123!")
 				user := &User{
 					ID:           "user-id",
 					Username:     "disabled",
@@ -257,7 +257,7 @@ func TestRefresh_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "refreshuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					Username: "refreshuser", Password: "password12345",
+					Username: "refreshuser", Password: "Password12345!",
 				})
 				require.NoError(t, err)
 				return resp.RefreshToken
@@ -332,7 +332,7 @@ func TestLogout_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "logoutuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					Username: "logoutuser", Password: "password12345",
+					Username: "logoutuser", Password: "Password12345!",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken
@@ -389,7 +389,7 @@ func TestMiddleware_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "mwuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					Username: "mwuser", Password: "password12345",
+					Username: "mwuser", Password: "Password12345!",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken
@@ -470,7 +470,7 @@ func TestMiddlewareOptional_TableDriven(t *testing.T) {
 				m.On("GetUserByUsername", mock.Anything, "optuser").Return(nil, ErrUserNotFound).Once()
 				m.On("CreateUser", mock.Anything, mock.Anything).Return(nil).Once()
 				resp, err := svc.SignUp(context.Background(), SignupRequest{
-					Username: "optuser", Password: "password12345",
+					Username: "optuser", Password: "Password12345!",
 				})
 				require.NoError(t, err)
 				return resp.AccessToken

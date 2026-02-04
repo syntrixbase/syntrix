@@ -2,6 +2,7 @@ package authn
 
 import (
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -97,17 +98,11 @@ func verifyArgon2id(password, hash string) (bool, error) {
 
 	newHash := argon2.IDKey([]byte(password), salt, timeParam, memory, threads, uint32(len(decodedHash)))
 
-	if len(newHash) != len(decodedHash) {
-		return false, nil
+	// Use constant-time comparison to prevent timing attacks
+	if subtle.ConstantTimeCompare(newHash, decodedHash) == 1 {
+		return true, nil
 	}
-
-	for i := 0; i < len(newHash); i++ {
-		if newHash[i] != decodedHash[i] {
-			return false, nil
-		}
-	}
-
-	return true, nil
+	return false, nil
 }
 
 func verifyBcrypt(password, hash string) (bool, error) {

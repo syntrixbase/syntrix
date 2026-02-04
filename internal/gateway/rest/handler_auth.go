@@ -2,12 +2,15 @@ package rest
 
 import (
 	"encoding/json"
-	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
+
+// Generic authentication error message to prevent account enumeration
+const authFailedMessage = "Invalid credentials"
 
 func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 	var req identity.SignupRequest
@@ -18,6 +21,8 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignUp(r.Context(), req)
 	if err != nil {
+		// Log the error for debugging (using Debug level to avoid log noise in production)
+		slog.Debug("SignUp failed", "username", req.Username, "error", err.Error())
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Signup failed")
 		return
 	}
@@ -39,23 +44,20 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 	tokenPair, err := h.auth.SignIn(r.Context(), req)
 	if err != nil {
-		if errors.Is(err, identity.ErrInvalidCredentials) {
-			writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Invalid credentials")
-			return
-		}
-		if errors.Is(err, identity.ErrAccountDisabled) {
-			writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Account is disabled")
-			return
-		}
-		if errors.Is(err, identity.ErrAccountLocked) {
-			writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Account is locked")
-			return
-		}
+		// Log the specific error internally for debugging, but return generic message to client
+		// This prevents account enumeration attacks
+		slog.Debug("Authentication failed",
+			"username", req.Username,
+			"error", err.Error(),
+		)
+
 		if model.IsCanceled(err) {
 			w.WriteHeader(499)
 			return
 		}
-		writeError(w, http.StatusInternalServerError, ErrCodeInternalError, "Login failed")
+
+		// Return generic error message for all authentication failures
+		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, authFailedMessage)
 		return
 	}
 
