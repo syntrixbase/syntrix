@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/syntrixbase/syntrix/internal/core/database"
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 	api_config "github.com/syntrixbase/syntrix/internal/gateway/config"
 	"github.com/syntrixbase/syntrix/internal/gateway/realtime"
@@ -63,7 +64,8 @@ func TestNewServer(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.rest)
 }
@@ -75,7 +77,8 @@ func TestNewServer_WithRealtime(t *testing.T) {
 
 	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{})
 
-	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, rt)
+	assert.NoError(t, err)
 	assert.NotNil(t, server)
 	assert.NotNil(t, server.realtime)
 }
@@ -85,7 +88,8 @@ func TestServer_RegisterRoutes(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NoError(t, err)
 
 	// Create a mux and register routes
 	mux := http.NewServeMux()
@@ -124,7 +128,8 @@ func TestServer_RegisterRoutes_WithRealtime(t *testing.T) {
 	mockAuthz := new(MockAuthzEngine)
 
 	rt := realtime.NewServer(mockQuery, nil, "docs", mockAuth, api_config.RealtimeConfig{})
-	server := NewServer(mockQuery, mockAuth, mockAuthz, rt)
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, rt)
+	assert.NoError(t, err)
 
 	mux := http.NewServeMux()
 	server.RegisterRoutes(mux)
@@ -159,7 +164,8 @@ func TestServer_SetDatabaseService(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzEngine)
 
-	server := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NoError(t, err)
 	assert.NotNil(t, server)
 
 	// SetDatabaseService should not panic and should set the service
@@ -169,4 +175,90 @@ func TestServer_SetDatabaseService(t *testing.T) {
 
 	// The function should have completed without panic
 	// This is a smoke test to ensure the method works
+}
+
+func TestNewServer_WithOptions(t *testing.T) {
+	mockQuery := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzEngine)
+
+	t.Run("WithDatabase option", func(t *testing.T) {
+		mockDB := &stubDatabaseService{}
+		server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil,
+			WithDatabase(mockDB))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, server)
+	})
+
+	t.Run("WithServerAuthRateLimiter option", func(t *testing.T) {
+		limiter := &stubRateLimiter{allowResult: true}
+		server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil,
+			WithServerAuthRateLimiter(limiter, 60000000000))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, server)
+	})
+
+	t.Run("Multiple options", func(t *testing.T) {
+		mockDB := &stubDatabaseService{}
+		limiter := &stubRateLimiter{allowResult: true}
+		server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil,
+			WithDatabase(mockDB),
+			WithServerAuthRateLimiter(limiter, 60000000000))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, server)
+	})
+}
+
+func TestServer_SetAuthRateLimiter(t *testing.T) {
+	mockQuery := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzEngine)
+
+	server, err := NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NoError(t, err)
+
+	limiter := &stubRateLimiter{allowResult: true}
+	// Should not panic
+	server.SetAuthRateLimiter(limiter, 60000000000)
+}
+
+// stubDatabaseService is a minimal stub implementing database.Service
+type stubDatabaseService struct{}
+
+func (s *stubDatabaseService) CreateDatabase(ctx context.Context, userID string, isAdmin bool, req database.CreateRequest) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) ListDatabases(ctx context.Context, userID string, isAdmin bool, opts database.ListOptions) (*database.ListResult, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) GetDatabase(ctx context.Context, userID string, isAdmin bool, identifier string) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) UpdateDatabase(ctx context.Context, userID string, isAdmin bool, identifier string, req database.UpdateRequest) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) DeleteDatabase(ctx context.Context, userID string, isAdmin bool, identifier string) error {
+	return nil
+}
+func (s *stubDatabaseService) ResolveDatabase(ctx context.Context, identifier string) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) ValidateDatabase(ctx context.Context, identifier string) error {
+	return nil
+}
+
+// stubRateLimiter is a minimal stub implementing ratelimit.Limiter
+type stubRateLimiter struct {
+	allowResult bool
+}
+
+func (s *stubRateLimiter) Allow(key string) bool {
+	return s.allowResult
+}
+
+func (s *stubRateLimiter) Reset(key string) {
+	// no-op
 }

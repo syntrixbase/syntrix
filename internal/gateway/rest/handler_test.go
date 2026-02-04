@@ -21,7 +21,7 @@ func TestAuthorized_GetDocumentError(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// We need to wrap a dummy handler with authorized
 	target := handler.authorized(func(w http.ResponseWriter, r *http.Request) {
@@ -93,7 +93,7 @@ func TestTriggerProtected_NoRoles(t *testing.T) {
 	mockAuth := new(MockAuthService_NoContext) // Use the no-context mock
 	mockAuthz := new(AllowAllAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Wrap a dummy handler
 	target := handler.triggerProtected(func(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +115,7 @@ func TestAdminOnly_NoRoles(t *testing.T) {
 	mockAuth := new(MockAuthService_NoContext) // Use the no-context mock
 	mockAuthz := new(AllowAllAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Wrap a dummy handler
 	target := handler.adminOnly(func(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +150,7 @@ func TestAuthorized_InvalidJSONBody(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// We need to verify that Evaluate is called with nil Resource (or Resource with nil Data)
 	// when body is invalid JSON.
@@ -189,7 +189,7 @@ func TestAuthorized_OwnerImplicitDBAdmin_SlugMatch(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Set up authz to allow the request
 	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
@@ -246,7 +246,7 @@ func TestAuthorized_OwnerImplicitDBAdmin_IDMatch(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Set up authz to allow the request
 	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
@@ -301,7 +301,7 @@ func TestAuthorized_OwnerImplicitDBAdmin_NotInList(t *testing.T) {
 	mockAuth := new(MockAuthService)
 	mockAuthz := new(MockAuthzService)
 
-	handler := NewHandler(mockService, mockAuth, mockAuthz)
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
 
 	// Set up authz to allow the request
 	mockAuthz.On("Evaluate", mock.Anything, "db-123", "col/doc", "create", mock.MatchedBy(func(req identity.AuthzRequest) bool {
@@ -346,4 +346,165 @@ func TestAuthorized_OwnerImplicitDBAdmin_NotInList(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rr.Code)
 	mockAuthz.AssertExpectations(t)
+}
+
+// TestWithAuthRateLimit tests the auth rate limiting functionality
+func TestWithAuthRateLimit_NoLimiter(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
+	// No auth rate limiter set - should pass through
+
+	called := false
+	wrapped := handler.withAuthRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req, _ := http.NewRequest("POST", "/auth/v1/login", nil)
+	rr := httptest.NewRecorder()
+	wrapped(rr, req)
+
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+// mockRateLimiter for testing
+type mockRateLimiter struct {
+	allowResult bool
+}
+
+func (m *mockRateLimiter) Allow(key string) bool {
+	return m.allowResult
+}
+
+func (m *mockRateLimiter) Reset(key string) {
+	// no-op for testing
+}
+
+func TestWithAuthRateLimit_Allowed(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
+	handler.SetAuthRateLimiter(&mockRateLimiter{allowResult: true}, 60000000000) // 1 minute
+
+	called := false
+	wrapped := handler.withAuthRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req, _ := http.NewRequest("POST", "/auth/v1/login", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+	wrapped(rr, req)
+
+	assert.True(t, called)
+	assert.Equal(t, http.StatusOK, rr.Code)
+}
+
+func TestWithAuthRateLimit_Denied(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	handler, _ := NewHandler(mockService, mockAuth, mockAuthz)
+	handler.SetAuthRateLimiter(&mockRateLimiter{allowResult: false}, 60000000000) // 1 minute
+
+	called := false
+	wrapped := handler.withAuthRateLimit(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req, _ := http.NewRequest("POST", "/auth/v1/login", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	rr := httptest.NewRecorder()
+	wrapped(rr, req)
+
+	assert.False(t, called)
+	assert.Equal(t, http.StatusTooManyRequests, rr.Code)
+	assert.Contains(t, rr.Body.String(), "RATE_LIMITED")
+	assert.NotEmpty(t, rr.Header().Get("Retry-After"))
+}
+
+// TestNewHandler_WithOptions tests the option pattern for NewHandler
+func TestNewHandler_WithOptions(t *testing.T) {
+	mockService := new(MockQueryService)
+	mockAuth := new(MockAuthService)
+	mockAuthz := new(MockAuthzService)
+
+	t.Run("WithDatabaseService option", func(t *testing.T) {
+		// Using a stub that satisfies database.Service interface
+		mockDB := &stubDatabaseService{}
+		handler, err := NewHandler(mockService, mockAuth, mockAuthz,
+			WithDatabaseService(mockDB))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, handler)
+		assert.NotNil(t, handler.database)
+		assert.NotNil(t, handler.dbValidator)
+	})
+
+	t.Run("WithAuthRateLimiter option", func(t *testing.T) {
+		limiter := &mockRateLimiter{allowResult: true}
+		handler, err := NewHandler(mockService, mockAuth, mockAuthz,
+			WithAuthRateLimiter(limiter, 60000000000))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, handler)
+		assert.NotNil(t, handler.authRateLimiter)
+	})
+
+	t.Run("Multiple options", func(t *testing.T) {
+		mockDB := &stubDatabaseService{}
+		limiter := &mockRateLimiter{allowResult: true}
+		handler, err := NewHandler(mockService, mockAuth, mockAuthz,
+			WithDatabaseService(mockDB),
+			WithAuthRateLimiter(limiter, 60000000000))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, handler)
+		assert.NotNil(t, handler.database)
+		assert.NotNil(t, handler.authRateLimiter)
+	})
+
+	t.Run("Nil database service does not create validator", func(t *testing.T) {
+		handler, err := NewHandler(mockService, mockAuth, mockAuthz,
+			WithDatabaseService(nil))
+
+		assert.NoError(t, err)
+		assert.NotNil(t, handler)
+		assert.Nil(t, handler.database)
+		assert.Nil(t, handler.dbValidator)
+	})
+}
+
+// stubDatabaseService is a minimal stub implementing database.Service
+type stubDatabaseService struct{}
+
+func (s *stubDatabaseService) CreateDatabase(ctx context.Context, userID string, isAdmin bool, req database.CreateRequest) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) ListDatabases(ctx context.Context, userID string, isAdmin bool, opts database.ListOptions) (*database.ListResult, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) GetDatabase(ctx context.Context, userID string, isAdmin bool, identifier string) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) UpdateDatabase(ctx context.Context, userID string, isAdmin bool, identifier string, req database.UpdateRequest) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) DeleteDatabase(ctx context.Context, userID string, isAdmin bool, identifier string) error {
+	return nil
+}
+func (s *stubDatabaseService) ResolveDatabase(ctx context.Context, identifier string) (*database.Database, error) {
+	return nil, nil
+}
+func (s *stubDatabaseService) ValidateDatabase(ctx context.Context, identifier string) error {
+	return nil
 }

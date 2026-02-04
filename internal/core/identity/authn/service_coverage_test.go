@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/syntrixbase/syntrix/internal/core/identity/config"
+	"github.com/syntrixbase/syntrix/internal/core/storage"
 )
 
 func TestSignUp_Coverage(t *testing.T) {
@@ -104,6 +105,7 @@ func TestSignUp_Coverage(t *testing.T) {
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
+				AdminUsername:   "syntrix", // Configure admin username for Admin Role Assignment test
 				PasswordPolicy: config.PasswordPolicyConfig{
 					MinLength:        12,
 					RequireUppercase: true,
@@ -164,7 +166,8 @@ func TestRefresh_Coverage(t *testing.T) {
 				return resp.RefreshToken
 			},
 			mockSetup: func(m *MockStorage) {
-				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(true, nil)
+				// Token already revoked - RevokeTokenIfNotRevoked returns ErrTokenAlreadyRevoked
+				m.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(storage.ErrTokenAlreadyRevoked)
 			},
 			expectError: true,
 			errorIs:     ErrInvalidToken,
@@ -181,7 +184,8 @@ func TestRefresh_Coverage(t *testing.T) {
 				return resp.RefreshToken
 			},
 			mockSetup: func(m *MockStorage) {
-				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, errors.New("db error"))
+				// Database error during atomic revocation
+				m.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("db error"))
 			},
 			expectError: true,
 		},
@@ -197,7 +201,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				return resp.RefreshToken
 			},
 			mockSetup: func(m *MockStorage) {
-				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
+				m.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 			},
 			expectError: true,
@@ -215,7 +219,7 @@ func TestRefresh_Coverage(t *testing.T) {
 				return resp.RefreshToken
 			},
 			mockSetup: func(m *MockStorage) {
-				m.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil)
+				m.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil)
 				m.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{
 					ID: "user-id", Username: "disabled", Disabled: true,
 				}, nil)

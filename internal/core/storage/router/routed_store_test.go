@@ -495,6 +495,9 @@ func (m *mockRevStoreImpl) IsRevoked(ctx context.Context, jti string, gracePerio
 	args := m.Called(ctx, jti, gracePeriod)
 	return args.Bool(0), args.Error(1)
 }
+func (m *mockRevStoreImpl) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return m.Called(ctx, jti, expiresAt, gracePeriod).Error(0)
+}
 func (m *mockRevStoreImpl) EnsureIndexes(ctx context.Context) error {
 	return m.Called(ctx).Error(0)
 }

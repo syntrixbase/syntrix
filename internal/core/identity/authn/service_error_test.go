@@ -94,14 +94,12 @@ func TestRefresh_ErrorPaths_Extended(t *testing.T) {
 		return pair.RefreshToken
 	}
 
-	t.Run("RevokeToken Error", func(t *testing.T) {
+	t.Run("RevokeTokenIfNotRevoked Error", func(t *testing.T) {
 		t.Parallel()
 		token := getRefreshToken()
 
-		// Mock successful checks but failed revocation
-		mockStorage.On("IsRevoked", mock.Anything, mock.Anything, mock.Anything).Return(false, nil).Once()
-		mockStorage.On("GetUserByID", mock.Anything, mock.Anything).Return(&User{ID: "u1"}, nil).Once()
-		mockStorage.On("RevokeToken", mock.Anything, mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
+		// Mock failed atomic revocation
+		mockStorage.On("RevokeTokenIfNotRevoked", mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(errors.New("revoke failed")).Once()
 
 		_, err := svc.Refresh(context.Background(), RefreshRequest{RefreshToken: token})
 		assert.Error(t, err)

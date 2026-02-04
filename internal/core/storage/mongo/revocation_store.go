@@ -51,6 +51,47 @@ func (s *revocationStore) RevokeTokenImmediate(ctx context.Context, jti string, 
 	return err
 }
 
+// RevokeTokenIfNotRevoked atomically checks if token is revoked and revokes it.
+// Uses MongoDB's unique index on _id to ensure atomicity.
+// Returns ErrTokenAlreadyRevoked if the token was already revoked (within grace period).
+func (s *revocationStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	// First, try to insert the revocation record
+	doc := types.RevokedToken{
+		JTI:       jti,
+		ExpiresAt: expiresAt,
+		RevokedAt: time.Now(),
+	}
+	_, err := s.coll.InsertOne(ctx, doc)
+	if err == nil {
+		// Successfully inserted - token was not revoked
+		return nil
+	}
+
+	// If it's a duplicate key error, check if within grace period
+	if mongo.IsDuplicateKeyError(err) {
+		// Check if the existing revocation is past the grace period
+		filter := bson.M{"_id": jti}
+		var existingDoc types.RevokedToken
+		findErr := s.coll.FindOne(ctx, filter).Decode(&existingDoc)
+		if findErr != nil {
+			// This shouldn't happen since we just got a duplicate key error
+			return findErr
+		}
+
+		// If within grace period, token is effectively not revoked yet (overlap window)
+		if gracePeriod > 0 && time.Since(existingDoc.RevokedAt) < gracePeriod {
+			// Token is in grace period, but we need to deny concurrent refresh
+			// to prevent race condition
+			return types.ErrTokenAlreadyRevoked
+		}
+
+		// Token is already revoked (past grace period)
+		return types.ErrTokenAlreadyRevoked
+	}
+
+	return err
+}
+
 func (s *revocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	filter := bson.M{"_id": jti}
 	var doc types.RevokedToken

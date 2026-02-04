@@ -474,18 +474,20 @@ func TestNewGRPCServer(t *testing.T) {
 	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
-	grpcServer := NewGRPCServer(s)
+	grpcServer, err := NewGRPCServer(s)
+	require.NoError(t, err)
 	assert.NotNil(t, grpcServer)
 }
 
-func TestNewGRPCServer_PanicOnNonStreamerService(t *testing.T) {
+func TestNewGRPCServer_ErrorOnNonStreamerService(t *testing.T) {
 	t.Parallel()
 	// Create a mock that implements StreamerServer but is not *streamerService
 	mockServer := &mockStreamerServer{}
 
-	assert.Panics(t, func() {
-		NewGRPCServer(mockServer)
-	})
+	grpcServer, err := NewGRPCServer(mockServer)
+	assert.Error(t, err)
+	assert.Nil(t, grpcServer)
+	assert.Contains(t, err.Error(), "requires a *streamerService instance")
 }
 
 // mockStreamerServer is a mock StreamerServer for testing NewGRPCServer panic.
@@ -508,7 +510,8 @@ func TestGRPCServerAdapter_Stream(t *testing.T) {
 	s, err := NewService(ServerConfig{}, slog.Default())
 	require.NoError(t, err)
 
-	grpcServer := NewGRPCServer(s)
+	grpcServer, err := NewGRPCServer(s)
+	require.NoError(t, err)
 	require.NotNil(t, grpcServer)
 
 	ctx, cancel := context.WithCancel(context.Background())

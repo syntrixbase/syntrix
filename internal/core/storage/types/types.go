@@ -130,10 +130,17 @@ type UserStore interface {
 	Close(ctx context.Context) error
 }
 
+// ErrTokenAlreadyRevoked is returned when attempting to revoke an already-revoked token.
+var ErrTokenAlreadyRevoked = errors.New("token already revoked")
+
 // TokenRevocationStore defines the interface for token revocation storage operations
 type TokenRevocationStore interface {
 	RevokeToken(ctx context.Context, jti string, expiresAt time.Time) error
 	RevokeTokenImmediate(ctx context.Context, jti string, expiresAt time.Time) error
+	// RevokeTokenIfNotRevoked atomically checks if token is revoked and revokes it.
+	// Returns ErrTokenAlreadyRevoked if the token was already revoked (within grace period).
+	// This prevents race conditions in concurrent token refresh attempts.
+	RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error
 	IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error)
 	EnsureIndexes(ctx context.Context) error
 	Close(ctx context.Context) error

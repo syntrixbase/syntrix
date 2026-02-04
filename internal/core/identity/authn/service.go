@@ -3,6 +3,7 @@ package authn
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -40,6 +41,7 @@ type AuthService struct {
 	revocations       TokenRevocationStore
 	tokenService      *TokenService
 	passwordValidator *PasswordValidator
+	adminUsername     string // Configurable admin username
 }
 
 func NewAuthService(cfg config.AuthNConfig, users UserStore, revocations TokenRevocationStore) (Service, error) {
@@ -52,6 +54,7 @@ func NewAuthService(cfg config.AuthNConfig, users UserStore, revocations TokenRe
 		revocations:       revocations,
 		tokenService:      tokenService,
 		passwordValidator: NewPasswordValidator(cfg.PasswordPolicy),
+		adminUsername:     cfg.AdminUsername,
 	}, nil
 }
 
@@ -83,7 +86,13 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 		if attempts >= 10 { // Lockout threshold
 			lockoutUntil = time.Now().Add(5 * time.Minute)
 		}
-		_ = s.users.UpdateUserLoginStats(ctx, user.ID, user.LastLoginAt, attempts, lockoutUntil)
+		// Log but don't fail the request - login stats are for security monitoring
+		if err := s.users.UpdateUserLoginStats(ctx, user.ID, user.LastLoginAt, attempts, lockoutUntil); err != nil {
+			slog.Warn("Failed to update login stats for failed attempt",
+				"user_id", user.ID,
+				"error", err,
+			)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
@@ -93,7 +102,13 @@ func (s *AuthService) SignIn(ctx context.Context, req LoginRequest) (*TokenPair,
 	}
 
 	// Success - reset stats
-	_ = s.users.UpdateUserLoginStats(ctx, user.ID, time.Now(), 0, time.Time{})
+	// Log but don't fail the request - login stats are for security monitoring
+	if err := s.users.UpdateUserLoginStats(ctx, user.ID, time.Now(), 0, time.Time{}); err != nil {
+		slog.Warn("Failed to reset login stats after successful login",
+			"user_id", user.ID,
+			"error", err,
+		)
+	}
 
 	return s.tokenService.GenerateTokenPair(user)
 }
@@ -129,8 +144,8 @@ func (s *AuthService) SignUp(ctx context.Context, req SignupRequest) (*TokenPair
 		Roles:        []string{}, // Default roles
 	}
 
-	// Assign admin role to default superuser
-	if user.Username == "syntrix" {
+	// Assign admin role to configured admin user
+	if s.adminUsername != "" && user.Username == s.adminUsername {
 		user.Roles = append(user.Roles, "admin")
 	} else {
 		user.Roles = append(user.Roles, "user")
@@ -149,13 +164,14 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 		return nil, ErrInvalidToken
 	}
 
-	// Check revocation with overlap
-	revoked, err := s.revocations.IsRevoked(ctx, claims.ID, s.tokenService.RefreshOverlap())
-	if err != nil {
+	// Atomically check and revoke token to prevent race conditions
+	// This ensures only one concurrent refresh request can succeed
+	gracePeriod := s.tokenService.RefreshOverlap()
+	if err := s.revocations.RevokeTokenIfNotRevoked(ctx, claims.ID, claims.ExpiresAt.Time, gracePeriod); err != nil {
+		if errors.Is(err, storage.ErrTokenAlreadyRevoked) {
+			return nil, ErrInvalidToken
+		}
 		return nil, err
-	}
-	if revoked {
-		return nil, ErrInvalidToken // Revoked
 	}
 
 	// Get user to ensure still exists/active
@@ -165,12 +181,6 @@ func (s *AuthService) Refresh(ctx context.Context, req RefreshRequest) (*TokenPa
 	}
 	if user.Disabled {
 		return nil, ErrAccountDisabled
-	}
-
-	// Revoke old token (soft revoke for overlap)
-	// We use the Expiration time from claims to clean up later
-	if err := s.revocations.RevokeToken(ctx, claims.ID, claims.ExpiresAt.Time); err != nil {
-		return nil, err
 	}
 
 	// Issue new pair

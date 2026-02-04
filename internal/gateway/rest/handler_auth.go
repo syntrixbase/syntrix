@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"encoding/json"
 	"log/slog"
 	"net/http"
 
@@ -13,13 +12,21 @@ import (
 const authFailedMessage = "Invalid credentials"
 
 func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
-	var req identity.SignupRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := decodeAndValidate[identity.SignupRequest](r)
+	if err != nil {
+		if ve, ok := err.(ValidationErrors); ok {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"code":    ErrCodeBadRequest,
+				"message": "Validation failed",
+				"errors":  ve.Errors,
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
 		return
 	}
 
-	tokenPair, err := h.auth.SignUp(r.Context(), req)
+	tokenPair, err := h.auth.SignUp(r.Context(), *req)
 	if err != nil {
 		// Log the error for debugging (using Debug level to avoid log noise in production)
 		slog.Debug("SignUp failed", "username", req.Username, "error", err.Error())
@@ -31,18 +38,21 @@ func (h *Handler) handleSignUp(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
-	var req identity.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := decodeAndValidate[identity.LoginRequest](r)
+	if err != nil {
+		if ve, ok := err.(ValidationErrors); ok {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"code":    ErrCodeBadRequest,
+				"message": "Validation failed",
+				"errors":  ve.Errors,
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
 		return
 	}
 
-	if req.Username == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Username and password are required")
-		return
-	}
-
-	tokenPair, err := h.auth.SignIn(r.Context(), req)
+	tokenPair, err := h.auth.SignIn(r.Context(), *req)
 	if err != nil {
 		// Log the specific error internally for debugging, but return generic message to client
 		// This prevents account enumeration attacks
@@ -65,18 +75,21 @@ func (h *Handler) handleLogin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
-	var req identity.RefreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := decodeAndValidate[identity.RefreshRequest](r)
+	if err != nil {
+		if ve, ok := err.(ValidationErrors); ok {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"code":    ErrCodeBadRequest,
+				"message": "Validation failed",
+				"errors":  ve.Errors,
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
 		return
 	}
 
-	if req.RefreshToken == "" {
-		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing refresh token")
-		return
-	}
-
-	tokenPair, err := h.auth.Refresh(r.Context(), req)
+	tokenPair, err := h.auth.Refresh(r.Context(), *req)
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "Invalid or expired refresh token")
 		return
@@ -85,18 +98,23 @@ func (h *Handler) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tokenPair)
 }
 
+// LogoutRequest represents the logout payload.
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token" validate:"required"`
+}
+
 func (h *Handler) handleLogout(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		RefreshToken string `json:"refresh_token"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := decodeAndValidate[LogoutRequest](r)
+	if err != nil {
+		if ve, ok := err.(ValidationErrors); ok {
+			writeJSON(w, http.StatusBadRequest, map[string]interface{}{
+				"code":    ErrCodeBadRequest,
+				"message": "Validation failed",
+				"errors":  ve.Errors,
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid request body")
-		return
-	}
-
-	if req.RefreshToken == "" {
-		writeError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing refresh token")
 		return
 	}
 

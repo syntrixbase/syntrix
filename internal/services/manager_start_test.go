@@ -22,6 +22,7 @@ import (
 	puller_config "github.com/syntrixbase/syntrix/internal/puller/config"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
 	"github.com/syntrixbase/syntrix/internal/server"
+	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"github.com/syntrixbase/syntrix/internal/streamer"
 	"github.com/syntrixbase/syntrix/internal/trigger"
 	"github.com/syntrixbase/syntrix/pkg/model"
@@ -347,6 +348,9 @@ func (m *MockServerService) RegisterGRPCService(desc *grpc.ServiceDesc, impl int
 func (m *MockServerService) HTTPMux() *http.ServeMux {
 	m.Called()
 	return http.NewServeMux()
+}
+func (m *MockServerService) AuthRateLimiter() ratelimit.Limiter {
+	return nil
 }
 
 type MockStreamerService struct {

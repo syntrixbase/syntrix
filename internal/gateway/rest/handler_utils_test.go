@@ -9,18 +9,18 @@ import (
 	"github.com/syntrixbase/syntrix/internal/core/identity"
 )
 
-func TestNewHandler_Panic(t *testing.T) {
+func TestNewHandler_NilArgs(t *testing.T) {
 	mockAuthz := new(AllowAllAuthzService)
 
-	// Test panic when auth is nil
-	assert.Panics(t, func() {
-		NewHandler(&MockQueryService{}, nil, mockAuthz)
-	})
+	// Test error when auth is nil
+	_, err := NewHandler(&MockQueryService{}, nil, mockAuthz)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "authn service cannot be nil")
 
-	// Test panic when authz is nil
-	assert.Panics(t, func() {
-		NewHandler(&MockQueryService{}, new(MockAuthService), nil)
-	})
+	// Test error when authz is nil
+	_, err = NewHandler(&MockQueryService{}, new(MockAuthService), nil)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "authz service cannot be nil")
 }
 
 func TestGetDatabase(t *testing.T) {

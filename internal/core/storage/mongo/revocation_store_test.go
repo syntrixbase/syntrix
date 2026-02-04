@@ -80,3 +80,41 @@ func TestRevocationStore_RevokeTokenImmediate_Duplicate(t *testing.T) {
 	err = s.RevokeTokenImmediate(ctx, jti, expiresAt)
 	require.NoError(t, err)
 }
+
+func TestRevocationStore_RevokeTokenIfNotRevoked(t *testing.T) {
+	s, teardown := setupTestRevocationStore(t)
+	defer teardown()
+
+	ctx := context.Background()
+	jti := "token-atomic"
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	// 1. First revocation should succeed
+	err := s.RevokeTokenIfNotRevoked(ctx, jti, expiresAt, 0)
+	require.NoError(t, err)
+
+	// 2. Second revocation should fail with ErrTokenAlreadyRevoked
+	err = s.RevokeTokenIfNotRevoked(ctx, jti, expiresAt, 0)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.ErrTokenAlreadyRevoked)
+}
+
+func TestRevocationStore_RevokeTokenIfNotRevoked_WithGracePeriod(t *testing.T) {
+	s, teardown := setupTestRevocationStore(t)
+	defer teardown()
+
+	ctx := context.Background()
+	jti := "token-atomic-grace"
+	expiresAt := time.Now().Add(1 * time.Hour)
+
+	// 1. First revocation should succeed
+	err := s.RevokeTokenIfNotRevoked(ctx, jti, expiresAt, 1*time.Minute)
+	require.NoError(t, err)
+
+	// 2. Second revocation within grace period should still fail (atomic check)
+	// Even though IsRevoked with grace period returns false, the atomic operation
+	// should detect the existing record and return ErrTokenAlreadyRevoked
+	err = s.RevokeTokenIfNotRevoked(ctx, jti, expiresAt, 1*time.Minute)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, types.ErrTokenAlreadyRevoked)
+}

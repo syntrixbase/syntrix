@@ -88,8 +88,11 @@ func containsSpecial(s string) bool {
 }
 
 // ValidatePasswordComplexity validates that a password meets security requirements
-// using default strict policy. This is a convenience function for cases where
-// the full PasswordValidator is not needed.
+// using default strict policy.
+//
+// Deprecated: This function uses hardcoded policy values. Use PasswordValidator
+// with configured policy instead. This function is kept for backward compatibility
+// but will be removed in a future version.
 func ValidatePasswordComplexity(password string) error {
 	validator := NewPasswordValidator(config.PasswordPolicyConfig{
 		MinLength:        12,

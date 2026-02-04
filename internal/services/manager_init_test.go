@@ -386,6 +386,9 @@ func (f *fakeAuthStore) RevokeTokenImmediate(ctx context.Context, jti string, ex
 func (f *fakeAuthStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
+func (f *fakeAuthStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return nil
+}
 func (f *fakeAuthStore) EnsureIndexes(ctx context.Context) error {
 	f.ensureCalled = true
 	return nil
@@ -1413,6 +1416,9 @@ func (f *fakeAuthStoreWithUser) RevokeTokenImmediate(ctx context.Context, jti st
 func (f *fakeAuthStoreWithUser) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
+func (f *fakeAuthStoreWithUser) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return nil
+}
 func (f *fakeAuthStoreWithUser) EnsureIndexes(ctx context.Context) error {
 	return nil
 }
@@ -1602,7 +1608,8 @@ func TestManager_initDatabaseService_WithGatewayServer(t *testing.T) {
 	mockQuery := &stubQueryService{}
 	mockAuth := &stubAuthN{}
 	mockAuthz := &stubAuthZ{}
-	mgr.gatewayServer = gateway.NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	mgr.gatewayServer, err = gateway.NewServer(mockQuery, mockAuth, mockAuthz, nil)
+	assert.NoError(t, err)
 
 	// Call initDatabaseService
 	err = mgr.initDatabaseService(context.Background())

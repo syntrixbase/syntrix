@@ -13,18 +13,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/syntrixbase/syntrix/internal/ctxkeys"
 	"github.com/syntrixbase/syntrix/internal/server/ratelimit"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
-// Context keys for request-scoped values
-type contextKey string
-
-const (
-	contextKeyRequestID contextKey = "request_id"
-)
+// contextKeyRequestID uses the unified context key for request ID
+var contextKeyRequestID = ctxkeys.KeyRequestID
 
 // APIError represents a structured error response
 type APIError struct {

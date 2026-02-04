@@ -4,6 +4,7 @@ package streamer
 
 import (
 	"context"
+	"fmt"
 
 	pb "github.com/syntrixbase/syntrix/api/gen/streamer/v1"
 	"github.com/syntrixbase/syntrix/internal/puller/events"
@@ -99,11 +100,12 @@ func (a *grpcServerAdapter) Stream(stream grpc.BidiStreamingServer[pb.GatewayMes
 
 // NewGRPCServer creates a gRPC server for the Streamer service.
 // The server implements pb.StreamerServiceServer and wraps the StreamerServer interface.
-func NewGRPCServer(srv StreamerServer) pb.StreamerServiceServer {
+// Returns an error if the provided srv is not a *streamerService instance.
+func NewGRPCServer(srv StreamerServer) (pb.StreamerServiceServer, error) {
 	// Type assert to get the concrete service implementation
 	svc, ok := srv.(*streamerService)
 	if !ok {
-		panic("NewGRPCServer requires a *streamerService instance")
+		return nil, fmt.Errorf("NewGRPCServer requires a *streamerService instance, got %T", srv)
 	}
-	return &grpcServerAdapter{service: svc}
+	return &grpcServerAdapter{service: svc}, nil
 }

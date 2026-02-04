@@ -271,7 +271,7 @@ func createTestServer(engine query.Service, auth identity.AuthN, authz identity.
 		authz = new(AllowAllAuthzService)
 	}
 
-	h := NewHandler(engine, auth, authz)
+	h, _ := NewHandler(engine, auth, authz)
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 	return &TestServer{

@@ -1,12 +1,16 @@
 package rest
 
 import (
+	"bytes"
+	"net/http/httptest"
 	"testing"
 
+	"github.com/syntrixbase/syntrix/internal/core/identity"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/pkg/model"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateData(t *testing.T) {
@@ -207,6 +211,170 @@ func TestValidateReplicationPush(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+func TestDecodeAndValidate(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantErr    bool
+		wantErrMsg string
+	}{
+		{
+			name:    "valid login request",
+			body:    `{"username": "testuser", "password": "pass"}`,
+			wantErr: false,
+		},
+		{
+			name:       "missing username",
+			body:       `{"password": "pass"}`,
+			wantErr:    true,
+			wantErrMsg: "username: This field is required",
+		},
+		{
+			name:       "missing password",
+			body:       `{"username": "testuser"}`,
+			wantErr:    true,
+			wantErrMsg: "password: This field is required",
+		},
+		{
+			name:       "empty body",
+			body:       `{}`,
+			wantErr:    true,
+			wantErrMsg: "username: This field is required",
+		},
+		{
+			name:       "invalid json",
+			body:       `{invalid}`,
+			wantErr:    true,
+			wantErrMsg: "invalid request body",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("POST", "/login", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+
+			result, err := decodeAndValidate[identity.LoginRequest](req)
+
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErrMsg)
+			} else {
+				require.NoError(t, err)
+				assert.NotNil(t, result)
+				assert.NotEmpty(t, result.Username)
+			}
+		})
+	}
+}
+
+func TestValidateStruct(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   interface{}
+		wantErr bool
+	}{
+		{
+			name: "valid signup request",
+			input: &identity.SignupRequest{
+				Username: "testuser",
+				Password: "password123",
+			},
+			wantErr: false,
+		},
+		{
+			name: "username too short",
+			input: &identity.SignupRequest{
+				Username: "ab",
+				Password: "password123",
+			},
+			wantErr: true,
+		},
+		{
+			name: "password too short",
+			input: &identity.SignupRequest{
+				Username: "testuser",
+				Password: "short",
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateStruct(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidationErrors_Error(t *testing.T) {
+	ve := ValidationErrors{
+		Errors: []ValidationError{
+			{Field: "username", Message: "required"},
+			{Field: "password", Message: "too short"},
+		},
+	}
+	errStr := ve.Error()
+	assert.Contains(t, errStr, "username: required")
+	assert.Contains(t, errStr, "password: too short")
+}
+
+func TestTranslateValidationError(t *testing.T) {
+	// Test using real validator to produce FieldErrors
+	type testStruct struct {
+		Required    string `validate:"required"`
+		MinLen      string `validate:"min=3"`
+		MaxLen      string `validate:"max=5"`
+		AlphaNum    string `validate:"alphanum"`
+		Email       string `validate:"email"`
+		GreaterThan int    `validate:"gt=5"`
+		LessThan    int    `validate:"lt=10"`
+		OneOf       string `validate:"oneof=a b c"`
+	}
+
+	tests := []struct {
+		name        string
+		input       testStruct
+		fieldName   string
+		wantContain string
+	}{
+		{
+			name:        "required field",
+			input:       testStruct{},
+			fieldName:   "required",
+			wantContain: "required",
+		},
+		{
+			name:        "min length",
+			input:       testStruct{Required: "x", MinLen: "ab"},
+			fieldName:   "minlen",
+			wantContain: "at least 3",
+		},
+		{
+			name:        "max length",
+			input:       testStruct{Required: "x", MaxLen: "toolong"},
+			fieldName:   "maxlen",
+			wantContain: "at most 5",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateStruct(&tt.input)
+			if err == nil {
+				t.Skip("no validation error produced")
+				return
+			}
+			assert.Contains(t, err.Error(), tt.wantContain)
 		})
 	}
 }

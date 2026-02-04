@@ -135,6 +135,9 @@ func (m *mockRevocationStore) RevokeTokenImmediate(ctx context.Context, jti stri
 func (m *mockRevocationStore) IsRevoked(ctx context.Context, jti string, gracePeriod time.Duration) (bool, error) {
 	return false, nil
 }
+func (m *mockRevocationStore) RevokeTokenIfNotRevoked(ctx context.Context, jti string, expiresAt time.Time, gracePeriod time.Duration) error {
+	return nil
+}
 func (m *mockRevocationStore) EnsureIndexes(ctx context.Context) error {
 	return nil
 }

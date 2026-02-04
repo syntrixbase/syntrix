@@ -1,14 +1,113 @@
 package rest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/syntrixbase/syntrix/internal/core/storage"
 	"github.com/syntrixbase/syntrix/internal/helper"
 	"github.com/syntrixbase/syntrix/pkg/model"
 )
+
+// validate is the singleton validator instance used across all handlers.
+var validate *validator.Validate
+
+func init() {
+	validate = validator.New()
+}
+
+// ValidationError wraps validation errors with user-friendly messages.
+type ValidationError struct {
+	Field   string `json:"field"`
+	Message string `json:"message"`
+}
+
+// ValidationErrors contains multiple validation errors.
+type ValidationErrors struct {
+	Errors []ValidationError `json:"errors"`
+}
+
+func (v ValidationErrors) Error() string {
+	var msgs []string
+	for _, e := range v.Errors {
+		msgs = append(msgs, fmt.Sprintf("%s: %s", e.Field, e.Message))
+	}
+	return strings.Join(msgs, "; ")
+}
+
+// translateValidationError converts a validator.FieldError to a user-friendly message.
+func translateValidationError(fe validator.FieldError) string {
+	switch fe.Tag() {
+	case "required":
+		return "This field is required"
+	case "min":
+		return fmt.Sprintf("Must be at least %s characters", fe.Param())
+	case "max":
+		return fmt.Sprintf("Must be at most %s characters", fe.Param())
+	case "alphanum":
+		return "Must contain only letters and numbers"
+	case "email":
+		return "Must be a valid email address"
+	case "url":
+		return "Must be a valid URL"
+	case "gte":
+		return fmt.Sprintf("Must be greater than or equal to %s", fe.Param())
+	case "lte":
+		return fmt.Sprintf("Must be less than or equal to %s", fe.Param())
+	case "gt":
+		return fmt.Sprintf("Must be greater than %s", fe.Param())
+	case "lt":
+		return fmt.Sprintf("Must be less than %s", fe.Param())
+	case "oneof":
+		return fmt.Sprintf("Must be one of: %s", fe.Param())
+	default:
+		return fmt.Sprintf("Failed validation: %s", fe.Tag())
+	}
+}
+
+// formatValidationErrors converts validator errors to ValidationErrors.
+func formatValidationErrors(err error) ValidationErrors {
+	var ve validator.ValidationErrors
+	if !errors.As(err, &ve) {
+		return ValidationErrors{
+			Errors: []ValidationError{{Field: "unknown", Message: err.Error()}},
+		}
+	}
+
+	var valErrors []ValidationError
+	for _, fe := range ve {
+		valErrors = append(valErrors, ValidationError{
+			Field:   strings.ToLower(fe.Field()),
+			Message: translateValidationError(fe),
+		})
+	}
+	return ValidationErrors{Errors: valErrors}
+}
+
+// decodeAndValidate decodes a JSON request body and validates it.
+// Returns the validated request struct or an error.
+func decodeAndValidate[T any](r *http.Request) (*T, error) {
+	var req T
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return nil, fmt.Errorf("invalid request body: %w", err)
+	}
+	if err := validate.Struct(&req); err != nil {
+		return nil, formatValidationErrors(err)
+	}
+	return &req, nil
+}
+
+// validateStruct validates a struct and returns user-friendly errors.
+func validateStruct(s interface{}) error {
+	if err := validate.Struct(s); err != nil {
+		return formatValidationErrors(err)
+	}
+	return nil
+}
 
 // ValidationConfig holds configurable limits for validation
 type ValidationConfig struct {
