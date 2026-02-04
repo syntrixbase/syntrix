@@ -16,6 +16,7 @@ type memoryLimiter struct {
 	// For lazy cleanup of stale buckets
 	cleanupT *time.Ticker
 	stopCh   chan struct{}
+	stopped  bool
 }
 
 // tokenBucket implements the Token Bucket algorithm.
@@ -122,7 +123,14 @@ func (l *memoryLimiter) cleanupStale() {
 }
 
 // Stop stops the cleanup goroutine. Should be called when the limiter is no longer needed.
+// Safe to call multiple times.
 func (l *memoryLimiter) Stop() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.stopped {
+		return
+	}
+	l.stopped = true
 	close(l.stopCh)
 }
 

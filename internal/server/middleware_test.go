@@ -79,7 +79,7 @@ func TestRecoveryMiddleware(t *testing.T) {
 }
 
 func TestCORSMiddleware(t *testing.T) {
-	cfg := Config{EnableCORS: true}
+	cfg := Config{EnableCORS: true, AllowCredentials: true}
 	cfg.ApplyDefaults() // Apply defaults to get AllowedMethods and AllowedHeaders
 	srv := New(cfg, nil).(*serverImpl)
 
@@ -179,6 +179,58 @@ func TestSecurityHeadersMiddleware(t *testing.T) {
 	assert.Equal(t, "1; mode=block", resp.Header.Get("X-XSS-Protection"))
 	assert.Equal(t, "strict-origin-when-cross-origin", resp.Header.Get("Referrer-Policy"))
 	assert.Equal(t, "default-src 'self'", resp.Header.Get("Content-Security-Policy"))
+}
+
+func TestRateLimitMiddleware(t *testing.T) {
+	cfg := Config{
+		RateLimit: RateLimitConfig{
+			Enabled:  true,
+			Requests: 2,
+			Window:   time.Minute,
+		},
+	}
+	cfg.ApplyDefaults()
+	srv := New(cfg, nil).(*serverImpl)
+	defer func() {
+		if srv.rateLimiter != nil {
+			if stoppable, ok := srv.rateLimiter.(interface{ Stop() }); ok {
+				stoppable.Stop()
+			}
+		}
+	}()
+
+	nextHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := srv.rateLimitMiddleware(nextHandler)
+
+	// First 2 requests should pass
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.RemoteAddr = "192.168.1.1:12345"
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusOK, w.Code, "Request %d should pass", i+1)
+	}
+
+	// 3rd request should be rate limited
+	req := httptest.NewRequest("GET", "/", nil)
+	req.RemoteAddr = "192.168.1.1:12345"
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	assert.Equal(t, http.StatusTooManyRequests, w.Code)
+	assert.Equal(t, "60", w.Header().Get("Retry-After"))
+
+	// Verify error response body
+	var errResp struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	err := json.NewDecoder(w.Body).Decode(&errResp)
+	assert.NoError(t, err)
+	assert.Equal(t, "RATE_LIMITED", errResp.Code)
+	assert.Equal(t, "Too many requests", errResp.Message)
 }
 
 func TestWrapMiddleware(t *testing.T) {

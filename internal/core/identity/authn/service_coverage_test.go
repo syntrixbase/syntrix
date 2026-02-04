@@ -104,6 +104,13 @@ func TestSignUp_Coverage(t *testing.T) {
 				AccessTokenTTL:  15 * time.Minute,
 				RefreshTokenTTL: 7 * 24 * time.Hour,
 				AuthCodeTTL:     2 * time.Minute,
+				PasswordPolicy: config.PasswordPolicyConfig{
+					MinLength:        12,
+					RequireUppercase: true,
+					RequireLowercase: true,
+					RequireDigit:     true,
+					RequireSpecial:   true,
+				},
 			}
 			svc, err := NewAuthService(cfg, mockStorage, mockStorage)
 			require.NoError(t, err)
