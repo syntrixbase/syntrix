@@ -40,6 +40,8 @@ export class QueryImpl<T> implements Query<T> {
   protected filters: any[] = [];
   protected sort: any[] = [];
   protected limitVal?: number;
+  protected startAfterVal?: string;
+  protected showDeletedVal?: boolean;
 
   constructor(protected storage: StorageClient, public path: string) {}
 
@@ -58,13 +60,31 @@ export class QueryImpl<T> implements Query<T> {
     return this;
   }
 
+  startAfter(cursor: string): Query<T> {
+    this.startAfterVal = cursor;
+    return this;
+  }
+
+  showDeleted(show: boolean = true): Query<T> {
+    this.showDeletedVal = show;
+    return this;
+  }
+
   async get(): Promise<T[]> {
-    const query = {
+    const query: any = {
       collection: this.path,
       filters: this.filters,
       orderBy: this.sort,
-      limit: this.limitVal
     };
+    if (this.limitVal !== undefined) {
+      query.limit = this.limitVal;
+    }
+    if (this.startAfterVal !== undefined) {
+      query.startAfter = this.startAfterVal;
+    }
+    if (this.showDeletedVal !== undefined) {
+      query.showDeleted = this.showDeletedVal;
+    }
     return this.storage.query<T>('/api/v1/query', query);
   }
 

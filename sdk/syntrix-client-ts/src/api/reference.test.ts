@@ -93,5 +93,55 @@ describe('Reference API', () => {
         limit: 10
       });
     });
+
+    it('should include startAfter in query', async () => {
+      const col = new CollectionReferenceImpl(mockStorage, 'users');
+      await col
+        .limit(10)
+        .startAfter('cursor-123')
+        .get();
+
+      expect(mockStorage.query).toHaveBeenCalledWith('/api/v1/query', {
+        collection: 'users',
+        filters: [],
+        orderBy: [],
+        limit: 10,
+        startAfter: 'cursor-123'
+      });
+    });
+
+    it('should include showDeleted in query', async () => {
+      const col = new CollectionReferenceImpl(mockStorage, 'users');
+      await col
+        .showDeleted(true)
+        .get();
+
+      expect(mockStorage.query).toHaveBeenCalledWith('/api/v1/query', {
+        collection: 'users',
+        filters: [],
+        orderBy: [],
+        showDeleted: true
+      });
+    });
+
+    it('should combine all query options', async () => {
+      const col = new CollectionReferenceImpl(mockStorage, 'posts');
+      await col
+        .where('status', '==', 'published')
+        .orderBy('createdAt', 'desc')
+        .limit(20)
+        .startAfter('last-doc-id')
+        .showDeleted(false)
+        .get();
+
+      expect(mockStorage.query).toHaveBeenCalledWith('/api/v1/query', {
+        collection: 'posts',
+        filters: [{ field: 'status', op: '==', value: 'published' }],
+        orderBy: [{ field: 'createdAt', direction: 'desc' }],
+        limit: 20,
+        startAfter: 'last-doc-id',
+        showDeleted: false
+      });
+    });
   });
 });

@@ -15,6 +15,8 @@ export interface Query<T> {
   where(field: string, op: FilterOp, value: any): Query<T>;
   orderBy(field: string, direction?: 'asc' | 'desc'): Query<T>;
   limit(n: number): Query<T>;
+  startAfter(cursor: string): Query<T>;
+  showDeleted(show?: boolean): Query<T>;
   get(): Promise<T[]>;
   update(data: Partial<T>): Promise<void>;
   delete(): Promise<void>;
