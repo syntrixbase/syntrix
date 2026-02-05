@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net"
@@ -24,6 +25,9 @@ import (
 	"github.com/syntrixbase/syntrix/internal/server"
 	"github.com/syntrixbase/syntrix/internal/services"
 	"github.com/syntrixbase/syntrix/internal/streamer"
+	trigger_config "github.com/syntrixbase/syntrix/internal/trigger/config"
+	"github.com/syntrixbase/syntrix/internal/trigger/delivery"
+	"github.com/syntrixbase/syntrix/internal/trigger/evaluator"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -39,14 +43,167 @@ var (
 
 // GlobalTestEnv holds the shared test environment
 type GlobalTestEnv struct {
-	APIURL      string
-	QueryURL    string
-	Manager     *services.Manager
-	MongoURI    string
-	PostgresDSN string
-	DBName      string
-	cancel      context.CancelFunc
-	tempDir     string
+	APIURL          string
+	QueryURL        string
+	Manager         *services.Manager
+	MongoURI        string
+	PostgresDSN     string
+	DBName          string
+	TriggerRulesDir string
+	StreamName      string
+	NatsURL         string
+	WebhookServer   *WebhookTestServer
+	cancel          context.CancelFunc
+	tempDir         string
+}
+
+// WebhookTestServer captures webhook deliveries for testing
+type WebhookTestServer struct {
+	Server   *http.Server
+	URL      string
+	mu       sync.Mutex
+	received []WebhookDelivery
+	notify   chan struct{}
+}
+
+// WebhookDelivery represents a single webhook delivery
+// This structure matches the DeliveryTask sent by the trigger worker
+type WebhookDelivery struct {
+	TriggerID      string                 `json:"triggerId"`
+	Database       string                 `json:"database"`
+	Event          string                 `json:"event"`
+	Collection     string                 `json:"collection"`
+	DocumentID     string                 `json:"documentId"`
+	LSN            string                 `json:"lsn"`
+	Seq            int64                  `json:"seq"`
+	Before         map[string]interface{} `json:"before,omitempty"`
+	After          map[string]interface{} `json:"after,omitempty"`
+	Timestamp      int64                  `json:"ts"`
+	URL            string                 `json:"url"`
+	HeadersFromReq map[string]string      `json:"headers"`
+	SecretsRef     string                 `json:"secretsRef"`
+	RetryPolicy    json.RawMessage        `json:"retryPolicy"`
+	Timeout        json.RawMessage        `json:"timeout"`
+	PreIssuedToken string                 `json:"preIssuedToken,omitempty"`
+	Payload        map[string]interface{} `json:"payload,omitempty"`
+	SubjectHashed  bool                   `json:"subjectHashed,omitempty"`
+	Headers        http.Header            `json:"-"` // HTTP headers from request
+	ReceivedAt     time.Time              `json:"-"`
+}
+
+// NewWebhookTestServer creates a new webhook test server
+func NewWebhookTestServer() (*WebhookTestServer, error) {
+	listener, err := net.Listen("tcp", "localhost:0")
+	if err != nil {
+		return nil, err
+	}
+
+	ws := &WebhookTestServer{
+		received: make([]WebhookDelivery, 0),
+		notify:   make(chan struct{}, 100),
+	}
+	ws.URL = fmt.Sprintf("http://localhost:%d/webhook", listener.Addr().(*net.TCPAddr).Port)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/webhook", ws.handleWebhook)
+
+	ws.Server = &http.Server{Handler: mux}
+	go ws.Server.Serve(listener)
+
+	return ws, nil
+}
+
+func (ws *WebhookTestServer) handleWebhook(w http.ResponseWriter, r *http.Request) {
+	var delivery WebhookDelivery
+	if err := json.NewDecoder(r.Body).Decode(&delivery); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	delivery.Headers = r.Header
+	delivery.ReceivedAt = time.Now()
+
+	ws.mu.Lock()
+	ws.received = append(ws.received, delivery)
+	ws.mu.Unlock()
+
+	select {
+	case ws.notify <- struct{}{}:
+	default:
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+
+// WaitForDelivery waits for a webhook delivery matching the trigger ID
+func (ws *WebhookTestServer) WaitForDelivery(triggerID string, timeout time.Duration) (*WebhookDelivery, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		ws.mu.Lock()
+		for _, d := range ws.received {
+			if d.TriggerID == triggerID {
+				ws.mu.Unlock()
+				return &d, nil
+			}
+		}
+		ws.mu.Unlock()
+
+		select {
+		case <-ws.notify:
+			// Check again
+		case <-time.After(100 * time.Millisecond):
+			// Timeout, check again
+		}
+	}
+	return nil, fmt.Errorf("timeout waiting for delivery with triggerID %s", triggerID)
+}
+
+// WaitForDeliveryMatching waits for a webhook delivery matching the given criteria
+func (ws *WebhookTestServer) WaitForDeliveryMatching(triggerID, collection, event string, timeout time.Duration) (*WebhookDelivery, error) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		ws.mu.Lock()
+		for _, d := range ws.received {
+			if d.TriggerID == triggerID && d.Collection == collection && d.Event == event {
+				ws.mu.Unlock()
+				return &d, nil
+			}
+		}
+		ws.mu.Unlock()
+
+		select {
+		case <-ws.notify:
+			// Check again
+		case <-time.After(100 * time.Millisecond):
+			// Timeout, check again
+		}
+	}
+	return nil, fmt.Errorf("timeout waiting for delivery with triggerID=%s, collection=%s, event=%s", triggerID, collection, event)
+}
+
+// GetDeliveries returns all received deliveries
+func (ws *WebhookTestServer) GetDeliveries() []WebhookDelivery {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	result := make([]WebhookDelivery, len(ws.received))
+	copy(result, ws.received)
+	return result
+}
+
+// HasDeliveryForCollection checks if any delivery was received for a collection
+func (ws *WebhookTestServer) HasDeliveryForCollection(collection string) bool {
+	ws.mu.Lock()
+	defer ws.mu.Unlock()
+	for _, d := range ws.received {
+		if d.Collection == collection {
+			return true
+		}
+	}
+	return false
+}
+
+// Shutdown stops the webhook server
+func (ws *WebhookTestServer) Shutdown(ctx context.Context) error {
+	return ws.Server.Shutdown(ctx)
 }
 
 // TestMain sets up the global test environment before running tests
@@ -244,6 +401,47 @@ templates:
 		return nil, fmt.Errorf("failed to write templates file: %w", err)
 	}
 
+	// Create trigger rules directory for trigger integration tests
+	triggerRulesDir := tempDir + "/trigger_rules"
+	if err := os.MkdirAll(triggerRulesDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create trigger rules dir: %w", err)
+	}
+
+	// Start webhook test server for trigger deliveries
+	webhookServer, err := NewWebhookTestServer()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create webhook test server: %w", err)
+	}
+
+	// Create trigger rules file with webhook server URL
+	// This trigger watches any collection and fires when age >= 18
+	// Using "*" as collection pattern matches any collection name
+	triggerRulesContent := fmt.Sprintf(`database: default
+triggers:
+  integration-test-trigger:
+    collection: "*"
+    events:
+      - create
+      - update
+    condition: "event.document.age >= 18"
+    url: "%s"
+    headers:
+      X-Test: "true"
+`, webhookServer.URL)
+	triggerRulesFile := triggerRulesDir + "/default.yml"
+	if err := os.WriteFile(triggerRulesFile, []byte(triggerRulesContent), 0644); err != nil {
+		return nil, fmt.Errorf("failed to write trigger rules file: %w", err)
+	}
+
+	// Get NATS URL from environment or use default
+	natsURL := os.Getenv("NATS_URL")
+	if natsURL == "" {
+		natsURL = "nats://localhost:4222"
+	}
+
+	// Generate unique stream name to avoid conflicts between test runs
+	streamName := fmt.Sprintf("TRIGGERS_%d", time.Now().UnixNano())
+
 	// Get available ports
 	apiPort, err := getAvailablePort()
 	if err != nil {
@@ -354,6 +552,24 @@ templates:
 				PullerAddr: fmt.Sprintf("localhost:%d", grpcPort),
 			},
 		},
+		Trigger: trigger_config.Config{
+			NatsURL: natsURL,
+			Evaluator: evaluator.Config{
+				PullerAddr:         fmt.Sprintf("localhost:%d", grpcPort),
+				StartFromNow:       true,
+				RulesPath:          triggerRulesDir,
+				CheckpointDatabase: "default",
+				StreamName:         streamName,
+				RetryAttempts:      3,
+				StorageType:        "memory", // Use memory for tests
+			},
+			Delivery: delivery.Config{
+				NumWorkers:   4,
+				StreamName:   streamName,
+				ConsumerName: "trigger-delivery-test",
+				StorageType:  "memory", // Use memory for tests
+			},
+		},
 	}
 
 	// Initialize the unified server
@@ -363,9 +579,9 @@ templates:
 		Mode:                services.ModeDistributed, // Services communicate via gRPC even in same process
 		RunAPI:              true,
 		RunQuery:            true,
-		RunStreamer:         true,  // Run Streamer service locally
-		RunTriggerEvaluator: false, // Disable trigger services by default
-		RunTriggerWorker:    false,
+		RunStreamer:         true, // Run Streamer service locally
+		RunTriggerEvaluator: true, // Enable trigger services for trigger integration tests
+		RunTriggerWorker:    true,
 		RunPuller:           true,
 		RunIndexer:          true,
 	}
@@ -390,14 +606,18 @@ templates:
 		apiPort, grpcPort, dbName)
 
 	return &GlobalTestEnv{
-		APIURL:      fmt.Sprintf("http://localhost:%d", apiPort),
-		QueryURL:    fmt.Sprintf("localhost:%d", grpcPort),
-		Manager:     manager,
-		MongoURI:    mongoURI,
-		PostgresDSN: postgresDSN,
-		DBName:      dbName,
-		cancel:      mgrCancel,
-		tempDir:     tempDir,
+		APIURL:          fmt.Sprintf("http://localhost:%d", apiPort),
+		QueryURL:        fmt.Sprintf("localhost:%d", grpcPort),
+		Manager:         manager,
+		MongoURI:        mongoURI,
+		PostgresDSN:     postgresDSN,
+		DBName:          dbName,
+		TriggerRulesDir: triggerRulesDir,
+		StreamName:      streamName,
+		NatsURL:         natsURL,
+		WebhookServer:   webhookServer,
+		cancel:          mgrCancel,
+		tempDir:         tempDir,
 	}, nil
 }
 
@@ -412,6 +632,11 @@ func (e *GlobalTestEnv) Shutdown() {
 
 	if e.Manager != nil {
 		e.Manager.Shutdown(shutdownCtx)
+	}
+
+	// Shutdown webhook server
+	if e.WebhookServer != nil {
+		e.WebhookServer.Shutdown(shutdownCtx)
 	}
 
 	// Cleanup database
