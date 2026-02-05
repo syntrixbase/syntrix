@@ -467,3 +467,42 @@ func TestInitialize_RedirectsStandardLog(t *testing.T) {
 	assert.Contains(t, lines, "message from standard log")
 	assert.Contains(t, lines, "formatted message: 42")
 }
+
+func TestFatal(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Console.Enabled = false
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	err := Initialize(cfg)
+	require.NoError(t, err)
+
+	// Override exitFunc to capture the exit code instead of actually exiting
+	var exitCode int
+	originalExitFunc := exitFunc
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+	defer func() {
+		exitFunc = originalExitFunc
+	}()
+
+	// Call Fatal
+	Fatal("fatal error occurred", "key", "value")
+
+	// Verify exit code
+	assert.Equal(t, 1, exitCode)
+
+	// Shutdown to flush (Fatal already called Shutdown, but be safe)
+	Shutdown()
+
+	// Verify the error was logged
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+	assert.Contains(t, lines, "fatal error occurred")
+	assert.Contains(t, lines, "key=value")
+}

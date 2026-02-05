@@ -21,6 +21,9 @@ var (
 	asyncWriters  []*AsyncWriter
 	dedupHandlers []*DedupHandler
 	logFilesMu    sync.Mutex
+
+	// exitFunc allows overriding os.Exit for testing
+	exitFunc = os.Exit
 )
 
 // Initialize sets up the global logger based on configuration
@@ -71,7 +74,7 @@ func (w *slogWriter) Write(p []byte) (n int, err error) {
 func Fatal(msg string, args ...any) {
 	slog.Error(msg, args...)
 	Shutdown() // Flush all buffers
-	os.Exit(1)
+	exitFunc(1)
 }
 
 // NewLogger creates a new logger instance with the given configuration
