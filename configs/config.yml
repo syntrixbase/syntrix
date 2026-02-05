@@ -1,3 +1,8 @@
+# Global data directory for all runtime data (logs, caches, indexes)
+# Relative paths in service configs are resolved from this directory.
+# Can be overridden via SYNTRIX_DATA_DIR environment variable.
+data_dir: "data"
+
 server:
   host: "localhost"
   http_port: 8080
@@ -51,7 +56,7 @@ identity:
     rules_path: "security_rules"
   admin:
     username: "syntrix"
-    password: "changeme123456"  # Change this in production
+    password: "Changeme@123456!"  # Change this in production
 
 gateway:
   query_service_url: "localhost:9000"
@@ -78,7 +83,7 @@ puller:
     - name: "default_mongo"
       collections: ["documents"]
   buffer:
-    path: ".syntrix/data/puller/events"
+    path: "puller/events"      # Relative to data_dir
     max_size: "10GiB"
     batch_size: 100
     batch_interval: 100ms
@@ -114,12 +119,12 @@ streamer:
 indexer:
   puller_addr: "localhost:9000"
   template_path: "index_templates"
-  progress_path: "data/indexer/progress"
+  progress_path: "indexer/progress"    # Relative to data_dir
   consumer_id: "indexer"
   reconcile_interval: 5s
   storage_mode: "memory"
   store:
-    path: "data/indexer/indexes.db"
+    path: "indexer/indexes.db"         # Relative to data_dir
     batch_size: 100
     batch_interval: 100ms
     queue_size: 10000
@@ -133,9 +138,8 @@ logging:
   # Log format: text (human-readable) or json (machine-readable)
   format: "text"
 
-  # Log directory (relative or absolute path)
-  # Relative paths are resolved from the parent of the config directory
-  # Default: "logs" (creates ./logs directory)
+  # Log directory (relative to data_dir or absolute path)
+  # Default: "logs" (creates {data_dir}/logs directory)
   dir: "logs"
 
   # File rotation settings

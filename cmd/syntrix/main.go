@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
+	"fmt"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 
 func main() {
 	// 0. Parse Command Line Flags
+	configDir := flag.String("config-dir", "", "Configuration directory (default: configs, or SYNTRIX_CONFIG_DIR env var)")
 	runAPI := flag.Bool("api", false, "Run API Gateway (REST + Realtime)")
 	runQuery := flag.Bool("query", false, "Run Query Service")
 	runTriggerEvaluator := flag.Bool("trigger-evaluator", false, "Run Trigger Evaluator Service")
@@ -29,13 +31,16 @@ func main() {
 	flag.Parse()
 
 	// 1. Load Configuration early to check deployment mode from config
-	cfg := config.LoadConfig()
+	cfg := config.LoadConfigFrom(*configDir)
 
 	// Initialize logging (before any other services)
 	if err := logging.Initialize(cfg.Logging); err != nil {
-		log.Fatalf("Failed to initialize logging: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to initialize logging: %v\n", err)
+		os.Exit(1)
 	}
 	defer logging.Shutdown()
+
+	slog.Info("Configuration loaded", "config_dir", cfg.ConfigDir)
 
 	// Determine deployment mode: CLI flag takes precedence over config file
 	mode := cfg.Deployment.Mode
@@ -45,8 +50,8 @@ func main() {
 
 	// Standalone mode: all services in-process
 	if mode.IsStandalone() {
-		log.Println("Starting Syntrix in Standalone Mode...")
-		log.Println("- All services running in-process")
+		slog.Info("Starting Syntrix in Standalone Mode...")
+		slog.Info("- All services running in-process")
 		opts := services.Options{
 			Mode:   mode,
 			RunAPI: true,
@@ -66,24 +71,24 @@ func main() {
 		*runStreamer = true
 	}
 
-	log.Println("Starting Syntrix Services...")
+	slog.Info("Starting Syntrix Services...")
 	if *runAPI {
-		log.Println("- API Gateway (REST + Realtime): Enabled")
+		slog.Info("- API Gateway (REST + Realtime): Enabled")
 	}
 	if *runQuery {
-		log.Println("- Query Service: Enabled")
+		slog.Info("- Query Service: Enabled")
 	}
 	if *runTriggerEvaluator {
-		log.Println("- Trigger Evaluator Service: Enabled")
+		slog.Info("- Trigger Evaluator Service: Enabled")
 	}
 	if *runTriggerWorker {
-		log.Println("- Trigger Worker Service: Enabled")
+		slog.Info("- Trigger Worker Service: Enabled")
 	}
 	if *runPuller {
-		log.Println("- Change Stream Puller Service: Enabled")
+		slog.Info("- Change Stream Puller Service: Enabled")
 	}
 	if *runIndexer {
-		log.Println("- Indexer Service: Enabled")
+		slog.Info("- Indexer Service: Enabled")
 	}
 
 	// 2. Initialize Service Manager
@@ -107,7 +112,7 @@ func runServer(cfg *config.Config, opts services.Options) {
 	defer cancel()
 
 	if err := mgr.Init(ctx); err != nil {
-		log.Fatalf("Failed to initialize services: %v", err)
+		logging.Fatal("Failed to initialize services", "error", err)
 	}
 
 	// 3. Start Services
@@ -121,7 +126,7 @@ func runServer(cfg *config.Config, opts services.Options) {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("Shutting down services...")
+	slog.Info("Shutting down services...")
 
 	// Graceful shutdown
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -132,5 +137,5 @@ func runServer(cfg *config.Config, opts services.Options) {
 
 	mgr.Shutdown(shutdownCtx)
 
-	log.Println("All services stopped.")
+	slog.Info("All services stopped.")
 }

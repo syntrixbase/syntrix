@@ -61,7 +61,7 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 
 func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.ResolvePaths("base")
+	cfg.ResolvePaths("base", "data")
 
 	assert.Equal(t, filepath.Join("base", "security_rules"), cfg.AuthZ.RulesPath)
 	assert.Equal(t, filepath.Join("base", "keys/auth_private.pem"), cfg.AuthN.PrivateKeyFile)
@@ -70,7 +70,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AuthZ.RulesPath = "/absolute/path/security_rules"
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 
 	assert.Equal(t, "/absolute/path/security_rules", cfg.AuthZ.RulesPath)
 }
@@ -127,7 +127,7 @@ func TestConfig_ResolvePaths_EmptyPaths(t *testing.T) {
 			RulesPath: "",
 		},
 	}
-	cfg.ResolvePaths("/config")
+	cfg.ResolvePaths("/config", "/data")
 
 	// Empty paths should stay empty
 	assert.Equal(t, "", cfg.AuthZ.RulesPath)
@@ -137,7 +137,7 @@ func TestConfig_ResolvePaths_EmptyPaths(t *testing.T) {
 func TestConfig_ResolvePaths_PrivateKeyAbsolute(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.AuthN.PrivateKeyFile = "/absolute/key.pem"
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 
 	assert.Equal(t, "/absolute/key.pem", cfg.AuthN.PrivateKeyFile)
 }

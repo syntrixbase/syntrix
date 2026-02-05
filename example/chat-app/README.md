@@ -10,116 +10,130 @@ This example demonstrates an **Event-Driven LLM Agent** architecture using Syntr
 
 ## Prerequisites
 
-- **Go 1.23+** (to run Syntrix)
+- **Go 1.24+** (to run Syntrix)
 - **Bun** or **Node.js** (to run the worker and frontend)
 - **MongoDB** (running locally or accessible)
+- **NATS** (running locally for triggers)
 - **Azure OpenAI API Key** (or standard OpenAI Key)
 - **Tavily API Key** (for search functionality)
 
-## Step-by-Step Run Guide
+## Quick Start
 
 You will need **3 separate terminal windows** to run the full stack.
 
 ### Terminal 1: Start Syntrix Server
 
-1. Navigate to the root `syntrix` directory.
-2. Ensure your configuration points to the triggers directory.
-     - Edit `config.yml` (or `config.local.yml`):
+```bash
+# From the root syntrix directory
+make build
+./bin/syntrix --config-dir example/chat-app/config --standalone
+```
 
-         ```yaml
-         trigger:
-             rules_path: "example/chat-app/config/triggers"
-             # ... other config
-         ```
-
-3. Build and run Syntrix:
-
-     ```bash
-     make build
-     ./bin/syntrix --all
-     ```
-
-     - Syntrix API should be running at `http://localhost:8080`.
-     - Realtime API should be running at `http://localhost:8081`.
+This will:
+- Load configuration from `example/chat-app/config/`
+- Run all services in standalone mode (single process)
+- API available at `http://localhost:8080`
+- Realtime available at `http://localhost:8081`
 
 ### Terminal 2: Start Trigger Worker
 
-This worker handles the "brain" of the agent.
+```bash
+cd example/chat-app/trigger-worker
+bun install
+cp .env.example .env  # Then edit with your API keys
+bun run dev
+```
 
-1. Navigate to the worker directory:
-
-   ```bash
-   cd example/chat-app/trigger-worker
-   ```
-
-2. Install dependencies:
-
-   ```bash
-   bun install
-   ```
-
-3. Configure Environment:
-
-   - Copy `.env.example` to `.env` (if you haven't already).
-   - Fill in your API keys:
-
-     ```env
-     PORT=8000
-     SYNTRIX_API_URL=http://localhost:8080/api/v1
-     AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-     AZURE_OPENAI_API_KEY=your_key
-     AZURE_OPENAI_MODEL=gpt-4o
-     TAVILY_API_KEY=your_tavily_key
-     ```
-
-4. Start the worker:
-
-   ```bash
-   bun run dev
-   ```
-
-   - Worker should be listening at `http://localhost:8000`.
+Configure `.env`:
+```env
+PORT=8000
+SYNTRIX_API_URL=http://localhost:8080
+AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
+AZURE_OPENAI_API_KEY=your_key
+AZURE_OPENAI_MODEL=gpt-4o
+TAVILY_API_KEY=your_tavily_key
+```
 
 ### Terminal 3: Start Frontend App
 
-1. Navigate to the app directory:
+```bash
+cd example/chat-app
+bun install
+bun run dev
+```
 
-   ```bash
-   cd example/chat-app
-   ```
+Open `http://localhost:5173` in your browser.
 
-2. Install dependencies:
+## Configuration
 
-   ```bash
-   bun install
-   ```
+The chat-app has its own dedicated configuration in `config/`:
 
-3. Start the development server:
+```
+example/chat-app/config/
+├── config.yml           # Main Syntrix configuration
+├── keys/
+│   └── auth_private.pem # JWT signing key (auto-generated)
+├── security_rules/
+│   └── default.yml      # Access control rules
+└── triggers/
+    └── default.yml      # Webhook trigger definitions
+```
 
-   ```bash
-   bun run dev
-   ```
+### Key Configuration Differences from Default
 
-4. Open your browser at `http://localhost:5173`.
+| Setting | Default | Chat-App | Why |
+|---------|---------|----------|-----|
+| Database | `syntrix` | `syntrix_chat` | Isolated data |
+| CORS Origins | None | `localhost:5173` | Vite dev server |
+| Access Token TTL | 15m | 1h | Demo convenience |
+| Log Level | info | debug | Easier debugging |
+| Storage Backend | Mongo + Postgres | Mongo only | Simpler setup |
+
+### Environment Variables
+
+You can override config values with environment variables:
+
+```bash
+# Override config directory
+export SYNTRIX_CONFIG_DIR=/path/to/custom/config
+
+# Override specific settings
+export MONGO_URI=mongodb://remote:27017
+export TRIGGER_NATS_URL=nats://remote:4222
+```
 
 ## How to Use
 
-1. **Create a Chat**: Click the "+ New Chat" button in the sidebar.
-2. **Send a Message**: Type "Hello" to test the LLM response.
-3. **Test Tools**: Type a query that requires internet access, e.g., *"What is the current weather in Tokyo?"*.
-     - **Observe**:
-         1. The message appears immediately (Optimistic UI).
-         2. Syntrix triggers the worker.
-         3. Worker sees the intent and creates a `tool-calls` document (Status: Pending).
-         4. Worker picks up the pending tool call, executes Tavily search, and updates the document (Status: Success).
-         5. Worker picks up the success event, feeds the result back to LLM.
-         6. LLM generates the final answer.
-         7. Frontend syncs the new message and displays it.
+1. **Sign Up**: Create an account (or use admin: `admin` / `chatapp123`)
+2. **Create a Chat**: Click "+ New Chat" in the sidebar
+3. **Send Messages**: Test with "Hello" or research queries
+4. **Watch the Magic**:
+   - Message syncs immediately (optimistic UI)
+   - Trigger fires webhook to worker
+   - Worker orchestrates LLM + tools
+   - Results sync back to frontend
 
 ## Troubleshooting
 
-- **Worker Errors**: Check Terminal 2 logs. If you see "Missing credentials", check your `.env` file.
-- **No Response**:
-   - Check Terminal 1 (Syntrix) logs to see if the Trigger was fired and if the Webhook delivery succeeded (HTTP 200).
-   - Check if `config/triggers/` directory is correctly loaded by Syntrix.
-- **Frontend Sync Issues**: Open Browser Console (F12). Check for WebSocket connection errors or RxDB replication errors.
+### Syntrix won't start
+```bash
+# Check if MongoDB is running
+mongosh --eval "db.runCommand({ping:1})"
+
+# Check if NATS is running
+nats-server --version
+```
+
+### No response from LLM
+- Check Terminal 2 (Worker) logs for API errors
+- Verify `.env` has correct Azure OpenAI credentials
+- Check Terminal 1 (Syntrix) for trigger delivery status
+
+### Frontend sync issues
+- Open Browser Console (F12)
+- Check for WebSocket connection errors
+- Verify CORS settings allow `localhost:5173`
+
+### Authentication errors
+- Check `config/keys/auth_private.pem` exists
+- Try regenerating: `openssl genpkey -algorithm RSA -out config/keys/auth_private.pem -pkeyopt rsa_keygen_bits:2048`

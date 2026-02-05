@@ -143,42 +143,86 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 
 func TestConfig_ResolvePaths(t *testing.T) {
 	tests := []struct {
-		name         string
-		baseDir      string
-		templatePath string
-		expected     string
+		name              string
+		configDir         string
+		dataDir           string
+		templatePath      string
+		progressPath      string
+		storePath         string
+		expectedTemplate  string
+		expectedProgress  string
+		expectedStorePath string
 	}{
 		{
-			name:         "relative path gets resolved",
-			baseDir:      "/config",
-			templatePath: "templates.yaml",
-			expected:     "/config/templates.yaml",
+			name:              "relative paths get resolved",
+			configDir:         "/config",
+			dataDir:           "/app/data",
+			templatePath:      "templates.yaml",
+			progressPath:      "indexer/progress",
+			storePath:         "indexer/indexes.db",
+			expectedTemplate:  "/config/templates.yaml",
+			expectedProgress:  "/app/data/indexer/progress",
+			expectedStorePath: "/app/data/indexer/indexes.db",
 		},
 		{
-			name:         "absolute path preserved",
-			baseDir:      "/config",
-			templatePath: "/absolute/templates.yaml",
-			expected:     "/absolute/templates.yaml",
+			name:              "absolute paths preserved",
+			configDir:         "/config",
+			dataDir:           "/app/data",
+			templatePath:      "/absolute/templates.yaml",
+			progressPath:      "/absolute/progress",
+			storePath:         "/absolute/indexes.db",
+			expectedTemplate:  "/absolute/templates.yaml",
+			expectedProgress:  "/absolute/progress",
+			expectedStorePath: "/absolute/indexes.db",
 		},
 		{
-			name:         "nested relative path",
-			baseDir:      "/app/config",
-			templatePath: "sub/templates.yaml",
-			expected:     "/app/config/sub/templates.yaml",
+			name:              "nested relative paths",
+			configDir:         "/app/config",
+			dataDir:           "/var/lib/syntrix",
+			templatePath:      "sub/templates.yaml",
+			progressPath:      "indexer/sub/progress",
+			storePath:         "indexer/sub/indexes.db",
+			expectedTemplate:  "/app/config/sub/templates.yaml",
+			expectedProgress:  "/var/lib/syntrix/indexer/sub/progress",
+			expectedStorePath: "/var/lib/syntrix/indexer/sub/indexes.db",
 		},
 		{
-			name:         "empty path stays empty",
-			baseDir:      "/config",
-			templatePath: "",
-			expected:     "",
+			name:              "empty paths stay empty",
+			configDir:         "/config",
+			dataDir:           "/app/data",
+			templatePath:      "",
+			progressPath:      "",
+			storePath:         "",
+			expectedTemplate:  "",
+			expectedProgress:  "",
+			expectedStorePath: "",
+		},
+		{
+			name:              "mixed relative and absolute",
+			configDir:         "/config",
+			dataDir:           "/app/data",
+			templatePath:      "templates.yaml",
+			progressPath:      "/absolute/progress",
+			storePath:         "indexer/indexes.db",
+			expectedTemplate:  "/config/templates.yaml",
+			expectedProgress:  "/absolute/progress",
+			expectedStorePath: "/app/data/indexer/indexes.db",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{TemplatePath: tt.templatePath}
-			cfg.ResolvePaths(tt.baseDir)
-			assert.Equal(t, tt.expected, cfg.TemplatePath)
+			cfg := Config{
+				TemplatePath: tt.templatePath,
+				ProgressPath: tt.progressPath,
+				Store: StoreConfig{
+					Path: tt.storePath,
+				},
+			}
+			cfg.ResolvePaths(tt.configDir, tt.dataDir)
+			assert.Equal(t, tt.expectedTemplate, cfg.TemplatePath)
+			assert.Equal(t, tt.expectedProgress, cfg.ProgressPath)
+			assert.Equal(t, tt.expectedStorePath, cfg.Store.Path)
 		})
 	}
 }

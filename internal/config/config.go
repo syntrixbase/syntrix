@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"path/filepath"
 
 	"github.com/syntrixbase/syntrix/internal/core/database"
 	identity "github.com/syntrixbase/syntrix/internal/core/identity/config"
@@ -36,11 +37,40 @@ type Config struct {
 	Storage  storage.Config  `yaml:"storage"`
 	Identity identity.Config `yaml:"identity"`
 	Database database.Config `yaml:"database"`
+
+	// DataDir is the root directory for all runtime data (logs, caches, indexes, etc.)
+	// Relative paths are resolved from the current working directory.
+	// Defaults to "data".
+	DataDir string `yaml:"data_dir"`
+
+	// ConfigDir is the directory where config files are loaded from (not serialized to YAML)
+	ConfigDir string `yaml:"-"`
 }
 
-// LoadConfig loads configuration from files and environment variables
-// Order: defaults -> config.yml -> config.local.yml -> ApplyEnvOverrides -> ResolvePaths -> Validate
+// DefaultConfigDir is the default configuration directory
+const DefaultConfigDir = "configs"
+
+// DefaultDataDir is the default data directory
+const DefaultDataDir = ".syntrix/data"
+
+// LoadConfig loads configuration from the default directory.
+// Use LoadConfigFrom to specify a custom directory.
 func LoadConfig() *Config {
+	return LoadConfigFrom("")
+}
+
+// LoadConfigFrom loads configuration from the specified directory.
+// If configDir is empty, it checks SYNTRIX_CONFIG_DIR env var, then falls back to "configs".
+// Order: defaults -> config.yml -> config.local.yml -> ApplyEnvOverrides -> ResolvePaths -> Validate
+func LoadConfigFrom(configDir string) *Config {
+	// Determine config directory: parameter > env var > default
+	if configDir == "" {
+		configDir = os.Getenv("SYNTRIX_CONFIG_DIR")
+	}
+	if configDir == "" {
+		configDir = DefaultConfigDir
+	}
+
 	// 1. Start with default values (so YAML can override them, including bool fields)
 	cfg := &Config{
 		Storage:    storage.DefaultConfig(),
@@ -55,26 +85,32 @@ func LoadConfig() *Config {
 		Streamer:   streamer.DefaultConfig(),
 		Indexer:    indexer.DefaultConfig(),
 		Database:   database.DefaultConfig(),
+		DataDir:    DefaultDataDir,
+		ConfigDir:  configDir,
 	}
 
 	// 2. Load config.yml (overrides defaults)
-	loadFile("configs/config.yml", cfg)
+	loadFile(filepath.Join(configDir, "config.yml"), cfg)
 
 	// 3. Load config.local.yml (overrides config.yml)
-	loadFile("configs/config.local.yml", cfg)
+	loadFile(filepath.Join(configDir, "config.local.yml"), cfg)
 
-	// 4. Apply configuration lifecycle: ApplyDefaults fills gaps, ApplyEnvOverrides, ResolvePaths, Validate
+	// 4. Apply data_dir from environment variable if set
+	if val := os.Getenv("SYNTRIX_DATA_DIR"); val != "" {
+		cfg.DataDir = val
+	}
+
+	// 5. Apply configuration lifecycle: ApplyDefaults fills gaps, ApplyEnvOverrides, ResolvePaths, Validate
 	// Note: We need to process Deployment first to get the mode, then pass it to other configs
-	configDir := "configs"
 	cfg.Deployment.ApplyDefaults()
 	cfg.Deployment.ApplyEnvOverrides()
-	cfg.Deployment.ResolvePaths(configDir)
+	cfg.Deployment.ResolvePaths(configDir, cfg.DataDir)
 	if err := cfg.Deployment.Validate(cfg.Deployment.Mode); err != nil {
 		log.Fatalf("Configuration error: %v", err)
 	}
 
 	// Apply other configs with the now-known deployment mode
-	if err := ApplyServiceConfigs(configDir, cfg.Deployment.Mode,
+	if err := ApplyServiceConfigs(configDir, cfg.DataDir, cfg.Deployment.Mode,
 		&cfg.Server,
 		&cfg.Logging,
 		&cfg.Query,

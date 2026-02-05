@@ -54,7 +54,7 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 
 func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 	// No paths to resolve, just verify no panic
 }
 

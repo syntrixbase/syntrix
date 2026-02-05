@@ -78,9 +78,9 @@ func (c *Config) ApplyEnvOverrides() {
 	}
 }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // RulesFile is resolved at the parent trigger.Config level.
-func (c *Config) ResolvePaths(_ string) { _ = c }
+func (c *Config) ResolvePaths(_, _ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(mode services.DeploymentMode) error {

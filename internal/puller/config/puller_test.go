@@ -462,14 +462,54 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 }
 
 func TestConfig_ResolvePaths(t *testing.T) {
-	// ResolvePaths is currently a no-op for puller config
-	// Verify it doesn't panic and doesn't modify config
-	cfg := DefaultConfig()
-	originalPath := cfg.Buffer.Path
+	tests := []struct {
+		name         string
+		configDir    string
+		dataDir      string
+		bufferPath   string
+		expectedPath string
+	}{
+		{
+			name:         "relative path gets resolved with dataDir",
+			configDir:    "/config",
+			dataDir:      "/app/data",
+			bufferPath:   "puller/events",
+			expectedPath: "/app/data/puller/events",
+		},
+		{
+			name:         "absolute path preserved",
+			configDir:    "/config",
+			dataDir:      "/app/data",
+			bufferPath:   "/absolute/events",
+			expectedPath: "/absolute/events",
+		},
+		{
+			name:         "nested relative path",
+			configDir:    "/config",
+			dataDir:      "/var/lib/syntrix",
+			bufferPath:   "puller/buffer/events",
+			expectedPath: "/var/lib/syntrix/puller/buffer/events",
+		},
+		{
+			name:         "empty path stays empty",
+			configDir:    "/config",
+			dataDir:      "/app/data",
+			bufferPath:   "",
+			expectedPath: "",
+		},
+	}
 
-	cfg.ResolvePaths("/some/base/dir")
-
-	if cfg.Buffer.Path != originalPath {
-		t.Errorf("ResolvePaths modified Buffer.Path unexpectedly")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				Buffer: BufferConfig{
+					Path: tt.bufferPath,
+				},
+			}
+			cfg.ResolvePaths(tt.configDir, tt.dataDir)
+			if cfg.Buffer.Path != tt.expectedPath {
+				t.Errorf("Buffer.Path = %q, want %q", cfg.Buffer.Path, tt.expectedPath)
+			}
+		})
 	}
 }

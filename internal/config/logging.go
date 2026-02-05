@@ -159,22 +159,13 @@ func (c *LoggingConfig) ApplyEnvOverrides() {
 	_ = c
 }
 
-// ResolvePaths resolves relative paths based on config directory
-func (c *LoggingConfig) ResolvePaths(configDir string) {
+// ResolvePaths resolves relative paths using the given directories.
+// - configDir: not used for logging config (no config-related paths)
+// - dataDir: base directory for log files
+func (c *LoggingConfig) ResolvePaths(configDir, dataDir string) {
+	_ = configDir // logging has no config-related paths
 	if c.Dir != "" && !filepath.IsAbs(c.Dir) {
-		// Resolve relative paths
-		// If path starts with "..", resolve from configDir directly (allows navigating up from config location)
-		// Otherwise, resolve from parent of configDir (so logs/ ends up next to configs/, not inside it)
-		var resolvedPath string
-		if len(c.Dir) >= 2 && c.Dir[0:2] == ".." {
-			// Path starts with "..", resolve from configDir
-			resolvedPath = filepath.Join(configDir, c.Dir)
-		} else {
-			// Simple relative path, resolve from parent
-			baseDir := filepath.Dir(configDir)
-			resolvedPath = filepath.Join(baseDir, c.Dir)
-		}
-		c.Dir = filepath.Clean(resolvedPath)
+		c.Dir = filepath.Join(dataDir, c.Dir)
 	}
 }
 

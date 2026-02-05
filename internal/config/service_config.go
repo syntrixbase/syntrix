@@ -14,8 +14,10 @@ type ServiceConfig interface {
 	// ApplyEnvOverrides applies environment variable overrides
 	ApplyEnvOverrides()
 
-	// ResolvePaths resolves relative paths using the given base directory
-	ResolvePaths(baseDir string)
+	// ResolvePaths resolves relative paths using the given directories.
+	// - configDir: base directory for config-related paths (e.g., rules_path, template_path)
+	// - dataDir: base directory for runtime data paths (e.g., logs, caches, indexes)
+	ResolvePaths(configDir, dataDir string)
 
 	// Validate returns an error if the configuration is invalid.
 	// The mode parameter allows configs to perform mode-specific validation,
@@ -25,12 +27,11 @@ type ServiceConfig interface {
 
 // ApplyServiceConfigs applies the configuration lifecycle to all service configs.
 // It calls ApplyDefaults, ApplyEnvOverrides, ResolvePaths, and Validate in order.
-// The mode parameter is passed to each config's Validate method.
-func ApplyServiceConfigs(baseDir string, mode services.DeploymentMode, configs ...ServiceConfig) error {
+func ApplyServiceConfigs(configDir, dataDir string, mode services.DeploymentMode, configs ...ServiceConfig) error {
 	for _, cfg := range configs {
 		cfg.ApplyDefaults()
 		cfg.ApplyEnvOverrides()
-		cfg.ResolvePaths(baseDir)
+		cfg.ResolvePaths(configDir, dataDir)
 		if err := cfg.Validate(mode); err != nil {
 			return err
 		}

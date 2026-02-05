@@ -86,7 +86,7 @@ func TestConfig_ApplyEnvOverrides(t *testing.T) {
 func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Evaluator.RulesPath = "triggers"
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 
 	assert.Equal(t, filepath.Join("config", "triggers"), cfg.Evaluator.RulesPath)
 }
@@ -95,7 +95,7 @@ func TestConfig_ResolvePaths_AbsolutePath(t *testing.T) {
 	cfg := DefaultConfig()
 	absPath := "/absolute/path/triggers"
 	cfg.Evaluator.RulesPath = absPath
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 
 	assert.Equal(t, absPath, cfg.Evaluator.RulesPath)
 }
@@ -174,7 +174,7 @@ func TestConfig_ApplyEnvOverrides_NoEnvVars(t *testing.T) {
 func TestConfig_ResolvePaths_EmptyRulesPath(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.Evaluator.RulesPath = ""
-	cfg.ResolvePaths("/config")
+	cfg.ResolvePaths("/config", "/data")
 
 	// Empty path should stay empty (not get resolved to just baseDir)
 	assert.Equal(t, "", cfg.Evaluator.RulesPath)

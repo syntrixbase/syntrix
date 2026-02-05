@@ -273,7 +273,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultConfig()
 	originalURI := cfg.Backends["default_mongo"].Mongo.URI
 
-	cfg.ResolvePaths("/some/base/dir")
+	cfg.ResolvePaths("/some/base/dir", "data")
 
 	assert.Equal(t, originalURI, cfg.Backends["default_mongo"].Mongo.URI)
 }

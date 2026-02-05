@@ -258,7 +258,7 @@ export const orchestratorHandler = async (req: Request, res: Response) => {
                 type: 'agent',
                 name: `agent:${args.type}`,
                 instruction: args.instruction,
-                triggerMessageId: payload.docKey || (payload.after as any)?.id || '', // The user message ID
+                triggerMessageId: payload.documentId || (payload.after as any)?.id || '', // The user message ID
                 status: 'pending',
                 createdAt: Date.now(),
                 updatedAt: Date.now()

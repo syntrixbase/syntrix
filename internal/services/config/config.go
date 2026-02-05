@@ -57,9 +57,9 @@ func (c *DeploymentConfig) ApplyEnvOverrides() {
 	}
 }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // No paths to resolve in deployment config.
-func (c *DeploymentConfig) ResolvePaths(_ string) { _ = c }
+func (c *DeploymentConfig) ResolvePaths(_, _ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *DeploymentConfig) Validate(_ DeploymentMode) error {

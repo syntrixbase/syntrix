@@ -100,13 +100,16 @@ func (c *Config) ApplyDefaults() {
 // No env vars for identity config currently.
 func (c *Config) ApplyEnvOverrides() { _ = c }
 
-// ResolvePaths resolves relative paths using the given base directory.
-func (c *Config) ResolvePaths(baseDir string) {
+// ResolvePaths resolves relative paths using the given directories.
+// - configDir: base directory for config-related paths (rules_path, private_key_file)
+// - dataDir: not used for identity config
+func (c *Config) ResolvePaths(configDir, dataDir string) {
+	_ = dataDir // identity has no data-related paths
 	if c.AuthZ.RulesPath != "" && !filepath.IsAbs(c.AuthZ.RulesPath) {
-		c.AuthZ.RulesPath = filepath.Join(baseDir, c.AuthZ.RulesPath)
+		c.AuthZ.RulesPath = filepath.Join(configDir, c.AuthZ.RulesPath)
 	}
 	if c.AuthN.PrivateKeyFile != "" && !filepath.IsAbs(c.AuthN.PrivateKeyFile) {
-		c.AuthN.PrivateKeyFile = filepath.Join(baseDir, c.AuthN.PrivateKeyFile)
+		c.AuthN.PrivateKeyFile = filepath.Join(configDir, c.AuthN.PrivateKeyFile)
 	}
 }
 

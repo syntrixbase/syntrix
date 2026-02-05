@@ -4,6 +4,7 @@ package logging
 import (
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -32,6 +33,11 @@ func Initialize(cfg config.LoggingConfig) error {
 	// Set as global default logger
 	slog.SetDefault(logger)
 
+	// Redirect standard log package to use slog
+	// This ensures log.Printf, log.Fatalf etc. go through slog
+	log.SetOutput(&slogWriter{logger: logger})
+	log.SetFlags(0) // slog handles formatting
+
 	// Log startup message with configuration
 	slog.Info("Logging initialized",
 		"level", cfg.Level,
@@ -43,6 +49,29 @@ func Initialize(cfg config.LoggingConfig) error {
 	)
 
 	return nil
+}
+
+// slogWriter adapts slog.Logger to io.Writer for standard log package
+type slogWriter struct {
+	logger *slog.Logger
+}
+
+func (w *slogWriter) Write(p []byte) (n int, err error) {
+	// Remove trailing newline if present (log package adds one)
+	msg := string(p)
+	if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+		msg = msg[:len(msg)-1]
+	}
+	w.logger.Info(msg)
+	return len(p), nil
+}
+
+// Fatal logs an error message and exits the program.
+// It ensures all log buffers are flushed before exiting.
+func Fatal(msg string, args ...any) {
+	slog.Error(msg, args...)
+	Shutdown() // Flush all buffers
+	os.Exit(1)
 }
 
 // NewLogger creates a new logger instance with the given configuration

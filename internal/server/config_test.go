@@ -108,7 +108,7 @@ func TestConfig_ResolvePaths(t *testing.T) {
 	// ResolvePaths is a no-op for server config
 	cfg := DefaultConfig()
 
-	cfg.ResolvePaths("/some/base/dir")
+	cfg.ResolvePaths("/some/base/dir", "data")
 
 	// Verify nothing changed
 	assert.Equal(t, "localhost", cfg.Host)

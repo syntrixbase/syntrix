@@ -282,8 +282,13 @@ const setupReplication = async (
                 }
                 const docs = await query.get();
                 const lastTs = docs.length > 0 ? getTimestamp(docs[docs.length - 1], orderField) : since;
+                // Add _deleted field required by RxDB replication
+                const docsWithDeleted = docs.map((doc: any) => ({
+                    ...doc,
+                    _deleted: doc._deleted ?? false
+                }));
                 return {
-                    documents: docs,
+                    documents: docsWithDeleted,
                     checkpoint: lastTs ? { ts: lastTs } : null
                 };
             }

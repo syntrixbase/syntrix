@@ -50,13 +50,15 @@ func (c *Config) ApplyEnvOverrides() {
 	c.Delivery.ApplyEnvOverrides()
 }
 
-// ResolvePaths resolves relative paths using the given base directory.
-func (c *Config) ResolvePaths(baseDir string) {
+// ResolvePaths resolves relative paths using the given directories.
+// - configDir: base directory for config-related paths (rules_path)
+// - dataDir: not used for trigger config
+func (c *Config) ResolvePaths(configDir, dataDir string) {
 	if c.Evaluator.RulesPath != "" && !filepath.IsAbs(c.Evaluator.RulesPath) {
-		c.Evaluator.RulesPath = filepath.Join(baseDir, c.Evaluator.RulesPath)
+		c.Evaluator.RulesPath = filepath.Join(configDir, c.Evaluator.RulesPath)
 	}
-	c.Evaluator.ResolvePaths(baseDir)
-	c.Delivery.ResolvePaths(baseDir)
+	c.Evaluator.ResolvePaths(configDir, dataDir)
+	c.Delivery.ResolvePaths(configDir, dataDir)
 }
 
 // Validate returns an error if the configuration is invalid.
