@@ -21,7 +21,8 @@ export interface LoginResponse {
 }
 
 export interface AuthService {
-  login(username: string, password: string, database?: string): Promise<LoginResponse>;
+  signup(username: string, password: string): Promise<LoginResponse>;
+  login(username: string, password: string): Promise<LoginResponse>;
   logout(): Promise<void>;
   isAuthenticated(): boolean;
 }

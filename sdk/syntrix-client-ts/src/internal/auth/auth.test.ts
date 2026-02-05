@@ -9,15 +9,31 @@ describe('DefaultTokenProvider', () => {
     axios.post = originalPost;
   });
 
-  it('should call derived /login endpoint with database and set tokens', async () => {
+  it('should call /signup endpoint and set tokens', async () => {
     const postMock = mock(async (url: string, body: any) => {
-      expect(url).toBe('http://auth/auth/v1/login');
-      expect(body).toEqual({ username: 'alice', password: 'pw', database: 't1' });
+      expect(url).toBe('http://localhost:8080/auth/v1/signup');
+      expect(body).toEqual({ username: 'alice', password: 'password123' });
       return { data: { access_token: 'at', refresh_token: 'rt', expires_in: 3600 } };
     }) as any;
     axios.post = postMock;
 
-    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh', database: 't1' });
+    const provider = new DefaultTokenProvider({}, 'http://localhost:8080');
+    const resp = await provider.signup('alice', 'password123');
+
+    expect(resp.access_token).toBe('at');
+    expect(resp.refresh_token).toBe('rt');
+    expect(await provider.getToken()).toBe('at');
+  });
+
+  it('should call /login endpoint and set tokens', async () => {
+    const postMock = mock(async (url: string, body: any) => {
+      expect(url).toBe('http://auth/auth/v1/login');
+      expect(body).toEqual({ username: 'alice', password: 'pw' });
+      return { data: { access_token: 'at', refresh_token: 'rt', expires_in: 3600 } };
+    }) as any;
+    axios.post = postMock;
+
+    const provider = new DefaultTokenProvider({ refreshUrl: 'http://auth/auth/v1/refresh' });
     const resp = await provider.login('alice', 'pw');
 
     expect(resp.access_token).toBe('at');
