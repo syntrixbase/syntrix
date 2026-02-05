@@ -1,48 +1,17 @@
 $ErrorActionPreference = 'Stop'
 
-Set-Location (Join-Path $PSScriptRoot '..')
+$scriptDir = $PSScriptRoot
+$projectRoot = Split-Path $scriptDir -Parent
+$hooksDir = Join-Path $projectRoot 'git-hooks'
 
-$gitDir = (git rev-parse --git-dir) 2>$null
-if (-not $gitDir) {
-    Write-Error 'Not a git repository.'
-    exit 1
-}
+# Set git to use our hooks directory
+Write-Output "Setting git hooks path to $hooksDir..."
+git config core.hooksPath $hooksDir
 
-$hooksDir = Join-Path $gitDir 'hooks'
-New-Item -ItemType Directory -Force -Path $hooksDir | Out-Null
-
-# Install pre-commit hook
-$preCommitPath = Join-Path $hooksDir 'pre-commit'
-$preCommitScript = @(
-    '#!/bin/sh',
-    'REPO_ROOT="$(git rev-parse --show-toplevel)"',
-    'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/gofmt-pre-commit.sh"',
-    'exec "$HOOK_SCRIPT"'
-) -join "`n"
-[System.IO.File]::WriteAllText($preCommitPath, $preCommitScript, [System.Text.Encoding]::ASCII)
-Write-Output "Pre-commit hook installed successfully at $preCommitPath"
-
-# Install commit-msg hook
-$commitMsgPath = Join-Path $hooksDir 'commit-msg'
-$commitMsgScript = @(
-    '#!/bin/sh',
-    'REPO_ROOT="$(git rev-parse --show-toplevel)"',
-    'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/commit-msg.sh"',
-    'exec "$HOOK_SCRIPT" "$1"'
-) -join "`n"
-[System.IO.File]::WriteAllText($commitMsgPath, $commitMsgScript, [System.Text.Encoding]::ASCII)
-Write-Output "Commit-msg hook installed successfully at $commitMsgPath"
-
-# Install pre-push hook (preserving git-lfs if present)
-$prePushPath = Join-Path $hooksDir 'pre-push'
-$prePushScript = @(
-    '#!/bin/sh',
-    'REPO_ROOT="$(git rev-parse --show-toplevel)"',
-    'HOOK_SCRIPT="$REPO_ROOT/scripts/hooks/pre-push.sh"',
-    '"$HOOK_SCRIPT" "$@" || exit $?',
-    '',
-    '# Run git-lfs if available',
-    'command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "$@"'
-) -join "`n"
-[System.IO.File]::WriteAllText($prePushPath, $prePushScript, [System.Text.Encoding]::ASCII)
-Write-Output "Pre-push hook installed successfully at $prePushPath"
+Write-Output "Git hooks configured successfully!"
+Write-Output "Hooks path: $hooksDir"
+Write-Output ""
+Write-Output "Active hooks:"
+Write-Output "  - pre-commit: Block main branch commits, run gofmt"
+Write-Output "  - commit-msg: Block co-author credits"
+Write-Output "  - pre-push: Run coverage check"
