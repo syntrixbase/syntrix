@@ -98,7 +98,7 @@ func TestServiceConfig_ResolvePaths(t *testing.T) {
 		AuthZ: identity.AuthZConfig{RulesPath: "security.yaml"},
 		AuthN: identity.AuthNConfig{PrivateKeyFile: "keys/auth.pem"},
 	}
-	identityCfg.ResolvePaths("configs")
+	identityCfg.ResolvePaths("configs", "data")
 	assert.Equal(t, filepath.Join("configs", "security.yaml"), identityCfg.AuthZ.RulesPath)
 	assert.Equal(t, filepath.Join("configs", "keys/auth.pem"), identityCfg.AuthN.PrivateKeyFile)
 
@@ -107,14 +107,14 @@ func TestServiceConfig_ResolvePaths(t *testing.T) {
 	identityCfg2 := identity.Config{
 		AuthZ: identity.AuthZConfig{RulesPath: absPath},
 	}
-	identityCfg2.ResolvePaths("configs")
+	identityCfg2.ResolvePaths("configs", "data")
 	assert.Equal(t, absPath, identityCfg2.AuthZ.RulesPath)
 
 	// Test with empty path - should remain empty
 	identityCfg3 := identity.Config{
 		AuthZ: identity.AuthZConfig{RulesPath: ""},
 	}
-	identityCfg3.ResolvePaths("configs")
+	identityCfg3.ResolvePaths("configs", "data")
 	assert.Equal(t, "", identityCfg3.AuthZ.RulesPath)
 }
 
@@ -134,3 +134,85 @@ func TestDeploymentMode_IsStandalone_ViaConfig(t *testing.T) {
 // Tests for distributed mode address requirements are in the respective
 // service config test files (e.g., query/config/config_test.go,
 // gateway/config/config_test.go, etc.)
+
+func TestLoadConfigFrom_CustomDir(t *testing.T) {
+	// Create a custom config directory
+	customDir := t.TempDir()
+	configContent := []byte(`
+server:
+  http_port: 9999
+storage:
+  backends:
+    default_mongo:
+      mongo:
+        uri: "mongodb://custom:27017"
+        database_name: "customdb"
+`)
+	err := os.WriteFile(filepath.Join(customDir, "config.yml"), configContent, 0644)
+	require.NoError(t, err)
+
+	cfg := LoadConfigFrom(customDir)
+
+	assert.Equal(t, customDir, cfg.ConfigDir)
+	assert.Equal(t, 9999, cfg.Server.HTTPPort)
+	assert.Equal(t, "mongodb://custom:27017", cfg.Storage.Backends["default_mongo"].Mongo.URI)
+	assert.Equal(t, "customdb", cfg.Storage.Backends["default_mongo"].Mongo.DatabaseName)
+}
+
+func TestLoadConfigFrom_EnvVar(t *testing.T) {
+	// Create a custom config directory
+	customDir := t.TempDir()
+	configContent := []byte(`
+server:
+  http_port: 8888
+`)
+	err := os.WriteFile(filepath.Join(customDir, "config.yml"), configContent, 0644)
+	require.NoError(t, err)
+
+	// Set env var
+	os.Setenv("SYNTRIX_CONFIG_DIR", customDir)
+	defer os.Unsetenv("SYNTRIX_CONFIG_DIR")
+
+	// Empty string should fall back to env var
+	cfg := LoadConfigFrom("")
+
+	assert.Equal(t, customDir, cfg.ConfigDir)
+	assert.Equal(t, 8888, cfg.Server.HTTPPort)
+}
+
+func TestLoadConfigFrom_ParameterOverridesEnvVar(t *testing.T) {
+	// Create two config directories
+	envDir := t.TempDir()
+	paramDir := t.TempDir()
+
+	// Env config
+	err := os.WriteFile(filepath.Join(envDir, "config.yml"), []byte(`server:
+  http_port: 1111
+`), 0644)
+	require.NoError(t, err)
+
+	// Param config
+	err = os.WriteFile(filepath.Join(paramDir, "config.yml"), []byte(`server:
+  http_port: 2222
+`), 0644)
+	require.NoError(t, err)
+
+	// Set env var
+	os.Setenv("SYNTRIX_CONFIG_DIR", envDir)
+	defer os.Unsetenv("SYNTRIX_CONFIG_DIR")
+
+	// Parameter should override env var
+	cfg := LoadConfigFrom(paramDir)
+
+	assert.Equal(t, paramDir, cfg.ConfigDir)
+	assert.Equal(t, 2222, cfg.Server.HTTPPort)
+}
+
+func TestLoadConfigFrom_DefaultFallback(t *testing.T) {
+	// Clear env var to ensure default is used
+	os.Unsetenv("SYNTRIX_CONFIG_DIR")
+
+	cfg := LoadConfigFrom("")
+
+	assert.Equal(t, DefaultConfigDir, cfg.ConfigDir)
+}

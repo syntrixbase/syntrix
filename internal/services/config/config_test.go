@@ -70,7 +70,7 @@ func TestDeploymentConfig_ApplyEnvOverrides(t *testing.T) {
 
 func TestDeploymentConfig_ResolvePaths(t *testing.T) {
 	cfg := DefaultDeploymentConfig()
-	cfg.ResolvePaths("config")
+	cfg.ResolvePaths("config", "data")
 	// No paths to resolve, just verify no panic
 }
 

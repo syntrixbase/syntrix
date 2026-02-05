@@ -25,7 +25,15 @@ describe('TriggerClient', () => {
   it('should initialize with correct baseURL and headers', () => {
     new TriggerClient('http://api.synbase.tech', 'my-token');
     expect(axios.create).toHaveBeenCalledWith({
-      baseURL: 'http://api.synbase.tech/trigger/v1',
+      baseURL: 'http://api.synbase.tech/trigger/v1/databases/default',
+      headers: { Authorization: 'Bearer my-token' }
+    });
+  });
+
+  it('should initialize with custom database', () => {
+    new TriggerClient('http://api.synbase.tech', 'my-token', 'my-database');
+    expect(axios.create).toHaveBeenCalledWith({
+      baseURL: 'http://api.synbase.tech/trigger/v1/databases/my-database',
       headers: { Authorization: 'Bearer my-token' }
     });
   });

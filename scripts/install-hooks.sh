@@ -1,50 +1,23 @@
 #!/bin/bash
 set -e
 
-cd $(dirname $0)/../
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+HOOKS_DIR="$PROJECT_ROOT/git-hooks"
 
-# Get the git directory (usually .git)
-GIT_DIR=$(git rev-parse --git-dir)
-HOOKS_DIR="$GIT_DIR/hooks"
-SCRIPT_DIR=$(dirname "$0")
+# Set git to use our hooks directory
+echo "Setting git hooks path to $HOOKS_DIR..."
+git config core.hooksPath "$HOOKS_DIR"
 
-# Hook sources
-PRE_COMMIT_SOURCE="$SCRIPT_DIR/hooks/gofmt-pre-commit.sh"
-COMMIT_MSG_SOURCE="$SCRIPT_DIR/hooks/commit-msg.sh"
-PRE_PUSH_SOURCE="$SCRIPT_DIR/hooks/pre-push.sh"
-
-# Resolve absolute paths
-ABS_PRE_COMMIT_SOURCE=$(realpath "$PRE_COMMIT_SOURCE")
-ABS_COMMIT_MSG_SOURCE=$(realpath "$COMMIT_MSG_SOURCE")
-ABS_PRE_PUSH_SOURCE=$(realpath "$PRE_PUSH_SOURCE")
-
-# Install pre-commit hook
-echo "Installing pre-commit hook..."
-cat > "$HOOKS_DIR/pre-commit" <<EOF
-#!/bin/bash
-"$ABS_PRE_COMMIT_SOURCE"
-EOF
+# Ensure hooks are executable
 chmod +x "$HOOKS_DIR/pre-commit"
-echo "Pre-commit hook installed successfully at $HOOKS_DIR/pre-commit"
-
-# Install commit-msg hook
-echo "Installing commit-msg hook..."
-cat > "$HOOKS_DIR/commit-msg" <<EOF
-#!/bin/bash
-"$ABS_COMMIT_MSG_SOURCE" "\$1"
-EOF
 chmod +x "$HOOKS_DIR/commit-msg"
-echo "Commit-msg hook installed successfully at $HOOKS_DIR/commit-msg"
-
-# Install pre-push hook (preserving git-lfs if present)
-echo "Installing pre-push hook..."
-cat > "$HOOKS_DIR/pre-push" <<EOF
-#!/bin/bash
-# Run coverage check
-"$ABS_PRE_PUSH_SOURCE" "\$@" || exit \$?
-
-# Run git-lfs if available
-command -v git-lfs >/dev/null 2>&1 && git lfs pre-push "\$@"
-EOF
 chmod +x "$HOOKS_DIR/pre-push"
-echo "Pre-push hook installed successfully at $HOOKS_DIR/pre-push"
+
+echo "Git hooks configured successfully!"
+echo "Hooks path: $HOOKS_DIR"
+echo ""
+echo "Active hooks:"
+echo "  - pre-commit: Block main branch commits, run gofmt"
+echo "  - commit-msg: Block co-author credits"
+echo "  - pre-push: Run coverage check"

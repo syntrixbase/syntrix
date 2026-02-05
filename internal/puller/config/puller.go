@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"time"
 
 	services "github.com/syntrixbase/syntrix/internal/services/config"
@@ -263,9 +264,15 @@ func (c *Config) ApplyDefaults() {
 // No env vars for puller config currently.
 func (c *Config) ApplyEnvOverrides() { _ = c }
 
-// ResolvePaths resolves relative paths using the given base directory.
-// No paths to resolve from config dir; buffer path is data path.
-func (c *Config) ResolvePaths(_ string) { _ = c }
+// ResolvePaths resolves relative paths using the given directories.
+// - configDir: not used for puller config (no config-related paths)
+// - dataDir: base directory for runtime data paths (buffer.path)
+func (c *Config) ResolvePaths(configDir, dataDir string) {
+	_ = configDir // puller has no config-related paths
+	if c.Buffer.Path != "" && !filepath.IsAbs(c.Buffer.Path) {
+		c.Buffer.Path = filepath.Join(dataDir, c.Buffer.Path)
+	}
+}
 
 // ParseByteSize parses a human-readable byte size string (e.g., "10GiB", "1TiB").
 // Returns the size in bytes.

@@ -50,9 +50,9 @@ func (g *GatewayConfig) ApplyEnvOverrides() {
 	}
 }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // No paths to resolve in gateway config.
-func (g *GatewayConfig) ResolvePaths(_ string) { _ = g }
+func (g *GatewayConfig) ResolvePaths(_, _ string) { _ = g }
 
 // Validate returns an error if the configuration is invalid.
 func (g *GatewayConfig) Validate(mode services.DeploymentMode) error {

@@ -98,33 +98,44 @@ func TestLoggingConfigResolvePaths(t *testing.T) {
 	tests := []struct {
 		name      string
 		configDir string
+		dataDir   string
 		dir       string
 		expected  string
 	}{
 		{
-			name:      "relative path",
+			name:      "relative path resolved from data_dir",
 			configDir: "/app/configs",
+			dataDir:   "/app/data",
 			dir:       "logs",
-			expected:  "/app/logs",
+			expected:  "/app/data/logs",
 		},
 		{
 			name:      "absolute path unchanged",
 			configDir: "/app/configs",
+			dataDir:   "/app/data",
 			dir:       "/var/log/syntrix",
 			expected:  "/var/log/syntrix",
 		},
 		{
 			name:      "relative with subdirs",
 			configDir: "/app/configs",
-			dir:       "../logs/app",
-			expected:  "/app/logs/app",
+			dataDir:   "/app/data",
+			dir:       "logs/app",
+			expected:  "/app/data/logs/app",
+		},
+		{
+			name:      "empty dir unchanged",
+			configDir: "/app/configs",
+			dataDir:   "/app/data",
+			dir:       "",
+			expected:  "",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := &LoggingConfig{Dir: tt.dir}
-			cfg.ResolvePaths(tt.configDir)
+			cfg.ResolvePaths(tt.configDir, tt.dataDir)
 			assert.Equal(t, tt.expected, cfg.Dir)
 		})
 	}

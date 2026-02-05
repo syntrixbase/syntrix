@@ -29,9 +29,9 @@ func (c *Config) ApplyDefaults() {
 // No env vars for streamer config currently.
 func (c *Config) ApplyEnvOverrides() { _ = c }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // No paths to resolve in streamer config.
-func (c *Config) ResolvePaths(_ string) { _ = c }
+func (c *Config) ResolvePaths(_, _ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(mode services.DeploymentMode) error {

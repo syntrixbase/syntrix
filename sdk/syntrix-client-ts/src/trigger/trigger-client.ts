@@ -18,18 +18,24 @@ class TriggerCollectionReferenceImpl<T> extends CollectionReferenceImpl<T> {
 
 export class TriggerClient implements StorageClient {
   private axios: AxiosInstance;
+  private database: string;
 
-  constructor(baseURL: string, token: string) {
+  constructor(baseURL: string, token: string, database: string = 'default') {
     const cleanBaseUrl = baseURL.replace(/\/$/, '');
+    this.database = database;
     this.axios = axios.create({
-        baseURL: `${cleanBaseUrl}/trigger/v1`,
+        baseURL: `${cleanBaseUrl}/trigger/v1/databases/${database}`,
         headers: { Authorization: `Bearer ${token}` }
     });
   }
 
+  getDatabase(): string {
+    return this.database;
+  }
+
   /**
    * Performs an atomic batch write.
-   * Maps to POST /trigger/v1/write
+   * Maps to POST /trigger/v1/databases/{database}/write
    */
   async batch(writes: WriteOp[]): Promise<void> {
       await this.axios.post('/write', { writes });
@@ -39,7 +45,7 @@ export class TriggerClient implements StorageClient {
 
   async get<T>(path: string): Promise<T | null> {
       try {
-          // Maps to POST /api/v1/trigger/get
+          // Maps to POST /trigger/v1/databases/{database}/get
           const res = await this.axios.post('/get', { path });
 
           // Tolerant to empty responses or array wrapper
@@ -78,7 +84,7 @@ export class TriggerClient implements StorageClient {
   }
 
   async query<T>(path: string, query: any): Promise<T[]> {
-      // Maps to POST /api/v1/trigger/query
+      // Maps to POST /trigger/v1/databases/{database}/query
       // Note: We ignore the `path` argument here because QueryImpl passes the generic '/api/v1/query' path.
       // The actual collection to query is inside the `query` object (query.from).
       const res = await this.axios.post('/query', query);

@@ -2,6 +2,7 @@
 package logging
 
 import (
+	"log"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -376,4 +377,132 @@ func TestNewLogger_DedupEnabled(t *testing.T) {
 	// Verify log file was created
 	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
 	assert.FileExists(t, mainLogPath)
+}
+
+func TestSlogWriter_Write(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Console.Enabled = false // Disable console to avoid noise
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+
+	writer := &slogWriter{logger: logger}
+
+	// Test writing a message with newline (like standard log package)
+	msg := "test message from log package\n"
+	n, err := writer.Write([]byte(msg))
+	assert.NoError(t, err)
+	assert.Equal(t, len(msg), n) // Should return length of input
+
+	// Test writing a message without newline
+	msg2 := "message without newline"
+	n, err = writer.Write([]byte(msg2))
+	assert.NoError(t, err)
+	assert.Equal(t, len(msg2), n)
+
+	// Shutdown and verify logs
+	Shutdown()
+
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+	// The message should be logged without the trailing newline
+	assert.Contains(t, lines, "test message from log package")
+	assert.Contains(t, lines, "message without newline")
+}
+
+func TestSlogWriter_Write_EmptyMessage(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Console.Enabled = false
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	logger, err := NewLogger(cfg)
+	require.NoError(t, err)
+
+	writer := &slogWriter{logger: logger}
+
+	// Test writing empty message
+	n, err := writer.Write([]byte(""))
+	assert.NoError(t, err)
+	assert.Equal(t, 0, n)
+
+	// Test writing just a newline
+	n, err = writer.Write([]byte("\n"))
+	assert.NoError(t, err)
+	assert.Equal(t, 1, n)
+
+	Shutdown()
+}
+
+func TestInitialize_RedirectsStandardLog(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Console.Enabled = false // Disable console to avoid noise
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	err := Initialize(cfg)
+	require.NoError(t, err)
+
+	// Use standard log package - this should be redirected to slog
+	log.Print("message from standard log")
+	log.Printf("formatted message: %d", 42)
+
+	// Shutdown to flush
+	Shutdown()
+
+	// Verify logs were captured
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+	assert.Contains(t, lines, "message from standard log")
+	assert.Contains(t, lines, "formatted message: 42")
+}
+
+func TestFatal(t *testing.T) {
+	cfg := config.DefaultLoggingConfig()
+	cfg.Console.Enabled = false
+
+	tmpDir := t.TempDir()
+	cfg.Dir = tmpDir
+
+	err := Initialize(cfg)
+	require.NoError(t, err)
+
+	// Override exitFunc to capture the exit code instead of actually exiting
+	var exitCode int
+	originalExitFunc := exitFunc
+	exitFunc = func(code int) {
+		exitCode = code
+	}
+	defer func() {
+		exitFunc = originalExitFunc
+	}()
+
+	// Call Fatal
+	Fatal("fatal error occurred", "key", "value")
+
+	// Verify exit code
+	assert.Equal(t, 1, exitCode)
+
+	// Shutdown to flush (Fatal already called Shutdown, but be safe)
+	Shutdown()
+
+	// Verify the error was logged
+	mainLogPath := filepath.Join(tmpDir, "syntrix.log")
+	content, err := os.ReadFile(mainLogPath)
+	require.NoError(t, err)
+
+	lines := string(content)
+	assert.Contains(t, lines, "fatal error occurred")
+	assert.Contains(t, lines, "key=value")
 }

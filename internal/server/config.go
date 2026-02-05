@@ -123,9 +123,9 @@ func (c *Config) ApplyDefaults() {
 // No env vars for server config currently.
 func (c *Config) ApplyEnvOverrides() { _ = c }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // No paths to resolve in server config.
-func (c *Config) ResolvePaths(_ string) { _ = c }
+func (c *Config) ResolvePaths(_, _ string) { _ = c }
 
 // Validate returns an error if the configuration is invalid.
 func (c *Config) Validate(_ services.DeploymentMode) error {

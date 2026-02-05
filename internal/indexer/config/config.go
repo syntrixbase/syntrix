@@ -138,10 +138,20 @@ func (c *Config) ApplyDefaults() {
 // No env vars for indexer config currently.
 func (c *Config) ApplyEnvOverrides() { _ = c }
 
-// ResolvePaths resolves relative paths using the given base directory.
-func (c *Config) ResolvePaths(baseDir string) {
+// ResolvePaths resolves relative paths using the given directories.
+// - configDir: base directory for config-related paths (template_path)
+// - dataDir: base directory for runtime data paths (progress_path, store.path)
+func (c *Config) ResolvePaths(configDir, dataDir string) {
+	// Config-related paths
 	if c.TemplatePath != "" && !filepath.IsAbs(c.TemplatePath) {
-		c.TemplatePath = filepath.Join(baseDir, c.TemplatePath)
+		c.TemplatePath = filepath.Join(configDir, c.TemplatePath)
+	}
+	// Data-related paths
+	if c.ProgressPath != "" && !filepath.IsAbs(c.ProgressPath) {
+		c.ProgressPath = filepath.Join(dataDir, c.ProgressPath)
+	}
+	if c.Store.Path != "" && !filepath.IsAbs(c.Store.Path) {
+		c.Store.Path = filepath.Join(dataDir, c.Store.Path)
 	}
 }
 

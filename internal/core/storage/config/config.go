@@ -188,6 +188,6 @@ func (c *Config) ApplyEnvOverrides() {
 	}
 }
 
-// ResolvePaths resolves relative paths using the given base directory.
+// ResolvePaths resolves relative paths using the given directories.
 // No paths to resolve in storage config.
-func (c *Config) ResolvePaths(_ string) { _ = c }
+func (c *Config) ResolvePaths(_, _ string) { _ = c }
